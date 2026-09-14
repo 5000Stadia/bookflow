@@ -7,7 +7,7 @@ from .permission_catalog import (ScopeKey, Requirement, SubjectKind, Role, Defau
     ScopeKind, Threshold, CommandDescriptor, CapabilitySpec, DefaultEntry, CompanyAction,
     AdminAction, ResourceSource, Catalog, CatalogManifest, PolicyInputError,
     _check, _fail, _unique, _same_keys, _scope_key, _req_key, _normal_catalog,
-    catalog_manifest, THRESHOLDS, ROLES)
+    catalog_manifest, THRESHOLDS, ROLES, DELETE_NAMES, PURCHASE_DELETE_FAMILIES)
 
 CatalogValue = CommandDescriptor | CapabilitySpec | Requirement | DefaultEntry | CompanyAction | AdminAction | ResourceSource
 
@@ -98,6 +98,7 @@ class Phase:
     memberships: tuple[MembershipSlot, ...]
     visibility: tuple[Visibility, ...]
     agents: tuple[AgentSlot, ...]
+    semantics: Literal['prepared_v1', 'legacy_actual', 'scoped_v1'] = 'prepared_v1'
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,6 +414,8 @@ def _role(p,identifier,subject,scope):
     members=_members(p,identifier,scope)
     role=max((m.role for _,m in members),key=ROLES.index,default=None)
     admin=bool(subject and subject.hub_admin)
+    if p.semantics == 'scoped_v1' and scope.kind != 'hub':
+        admin=False
     return RoleFacts(role,tuple(sorted((s for s,m in members if m.role==role),key=_scope_key)),admin,'hub_admin' if admin else role)
 
 
@@ -450,6 +453,12 @@ def admissions(value: ValidatedComparison, *, phase: Literal['old', 'new'],
         grants=tuple(k for k,m in members if requirement.capability in m.policy.grants) if present else ()
         denies=tuple(k for k,m in members if requirement.capability in m.policy.denies) if present else ()
         default=present and (role.default_role,requirement) in defaults
+        if p.semantics == 'legacy_actual':
+            # Public access.require_resource ignores override/default rows. Its
+            # explicit-only gate always refuses Delete, even for installation admins.
+            default=present and requirement.capability not in (*DELETE_NAMES,
+                *('transaction.'+family+'.delete' for family in PURCHASE_DELETE_FAMILIES))
+            grants=denies=()
         reasons=_base_reasons(p,subject,s,scope)
         if not _floor(role,requirement.threshold):reasons.append(Reason.role_floor)
         if not (default or grants):reasons.append(Reason.no_grant)
@@ -475,7 +484,8 @@ def signature(value: ValidatedComparison, *, phase: Literal['old', 'new'],
             admitted=bool(action and action.domain==scope.kind and not _base_reasons(p,subject,s,scope) and _floor(role,action.threshold) and (not action.human_only or (s and s.kind=='human')))
             bits.append((key,admitted))
         company=tuple((a.requirement,a.admitted) for a in admissions(value,phase=phase,subject=subject,scope=scope)) if scope.kind in ('company','future_company') else ()
-        scopes.append(ScopeSignature(scope,_present(p,scope),not _base_reasons(p,subject,s,scope),role.membership_role,role.hub_admin,company,tuple(bits)))
+        scopes.append(ScopeSignature(scope,_present(p,scope),not _base_reasons(p,subject,s,scope),role.membership_role,
+            role.hub_admin if scope.kind == 'hub' or p.semantics == 'prepared_v1' else False,company,tuple(bits)))
     return AuthoritySignature(subject,s is not None,bool(s and s.active),tuple(scopes))
 
 

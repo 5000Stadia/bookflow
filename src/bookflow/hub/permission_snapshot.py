@@ -559,9 +559,17 @@ def derive_scope_proposal(old: RootFacts, *, old_catalog: CatalogBundle,
     return _derive(old, old_catalog, new_catalog, changes, generation, full_defaults, scopes)
 
 
-def _derive(old, old_catalog, new_catalog, changes, generation, full_defaults, scopes):
+def derive_activation(old: RootFacts, *, catalog: CatalogBundle, changes: ProposalRows, generation: int,
+                      full_defaults: tuple[c.DefaultEntry, ...]) -> DerivedFacts:
+    """Private legacy transition projection; ordinary proposals still refuse legacy."""
+    if old.stamp.mode != 'legacy':
+        _fail('invalid_facts', 'activation_mode')
+    return _derive(old, catalog, catalog, changes, generation, full_defaults, None, activation=True)
+
+
+def _derive(old, old_catalog, new_catalog, changes, generation, full_defaults, scopes, *, activation=False):
     try:
-        _validated_root(old, old_catalog)
+        _validated_root(old, old_catalog, activated=not activation)
         _decode(changes, ProposalRows, 'changes', native=True)
         _decode(generation, int, 'generation', native=True)
         if not 1 <= generation <= 9223372036854775807 or generation not in (old.stamp.generation, old.stamp.generation + 1):
@@ -641,15 +649,36 @@ def _observe(root, scopes, subjects):
 def observe_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBundle,
                  new_catalog: CatalogBundle, visibility: VisibilityProvider | None,
                  activated: bool = True) -> ObservedPair:
+    return _observe_pair(old, proposed, old_catalog=old_catalog, new_catalog=new_catalog,
+                         visibility=visibility, activated=activated)
+
+
+def observe_activation(old: RootFacts, proposed: RootFacts, *, catalog: CatalogBundle,
+                       visibility: VisibilityProvider) -> ObservedPair:
+    """Only this transition compares distinct legacy and scoped-policy roots."""
+    if old.stamp.mode != 'legacy' or proposed.stamp.mode != 'policy_v1':
+        _fail('invalid_facts', 'activation_mode')
+    return _observe_pair(old, proposed, old_catalog=catalog, new_catalog=catalog,
+                         visibility=visibility, activated=False, activation=True,
+                         phase_semantics=('legacy_actual', 'scoped_v1'))
+
+
+def _observe_pair(old, proposed, *, old_catalog, new_catalog, visibility,
+                  activated=True, activation=False,
+                  phase_semantics=None):
     """Complete raw-union observations and the supported live-union A comparison.
 
     activated=False is the self-observation relaxation, and only that: one root
     observed against itself. A never-activated root stores no catalog copy, but
     it still carries the catalog its executable bundle defines, which is all a
     reader of its own membership facts needs. Comparing two distinct roots is a
-    policy transition and still requires policy_v1.
+    policy transition and still requires policy_v1, except through the dedicated
+    legacy activation owner.
     """
-    if not activated and old is not proposed:
+    if phase_semantics is None:
+        phase_semantics = tuple('scoped_v1' if root.stamp.mode == 'policy_v1' and
+            root.catalog.version == c.SCOPED_POLICY_VERSION else 'prepared_v1' for root in (old, proposed))
+    if not activated and not activation and old is not proposed:
         _fail('legacy_comparison_unavailable', 'mode')
     for root, bundle in ((old, old_catalog), (proposed, new_catalog)):
         _validated_root(root, bundle, activated=activated)
@@ -669,7 +698,7 @@ def observe_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBun
     scopes = {c.ScopeKey('hub', 'root'), *(c.ScopeKey('organization', x) for x in orgs),
               *(c.ScopeKey('future_company', x) for x in orgs), *(c.ScopeKey('company', x) for x in companies)}
     manifests = []; phases = []; revisions = []
-    for root, bundle, obs in zip((old, proposed), (old_catalog, new_catalog), observations):
+    for root, bundle, obs, semantics in zip((old, proposed), (old_catalog, new_catalog), observations, phase_semantics, strict=True):
         supplied = visibility.facts(root, raw_scopes, subjects)
         if (type(supplied) is not VisibilityFacts or type(supplied.policy_revision) is not str
                 or not supplied.policy_revision or type(supplied.rows) is not tuple):
@@ -692,7 +721,7 @@ def observe_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBun
             tuple(x for x in obs.memberships if x.scope in scopes),
             tuple(x for x in supplied.rows if x.scope in scopes),
             tuple(a.AgentSlot(x, a.AgentState(aa[x].suspended_at is not None,
-                tuple(sorted(y.principal_user_id for y in root.assignments if y.agent_user_id == x and y.revoked_at is None and uu[y.principal_user_id].active))) if x in aa else None) for x in agents)))
+                tuple(sorted(y.principal_user_id for y in root.assignments if y.agent_user_id == x and y.revoked_at is None and uu[y.principal_user_id].active))) if x in aa else None) for x in agents), semantics))
     if revisions[0] != revisions[1]:
         _fail('visibility_unresolved', 'visibility')
     try:

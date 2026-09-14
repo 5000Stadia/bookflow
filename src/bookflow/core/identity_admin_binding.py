@@ -70,7 +70,7 @@ class BoundOperation:
     def preview(self, intent):
         binding = self._binding('preview')
         return b.preview_edit(self._tx, binding=binding, intent=intent,
-                              catalog=runtime.catalog_bundle(), visibility=runtime.VISIBILITY,
+                              catalog=runtime.catalog_for_root(self._tx), visibility=runtime.VISIBILITY,
                               request_id=self._guard.request_id)
 
     def apply(self, intent, *, audit):
@@ -78,7 +78,7 @@ class BoundOperation:
             fail('invalid_input', 'binding')
         binding = self._binding('apply')
         return b.apply_edit(self._tx, binding=binding, intent=intent,
-                            catalog=runtime.catalog_bundle(), visibility=runtime.VISIBILITY, audit=audit)
+                            catalog=runtime.catalog_for_root(self._tx), visibility=runtime.VISIBILITY, audit=audit)
 
     def require_company(self, company, requirement):
         self._binding(self._guard.purpose)

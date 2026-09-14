@@ -109,6 +109,9 @@ THRESHOLDS = ('authenticated', 'member', 'standard', 'admin', 'owner', 'hub_admi
 _SCOPE_KINDS = ('hub', 'organization', 'company', 'future_company')
 DELETE_NAMES = tuple('transaction.' + family + '.delete' for family in
                      ('journal_entry', 'invoice', 'sales_receipt', 'payment'))
+SCOPED_POLICY_VERSION = 'purchase-delete-activation-preparation-v1'
+PURCHASE_DELETE_FAMILIES = ('check', 'card_charge')
+SUPPORTED_DELETE_NAMES = (*DELETE_NAMES, *('transaction.'+family+'.delete' for family in PURCHASE_DELETE_FAMILIES))
 
 
 class InputErrorCategory(str, Enum):
@@ -230,11 +233,11 @@ def _normal_catalog(catalog):
             _fail('invalid_catalog', 'capabilities')
         for ts in (spec.company_thresholds, spec.registered_thresholds):
             _unique(ts, lambda x: x, 'thresholds')
-        if spec.name in DELETE_NAMES and (spec.company_thresholds != ('standard',) or spec.registered_thresholds):
+        if spec.name in SUPPORTED_DELETE_NAMES and (spec.company_thresholds != ('standard',) or spec.registered_thresholds):
             _fail('invalid_catalog', 'capabilities')
     company = set(_requirements(catalog, True))
     registered = set(_requirements(catalog))
-    if company - registered - {Requirement(name, 'standard') for name in DELETE_NAMES}:
+    if company - registered - {Requirement(name, 'standard') for name in SUPPORTED_DELETE_NAMES}:
         _fail('invalid_catalog', 'capabilities')
     for cmd in commands.values():
         _unique(cmd.resources, lambda x: x, 'resources')
@@ -248,7 +251,7 @@ def _normal_catalog(catalog):
         if not action.requirements or not set(action.requirements) <= company:
             _fail('invalid_reference', 'company_actions')
     for entry in defaults.values():
-        if entry.requirement.capability in DELETE_NAMES or entry.requirement not in registered:
+        if entry.requirement.capability in SUPPORTED_DELETE_NAMES or entry.requirement not in registered:
             _fail('invalid_catalog', 'defaults')
     for source in sources.values():
         _unique(source.call_sites, lambda x: x, 'call_sites')

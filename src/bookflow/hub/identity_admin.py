@@ -78,7 +78,21 @@ class ReplaceCatalog:
     full_defaults: tuple[c.DefaultEntry,...]
 
 
-Edit = PutMembership | RevokeMembership | SetUserActive | SetAssignments | AuthorizeAgent | ReplaceCatalog
+@dataclass(frozen=True, slots=True)
+class CompanyAdministrator:
+    company_id: str
+    user_id: str
+    expected: Absent | Version
+
+
+@dataclass(frozen=True, slots=True)
+class ActivatePolicy:
+    expected_generation: int
+    expected_catalog_sha256: str
+    administrators: tuple[CompanyAdministrator, ...] = ()
+
+
+Edit = PutMembership | RevokeMembership | SetUserActive | SetAssignments | AuthorizeAgent | ReplaceCatalog | ActivatePolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +233,7 @@ def _scope_admin(old,base_pair,actor,scope,owner=False):
     present=scope.id in (old.keys.organizations if scope.kind=='organization' else dict(old.keys.companies))
     visible=next((x.visible for x in base_pair.comparison.old.visibility if x.subject==actor.id and x.scope==scope),False)
     if not present or not visible:fail('unavailable_target','scope')
-    if actor.hub_admin:return
+    if actor.hub_admin and base_pair.comparison.old.semantics != 'scoped_v1':return
     parent=dict(old.keys.companies).get(scope.id) if scope.kind=='company' else None
     roles=[x.role for x in old.memberships if x.user_id==actor.id and x.revoked_at is None and (
         (x.scope_type==scope.kind and x.scope_id==scope.id) or (parent is not None and x.scope_type=='organization' and x.scope_id==parent))]
@@ -274,6 +288,9 @@ def _mutation(table,before,after,key_names):
 def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None):
     preview=context is None
     _require_tx(tx,not preview)
+    if type(intent) is ActivatePolicy:
+        from .permission_activation import prepare
+        return prepare(tx, actor_id=actor_id, intent=intent, catalog=catalog, context=context)
     if type(intent) not in (PutMembership,RevokeMembership,SetUserActive,SetAssignments,AuthorizeAgent,ReplaceCatalog):fail('invalid_input','intent')
     typed(intent,type(intent),'intent')
     try:old=s.load_root(tx,catalog=catalog)

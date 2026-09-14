@@ -74,6 +74,18 @@ class _MembershipVisibility:
 VISIBILITY = _MembershipVisibility()
 
 
+def catalog_for_root(tx):
+    """Select only a recognized explicitly stored build; legacy stays frozen."""
+    bundle = catalog_bundle()
+    # Only an explicitly activated, recognized stored policy selects the new build.
+    # Legacy reads retain the exact pre-cutover bundle and calculator semantics.
+    state = tx.raw.execute('SELECT mode,catalog_version FROM main.permission_state WHERE id=1').fetchone()
+    if state == ('policy_v1', c.SCOPED_POLICY_VERSION):
+        from .permission_activation_catalog import catalog_bundle as activated_bundle
+        bundle = activated_bundle()
+    return bundle
+
+
 def observe_current(tx) -> s.ObservedPair:
     """Fresh complete observation of this root against itself, on the caller's transaction.
 
@@ -84,7 +96,7 @@ def observe_current(tx) -> s.ObservedPair:
     memberships and so unable to read its own audit trail. Administration keeps
     the strict requirement through assemble_pair.
     """
-    bundle = catalog_bundle()
+    bundle = catalog_for_root(tx)
     try:
         root = s.load_root(tx, catalog=bundle)
         return s.observe_pair(root, root, old_catalog=bundle, new_catalog=bundle,
