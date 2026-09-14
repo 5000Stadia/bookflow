@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Users & permissions — {{ company_label }}{% endblock %}
+{% block body %}
+<section id="company-permissions" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<style>#company-permissions fieldset label { display:block; padding:.35rem 0; }</style>
+<h1>Users & permissions</h1><p>{{ company_label }}. Company permissions apply to this company; organization memberships also cover its current and future companies.</p>
+{% if current.mode == 'legacy' %}<p class="warn">Permissions have not been activated. An installation administrator can <a href="/hub/permission">review and activate permissions</a>. Existing role access remains in effect.</p>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong> {{ error.message }}{% if error.details %}<pre>{{ error.details | tojson(indent=2) }}</pre>{% endif %}</div>{% endif %}
+{% if result %}<section role="status"><h2>{{ 'Preview' if result.dry_run else 'Saved' }}</h2><p>{{ result.username }} · {{ result.role }} · version {{ result.version }}. {{ result.message }}</p><p>Delete grants: {{ result.grants | join(', ') or 'none' }}. Denied: {{ result.denies | join(', ') or 'none' }}.</p><details><summary>Full result</summary><pre>{{ result | tojson(indent=2) }}</pre></details></section>{% endif %}
+<div class="table-wrap" style="overflow-x:auto"><table><thead><tr><th>User</th><th>Scope</th><th>Role</th><th>Status</th></tr></thead><tbody>{% for row in rows %}<tr><td><a href="?user={{ row.user_id }}">{{ row.username }}</a></td><td>{{ row.scope_type }}: {{ row.scope_name }}</td><td>{{ row.role }}</td><td>{{ 'Active' if row.active else 'Revoked' }}</td></tr>{% endfor %}</tbody></table></div>
+{% if current.can_administer and current.mode != 'legacy' %}
+<form method="get" action="/c/{{ company_id }}/users" aria-label="Load company user">
+<label>Load an existing username or user ID<input name="user" required></label><button>Load user</button></form>
+<p>Loading another user replaces the editor with that user's own membership. A provisioned login with no company membership starts with clean defaults.</p>
+{% if values.user %}
+<form method="post" hx-post="/c/{{ company_id }}/users" hx-target="#company-permissions" hx-select="#company-permissions" hx-swap="outerHTML" aria-label="Company user permissions">
+<label>Loaded user<input name="user" value="{{ values.user }}" readonly required></label><p>Use Load user to change the target. Installation administrators provision logins with User add.</p>
+<input type="hidden" name="expected_version" value="{{ values.expected_version }}"><input type="hidden" name="other_grants" value="{{ values.other_grants }}"><input type="hidden" name="other_denies" value="{{ values.other_denies }}">
+<label>Company role<select name="role">{% for role in ('readonly','standard','admin','owner') %}<option value="{{ role }}" {% if values.role == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select></label>
+<fieldset><legend>Company permissions</legend>
+<label><input type="checkbox" name="allow_read" {% if values.allow_read %}checked{% endif %}>Allow reading the books at the assigned role</label>
+<label><input type="checkbox" name="allow_post" {% if values.allow_post %}checked{% endif %}>Allow posting, editing and voiding at the assigned role</label>
+<label><input type="checkbox" name="check_delete" {% if values.check_delete %}checked{% endif %}>Grant check deletion</label>
+<label><input type="checkbox" name="card_delete" {% if values.card_delete %}checked{% endif %}>Grant credit card charge deletion</label>
+</fieldset><p>Deletion requires at least Standard and permission to read. It does not require permission to post. These deletion permissions are saved, but deleting checks and card charges is not available yet. A deny at either company or organization wins. Reducing permissions may require connected agents to be authorized again.</p>
+<label>Reason<input name="reason" value="{{ values.reason or '' }}" maxlength="140"></label>
+<button name="action" value="preview">Preview permissions</button><button name="action" value="save">Save permissions</button>{% if values.expected_version|int > 0 %}<button name="action" value="revoke">Revoke this company membership</button>{% endif %}
+</form>{% endif %}{% endif %}
+{% if effective %}<h2>Effective permissions</h2><p>Selected user {{ effective.user_id }}</p><ul>{% for permission in effective.permissions if permission.requirement.capability in ('ledger.read','ledger.post','transaction.check.delete','transaction.card_charge.delete') %}<li>{{ permission.requirement.capability }}: {{ 'Allowed' if permission.admitted else 'Denied' }}{% if permission.reasons %} — {{ permission.reasons | join(', ') }}{% endif %}{% if permission.grant_sources %} · explicit grant{% endif %}{% if permission.deny_sources %} · explicit deny{% endif %}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endblock %}

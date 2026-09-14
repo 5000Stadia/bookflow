@@ -2,6 +2,102 @@
 
 # `membership` commands
 
+## `membership effective`
+
+Show exact effective permissions and role/grant/deny provenance in one company; self or scoped administrator.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | read |
+| Required role | authenticated |
+| Capability | membership |
+| Feature | — |
+| HTTP | `POST /commands/membership.effective` |
+| External binary body | none |
+
+### CLI
+
+`bookflow membership effective --company "Demo Plumbing Co" --user jordan --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `company` | `--company` | string | yes | no | — | Company name or id; this scope alone is inspected |
+| `user` | `--user` | string \| null | no | yes | null | Username or id; omit for yourself. Other users require company administration. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+
+### HTTP
+
+Route: `POST /commands/membership.effective`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `can_administer` | boolean | yes | no | — | — |
+| `company_name` | string | yes | no | — | — |
+| `company_id` | string | yes | no | — | — |
+| `user_id` | string | yes | no | — | — |
+| `mode` | string | yes | no | — | — |
+| `permissions` | array[dict] | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "can_administer": false,
+  "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "company_name": "value",
+  "mode": "value",
+  "permissions": [],
+  "user_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `membership grant`
 
 Give a person access to a company or a whole organization, at one role.
@@ -12,7 +108,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human administrator of that company or organization, or a hub administrator; owner to grant or move an owner |
+| Required role | human administrator of that company or organization; owner to grant or move an owner; installation shortcut only before permission activation |
 | Capability | membership |
 | Feature | — |
 | HTTP | `POST /commands/membership.grant` |
@@ -20,7 +116,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow membership grant jordan --company "Demo Plumbing Co" --role standard --json`
+`bookflow membership grant jordan --company 'Demo Plumbing Co' --role standard --expected-version 1 --grants '["transaction.check.delete"]' --denies '["ledger.post"]' --json`
 
 ### Input
 
@@ -30,6 +126,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `company` | `--company` | string \| null | no | yes | null | Company they may open; name or id |
 | `organization` | `--organization` | string \| null | no | yes | null | Organization they may open, covering all its companies; name or id |
 | `role` | `--role` | literal["readonly", "standard", "admin", "owner"] | no | no | "standard" | Role at that scope: readonly reads, standard does the bookkeeping, admin also manages members, owner is the final say |
+| `grants` | `--grants` | array[string] \| null | no | yes | null | Exact capabilities to grant; omitted preserves existing grants, [] clears them |
+| `denies` | `--denies` | array[string] \| null | no | yes | null | Exact capabilities to deny at this scope; omitted preserves existing denies |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed membership version; required when grants or denies are supplied. 0 requires absence; omission on role-only edits is a blind update and may overwrite a concurrent role change |
 
 ### Command and context options
 
@@ -72,6 +171,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `granted_at` | string \| null | yes | yes | — | — |
 | `revoked_at` | string \| null | yes | yes | — | — |
 | `changed` | boolean | yes | no | — | — |
+| `version` | integer \| null | no | yes | null | — |
+| `grants` | array[string] | no | no | [] | — |
+| `denies` | array[string] | no | no | [] | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `message` | string | yes | no | — | — |
@@ -81,8 +183,10 @@ Example JSON output:
 ```json
 {
   "changed": false,
+  "denies": [],
   "dry_run": false,
   "granted_at": null,
+  "grants": [],
   "membership_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "message": "value",
   "organization_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -93,6 +197,7 @@ Example JSON output:
   "scope_type": "value",
   "user_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "username": "value",
+  "version": null,
   "warnings": []
 }
 ```
@@ -124,6 +229,7 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_USER_NOT_FOUND` | No such user. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
 ## `membership list`
 
@@ -133,7 +239,7 @@ List who holds access to what, and at which role. Give --company or --organizati
 |---|---|
 | Scope | hub |
 | Kind | read |
-| Required role | the memberships you administer: every one for a hub administrator, those of a company or organization you administer, and always your own |
+| Required role | the memberships you administer: installation-wide only in legacy mode; those of a company or organization you administer, and always your own |
 | Capability | membership |
 | Feature | — |
 | HTTP | `POST /commands/membership.list` |
@@ -177,6 +283,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `items` | array[object] | yes | no | — | — |
+| `items[].version` | integer | yes | no | — | — |
+| `items[].grants` | array[string] | no | no | [] | — |
+| `items[].denies` | array[string] | no | no | [] | — |
 | `items[].membership_id` | string | yes | no | — | — |
 | `items[].user_id` | string | yes | no | — | — |
 | `items[].username` | string | yes | no | — | — |
@@ -241,7 +350,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human administrator of that company or organization, or a hub administrator; owner to revoke an owner |
+| Required role | human administrator of that company or organization; owner to revoke an owner; installation shortcut only before permission activation |
 | Capability | membership |
 | Feature | — |
 | HTTP | `POST /commands/membership.revoke` |
@@ -255,6 +364,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed membership version; stale requests refuse. Legacy omission is a blind revoke and may overwrite concurrent membership changes |
 | `user` | `USER` | string | yes | no | — | Username or id of the person losing access; maximum length 64 |
 | `company` | `--company` | string \| null | no | yes | null | Company they may no longer open; name or id |
 | `organization` | `--organization` | string \| null | no | yes | null | Organization they may no longer open; name or id |
@@ -300,6 +410,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `granted_at` | string \| null | yes | yes | — | — |
 | `revoked_at` | string \| null | yes | yes | — | — |
 | `changed` | boolean | yes | no | — | — |
+| `version` | integer \| null | no | yes | null | — |
+| `grants` | array[string] | no | no | [] | — |
+| `denies` | array[string] | no | no | [] | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `message` | string | yes | no | — | — |
@@ -309,8 +422,10 @@ Example JSON output:
 ```json
 {
   "changed": false,
+  "denies": [],
   "dry_run": false,
   "granted_at": null,
+  "grants": [],
   "membership_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "message": "value",
   "organization_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -321,6 +436,7 @@ Example JSON output:
   "scope_type": "value",
   "user_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "username": "value",
+  "version": null,
   "warnings": []
 }
 ```
@@ -353,3 +469,4 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_USER_NOT_FOUND` | No such user. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |

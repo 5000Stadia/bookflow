@@ -34,6 +34,8 @@ def _snapshot(value):
         result = decode_snapshot(value)
         if result is not None and not isinstance(result, dict):
             raise ValueError
+        if isinstance(result,dict) and result.get('format') == 1 and result.get('kind') in ('membership','api_token'):
+            result = result['row']
         return result
     except Exception:
         raise BookflowError("E_IO", details={"stage": "publication", "outcome": "unknown",
@@ -43,6 +45,7 @@ def _snapshot(value):
 @contextmanager
 def publication_reader(host, cred):
     session = host.reader_session(cred.user_id, cred.login)
+    session.credential = cred
     try:
         yield session
     finally:
@@ -117,7 +120,7 @@ class OSBinding:
 
 # Only these current lifecycle operations may account for their own membership
 # row additions/removals. Each substitution must be in this request's hub audit.
-MEMBERSHIP_EFFECTS = frozenset({"company new", "company attach", "company detach", "demo reset",
+MEMBERSHIP_EFFECTS = frozenset({"permission activate", "company new", "company attach", "company detach", "demo reset",
                                 "membership grant", "membership revoke"})
 
 
@@ -178,6 +181,9 @@ class PublicationPermit:
     @classmethod
     def capture(cls, cmd, raw, ctx, s, cred, selector, source, dry_run):
         from bookflow.core.publication_inventory import policy
+        # Streaming execution also uses capture on a host reader. Retain the
+        # authenticated producer for its later company/resource admission.
+        s.credential = cred
         policy(cmd)
         input_error = None
         try:
@@ -311,6 +317,8 @@ class PublicationPermit:
             check_hosted(host, cred, self.ctx, self.deposit_proof)
             return
         with publication_reader(host, cred) as s:
+            s.credential = cred
+            s._permission_context = self.ctx
             try:
                 cred.revalidate(s.hub)
             except BookflowError:
@@ -339,7 +347,10 @@ class PublicationPermit:
                     return  # unchanged authority may receive its original rejection
                 access.require_command_activation(s, self.cmd)
                 acc, role = access.company_role(s, *self.company)
-                if not access.role_satisfies(role, acc, self.cmd.required_role, s.is_hub_admin):
+                from bookflow.hub.permission_access import activated
+                if activated(s):
+                    access.require_resource(s, self.cmd.capability, self.cmd.required_role or "authenticated")
+                elif not access.role_satisfies(role, acc, self.cmd.required_role, s.is_hub_admin):
                     _deny()
                 for capability, required in self.cmd.resource_requirements:
                     access.require_resource(s, capability, required)
@@ -400,6 +411,10 @@ class PublicationPermit:
         elif name == "user set-password":
             inp = self.inp.model_copy(update={"username": self.targets.get("user_id", self.inp.username)})
             host_cmds.authorize_set_password(inp, self.ctx, s)
+        elif name == "membership effective":
+            from bookflow.commands.permission_cmds import authorize_effective
+            inp = self.inp.model_copy(update={"user":self.targets.get("user_id",self.inp.user)})
+            authorize_effective(inp,self.ctx,s)
         elif name == "token issue":
             inp = self.inp.model_copy(update={"user": self.targets.get("user_id", self.inp.user), "principal": self.targets.get("on_behalf_of", self.inp.principal)})
             _, _, epoch = host_cmds.authorize_token_issue(inp, self.ctx, s)

@@ -20,12 +20,13 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow company attach /example/company --json`
+`bookflow company attach /example/company --administrator jordan --json`
 
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `administrator` | `--administrator` | string \| null | no | yes | null | Existing human username or id explicitly enrolled as this company administrator; required after permission activation |
 | `path` | `PATH` | string | yes | no | — | Company folder, already inside an organization's folder |
 | `name` | `--name` | string \| null | no | yes | null | Display name to register under; defaults to the folder's copy |
 

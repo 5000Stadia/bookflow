@@ -1,10 +1,13 @@
 """Current registered publication dependencies; unknown hub projections fail review.
 
 Company commands use selected registration, current role/resources and their shared
-authorize_input predicate. Granular grants are a Row7 dependency, not inferred here.
+authorize_input predicate. Activated granular requirements use the shared current authenticated policy owner.
 """
 
 HUB = {
+    "permission show": "current_installation_administrator_and_setup_metadata",
+    "permission activate": "current_installation_administrator_and_own_enrollment_certificate",
+    "membership effective": "resolved_company_user_and_current_scope_administration",
     "chart list": "static_product_metadata", "chart show": "static_product_metadata",
     "profile list": "static_product_metadata", "profile show": "static_product_metadata",
     "company list": "returned_company_registrations",

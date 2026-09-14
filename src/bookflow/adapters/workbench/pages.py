@@ -635,6 +635,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return {"company": company_id, "target": {"record_type": record_type, "record_id": key},
                 "allowed": allowed, "writes": [name for name in allowed if registry.get(name).is_write]}
 
+    from bookflow.adapters.workbench import permissions as Permissions
+    Permissions.install(app,run=run,render=render,page_error=page_error)
+
     from bookflow.adapters.workbench import payments as Payments
     from bookflow.adapters.workbench import deposits as Deposits
     from bookflow.adapters.workbench import bill_payments as BillPayments

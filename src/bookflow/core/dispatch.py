@@ -494,6 +494,8 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
               company_source: str = "option", dry_run: bool = False, read_only: bool = False,
               _recovery_only: bool = False) -> Context:
     """Shared company, role, directive and reason checks, with optional read-only opening."""
+    s._permission_context = ctx
+    s._permission_command = cmd.name
     access.require_command_activation(s, cmd)
     if cmd.scope == "company":
         if s.company_row is None or (company_selector is not None):
@@ -502,7 +504,19 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
         acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
         if acc is None:
             raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
-        if not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
+        from bookflow.hub.permission_access import activated
+        if activated(s):
+            if (s.company_row.get("pending_path") or "").startswith("trash/"):
+                # Retirement has already committed: no business command may
+                # execute against this scope. Preserve its existing targeted
+                # recovery on writable opens by applicable members meeting the
+                # command's role floor, never the installation-admin shortcut.
+                if ("company" in cmd.writes and not dry_run and not read_only and s.hub.writable
+                        and access.role_satisfies(role, acc, cmd.required_role, False)):
+                    _complete_trash(s, s.company_row, ctx.model_copy(update={"company_id": s.company_row["id"]}))
+                raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
+            access.require_resource(s, cmd.capability, cmd.required_role or "authenticated")
+        elif not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
             raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": cmd.required_role, "role": role})
         for capability, required_role in cmd.resource_requirements:
             access.require_resource(s, capability, required_role)

@@ -75,6 +75,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`payment settlement`](cli/payment-settlement.md)
 - [`payment-method`](cli/payment-method.md)
 - [`payment-method query`](cli/payment-method-query.md)
+- [`permission`](cli/permission.md)
 - [`presence`](cli/presence.md)
 - [`price-level`](cli/price-level.md)
 - [`price-level query`](cli/price-level-query.md)

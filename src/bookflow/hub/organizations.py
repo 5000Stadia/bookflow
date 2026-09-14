@@ -12,6 +12,7 @@ from bookflow.core.ids import new_id
 from bookflow.core.registry import Touched
 from bookflow.core.session import Session, now_iso
 from bookflow.hub import schema as h
+from bookflow.hub.permission_scopes import registry_write
 from bookflow.hub.users import common
 from bookflow.storage.paths import name_key, reserve_folder, write_org_marker
 
@@ -23,6 +24,7 @@ def name_taken(s: Session, key: str, exclude_id: str | None = None) -> bool:
     return s.hub.conn.execute(q).first() is not None
 
 
+@registry_write
 def create(s: Session, display_name: str, via: str, is_demo: bool = False) -> tuple[dict[str, Any], Touched]:
     key = name_key(display_name)
     if name_taken(s, key):

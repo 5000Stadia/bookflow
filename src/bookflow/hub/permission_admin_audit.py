@@ -24,6 +24,7 @@ class AuditContext:
     directive_id: str | None = None
     directive_code: str | None = None
     source_ref: str | None = None
+    command: str | None = None
 
     def validate(self):
         typed(self,AuditContext,'audit')
@@ -33,7 +34,7 @@ class AuditContext:
         except (ValueError,TypeError):fail('invalid_input','audit')
         limits={'at':32,'client_name':64,'client_version':32,'client_host':255,
                 'session_id':26,'request_id':26,'reason':140,'idempotency_key':128,
-                'directive_id':26,'directive_code':16,'source_ref':512}
+                'directive_id':26,'directive_code':16,'source_ref':512,'command':128}
         for key,limit in limits.items():
             value=getattr(self,key)
             if value is not None and (len(value)>limit or (key in ('at','request_id','session_id') and not value)):
@@ -155,7 +156,7 @@ def prepare_audit(tx, *, context: AuditContext, actor_id: str, command: str,
     sequence=next_seq(tx,table)
     if type(sequence) is not int or sequence<1:fail('invalid_input','audit_sequence')
     if sequence>MAX_INTEGER:fail('integer_overflow','audit_sequence')
-    event=EventRow(new_id(),sequence,context.at,command,actor_id,'human',None,
+    event=EventRow(new_id(),sequence,context.at,context.command or command,actor_id,'human',None,
         context.interface,context.client_name,context.client_version,context.client_host,
         context.session_id,context.request_id,context.idempotency_key,context.reason,
         context.directive_id,context.directive_code,context.source_ref,'Permission administration updated.')

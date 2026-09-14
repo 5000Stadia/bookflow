@@ -83,6 +83,9 @@ def catalog_for_root(tx):
     if state == ('policy_v1', c.SCOPED_POLICY_VERSION):
         from .permission_activation_catalog import catalog_bundle as activated_bundle
         bundle = activated_bundle()
+    if state == ('policy_v1', c.SETUP_POLICY_VERSION):
+        from .permission_setup_catalog import catalog_bundle as setup_bundle
+        bundle = setup_bundle()
     return bundle
 
 

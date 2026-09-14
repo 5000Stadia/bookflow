@@ -4,6 +4,7 @@ The caller supplies a reviewed build bundle, a consistent existing hub transacti
 and explicit governed visibility. No registry discovery, path opening or writes.
 """
 from __future__ import annotations
+from functools import lru_cache
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 import hashlib
 import json
@@ -99,6 +100,19 @@ def encode_catalog(catalog: c.Catalog) -> str:
 
 
 def decode_catalog(raw: str, *, version: str, sha256: str) -> c.Catalog:
+    # Cache parsing of exact immutable serialized descriptors only. Every root
+    # load still reads current state and compares this catalog with actual defaults.
+    if all(type(x) is str for x in (raw, version, sha256)):
+        return _decoded_catalog(raw, version=version, sha256=sha256)
+    return _decode_catalog(raw, version=version, sha256=sha256)
+
+
+@lru_cache(maxsize=16)
+def _decoded_catalog(raw, *, version, sha256):
+    return _decode_catalog(raw, version=version, sha256=sha256)
+
+
+def _decode_catalog(raw: str, *, version: str, sha256: str) -> c.Catalog:
     try:
         catalog = c._normal_catalog(_decode(_parse(raw, 'catalog'), c.Catalog, 'catalog'))
         manifest = c.catalog_manifest(catalog)
@@ -677,7 +691,7 @@ def _observe_pair(old, proposed, *, old_catalog, new_catalog, visibility,
     """
     if phase_semantics is None:
         phase_semantics = tuple('scoped_v1' if root.stamp.mode == 'policy_v1' and
-            root.catalog.version == c.SCOPED_POLICY_VERSION else 'prepared_v1' for root in (old, proposed))
+            root.catalog.version in c.SCOPED_POLICY_VERSIONS else 'prepared_v1' for root in (old, proposed))
     if not activated and not activation and old is not proposed:
         _fail('legacy_comparison_unavailable', 'mode')
     for root, bundle in ((old, old_catalog), (proposed, new_catalog)):

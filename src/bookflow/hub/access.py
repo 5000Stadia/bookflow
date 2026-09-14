@@ -13,6 +13,11 @@ ROLE_RANK = {"readonly": 0, "standard": 1, "admin": 2, "owner": 3}
 ROLE_FOR_REQUIRED = {"member": 0, "standard": 1, "admin": 2, "owner": 3}
 
 
+def legacy_admin(s: Session) -> bool:
+    from .permission_access import activated
+    return s.is_hub_admin and not activated(s)
+
+
 def load_memberships(s: Session) -> list[dict[str, Any]]:
     assert s.hub and s.actor
     # Select only the legacy fields this row consumes. A writable open loads the
@@ -44,7 +49,7 @@ def company_role(s: Session, company_id: str, organization_id: str) -> tuple[str
         if (m["scope_type"] == "company" and m["scope_id"] == company_id) or (m["scope_type"] == "organization" and m["scope_id"] == organization_id):
             if best_role is None or ROLE_RANK[m["role"]] > ROLE_RANK[best_role]:
                 best_role, access = m["role"], m["scope_type"]
-    if best_role is None and s.is_hub_admin:
+    if best_role is None and legacy_admin(s):
         return "hub_admin", None
     return access, best_role
 
@@ -63,7 +68,7 @@ def visible_org_ids(s: Session) -> set[str] | None:
 
 def visible_company_filter(s: Session):
     """SQLAlchemy criterion selecting companies the actor can see."""
-    if s.is_hub_admin:
+    if legacy_admin(s):
         return sa.true()
     org_ids = {m["scope_id"] for m in s.memberships if m["scope_type"] == "organization"}
     company_ids = {m["scope_id"] for m in s.memberships if m["scope_type"] == "company"}
@@ -93,6 +98,9 @@ def require_explicit_grant(s: Session, capability: str) -> None:
     There is deliberately no configurable provider, context override or role
     escape here. Tests may monkeypatch this owner in their own process.
     """
+    from .permission_access import activated, require
+    if activated(s):
+        return require(s, capability, 'standard')
     from bookflow.core.errors import BookflowError
     raise BookflowError('E_PERMISSION', details={'reason': 'capability_not_activated'})
 
@@ -100,6 +108,14 @@ def require_explicit_grant(s: Session, capability: str) -> None:
 def require_command_activation(s: Session, cmd) -> None:
     """Admission before company opening, saved recovery facts or planner reads."""
     from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
+    from .permission_access import activated
+    if activated(s):
+        from .permission_setup_catalog import CATALOG
+        descriptor = next((x for x in CATALOG.commands if x.name == cmd.name), None)
+        if descriptor is None or not descriptor.available:
+            from bookflow.core.errors import BookflowError
+            raise BookflowError('E_PERMISSION', details={'reason':'command_unavailable'})
+        return
     if cmd.explicit_grant_only or cmd.capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:
         require_explicit_grant(s, cmd.capability)
     for capability, _ in cmd.resource_requirements:
@@ -108,7 +124,10 @@ def require_command_activation(s: Session, cmd) -> None:
 
 
 def require_resource(s: Session, capability: str, required_role: str) -> None:
-    """Common company resource check; granular grants/denies remain Row7."""
+    """Company requirement under the explicitly activated policy, or legacy role floor."""
+    from .permission_access import activated, require
+    if activated(s):
+        return require(s, capability, required_role)
     from bookflow.core.errors import BookflowError
     from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
     if capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:

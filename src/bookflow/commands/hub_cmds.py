@@ -330,8 +330,10 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
             return Applied(OrgRenameOutput(organization_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
         new = org.bump(row, s.actor.id, VIA(ctx), **changes) if changes else row
         if changes:
-            s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(**{k: new[k] for k in changes} | {"version": new["version"], "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": new["updated_via"]}))
-            audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
+            from bookflow.hub.permission_scopes import scope_change
+            with scope_change(s,VIA(ctx)) as policy_effects:
+                s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(**{k: new[k] for k in changes} | {"version": new["version"], "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": new["updated_via"]}))
+            audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)] + policy_effects)
         s.commits.commit(s.hub, "hub.org_rename")
         moved = row["id"] in s.completed_moves
         if plan.data["will_move"] and new.get("pending_path"):
@@ -661,6 +663,7 @@ def apply_company_use(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 
 class AttachInput(BaseModel):
+    administrator: str | None = Field(None, description="Existing human username or id explicitly enrolled as this company administrator; required after permission activation")
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     path: str = Field(description="Company folder, already inside an organization's folder")
     name: str | None = Field(None, description="Display name to register under; defaults to the folder's copy")
@@ -700,6 +703,16 @@ def _read_company_raw(db_path: Path) -> dict[str, Any]:
 
 @company_attach
 def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
+    from bookflow.hub.permission_access import activated
+    if activated(s) and inp.administrator is None:
+        raise BookflowError('E_VALIDATION',message='Name the existing human login to administer this attached company.')
+    administrator_id = None
+    if inp.administrator is not None:
+        from bookflow.commands.host_cmds import _membership_target
+        person = _membership_target(s,inp.administrator)
+        if person['kind'] != 'human':
+            raise BookflowError('E_VALIDATION',message='Company administrator must be an active human login.')
+        administrator_id = person['id']
     given = Path(inp.path).expanduser()
     try:
         folder = given.resolve(strict=True)
@@ -731,7 +744,7 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
     if co.name_taken(s, orow["id"], name_key(name)):
         raise BookflowError("E_NAME_TAKEN", details={"name": name})
     preview = AttachOutput(company_id=raw["id"], organization_id=orow["id"], display_name=name, path=str(folder))
-    return Plan(preview=preview, data={"folder": folder, "org": orow, "raw": raw, "name": name, "behind": state == "behind", "rename_copy": name != raw["display_name"]})
+    return Plan(preview=preview, data={"administrator_id": administrator_id,"folder": folder, "org": orow, "raw": raw, "name": name, "behind": state == "behind", "rename_copy": name != raw["display_name"]})
 
 
 @company_attach.applier
@@ -748,7 +761,7 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
         sync_directory(folder.parent)
         row, touched = co.register(s, company_id=raw["id"], organization_id=orow["id"], display_name=name, rel_path=s.rel_path(folder),
                                    legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or migrate.HEADS["company"],
-                                   via=VIA(ctx), owner_membership=False)
+                                   via=VIA(ctx), owner_membership=False, administrator_id=plan.data["administrator_id"])
         if plan.data["behind"] or plan.data["rename_copy"]:
             try:
                 with engine.open_database(folder / "company.db", writable=True) as db:
@@ -876,8 +889,10 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
                 s.release_company(company_id)
             pending = existing.get("pending_path") if (existing.get("pending_path") or "").startswith("trash/") else trash_rel
             if existing.get("pending_path") != pending:
-                s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
-                audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
+                from bookflow.hub.permission_scopes import scope_change
+                with scope_change(s,VIA(ctx)) as policy_effects:
+                    s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
+                audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})] + policy_effects)
             s.commits.commit(s.hub, "hub.demo_reset")
             src, dst = s.abs_path(existing["path"]), s.abs_path(pending)
             try:

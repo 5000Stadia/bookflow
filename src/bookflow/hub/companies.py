@@ -11,6 +11,7 @@ from bookflow.core.ids import new_id
 from bookflow.core.registry import Touched
 from bookflow.core.session import Session, now_iso
 from bookflow.hub import access, schema as h
+from bookflow.hub.permission_scopes import registry_write
 from bookflow.hub.users import common
 from bookflow.storage.paths import name_key
 
@@ -22,8 +23,9 @@ def name_taken(s: Session, organization_id: str, key: str, exclude_id: str | Non
     return s.hub.conn.execute(q).first() is not None
 
 
+@registry_write
 def register(s: Session, *, company_id: str, organization_id: str, display_name: str, rel_path: str, legal_name: str,
-             home_currency: str, schema_revision: str, via: str, is_demo: bool = False, owner_membership: bool = True) -> tuple[dict[str, Any], list[Touched]]:
+             home_currency: str, schema_revision: str, via: str, is_demo: bool = False, owner_membership: bool = True, administrator_id: str | None = None) -> tuple[dict[str, Any], list[Touched]]:
     key = name_key(display_name)
     if name_taken(s, organization_id, key):
         raise BookflowError("E_NAME_TAKEN", details={"name": display_name})
@@ -32,8 +34,8 @@ def register(s: Session, *, company_id: str, organization_id: str, display_name:
            "schema_revision": schema_revision, "is_demo": is_demo, **common(s.actor.id, via)}
     s.hub.conn.execute(h.companies.insert().values(**row))
     touched = [Touched("company", company_id, "create", None, 1, row)]
-    if owner_membership:
-        m = {"id": new_id(), "user_id": s.actor.id, "scope_type": "company", "scope_id": company_id, "role": "owner",
+    if owner_membership or administrator_id is not None:
+        m = {"id": new_id(), "user_id": administrator_id or s.actor.id, "scope_type": "company", "scope_id": company_id, "role": "admin" if administrator_id else "owner",
              "granted_by": s.actor.id, "granted_at": now_iso(), "revoked_at": None}
         s.hub.conn.execute(h.memberships.insert().values(**m))
         touched.append(Touched("membership", m["id"], "create", None, None, m))
@@ -52,12 +54,14 @@ def list_visible(s: Session) -> list[dict[str, Any]]:
     return [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
 
 
+@registry_write
 def update(s: Session, row: dict[str, Any], via: str, **changes: Any) -> tuple[dict[str, Any], Touched]:
     new = {**row, **changes, "version": row["version"] + 1, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": via}
     s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(**{k: v for k, v in new.items() if k in h.companies.c}))
     return new, Touched("company", row["id"], "update", row["version"], new["version"], {k: v for k, v in new.items() if k in h.companies.c})
 
 
+@registry_write
 def delete_company_rows(s: Session, company_id: str) -> list[Touched]:
     """Hard delete with entries carrying the rows (blueprint 3.1)."""
     touched: list[Touched] = []
@@ -74,6 +78,7 @@ def delete_company_rows(s: Session, company_id: str) -> list[Touched]:
     return touched
 
 
+@registry_write
 def delete_organization_rows(s: Session, organization_id: str) -> list[Touched]:
     touched: list[Touched] = []
     for c in s.hub.conn.execute(sa.select(h.companies.c.id).where(h.companies.c.organization_id == organization_id)).all():

@@ -83,6 +83,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `membership.granted_at` | string \| null | yes | yes | — | — |
 | `membership.revoked_at` | string \| null | yes | yes | — | — |
 | `membership.changed` | boolean | yes | no | — | — |
+| `membership.version` | integer \| null | no | yes | null | — |
+| `membership.grants` | array[string] | no | no | [] | — |
+| `membership.denies` | array[string] | no | no | [] | — |
 | `message` | string | yes | no | — | — |
 
 Example JSON output:
@@ -130,13 +133,13 @@ Example JSON output:
 
 ## `user list`
 
-List the people on this installation, with the agent principals that act for them. Filtered by company or organization it answers who can reach it, through their own membership or their organization's; hub administrators reach every company without one and are listed unfiltered, with hub_admin set.
+List the people on this installation, with the agent principals that act for them. Filtered by company or organization it answers who can reach it, through their own membership or their organization's. After activation, installation administration alone supplies no company access.
 
 | Contract | Value |
 |---|---|
 | Scope | hub |
 | Kind | read |
-| Required role | the principals you administer: everyone for a hub administrator, the members of a company or organization you administer, and always yourself |
+| Required role | the principals you administer: installation-wide only in legacy mode; the members of a company or organization you administer, and always yourself |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/user.list` |

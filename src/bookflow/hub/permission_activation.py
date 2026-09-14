@@ -78,7 +78,10 @@ def _enroll(old, actor, entries, at, via, preview):
 def prepare(tx, *, actor_id, intent, catalog, context=None):
     typed(intent, b.ActivatePolicy, 'intent')
     integer(intent.expected_generation, 'generation')
-    if catalog != build.catalog_bundle() or intent.expected_catalog_sha256 != build.MANIFEST.descriptor_sha256:
+    selected = build
+    if catalog != build.catalog_bundle():
+        from . import permission_setup_catalog as selected
+    if catalog != selected.catalog_bundle() or intent.expected_catalog_sha256 != selected.MANIFEST.descriptor_sha256:
         fail('catalog_mismatch', 'executable_catalog')
     try:
         old = s.load_root(tx, catalog=catalog)

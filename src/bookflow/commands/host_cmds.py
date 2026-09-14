@@ -8,6 +8,7 @@ Nothing here imports FastAPI, uvicorn, or the workbench at module scope: the CLI
 from __future__ import annotations
 
 import errno
+import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -520,6 +521,9 @@ class MembershipOut(BaseModel):
     granted_at: str | None
     revoked_at: str | None
     changed: bool
+    version: int | None = None
+    grants: list[str] = Field(default_factory=list)
+    denies: list[str] = Field(default_factory=list)
 
 
 class Scope(BaseModel):
@@ -562,11 +566,11 @@ def actor_scope_role(s: Session, scope: Scope) -> str | None:
 
 def administers_scope(s: Session, scope: Scope, required: str) -> bool:
     """The one place scope administration is decided. The writes raise on it; the listings filter on it."""
-    return s.is_hub_admin or access.role_satisfies(actor_scope_role(s, scope), scope.scope_type, required, False)
+    return access.legacy_admin(s) or access.role_satisfies(actor_scope_role(s, scope), scope.scope_type, required, False)
 
 
 def authorize_membership_scope(s: Session, scope: Scope, required: str) -> None:
-    """A human administrator of that same scope. A hub administrator administers every scope."""
+    """A human administrator of that scope; installation shortcut only in legacy mode."""
     if s.actor.kind != "human":
         raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": "human"})
     if not administers_scope(s, scope, required):
@@ -585,12 +589,22 @@ def _membership_out(row: dict[str, Any], user: dict[str, Any], scope: Scope, *, 
     return MembershipOut(membership_id=row["id"], user_id=user["id"], username=user["username"],
                          scope_type=scope.scope_type, scope_id=scope.scope_id, scope_name=scope.scope_name,
                          organization_id=scope.organization_id, role=row["role"],
-                         granted_at=row["granted_at"], revoked_at=row["revoked_at"], changed=changed)
+                         granted_at=row["granted_at"], revoked_at=row["revoked_at"], changed=changed,
+                         version=row.get('version'), grants=json.loads(row.get('grants') or '[]'),
+                         denies=json.loads(row.get('denies') or '[]'))
 
 
 def _grant(s: Session, ctx: Context, user: dict[str, Any], scope: Scope, role: str,
            existing: dict[str, Any] | None) -> tuple[dict[str, Any], Touched | None]:
     """The one place a membership is written. `user add` and `membership grant` share it."""
+    from bookflow.hub.permission_access import activated
+    if activated(s):
+        from bookflow.hub import permission_setup as setup
+        from dataclasses import asdict
+        prepared = setup.edit(s,ctx,setup.membership_intent(user,scope,existing,role))
+        row = asdict(next(x for x in prepared.final.root.memberships if x.id == prepared.visible.target_id))
+        return row, None if not prepared.visible.changed else Touched('membership',row['id'],
+            'create' if existing is None else 'update',existing['version'] if existing else None,row['version'],row,before=existing)
     at = now_iso()
     if existing is None:
         row = {"id": new_id(), "user_id": user["id"], "scope_type": scope.scope_type, "scope_id": scope.scope_id,
@@ -704,10 +718,14 @@ class MembershipGrantInput(BaseModel):
     company: str | None = Field(None, description="Company they may open; name or id")
     organization: str | None = Field(None, description="Organization they may open, covering all its companies; name or id")
     role: RoleName = Field("standard", description=ROLE_HELP)
+    grants: list[str] | None = Field(None, description="Exact capabilities to grant; omitted preserves existing grants, [] clears them")
+    denies: list[str] | None = Field(None, description="Exact capabilities to deny at this scope; omitted preserves existing denies")
+    expected_version: int | None = Field(None, ge=0, description="Observed membership version; required when grants or denies are supplied. 0 requires absence; omission on role-only edits is a blind update and may overwrite a concurrent role change")
 
 
 class MembershipSelector(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    expected_version: int | None = Field(None, ge=1, description="Observed membership version; stale requests refuse. Legacy omission is a blind revoke and may overwrite concurrent membership changes")
     user: str = Field(description="Username or id of the person losing access", max_length=64)
     company: str | None = Field(None, description="Company they may no longer open; name or id")
     organization: str | None = Field(None, description="Organization they may no longer open; name or id")
@@ -732,9 +750,9 @@ membership_grant = command("membership grant", scope="hub",
                            description="Give a person access to a company or a whole organization, at one role.",
                            input_model=MembershipGrantInput, output_model=MembershipOutput, writes={"hub"},
                            positional=["user"],
-                           error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION",
+                           error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_VERSION_CONFLICT",
                                         "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                           authorization="human administrator of that company or organization, or a hub administrator; owner to grant or move an owner")
+                           authorization="human administrator of that company or organization; owner to grant or move an owner; installation shortcut only before permission activation")
 
 
 def authorize_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session):
@@ -753,6 +771,22 @@ def authorize_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Sessi
 @membership_grant
 def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -> Plan:
     user, scope, existing = authorize_membership_grant(inp, ctx, s)
+    from bookflow.hub.permission_access import activated
+    from bookflow.hub import permission_setup as setup
+    if activated(s):
+        if inp.expected_version is None and (inp.grants is not None or inp.denies is not None):
+            raise BookflowError('E_VALIDATION',message='Supply expected_version when changing grants or denies; use 0 for an absent membership.')
+        intent = setup.membership_intent(user,scope,existing,inp.role,inp.grants,inp.denies,inp.expected_version)
+        prepared = setup.edit(s,ctx,intent,preview=True)
+        from dataclasses import asdict
+        row = asdict(next(x for x in prepared.final.root.memberships if x.id == prepared.visible.target_id))
+        out = _membership_out(row,user,scope,changed=prepared.visible.changed)
+        return Plan(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,inp.role,out.changed)),
+                    data={'input':inp,'intent':intent,'user':user,'scope':scope})
+    if inp.grants is not None or inp.denies is not None:
+        raise BookflowError('E_VALIDATION',message='Activate permissions before configuring grants or denies.')
+    if inp.expected_version is not None and inp.expected_version != (existing['version'] if existing else 0):
+        raise BookflowError('E_VERSION_CONFLICT')
     changed = existing is None or existing["role"] != inp.role or existing["revoked_at"] is not None
     preview = _membership_out({"id": existing["id"] if existing else "", "role": inp.role,
                                "granted_at": now_iso(), "revoked_at": None}, user, scope, changed=changed)
@@ -768,6 +802,15 @@ def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool)
 
 @membership_grant.applier
 def apply_membership_grant(plan: Plan, ctx: Context, s: Session) -> Applied:
+    if 'intent' in plan.data:
+        from bookflow.hub import permission_setup as setup
+        from dataclasses import asdict
+        prepared = setup.edit(s,ctx,plan.data['intent'])
+        row = asdict(next(x for x in prepared.final.root.memberships if x.id == prepared.visible.target_id))
+        user,scope = plan.data['user'],plan.data['scope']
+        out = _membership_out(row,user,scope,changed=prepared.visible.changed)
+        return Applied(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,row['role'],out.changed)),
+                       [],'Updated company permissions.',audited=out.changed)
     user, scope, existing = plan.data["user"], plan.data["scope"], plan.data["existing"]
     role = plan.data["role"]
     row, touched = _grant(s, ctx, user, scope, role, existing)
@@ -782,9 +825,9 @@ membership_revoke = command("membership revoke", scope="hub",
                             description="Take away a person's access to a company or organization; it stops on their next request.",
                             input_model=MembershipSelector, output_model=MembershipOutput, writes={"hub"},
                             positional=["user"],
-                            error_codes=["E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND", "E_VALIDATION", "E_PERMISSION",
+                            error_codes=["E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_VERSION_CONFLICT",
                                          "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                            authorization="human administrator of that company or organization, or a hub administrator; owner to revoke an owner")
+                            authorization="human administrator of that company or organization; owner to revoke an owner; installation shortcut only before permission activation")
 
 
 def authorize_membership_revoke(inp: MembershipSelector, ctx: Context, s: Session):
@@ -801,6 +844,18 @@ def authorize_membership_revoke(inp: MembershipSelector, ctx: Context, s: Sessio
 @membership_revoke
 def plan_membership_revoke(inp: MembershipSelector, ctx: Context, s: Session) -> Plan:
     user, scope, existing = authorize_membership_revoke(inp, ctx, s)
+    from bookflow.hub.permission_access import activated
+    if inp.expected_version is not None and inp.expected_version != existing['version']:
+        raise BookflowError('E_VERSION_CONFLICT')
+    if activated(s):
+        from bookflow.hub import permission_setup as setup, identity_admin as b
+        intent = b.RevokeMembership(existing['id'],existing['version'])
+        prepared = setup.edit(s,ctx,intent,preview=True)
+        from dataclasses import asdict
+        row = asdict(next(x for x in prepared.final.root.memberships if x.id == existing['id']))
+        out = _membership_out(row,user,scope,changed=prepared.visible.changed)
+        return Plan(MembershipOutput(**out.model_dump(),message=_revoke_message(user,scope,out.changed)),
+                    data={'intent':intent,'user':user,'scope':scope,'id':existing['id']})
     changed = existing["revoked_at"] is None
     preview = _membership_out({**existing, "revoked_at": existing["revoked_at"] or now_iso()}, user, scope, changed=changed)
     return Plan(preview=MembershipOutput(**preview.model_dump(), message=_revoke_message(user, scope, changed)),
@@ -816,6 +871,15 @@ def _revoke_message(user: dict[str, Any], scope: Scope, changed: bool) -> str:
 
 @membership_revoke.applier
 def apply_membership_revoke(plan: Plan, ctx: Context, s: Session) -> Applied:
+    if 'intent' in plan.data:
+        from bookflow.hub import permission_setup as setup
+        from dataclasses import asdict
+        prepared = setup.edit(s,ctx,plan.data['intent'])
+        row = asdict(next(x for x in prepared.final.root.memberships if x.id == plan.data['id']))
+        user,scope = plan.data['user'],plan.data['scope']
+        out = _membership_out(row,user,scope,changed=prepared.visible.changed)
+        return Applied(MembershipOutput(**out.model_dump(),message=_revoke_message(user,scope,out.changed)),
+                       [],'Revoked company permissions.',audited=out.changed)
     user, scope, existing = plan.data["user"], plan.data["scope"], plan.data["existing"]
     if existing["revoked_at"] is not None:
         out = MembershipOutput(**_membership_out(existing, user, scope, changed=False).model_dump(),
@@ -906,7 +970,7 @@ def listing_audience(s: Session, company: str | None, organization: str | None) 
     if company is not None or organization is not None:
         scope = resolve_scope(s, company, organization)
         return Audience((scope,), self_only=not administers_scope(s, scope, "admin"))
-    if s.is_hub_admin:
+    if access.legacy_admin(s):
         return Audience(None)
     administered = [m for m in s.memberships if m["role"] in ADMINISTERING_ROLES]
     return Audience(_named_scopes(s, administered), include_own=True)
@@ -1003,12 +1067,11 @@ class UserListInput(BaseModel):
 user_list = command("user list", scope="hub",
                     description=("List the people on this installation, with the agent principals that act for them. "
                                  "Filtered by company or organization it answers who can reach it, through their own "
-                                 "membership or their organization's; hub administrators reach every company without "
-                                 "one and are listed unfiltered, with hub_admin set."),
+                                 "membership or their organization's. After activation, installation administration alone supplies no company access."),
                     input_model=UserListInput, output_model=ListOutput[UserOut],
                     error_codes=["E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS",
                                  "E_ORGANIZATION_NOT_FOUND"],
-                    authorization="the principals you administer: everyone for a hub administrator, the members of a "
+                    authorization="the principals you administer: installation-wide only in legacy mode; the members of a "
                                   "company or organization you administer, and always yourself")
 
 
@@ -1043,6 +1106,9 @@ def _user_out(s: Session, row: dict[str, Any], names: dict[str, str], handles: d
 # ---------------------------------------------------------------- membership list
 
 class MembershipRow(BaseModel):
+    version: int
+    grants: list[str] = Field(default_factory=list)
+    denies: list[str] = Field(default_factory=list)
     membership_id: str
     user_id: str
     username: str
@@ -1075,7 +1141,7 @@ membership_list = command("membership list", scope="hub",
                           input_model=MembershipListInput, output_model=ListOutput[MembershipRow],
                           error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                                        "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                          authorization="the memberships you administer: every one for a hub administrator, those of a "
+                          authorization="the memberships you administer: installation-wide only in legacy mode; those of a "
                                         "company or organization you administer, and always your own")
 
 
@@ -1106,7 +1172,8 @@ def plan_membership_list(inp: MembershipListInput, ctx: Context, s: Session) -> 
 
 def _membership_row_out(s: Session, row: dict[str, Any], user: dict[str, Any], scope: Scope,
                         handles: dict[str, str], granters: dict[str, str]) -> MembershipRow:
-    return MembershipRow(membership_id=row["id"], user_id=user["id"], username=user["username"],
+    return MembershipRow(version=row["version"],grants=json.loads(row.get("grants") or "[]"),denies=json.loads(row.get("denies") or "[]"),
+                         membership_id=row["id"], user_id=user["id"], username=user["username"],
                          display_name=user["display_name"], kind=user["kind"],
                          acts_for=handles.get(user["owner_user_id"]) if user["owner_user_id"] else None,
                          scope_type=scope.scope_type, scope_id=scope.scope_id, scope_name=scope.scope_name,

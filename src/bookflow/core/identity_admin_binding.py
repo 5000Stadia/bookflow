@@ -126,6 +126,43 @@ def _transaction(tx, root, admitted, request_id, purpose, captured_file, *, logi
 
 
 @contextmanager
+def session_operation(session, ctx, *, purpose):
+    """Use the dispatcher's transaction and existing credential; never open a writer.
+
+    Hosted sessions retain the server-admitted credential. Offline sessions use
+    the existing OS producer under dispatch's RootLock. No JSON identity is read.
+    """
+    tx = session.hub
+    if tx is None or tx.path != session.data_root / 'hub.db':
+        fail('invalid_input', 'transaction')
+    admitted = session.credential
+    if admitted is None:
+        admitted = OSBinding.from_session(session, ctx.on_behalf_of)
+    elif type(admitted) is not OSBinding:
+        from bookflow.adapters.http.app import Credential
+        if type(admitted) is not Credential:
+            fail('invalid_input', 'binding')
+        admitted.revalidate(tx)
+        admitted = b.TokenBinding(admitted._secret, admitted.token_id, admitted.user_id,
+            admitted.kind, admitted.on_behalf_of, tx.path, ctx.request_id)
+    if admitted.user_id != session.actor.id:
+        fail('not_administrator', 'binding')
+    if purpose == 'apply' and not tx.write_transaction:
+        fail('invalid_input', 'transaction')
+    # Preview on a writable dispatcher connection may have no transaction yet.
+    # A local savepoint scopes that read; apply always retains the outer writer.
+    name = 'permission_dispatch_' + uuid4().hex
+    tx.raw.execute('SAVEPOINT ' + name)
+    try:
+        with b.OSOperation(tx, request_id=ctx.request_id, purpose=purpose) as guard:
+            operation = BoundOperation(tx, admitted, guard, _file(session.data_root))
+            operation._binding(purpose)
+            yield operation
+    finally:
+        tx.raw.execute('RELEASE SAVEPOINT ' + name)
+
+
+@contextmanager
 def hosted_operation(host, admitted, *, request_id, purpose):
     """Called inside the actual host writer job, never from a queued JSON body.
 

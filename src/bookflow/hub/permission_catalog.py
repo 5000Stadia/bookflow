@@ -5,6 +5,8 @@ from typing import Literal, get_type_hints, get_origin, get_args, Union
 from types import UnionType
 from enum import Enum
 from functools import lru_cache
+from collections import OrderedDict
+from threading import RLock
 import hashlib
 import json
 
@@ -110,6 +112,8 @@ _SCOPE_KINDS = ('hub', 'organization', 'company', 'future_company')
 DELETE_NAMES = tuple('transaction.' + family + '.delete' for family in
                      ('journal_entry', 'invoice', 'sales_receipt', 'payment'))
 SCOPED_POLICY_VERSION = 'purchase-delete-activation-preparation-v1'
+SETUP_POLICY_VERSION = 'purchase-permission-setup-v1'
+SCOPED_POLICY_VERSIONS = (SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION)
 PURCHASE_DELETE_FAMILIES = ('check', 'card_charge')
 SUPPORTED_DELETE_NAMES = (*DELETE_NAMES, *('transaction.'+family+'.delete' for family in PURCHASE_DELETE_FAMILIES))
 
@@ -220,7 +224,53 @@ def _requirements(catalog, company=False):
                         for t in (c.company_thresholds if company else c.registered_thresholds)), key=_req_key))
 
 
+def _descriptor_key(value):
+    """Type-preserving immutable key: True must never alias an invalid integer 1."""
+    kind = type(value)
+    if kind in (str, bool, int, type(None)):
+        return kind, value
+    if kind is tuple:
+        return kind, tuple(_descriptor_key(x) for x in value)
+    if kind in (Catalog, CommandDescriptor, CapabilitySpec, DefaultEntry,
+                CompanyAction, AdminAction, ResourceSource, Requirement):
+        return kind, tuple(_descriptor_key(getattr(value,f.name)) for f in fields(kind))
+    raise TypeError('Non-descriptor input')
+
+
+_VALIDATED_DESCRIPTORS = OrderedDict()
+_DESCRIPTOR_LOCK = RLock()
+
+
 def _normal_catalog(catalog):
+    # Only fully validated frozen descriptors enter this bounded identity memo.
+    # Retaining the object prevents id reuse; a new equal object still goes
+    # through the type-preserving value key (True must never alias integer 1).
+    # No root rows, policies, bindings or publication observations are cached.
+    with _DESCRIPTOR_LOCK:
+        found = _VALIDATED_DESCRIPTORS.get(id(catalog))
+        if found is not None and found[0] is catalog:
+            _VALIDATED_DESCRIPTORS.move_to_end(id(catalog))
+            return found[1]
+    try:
+        key = _descriptor_key(catalog)
+    except TypeError:
+        return _normal_catalog_uncached(catalog)
+    normalized = _normal_catalog_cached(key, catalog)
+    with _DESCRIPTOR_LOCK:
+        for value in (catalog, normalized):
+            _VALIDATED_DESCRIPTORS[id(value)] = (value, normalized)
+            _VALIDATED_DESCRIPTORS.move_to_end(id(value))
+        while len(_VALIDATED_DESCRIPTORS) > 32:
+            _VALIDATED_DESCRIPTORS.popitem(last=False)
+    return normalized
+
+
+@lru_cache(maxsize=32)
+def _normal_catalog_cached(key, catalog):
+    return _normal_catalog_uncached(catalog)
+
+
+def _normal_catalog_uncached(catalog):
     _check(catalog, Catalog, 'catalog')
     specs = _unique(catalog.capabilities, lambda x: x.name, 'capabilities')
     commands = _unique(catalog.commands, lambda x: x.name, 'commands')

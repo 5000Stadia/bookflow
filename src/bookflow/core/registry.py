@@ -249,6 +249,7 @@ def all_commands(*, include_standalone: bool = False) -> list[Command]:
 # Which module registers which nouns. The CLI loads only the module it needs, so cold start does not grow
 # with the command count; tests/test_registry.py asserts this index matches what the modules register.
 NOUN_MODULES: dict[str, list[str]] = {
+    "bookflow.commands.permission_cmds": ["permission", "membership"],
     "bookflow.commands.hub_cmds": ["init", "upgrade", "organization", "company", "demo"],
     "bookflow.commands.company_cmds": ["company", "directive", "presence"],
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
