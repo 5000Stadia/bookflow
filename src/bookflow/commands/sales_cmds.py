@@ -5,7 +5,7 @@ from bookflow.company.sales_models import (
     InvoicePostInput, InvoiceUpdateInput, InvoiceVoidInput, InvoiceShowInput,
     InvoiceHistoryInput, SalesReceiptPostInput, SalesReceiptUpdateInput,
     SalesReceiptVoidInput, SalesReceiptShowInput, SalesReceiptHistoryInput,
-    SalesQueryInput,
+    SalesQueryWithDeletedInput as SalesQueryInput,
 )
 from bookflow.company.sales_outputs import (
     SalesOutput, SalesWriteOutput, SalesPageOutput, SalesHistoryOutput,

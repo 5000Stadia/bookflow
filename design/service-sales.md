@@ -496,3 +496,28 @@ line mappings are immutable, audited company-local rows. Preview computes the
 same prospective ordering without writing, and fingerprints include the complete
 tax result. Live tax_calculation_details sits outside historical pricing facts;
 stored old retry payloads remain exact and may omit that projection.
+
+## Invoice and sales-receipt deletion
+
+Invoice and sales-receipt Delete use an explicit, default-off family grant at Standard
+plus ledger.read, independently of ledger.post. Company Users & permissions exposes
+these grants after explicit current-catalog activation. Installation administration
+alone grants neither company access nor Delete.
+
+Open a saved sale to preview cancellation and supply a reason, exact observed version
+and confirmation. Delete reverses the owning sale's captured accounting and stock
+at their original dates, including any required dated recost. Zero face value does
+not suppress physical/COGS reversal. Already-voided deletion retains the original
+inverse and adds only deletion metadata/version/audit. Active payment applications,
+deposits, reconciliation claims, live credit-return claims and closed affected dates
+refuse; no dependent document is silently unapplied or voided. Resolve each dependency
+through its owning workflow first. There is no Restore command or tombstone release.
+
+Ordinary sale queries/selectors/register presentation hide deleted identities.
+Explicit include_deleted reads retain original details, selected revisions, numbers,
+source/tax facts and paginated history with a Deleted overlay; the stored accounting
+status remains voided. Ledger/report inputs and totals are not filtered. Retained
+history has no edit/void/post actions. Confirmation errors preserve the draft; stale
+refresh retains reason/retry identity and requires renewed confirmation. Exact
+permanent retries reauthorize current actor and bound principal, never reactivate a
+sale or duplicate its cancellation. New fields do not recalculate historical prices.

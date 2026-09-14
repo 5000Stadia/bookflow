@@ -99,8 +99,8 @@ def detail_context(record, company_id, *, preview=False):
     print_url = None
     credit_url = None
     if not preview:
-        print_url = document_url(company_id, noun, record['id'])
-        if noun == 'invoice' and record['status'] != 'voided':
+        print_url = document_url(company_id, noun, record['id']) if not record.get('deletion') else None
+        if noun == 'invoice' and record['status'] == 'posted':
             # A return is written against this invoice, so it is opened from it: the credit
             # window seeds one returned row per line rather than asking anyone to copy ids.
             credit_url = ('/c/' + quote(str(company_id), safe='') + '/credit-memo/post?invoice='
@@ -111,11 +111,13 @@ def detail_context(record, company_id, *, preview=False):
         if revision['id'] != record['current_revision_id']:
             links += [('Next revision', url + '?revision_number=' + str(number + 1)), ('Current revision', url)]
         links.append(('History', url + '/history'))
-        if revision.get('billing_sources') and record['status'] != 'voided':
+        if revision.get('billing_sources') and record['status'] == 'posted':
             links.append(('Add an unlinked line', url + '/update#ordinary-lines'))
     for line in revision['lines']:
         for component in line.get('tax_components', []):
             component['rate_display'] = format(Decimal(component['rate_percent_millionths']) / Decimal(1_000_000), 'f')
+    if record.get('deletion'):
+        links = [(label, target + ('&' if '?' in target else '?') + 'include_deleted=1') for label,target in links]
     issuer = revision.get('issuer_snapshot', {})
     settlement = deepcopy(record.get('settlement_current'))
     if settlement:

@@ -196,7 +196,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `destinations[].type` | literal["invoice", "sales_receipt", "statement_charge"] | yes | no | — | — |
 | `destinations[].number` | string | yes | no | — | — |
 | `destinations[].current_revision_id` | string | yes | no | — | — |
-| `destinations[].status` | literal["posted", "voided"] | yes | no | — | — |
+| `destinations[].status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
+| `destinations[].deletion` | object \| null | no | yes | null | — |
+| `destinations[].deletion.created_by_name` | string \| null | no | yes | null | — |
+| `destinations[].deletion.principal_name` | string \| null | no | yes | null | — |
+| `destinations[].deletion.created_at` | string | yes | no | — | — |
+| `destinations[].deletion.created_by` | string | yes | no | — | — |
+| `destinations[].deletion.principal_id` | string \| null | yes | yes | — | — |
+| `destinations[].deletion.created_via` | string | yes | no | — | — |
+| `destinations[].deletion.reason` | string | yes | no | — | — |
+| `destinations[].deletion.from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `destinations[].deletion.cancellation_batch_id` | string \| null | yes | yes | — | — |
 | `destinations[].voided_at` | string \| null | yes | yes | — | — |
 | `destinations[].voided_by` | string \| null | yes | yes | — | — |
 | `destinations[].void_reason` | string \| null | yes | yes | — | — |
@@ -2124,7 +2134,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `type` | literal["invoice", "sales_receipt", "statement_charge"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
-| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
+| `deletion` | object \| null | no | yes | null | — |
+| `deletion.created_by_name` | string \| null | no | yes | null | — |
+| `deletion.principal_name` | string \| null | no | yes | null | — |
+| `deletion.created_at` | string | yes | no | — | — |
+| `deletion.created_by` | string | yes | no | — | — |
+| `deletion.principal_id` | string \| null | yes | yes | — | — |
+| `deletion.created_via` | string | yes | no | — | — |
+| `deletion.reason` | string | yes | no | — | — |
+| `deletion.from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `deletion.cancellation_batch_id` | string \| null | yes | yes | — | — |
 | `voided_at` | string \| null | yes | yes | — | — |
 | `voided_by` | string \| null | yes | yes | — | — |
 | `void_reason` | string \| null | yes | yes | — | — |
@@ -3408,7 +3428,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `type` | literal["invoice", "sales_receipt", "statement_charge"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
-| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
+| `deletion` | object \| null | no | yes | null | — |
+| `deletion.created_by_name` | string \| null | no | yes | null | — |
+| `deletion.principal_name` | string \| null | no | yes | null | — |
+| `deletion.created_at` | string | yes | no | — | — |
+| `deletion.created_by` | string | yes | no | — | — |
+| `deletion.principal_id` | string \| null | yes | yes | — | — |
+| `deletion.created_via` | string | yes | no | — | — |
+| `deletion.reason` | string | yes | no | — | — |
+| `deletion.from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `deletion.cancellation_batch_id` | string \| null | yes | yes | — | — |
 | `voided_at` | string \| null | yes | yes | — | — |
 | `voided_by` | string \| null | yes | yes | — | — |
 | `void_reason` | string \| null | yes | yes | — | — |

@@ -170,6 +170,9 @@ def strip(read, company_id, noun, record):
     document_id = record.get('id')
     if not document_id:
         return view
+    if record.get('deletion'):
+        view['unavailable'] = 'Deleted record: retained history is below; normal navigation excludes it.'
+        return view
     view['steps'] = True
     try:
         found = _neighbours(read, company_id, noun, record)

@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Delete {{ sale.title }}{% endblock %}{% block body %}<section id="sales-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<nav class="crumbs"><a href="/c/{{ company_id }}/{{ noun }}">{{ 'Invoices' if noun == 'invoice' else 'Sales receipts' }}</a> / Delete</nav>
+<h1>Delete {{ sale.title|lower }}</h1>
+{% include "sales_detail.html" %}
+<section class="workspace-card" aria-label="Deletion confirmation">
+<h2>Cancel this sale and retain its history</h2>
+{% if record.status == 'voided' %}<p>This sale is already voided. Deletion adds no further money or stock reversal.</p>
+{% else %}<p>Deletion cancels this sale’s accounting and sold stock at their original dates. Any required inventory cost corrections keep their own dates.</p>{% endif %}
+<p>The sale will leave normal lists and registers. Its original details, revisions, number and audit history remain available. There is no restore action.</p>
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% if error.details %}{% if error.details.next %}<p>{{ error.details.next }}</p>{% endif %}{% if error.details.credit_memo_ids %}<ul>{% for id in error.details.credit_memo_ids %}<li><a href="/c/{{ company_id }}/credit-memo/{{ id }}">Claiming credit memo {{ id }}</a></li>{% endfor %}</ul>{% endif %}{% endif %}</div>{% endif %}
+{% if result %}<div role="status" class="notice">Preview only — nothing saved. {{ result.cancelled_stock_movements }} stock movement(s) will be reversed. The sale will be marked deleted at version {{ result.version }}.</div>{% endif %}
+<form method="post" hx-post="/c/{{ company_id }}/{{ noun }}/{{ record.id }}/delete" hx-target="#sales-deletion" hx-select="#sales-deletion" hx-swap="outerHTML" data-sales-delete>
+<input type="hidden" name="expected_version" value="{{ values.expected_version }}">
+<input type="hidden" name="operation_key" value="{{ values.operation_key }}">
+<label for="delete-reason">Reason for deletion</label><textarea id="delete-reason" name="reason" required maxlength="140" rows="3">{{ values.reason }}</textarea>
+<label style="display:block;padding:1rem 0"><input type="checkbox" name="confirmed" value="yes" {% if values.get('confirmed') == 'yes' %}checked{% endif %}> I confirm cancellation of this sale.</label>
+<div class="actions"><button name="action" value="preview">Preview cancellation</button><button name="action" value="delete">Delete sale</button><a href="/c/{{ company_id }}/{{ noun }}/{{ record.id }}">Cancel</a></div>
+{% if error and error.code == 'E_VERSION_CONFLICT' %}<p>Your reason and retry key are retained. <button name="action" value="refresh" formnovalidate>Reload current sale</button> to review its new version before trying again.</p>{% endif %}
+</form></section>
+</section>{% endblock %}

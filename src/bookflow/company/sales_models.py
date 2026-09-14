@@ -275,10 +275,12 @@ class SalesShowInput(StrictModel):
 
 
 class InvoiceShowInput(SalesShowInput):
+    include_deleted: bool = Field(default=False, description="Explicitly read retained deleted sale facts")
     invoice: Selector
 
 
 class SalesReceiptShowInput(SalesShowInput):
+    include_deleted: bool = Field(default=False, description="Explicitly read retained deleted sale facts")
     sales_receipt: Selector
 
 
@@ -315,11 +317,17 @@ class SalesQueryInput(SalesPageInput):
         return self
 
 
+class SalesQueryWithDeletedInput(SalesQueryInput):
+    include_deleted: bool = Field(default=False, description="Include retained deleted sale facts")
+
+
 class InvoiceHistoryInput(SalesPageInput):
+    include_deleted: bool = Field(default=False, description="Explicitly read retained deleted sale facts")
     invoice: Selector
 
 
 class SalesReceiptHistoryInput(SalesPageInput):
+    include_deleted: bool = Field(default=False, description="Explicitly read retained deleted sale facts")
     sales_receipt: Selector
 
 

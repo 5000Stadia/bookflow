@@ -1173,7 +1173,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, BookflowError("E_USAGE", message=f"`{noun}` has no show command"))
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
-        if command_noun in Document.MONEY_OUT and 'include_deleted' in show.input_model.model_fields:
+        if 'include_deleted' in show.input_model.model_fields:
             raw['include_deleted'] = request.query_params.get('include_deleted') == '1'
         try:
             # Ask the command whether it reads a revision rather than keeping a list of the
@@ -1235,7 +1235,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     else:
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
-        purchase_record = out if command_noun in Document.MONEY_OUT else None
+        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt') else None
         purchase_noun = command_noun if purchase_record else None
         if command_noun == 'journal' and company_id:
             try:
@@ -1258,7 +1258,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # Delete preview additionally checks activation and any bound principal.
             effective = run(request, 'membership effective', {'company':company_id}, None)
             post_bits = [x for x in effective['permissions'] if x['requirement']=={'capability':'ledger.post','threshold':'standard'}]
-            verbs = [v for v in verbs if v.verb!='delete' and not (v.verb in ('post','update','void') and
+            verbs = [v for v in verbs if v.verb!='delete' and not (purchase_noun in ('invoice','sales-receipt') and v.verb=='post') and not (v.verb in ('post','update','void') and
                 (purchase_record.get('deletion') or (effective['mode']=='policy_v1' and not any(x['admitted'] for x in post_bits))))]
             if Purchases.delete_allowed(lambda *a,**kw: run(request,*a,**kw), company_id, purchase_noun, purchase_record):
                 verbs.append(registry.get(purchase_noun+' delete'))
@@ -1348,7 +1348,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
-                      purchase=Purchases.detail_context(purchase_record) if purchase_record else None,
+                      purchase=Purchases.detail_context(purchase_record) if purchase_record and purchase_noun in Document.MONEY_OUT else None,
                       purchase_noun=purchase_noun, purchase_history=purchase_history, purchase_history_paging=purchase_history_paging,
                       credit=Credits.detail_context(command_noun, out, company_id) if command_noun in Credits.NOUNS else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,

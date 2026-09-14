@@ -480,3 +480,20 @@ stable record IDs). Combine it with `projection: "reference"` and
 `include_inactive: true` to retrieve current labels and activity, without full record
 collections. It intersects every other criterion and remains subject to ordinary
 company authority and cursor checks. Omitted `ids` preserves ordinary browsing.
+
+## Deleting duplicate invoices and sales receipts
+
+Use `invoice delete` or `sales-receipt delete` with the exact observed version,
+a reason and a stable operation key. Preview first. The company must explicitly
+activate the current permission catalog, and the authenticated actor and bound
+principal need Standard plus the exact family Delete grant and ledger.read;
+ledger.post is not required for cancellation. Company Users & permissions exposes
+these grants. No role receives them by default.
+
+Deletion retains captured facts, numbering and history, reverses the sale through
+its stock/accounting owner and hides it from ordinary lists/register presentation.
+Read retained facts with `include_deleted=true` on show/query/history. A zero-price
+sale can still have stock/COGS to reverse. Dependencies and closed affected dates
+refuse; resolve supported payment/deposit/credit/reconciliation dependencies explicitly,
+never silently cascade. Retry the original operation key only under current authority.
+There is no Restore command, and payment/journal Delete remain unavailable.

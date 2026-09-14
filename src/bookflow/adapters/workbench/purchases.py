@@ -82,7 +82,7 @@ def delete_allowed(run, company_id, noun, record):
         return True
     except BookflowError as error:
         # Business refusals belong on confirmation; they do not remove authority.
-        return error.code in ('E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_VALIDATION','E_VERSION_CONFLICT')
+        return error.code in ('E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_VALIDATION','E_VERSION_CONFLICT','E_HAS_APPLICATIONS','E_SOURCE_CORRECTION_CONFLICT')
 
 
 def install_deletion(app, *, run, render, page_error):
@@ -97,6 +97,8 @@ def install_deletion(app, *, run, render, page_error):
 
     def routes(noun):
         selector=noun.replace('-','_')
+        is_sale=noun in ('invoice','sales-receipt')
+        label='sale' if is_sale else 'purchase'
         def display(request,company_id,record_id,values=None,result=None,error=None):
             record=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
             if record.get('deletion') and error is None:
@@ -104,8 +106,11 @@ def install_deletion(app, *, run, render, page_error):
             if values is None and not delete_allowed(lambda *a,**kw:run(request,*a,**kw),company_id,noun,record):
                 raise BookflowError('E_PERMISSION')
             values=values if values is not None else dict(expected_version=record['version'],operation_key=new_id(),reason='')
-            return render('purchase_delete.html',request,company_id=company_id,noun=noun,record=record,
-                purchase=detail_context(record),values=values,result=result,error=error,
+            from bookflow.adapters.workbench import sales as Sales
+            detail = Sales.detail_context(record,company_id) if is_sale else detail_context(record)
+            if is_sale: detail.update(print_url=None,credit_url=None,links=[])
+            return render('sales_delete.html' if is_sale else 'purchase_delete.html',request,company_id=company_id,noun=noun,record=record,
+                purchase=detail,sale=detail if is_sale else None,values=values,result=result,error=error,
                 status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
         def get(company_id:str,record_id:str,request:Request):
             try:return display(request,company_id,record_id)
@@ -115,16 +120,16 @@ def install_deletion(app, *, run, render, page_error):
             try:
                 action=values.get('action')
                 if action not in ('preview','delete','refresh'):
-                    raise BookflowError('E_VALIDATION',message='Choose Preview, Delete purchase or Reload current purchase.')
+                    raise BookflowError('E_VALIDATION',message=f'Choose Preview, Delete {label} or Reload current {label}.')
                 if action=='refresh':
                     current=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
                     values['expected_version']=current['version']
                     values.pop('confirmed',None)
                     return display(request,company_id,record_id,values)
                 if action=='delete' and values.get('confirmed')!='yes':
-                    raise BookflowError('E_VALIDATION',message='Confirm cancellation before deleting this purchase.')
+                    raise BookflowError('E_VALIDATION',message=f'Confirm cancellation before deleting this {label}.')
                 try:version=int(values.get('expected_version',''))
-                except ValueError:raise BookflowError('E_VALIDATION',message='Reload the purchase to read its current version.') from None
+                except ValueError:raise BookflowError('E_VALIDATION',message=f'Reload the {label} to read its current version.') from None
                 result=run(request,noun+' delete',{selector:record_id,'expected_version':version,
                     'operation_key':values.get('operation_key') or None},company_id,
                     headers={'X-Bookflow-Reason':values.get('reason','')},dry_run=action=='preview')
@@ -138,4 +143,4 @@ def install_deletion(app, *, run, render, page_error):
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',get,methods=['GET'])
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',post,methods=['POST'])
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
-    for noun in ('check','card-charge'):routes(noun)
+    for noun in ('check','card-charge','invoice','sales-receipt'):routes(noun)

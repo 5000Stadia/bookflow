@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}Invoice settlement{% endblock %}{% block body %}
 <link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
-<h1>Invoice {{ invoice.number }} — settlement</h1>
-<p class="payment-actions"><a href="/c/{{ company_id }}/invoice/{{ invoice.id }}">Invoice and commercial history</a><a href="/c/{{ company_id }}/receive-payments?invoice={{ invoice.id }}">Receive payment</a></p>
+{% if invoice.deletion %}<p role="status">Deleted invoice — retained settlement history.</p>{% endif %}<h1>Invoice {{ invoice.number }} — settlement</h1>
+<p class="payment-actions"><a href="/c/{{ company_id }}/invoice/{{ invoice.id }}{{ '?include_deleted=1' if invoice.deletion else '' }}">Invoice and commercial history</a>{% if not invoice.deletion %}<a href="/c/{{ company_id }}/receive-payments?invoice={{ invoice.id }}">Receive payment</a>{% endif %}</p>
 <form method="get"><label>Effective-date cutoff (blank for current)<input type="text" data-date name="as_of" value="{{ settlement.as_of or '' }}"></label><button>View settlement</button></form>
 <section aria-label="Dated invoice settlement"><h2>{{ 'As of ' ~ settlement.as_of if settlement.as_of else 'Current settlement' }}</h2>
 <p>{{ settlement.status.replace('_',' ')|capitalize }} · Gross {{ settlement.gross.amount }} · Applied {{ settlement.applied.amount }} · Due {{ settlement.due.amount }} {{ settlement.currency }}</p>

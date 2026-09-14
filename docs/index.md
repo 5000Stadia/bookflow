@@ -282,6 +282,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/reconciliation_report_preset_revisions`](schema/company/reconciliation_report_preset_revisions.md)
 - [`company/reconciliation_report_presets`](schema/company/reconciliation_report_presets.md)
 - [`company/report_cursor_keys`](schema/company/report_cursor_keys.md)
+- [`company/sales_deletions`](schema/company/sales_deletions.md)
 - [`company/sales_line_profiles`](schema/company/sales_line_profiles.md)
 - [`company/sales_profiles`](schema/company/sales_profiles.md)
 - [`company/sales_reps`](schema/company/sales_reps.md)

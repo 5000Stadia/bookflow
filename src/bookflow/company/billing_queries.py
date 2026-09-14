@@ -207,7 +207,7 @@ def billing(s, ctx, inp, kind):
     query = sa.select(t).where(t.c.id.in_(destination_ids)).order_by(t.c.created_at, t.c.id)
     found = [dict(r) for r in s.company.conn.execute(query.offset(state.offset).limit(inp.limit + 1)).mappings()]
     more, found = len(found) > inp.limit, found[:inp.limit]
-    destinations = [sales.summary(h, sales.journals.revision(s, h), sales.profile_row(s, sales.journals.revision(s, h))) for h in found]
+    destinations = [sales._visible_summary(s, h, sales.journals.revision(s, h), sales.profile_row(s, sales.journals.revision(s, h)), True) for h in found]
     from bookflow.core.money import Money
     for dest in destinations:
         from bookflow.company.payment_queries import invoice_current

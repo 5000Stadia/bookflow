@@ -155,6 +155,30 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         issuer_snapshot=json.loads(revision['issuer_snapshot']), custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot))
 
 
+def _deletion(s, header, include_deleted):
+    from bookflow.company.sales_deletion_models import SalesDeletionInfo
+    if not sa.inspect(s.company.conn).has_table('sales_deletions'):
+        return None
+    row = s.company.conn.execute(sa.select(c.sales_deletions).where(
+        c.sales_deletions.c.transaction_id == header['id'])).mappings().first()
+    if row is None:
+        return None
+    if not include_deleted:
+        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': header['type'], 'selector': header['id']})
+    from bookflow.company.info import principal_names
+    names = principal_names(s.company, {x for x in (row['created_by'],row['principal_id']) if x})
+    return SalesDeletionInfo(**{key:row[key] for key in SalesDeletionInfo.model_fields if key in row},
+        created_by_name=names.get(row['created_by']),principal_name=names.get(row['principal_id']))
+
+
+def _visible_summary(s, header, revision, profile, include_deleted):
+    value = summary(header, revision, profile)
+    deletion = _deletion(s, header, include_deleted)
+    if deletion:
+        value.update(status='deleted', deletion=deletion)
+    return value
+
+
 def show(s, inp, document_type):
     header = resolve(s, getattr(inp, document_type), document_type)
     revision = journals.revision(s, header, inp.revision_number)
@@ -162,7 +186,7 @@ def show(s, inp, document_type):
     if document_type == 'invoice':
         from bookflow.company.payment_queries import invoice_current
         settlement = invoice_current(s, header['id'])
-    return SalesOutput(**summary(header, revision, profile_row(s, revision)), revision=revision_output(s, revision), settlement_current=settlement)
+    return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement)
 
 
 def page(s, ctx, inp, document_type, *, history=False):
@@ -175,6 +199,7 @@ def page(s, ctx, inp, document_type, *, history=False):
     state = page_state(s, document_type + (' history' if history else ' query'), Contract(), ctx.on_behalf_of)
     if history:
         header = resolve(s, getattr(inp, document_type), document_type)
+        deletion = _deletion(s, header, getattr(inp, 'include_deleted', False))
         query = sa.select(c.transaction_revisions).where(c.transaction_revisions.c.transaction_id == header['id']).order_by(c.transaction_revisions.c.revision_number)
     else:
         from bookflow.company.payment_queries import indexed_source, cross_join
@@ -188,6 +213,8 @@ def page(s, ctx, inp, document_type, *, history=False):
         source = (cross_join(cross_join(p, r, r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)
             if inp.customer else cross_join(cross_join(t, r, r.c.id == t.c.current_revision_id), p, p.c.revision_id == r.c.id))
         query = sa.select(t.c.id).select_from(source).where(t.c.type == document_type)
+        if not getattr(inp, 'include_deleted', False) and sa.inspect(s.company.conn).has_table('sales_deletions'):
+            query = query.where(~sa.exists(sa.select(c.sales_deletions.c.transaction_id).where(c.sales_deletions.c.transaction_id == t.c.id)))
         if inp.customer:
             from bookflow.company.parties import resolve_party
             customer = resolve_party(s.company, 'customer', inp.customer)
@@ -209,7 +236,9 @@ def page(s, ctx, inp, document_type, *, history=False):
     more, found = len(found) > inp.limit, found[:inp.limit]
     shared = dict(count=len(found), has_more=more, next_cursor=continuation(state, len(found), more), audit_watermark=state.sequence)
     if history:
-        return SalesHistoryOutput(**{k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
+        current = {k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')}
+        if deletion: current.update(status='deleted', deletion=deletion)
+        return SalesHistoryOutput(**current,
             items=[revision_output(s, revision, summary_only=True) for revision in found], **shared)
     headers = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(c.transactions).where(
         c.transactions.c.id.in_([row['id'] for row in found]))).mappings()} if found else {}
@@ -231,7 +260,7 @@ def page(s, ctx, inp, document_type, *, history=False):
     items = []
     for header in found:
         revision = revisions[header['current_revision_id']]
-        item = SalesSummaryOutput(**summary(header, revision, profiles[revision['id']]))
+        item = SalesSummaryOutput(**_visible_summary(s, header, revision, profiles[revision['id']], getattr(inp, 'include_deleted', False)))
         if document_type == 'invoice':
             item.settlement_current = InvoiceSettlementOutput(**settlements[header['id']])
         items.append(item)

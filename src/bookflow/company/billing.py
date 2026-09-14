@@ -213,7 +213,7 @@ def replay_plan(s, ctx, inp, kind, destination):
         after = work.rows(s, c.work_revisions,
             c.work_revisions.c.document_id == source['id'],
             c.work_revisions.c.supersedes_revision_id == before['id'])[0]
-        return Plan(SalesWriteOutput(**sales.summary(header, revision, sales.profile_row(s, revision)),
+        return Plan(SalesWriteOutput(**sales._visible_summary(s, header, revision, sales.profile_row(s, revision), True),
             revision=sales.revision_output(s, revision), changed=False, idempotent_replay=True,
             source_effect=source_effect(source, before, after, saved['source_version']),
             source_current=source_current(source)),

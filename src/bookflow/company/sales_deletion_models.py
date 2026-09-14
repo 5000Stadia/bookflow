@@ -30,3 +30,15 @@ class SalesDeleteOutput(WriteOutput):
     cancelled_stock_movements: int
     changed: bool = True
     idempotent_replay: bool = False
+
+
+class SalesDeletionInfo(_Input):
+    created_by_name: str | None = None
+    principal_name: str | None = None
+    created_at: str
+    created_by: str
+    principal_id: str | None
+    created_via: str
+    reason: str
+    from_status: Literal['posted', 'voided']
+    cancellation_batch_id: str | None

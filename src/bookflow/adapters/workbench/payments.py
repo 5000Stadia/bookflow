@@ -16,7 +16,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
                 if request.query_params.get(name):
                     inputs[name] = request.query_params[name]
             state = run(request, 'invoice settlement', inputs, company_id)
-            invoice = run(request, 'invoice show', {'invoice': invoice_id}, company_id)
+            invoice = run(request, 'invoice show', {'invoice': invoice_id, 'include_deleted': True}, company_id)
             for group in (state, state['all_committed_current']):
                 for field in ('gross', 'applied', 'due'):
                     group[field] = Money(group[field+'_minor_units'], group['currency']).to_dict()
@@ -37,7 +37,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             history = run(request, 'application history', {'application': application_id, 'limit': 50,
                 **({'cursor': request.query_params['cursor']} if request.query_params.get('cursor') else {})}, company_id)
             record = shown['record']
-            invoice = run(request, 'invoice show', {'invoice': record['paid_transaction_id']}, company_id)
+            invoice = run(request, 'invoice show', {'invoice': record['paid_transaction_id'], 'include_deleted': True}, company_id)
             payment = run(request, 'payment show', {'payment': record['paying_transaction_id']}, company_id)
             for row in history['items']:
                 value = row.get('application') or row.get('allocation')

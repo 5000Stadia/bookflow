@@ -183,9 +183,10 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         while True:
             result = reports.general_ledger(report_input, s, principal_id=principal_id)
             deleted = set()
-            if sa.inspect(db.conn).has_table('purchase_deletions'):
-                deleted = set(db.conn.execute(sa.select(schema.purchase_deletions.c.transaction_id).where(
-                    schema.purchase_deletions.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}))).scalars())
+            for table in (schema.purchase_deletions, schema.sales_deletions):
+                if sa.inspect(db.conn).has_table(table.name):
+                    deleted.update(db.conn.execute(sa.select(table.c.transaction_id).where(
+                        table.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}))).scalars())
             visible = []
             for row in result.rows:
                 if row.transaction_id in deleted:

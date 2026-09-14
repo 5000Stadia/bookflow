@@ -1,4 +1,5 @@
 """Commercial sales results shared by all command adapters."""
+from bookflow.company.sales_deletion_models import SalesDeletionInfo
 from typing import Literal
 from pydantic import Field, model_serializer
 
@@ -146,7 +147,8 @@ class SalesSummaryOutput(CommonOut):
     type: Literal["invoice", "sales_receipt", "statement_charge"]
     number: str
     current_revision_id: str
-    status: Literal["posted", "voided"]
+    status: Literal["posted", "voided", "deleted"]
+    deletion: SalesDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     voided_at: str | None
     voided_by: str | None
     void_reason: str | None
@@ -250,7 +252,8 @@ class SalesHistoryOutput(StrictModel):
     version: int
     current_revision_id: str
     number: str
-    status: Literal["posted", "voided"]
+    status: Literal["posted", "voided", "deleted"]
+    deletion: SalesDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     items: list[SalesRevisionSummaryOutput]
     count: int
     has_more: bool
