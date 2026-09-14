@@ -1,0 +1,16 @@
+"""Add immutable invoice and sales-receipt cancellation receipts."""
+from alembic import op
+revision = "co0050"
+down_revision = "co0049"
+branch_labels = depends_on = None
+DDL = ("\nCREATE TABLE sales_deletions (\n\ttransaction_id VARCHAR(26) NOT NULL, \n\tfamily TEXT NOT NULL, \n\trevision_id VARCHAR(26) NOT NULL, \n\tfrom_status TEXT NOT NULL, \n\tfrom_version INTEGER NOT NULL, \n\tresult_version INTEGER NOT NULL, \n\tcancellation_batch_id VARCHAR(26), \n\toperation_key TEXT NOT NULL, \n\trequest_hash TEXT NOT NULL, \n\trequest_snapshot TEXT NOT NULL, \n\tresult_snapshot TEXT NOT NULL, \n\tcreated_at TEXT NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tprincipal_id VARCHAR(26), \n\tcreated_via TEXT NOT NULL, \n\treason TEXT NOT NULL, \n\taudit_event_id VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (transaction_id), \n\tFOREIGN KEY(transaction_id) REFERENCES transactions (id), \n\tFOREIGN KEY(transaction_id, revision_id) REFERENCES transaction_revisions (transaction_id, id), \n\tFOREIGN KEY(cancellation_batch_id) REFERENCES posting_batches (id), \n\tCONSTRAINT uq_sales_delete_operation UNIQUE (created_by, operation_key), \n\tCONSTRAINT ck_sales_delete_family CHECK (family IN ('invoice','sales_receipt')), \n\tCONSTRAINT ck_sales_delete_status CHECK (from_status IN ('posted','voided')), \n\tCONSTRAINT ck_sales_delete_version CHECK (typeof(from_version)='integer' AND from_version>0 AND typeof(result_version)='integer' AND result_version=from_version+1), \n\tCONSTRAINT ck_sales_delete_reason CHECK (length(trim(reason)) BETWEEN 1 AND 140), \n\tCONSTRAINT ck_sales_delete_request_snapshot CHECK (json_valid(request_snapshot) AND json_type(request_snapshot)='object'), \n\tCONSTRAINT ck_sales_delete_result_snapshot CHECK (json_valid(result_snapshot) AND json_type(result_snapshot)='object'), \n\tFOREIGN KEY(audit_event_id) REFERENCES audit_events (id)\n)\n\n", "CREATE TRIGGER sales_deletions_owner BEFORE INSERT ON sales_deletions WHEN NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id=NEW.transaction_id AND t.type=NEW.family AND t.status='voided' AND t.current_revision_id=NEW.revision_id AND t.version=NEW.result_version AND t.void_posting_batch_id IS NEW.cancellation_batch_id) OR (NEW.cancellation_batch_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM posting_batches b WHERE b.id=NEW.cancellation_batch_id AND b.transaction_id=NEW.transaction_id AND b.revision_id=NEW.revision_id AND b.kind='reversal')) BEGIN SELECT RAISE(ABORT,'sales deletion owner mismatch'); END", "CREATE TRIGGER sales_deletions_no_update BEFORE UPDATE ON sales_deletions BEGIN SELECT RAISE(ABORT,'sales deletion is immutable'); END", "CREATE TRIGGER sales_deletions_no_delete BEFORE DELETE ON sales_deletions BEGIN SELECT RAISE(ABORT,'sales deletion is immutable'); END", "CREATE TRIGGER sales_deletions_transaction_fence BEFORE UPDATE ON transactions WHEN EXISTS (SELECT 1 FROM sales_deletions d WHERE d.transaction_id=OLD.id) BEGIN SELECT RAISE(ABORT,'deleted sales is immutable'); END")
+
+def upgrade():
+    connection = op.get_bind()
+    for statement in DDL:
+        connection.exec_driver_sql(statement)
+    if connection.exec_driver_sql("PRAGMA foreign_key_check").first():
+        raise RuntimeError("co0050 foreign key check failed")
+
+def downgrade():
+    raise RuntimeError("Company migrations are forward-only")

@@ -154,7 +154,7 @@ def latest_consumption_changes(s, roots):
         transaction_id=row['transaction_id'], audit_event_id=row['audit_event_id'],
         updated_by=row['actor_id'], updated_via=row['interface'],
         seconds_since_update=max(0, int((now-datetime.fromisoformat(row['at'])).total_seconds())),
-        changed_fields=['billing_consumption', 'status' if row['command'].endswith(' void') else 'allocation_revision'])
+        changed_fields=['billing_consumption', 'status' if row['command'].endswith((' void', ' delete')) else 'allocation_revision'])
         for row in rows]
 
 

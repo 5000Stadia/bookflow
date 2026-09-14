@@ -89,6 +89,9 @@ def catalog_for_root(tx):
     if state == ('policy_v1', c.DELETE_POLICY_VERSION):
         from .permission_deletion_catalog import catalog_bundle as deletion_bundle
         bundle = deletion_bundle()
+    if state == ('policy_v1', c.SALES_DELETE_POLICY_VERSION):
+        from .permission_sales_deletion_catalog import catalog_bundle as sales_deletion_bundle
+        bundle = sales_deletion_bundle()
     return bundle
 
 

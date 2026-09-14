@@ -102,6 +102,8 @@ def test_first_keyed_delete_upgrades_populated_co48_preserving_all_prior_storage
         b['run']('check update',dict(check=post['id'],memo='Captured prior revision'),reason='Existing correction')
         post=b['run']('check show',dict(check=post['id']))
         path=location(b);enable(b,'check')
+    # This witness owns the historical co48->co49 transition and its first writer.
+    monkeypatch.setitem(HEADS, 'company', 'co0049')
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(tmp_path/'items'))
     before=database(path)
     from bookflow.storage import migrate

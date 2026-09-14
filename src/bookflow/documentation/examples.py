@@ -951,3 +951,8 @@ for noun, selector in (('check','check'),('card-charge','card_charge')):
     EXAMPLES[noun+' delete'] = Example(
         f'bookflow {noun} delete {ID} --expected-version 1 --operation-key purchase-delete-1 --reason "Remove duplicate purchase" --company "Demo Plumbing Co" --json',
         {selector:ID,'expected_version':1,'operation_key':'purchase-delete-1'})
+
+for _sales_noun in ('invoice', 'sales-receipt'):
+    EXAMPLES[_sales_noun+' delete'] = Example(
+        f'bookflow {_sales_noun} delete {ID} --expected-version 1 --operation-key sales-delete-example --reason "Remove duplicate sale" --dry-run --json',
+        {_sales_noun.replace('-', '_'): ID, 'expected_version': 1, 'operation_key': 'sales-delete-example'})

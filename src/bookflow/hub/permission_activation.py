@@ -83,6 +83,8 @@ def prepare(tx, *, actor_id, intent, catalog, context=None):
         from . import permission_setup_catalog as selected
     if catalog != selected.catalog_bundle():
         from . import permission_deletion_catalog as selected
+    if catalog != selected.catalog_bundle():
+        from . import permission_sales_deletion_catalog as selected
     if catalog != selected.catalog_bundle() or intent.expected_catalog_sha256 != selected.MANIFEST.descriptor_sha256:
         fail('catalog_mismatch', 'executable_catalog')
     try:

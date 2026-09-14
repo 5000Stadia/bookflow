@@ -99,3 +99,35 @@ SALES_COMMANDS = [
     sales_receipt_post, sales_receipt_show, sales_receipt_update, sales_receipt_void,
     sales_receipt_query, sales_receipt_history,
 ]
+
+
+def _delete(noun, model):
+    from bookflow.company import sales_deletions as deletion
+    from bookflow.company.sales_deletion_models import SalesDeleteOutput
+    from bookflow.core.deletion_families import capability
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp, noun)
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s, noun)
+    cmd = command(noun+' delete', scope='company',
+        description='Delete this sale with a required reason and exact expected_version. Cancel its stock and accounting at their original dates; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. Reconciled, dependent or closed effects refuse atomically.',
+        input_model=model, output_model=SalesDeleteOutput, writes={'company'},
+        required_role='standard', capability=capability(noun.replace('-', '_')), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=[noun.replace('-', '_')],
+        version_source=(noun+' show', noun.replace('-', '_'), 'version'),
+        error_codes=['E_RECORD_NOT_FOUND','E_VERSION_CONFLICT','E_VALIDATION','E_REASON_REQUIRED',
+                     'E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_IDEMPOTENCY_MISMATCH','E_HAS_APPLICATIONS','E_SOURCE_CORRECTION_CONFLICT'])(planner)
+    cmd.resource_requirements = (('ledger.read','member'),)
+    def authorize(inp, ctx, s):
+        from bookflow.company.billing_queries import authorize_sale
+        authorize_sale(inp, ctx, s, noun.replace('-', '_'), True)
+    cmd.authorize_input = authorize
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+from bookflow.company.sales_deletion_models import InvoiceDeleteInput, SalesReceiptDeleteInput
+invoice_delete = _delete('invoice', InvoiceDeleteInput)
+sales_receipt_delete = _delete('sales-receipt', SalesReceiptDeleteInput)
