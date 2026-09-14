@@ -16,6 +16,7 @@ already knows which document they are writing.
 Items and expenses share the entered amount. Purchased item facts remain captured beside
 immutable journal lines; tracked items receive stock through the inventory owner.
 """
+from bookflow.company.sales_models import SalesMoneyInput
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_serializer, model_validator
@@ -83,7 +84,7 @@ class _MoneyOut(_Input):
     account: _Selector
     pay_to: CheckParty | None = None
     date: _Date
-    amount: str | MoneyInput
+    amount: str | SalesMoneyInput
     memo: str | None = Field(default=None, max_length=2000)
     class_id: _Selector | None = None
     expenses: Expenses = Field(default_factory=list)
@@ -135,7 +136,7 @@ class _MoneyOutCorrection(_Input):
     account: _Selector | None = None
     pay_to: CheckParty | None = None
     date: _Date | None = None
-    amount: str | MoneyInput | None = None
+    amount: str | SalesMoneyInput | None = None
     memo: str | None = Field(default=None, max_length=2000)
     class_id: _Selector | None = None
     expenses: Expenses | None = None
@@ -259,6 +260,7 @@ class MoneyOutSummary(_Input):
 
     kind: Literal['check', 'card_charge']
     account_id: str
+    funding_details: dict | None = Field(default=None, exclude_if=lambda value: value is None)
     funding: Literal['bank', 'credit_card']
     currency: str
     amount: JournalMoneyOutput

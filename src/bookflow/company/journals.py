@@ -76,7 +76,7 @@ def totals(debit, credit, currency, *, document=False):
     return values
 
 
-def batch_output(s, batch, supplied=None):
+def batch_output(s, batch, supplied=None, *, currency=None):
     if supplied is None:
         # History summaries never load account snapshots or entered descriptions.
         t = c.posting_lines
@@ -85,9 +85,9 @@ def batch_output(s, batch, supplied=None):
         ).where(t.c.batch_id == batch['id'])).mappings())
     debit = checked_sum((l['debit_minor_units'] for l in supplied), 'debits')
     credit = checked_sum((l['credit_minor_units'] for l in supplied), 'credits')
-    if not supplied:
+    if not supplied and currency is None:
         raise BookflowError('E_INTERNAL', message='A journal posting batch has no lines.')
-    currency = supplied[0]['currency']
+    currency = supplied[0]['currency'] if supplied else currency
     return JournalBatchOutput(**batch, **totals(debit, credit, currency, document=True),
                               currency=currency, line_count=len(supplied))
 
@@ -97,7 +97,7 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
     batches = rows(s, c.posting_batches, c.posting_batches.c.revision_id == rev['id'], order=c.posting_batches.c.id)
     batches += [b for b in pending.get('posting_batches', []) if b['revision_id'] == rev['id']]
     summaries = [batch_output(s, b, [l for l in pending['posting_lines'] if l['batch_id'] == b['id']]
-                             if b in pending.get('posting_batches', []) else None) for b in batches]
+                             if b in pending.get('posting_batches', []) else None, currency=rev['currency']) for b in batches]
     values = {k: v for k, v in rev.items() if not k.endswith('_snapshot')}
     values.update(totals(rev['total_minor_units'], rev['total_minor_units'], rev['currency'], document=True))
     if summary_only:
@@ -114,7 +114,7 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
         custom_fields=custom.project(json.loads(rev['custom_fields_snapshot'])),
         lines=[dict(decoded(l), amount=Money(l['amount_minor_units'], l['currency']).to_dict(),
                     original_amount=Money(l['original_minor_units'], l['original_currency']).to_dict()
-                    if l['original_currency'] is not None else None) for l in lines])
+                    if l['original_currency'] is not None else None) for l in lines if l['kind'] == 'journal'])
 
 
 def summary(header, rev):
@@ -211,7 +211,7 @@ def allocate(s, explicit, own=None):
     return allocate_document(s, 'journal_entry', explicit, own)
 
 
-def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_revision=False):
+def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_revision=False, purchase_items=None):
     """``owner`` is the document module posting through this writer; the journal editor is None.
 
     It decides two things and nothing else: which control accounts these lines may name, and
@@ -224,6 +224,8 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
     which bank account and which number are on the paper is not something the journal editor
     or the register is editing, so neither may silently change them.
     """
+    if purchase_items is not None and owner != 'inventory':
+        raise invalid('items', 'commercial item rows require their purchase coordinator')
     old_h = resolve(s, inp.journal) if operation != 'post' else None
     if old_h is not None and owner != 'inventory':
         if s.company.conn.execute(sa.select(c.money_out_item_lines.c.document_line_id).where(
@@ -298,8 +300,9 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
             issuer = old_r['issuer_snapshot']
         # A correction that only renumbers a cheque changes no accounting at all: left out of
         # `unchanged` the entry would read as untouched and the new number would be dropped.
-        unchanged = old_r and not force_revision and not custom_plan.changed and not check_numbers.changed(settled, held) and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
-            key == old['line_id'] and all(value[k] == old[k] for k in value) for (key, value), old in zip(values, old_lines))
+        comparable = [l for l in old_lines if l['kind'] == 'journal'] if purchase_items is not None else old_lines
+        unchanged = old_r and not force_revision and not custom_plan.changed and not check_numbers.changed(settled, held) and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(comparable) and all(
+            key == old['line_id'] and all(value[k] == old[k] for k in value) for (key, value), old in zip(values, comparable))
         if unchanged:
             return Plan(JournalWriteOutput(**summary(old_h, old_r), revision=revision_output(s, old_r), changed=False, warnings=warnings), {'input': inp, 'operation': operation, 'changed': False})
         r = dict(**created(), transaction_id=h['id'], revision_number=old_r['revision_number'] + 1 if old_r else 1,
@@ -314,6 +317,9 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
                 pending['document_line_identities'].append(ident)
                 key = ident['id']
             pending['document_lines'].append(dict(**created(), transaction_id=h['id'], revision_id=r['id'], line_id=key, position=position, kind='journal', **value))
+        if purchase_items is not None:
+            from bookflow.company.check_items import free_envelopes
+            free_envelopes(pending, purchase_items, h, r, created, prior)
     else:
         r = old_r
     if old_h:
@@ -329,23 +335,25 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
             effective_date=r['date'], reverses_batch_id=None, replaces_batch_id=current_batch['id'] if current_batch else None, audit_event_id=event)
         pending['posting_batches'].append(batch)
         for line in pending['document_lines']:
-            leg = dict(**created(), transaction_id=h['id'], batch_id=batch['id'], line_no=line['position'],
+            if line['kind'] != 'journal':
+                continue
+            leg = dict(**created(), transaction_id=h['id'], batch_id=batch['id'], line_no=1 + sum(l['batch_id'] == batch['id'] for l in pending['posting_lines']),
                 **{k: line[k] for k in DIMENSIONS}, debit_minor_units=line['amount_minor_units'] if line['side'] == 'debit' else 0,
                 credit_minor_units=line['amount_minor_units'] if line['side'] == 'credit' else 0, reversed_line_id=None)
             pending['posting_lines'].append(leg)
             pending['posting_line_sources'].append(dict(**created(), transaction_id=h['id'], posting_line_id=leg['id'],
                 revision_id=r['id'], document_line_id=line['id'], amount_minor_units=line['amount_minor_units'], currency=line['currency'], reversed_source_id=None,
                 tax_component_id=None))
-    validate_pending_aggregate(s, h, pending, custom_plan, custom_input=inp, creating=old_h is None)
+    validate_pending_aggregate(s, h, pending, custom_plan, custom_input=inp, creating=old_h is None, purchase=purchase_items is not None)
     view_pending = pending if operation != 'void' else {k: v for k, v in pending.items() if k != 'document_lines'}
     output = JournalWriteOutput(**summary(h, r), revision=revision_output(s, r, view_pending), warnings=warnings,
         changed_fields=['journal'] if old_h else [])
     return Plan(output, dict(input=inp, operation=operation, changed=True, header=h, before=old_h,
                             pending=pending, sequence=sequence, event=event, custom_plan=custom_plan,
-                            check_instrument=instrument))
+                            check_instrument=instrument, purchase=purchase_items is not None))
 
 
-def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_input=None, creating=None):
+def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_input=None, creating=None, purchase=False):
     """Independently verify generated accounting effects before any audit or row write.
 
     Stored reversal targets are checked too: copying corrupt attribution must never
@@ -362,7 +370,7 @@ def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_i
             raise BookflowError('E_INTERNAL', message='Invalid journal aggregate: ' + problem)
 
     require(header['type'] == 'journal_entry', 'wrong business document type')
-    require(all(line['kind'] == 'journal' for line in pending['document_lines']), 'wrong entered line kind')
+    require(all(line['kind'] == 'journal' or (purchase and line['kind'] == 'purchase' and line['amount_minor_units'] is None and line['account_id'] is None and line['side'] is None) for line in pending['document_lines']), 'wrong entered line kind')
     require(all(source.get('tax_component_id') is None for source in pending['posting_line_sources']),
             'a journal source cannot attribute a sales tax component')
 
@@ -413,7 +421,7 @@ def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_i
 
     def check_effect(batch, own_legs, own_sources):
         require(batch['transaction_id'] == document_id, 'batch belongs to another document')
-        require(2 <= len(own_legs) <= 200, 'batch must have two through 200 posting lines')
+        require(2 <= len(own_legs) <= 200 or (purchase and not own_legs), 'batch must have two through 200 posting lines')
         require(sorted(l['line_no'] for l in own_legs) == list(range(1, len(own_legs) + 1)), 'invalid posting positions')
         debit = credit = 0
         for leg in own_legs:
@@ -448,7 +456,7 @@ def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_i
             require(rev is not None, 'business batch has no new revision')
             require(rev['currency'] == currency and rev['total_minor_units'] == total
                     and rev['date'] == batch['effective_date'], 'revision total, currency or date differs')
-            entered = [l for l in indexed['document_lines'].values() if l['revision_id'] == rev['id']]
+            entered = [l for l in indexed['document_lines'].values() if l['revision_id'] == rev['id'] and l['kind'] == 'journal']
             require(len(entered) == len(own_legs), 'entered and posting line counts differ')
             used = []
             for leg in own_legs:
@@ -461,7 +469,7 @@ def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_i
                 require(doc['side'] in ('debit', 'credit') and doc['amount_minor_units'] > 0, 'invalid entered side or amount')
                 require(doc['amount_minor_units'] == leg['debit_minor_units'] + leg['credit_minor_units']
                         and (doc['side'] == 'debit') == (leg['debit_minor_units'] > 0)
-                        and doc['position'] == leg['line_no']
+                        and (entered.index(doc) + 1 if purchase else doc['position']) == leg['line_no']
                         and all(doc[k] == leg[k] for k in DIMENSIONS), 'posting differs from entered line')
                 used.append(doc['id'])
             require(len(set(used)) == len(entered), 'entered-source mapping is not a bijection')
@@ -528,7 +536,7 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', n
     d = fresh.data
     h, old, pending = d['header'], d['before'], d['pending']
     custom_plan = d.get('custom_plan')
-    validate_pending_aggregate(s, h, pending, custom_plan, custom_input=d['input'], creating=old is None)
+    validate_pending_aggregate(s, h, pending, custom_plan, custom_input=d['input'], creating=old is None, purchase=d.get('purchase', False))
     foreign.validate(s, h, pending, d['input'])
     touched = [Touched('transaction', h['id'], 'update' if old else 'create', old['version'] if old else None,
                        h['version'], h, old, db='company')]

@@ -123,7 +123,9 @@ def test_item_storage_additive_migration_preserves_prior_database(tmp_path):
     with open_database(path,writable=True) as db:
         assert migrate_to_head(db,'company',tmp_path/'backups') == ('co0044', HEADS['company'])
         assert {name:table(db.raw,name) for name in names} == before
-        assert ddl <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+        from tests.test_bill_payment_migration import _rebuilt_since
+        owned = _rebuilt_since('co0044')
+        assert {row for row in ddl if row[1] not in owned} <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
         assert migrate_to_head(db,'company',tmp_path/'backups') == (HEADS['company'],HEADS['company'])

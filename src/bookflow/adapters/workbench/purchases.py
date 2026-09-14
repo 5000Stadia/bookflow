@@ -1,5 +1,6 @@
 """Saved check/card presentation from captured command output, without new defaults."""
 from copy import deepcopy
+import json
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
@@ -25,7 +26,7 @@ def _party(line):
 
 def editable_values(record):
     revision, document = record['revision'], record['document']
-    funding = revision['lines'][0]
+    funding = document.get('funding_details') or revision['lines'][0]
     values = dict(account=document['account_id'], pay_to=_party(funding),
         date=revision['date'], amount=document['amount']['amount'], memo=revision['memo'],
         custom_fields={f['definition_id']: deepcopy(f['value']) for f in revision.get('custom_fields', [])},
@@ -60,7 +61,10 @@ def editable_values(record):
 def detail_context(record):
     document = record['document']
     ids = {item['line_id'] for item in document['items']}
-    return dict(document=document, revision=record['revision'],
+    funding = deepcopy(document.get('funding_details') or record['revision']['lines'][0])
+    if isinstance(funding.get('account_snapshot'), str):
+        funding['account_snapshot'] = json.loads(funding['account_snapshot'])
+    return dict(document=document, funding=funding, revision=record['revision'],
         title='Check' if document['kind'] == 'check' else 'Credit card charge',
         items=[dict(item, unit_cost=Money(item['profile']['unit_cost_minor_units'], document['currency']).to_dict()
                     if item['profile']['unit_cost_minor_units'] is not None else None)

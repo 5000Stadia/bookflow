@@ -141,7 +141,7 @@ def posting_lifecycle(graph,header):
     reversed_batches=set()
     for batch in batches.values():
         group=[r for r in lines.values() if r['batch_id']==batch['id']]
-        require(group and sum(r['debit_minor_units']-r['credit_minor_units'] for r in group)==0)
+        require((group or (header['type']=='sales_receipt' and any(r['id']==batch['revision_id'] and r['total_minor_units']==0 for r in graph['transaction_revisions']))) and sum(r['debit_minor_units']-r['credit_minor_units'] for r in group)==0)
         if batch['kind']!='reversal':continue
         orig=batches.get(batch['reverses_batch_id']);require(orig is not None and orig['id'] not in reversed_batches)
         reversed_batches.add(orig['id']);require(orig['revision_id']==batch['revision_id'] and orig['effective_date']==batch['effective_date'])

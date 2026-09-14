@@ -89,7 +89,7 @@ def _stock(s, data, indexed, require):
     legs, batches = indexed['posting_lines'], indexed['posting_batches']
     control = {row['id'] for row in effects.rows(
         s, c.accounts, c.accounts.c.system_role == inventory.ASSET_ROLE)}
-    claimed = [row['posting_line_id'] for row in movements]
+    claimed = [row['posting_line_id'] for row in movements if row['value_minor_units']]
     require(len(claimed) == len(set(claimed)), 'two stock movements claim one posting line')
     require(set(claimed) == {leg['id'] for leg in legs.values() if leg['account_id'] in control},
             'an inventory-asset posting is not attributed to exactly one item')
@@ -98,17 +98,23 @@ def _stock(s, data, indexed, require):
     prior = {row['id']: row for row in effects.rows(
         s, c.inventory_movements, c.inventory_movements.c.transaction_id == header['id'])}
     for row in movements:
-        leg = legs[row['posting_line_id']]
-        require(leg['batch_id'] == row['posting_batch_id']
-                and leg['account_id'] == row['asset_account_id']
-                and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units']
-                and batches[leg['batch_id']]['effective_date'] == row['effective_date'],
-                'a stock movement does not match the posting line that carries its value')
+        leg = legs.get(row['posting_line_id'])
+        batch = batches.get(row['posting_batch_id'])
+        require(batch is not None and batch['transaction_id'] == row['transaction_id']
+                and batch['effective_date'] == row['effective_date'], 'stock batch ownership/date')
+        if row['value_minor_units']:
+            require(leg is not None and leg['batch_id'] == row['posting_batch_id']
+                    and leg['account_id'] == row['asset_account_id']
+                    and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units'],
+                    'stock monetary attribution')
+        else:
+            require(row['posting_line_id'] is None and row['quantity_microunits'] != 0,
+                    'zero stock effect must have quantity and no monetary leg')
         require(row['kind'] in ('receipt', 'reversal'), 'a bill moves stock only in or back out')
         if row['kind'] == 'reversal':
             original = prior.get(row['reverses_movement_id'])
             require(original is not None
-                    and leg['reversed_line_id'] == original['posting_line_id']
+                    and (leg['reversed_line_id'] if leg else None) == original['posting_line_id']
                     and row['quantity_microunits'] == -original['quantity_microunits']
                     and row['value_minor_units'] == -original['value_minor_units']
                     and row['item_id'] == original['item_id']
@@ -183,7 +189,7 @@ def _validate(plan, s, ctx):
     currency = s.company.conn.execute(c.company_info.select()).mappings().one()['home_currency']
     for batch in batches:
         own = [leg for leg in legs if leg['batch_id'] == batch['id']]
-        require(bool(own), 'empty batch')
+        # Commercial revisions can carry quantity without any monetary effect.
         require(sorted(leg['line_no'] for leg in own) == list(range(1, len(own) + 1)),
                 'non-contiguous batch lines')
         debit = credit = 0
@@ -199,7 +205,7 @@ def _validate(plan, s, ctx):
                              for source in sources if source['posting_line_id'] == leg['id'])
             require(attributed == leg['debit_minor_units'] + leg['credit_minor_units'],
                     'a posting line is not fully attributed to entered lines')
-        require(debit == credit and debit > 0, 'a posting batch does not balance')
+        require(debit == credit, 'a posting batch does not balance')
 
     if old:
         inverse = inverses[0]
@@ -293,60 +299,62 @@ def _validate(plan, s, ctx):
                 'the captured job disagrees with the column')
         if family == 'item':
             _item(line, facts)
-        totals[family] += amount(line['amount_minor_units'], positive=True)
+        totals[family] += amount(line['amount_minor_units'], positive=family == 'expense')
     require(totals['expense'] == profile['expense_total_minor_units']
             and totals['item'] == profile['item_total_minor_units'],
             'a line family does not add up to the total the header carries for it')
     total = totals['expense'] + totals['item']
-    require(total == revision['total_minor_units'] and total > 0,
+    require(total == revision['total_minor_units'] and total >= 0,
             'the entered lines do not add up to the bill')
 
     batch = business[0]
     own = [leg for leg in legs if leg['batch_id'] == batch['id']]
     payable = [leg for leg in own if leg['account_id'] == profile['ap_account_id'] and leg['credit_minor_units']]
-    require(len(payable) == 1 and payable[0]['credit_minor_units'] == total,
+    require((len(payable) == 1 and payable[0]['credit_minor_units'] == total) if total else not payable,
             'Accounts Payable is not credited exactly once for the whole bill')
     debits = {}
     for leg in own:
-        if leg is payable[0]:
+        if payable and leg is payable[0]:
             continue
         require(leg['debit_minor_units'] > 0, 'a bill posts nothing but line debits and one payable credit')
         debits[leg['id']] = leg
-    require(len(debits) == len(envelopes), 'one debit per entered line')
+    require(len(debits) == sum(by_envelope[e['id']][1]['amount_minor_units'] > 0 for e in envelopes), 'one debit per entered line')
     attributed = {}
     for source in sources:
-        if source['posting_line_id'] == payable[0]['id']:
+        if payable and source['posting_line_id'] == payable[0]['id']:
             attributed[source['document_line_id']] = attributed.get(source['document_line_id'], 0) + source['amount_minor_units']
     require(attributed == {envelope['id']: by_envelope[envelope['id']][1]['amount_minor_units']
-                           for envelope in envelopes},
+                           for envelope in envelopes if by_envelope[envelope['id']][1]['amount_minor_units']},
             'the payable credit is not attributed line by line')
 
     obligations = pending['ap_obligation_keys']
     existing = effects.rows(s, c.ap_obligation_keys, c.ap_obligation_keys.c.transaction_id == header['id'])
-    require(len(obligations) + len(existing) == 1, 'a bill owes exactly one payable')
-    obligation = (obligations or existing)[0]
-    require(obligation['vendor_id'] == profile['vendor_id']
-            and obligation['ap_account_id'] == profile['ap_account_id']
-            and obligation['currency'] == currency and obligation['ordinal'] == 1,
-            'the payable does not match the bill it belongs to')
-    if existing:
-        require(not obligations, 'a correction cannot mint a second payable')
-    components = pending['ap_obligation_components']
-    require(len(components) == len(envelopes), 'one obligation component per entered line')
-    require(all(component['key_id'] == obligation['id'] and component['currency'] == currency
-                and component['revision_id'] == revision['id'] for component in components),
-            'an obligation component belongs elsewhere')
-    attributions = {source['id']: source for source in sources
-                    if source['posting_line_id'] == payable[0]['id']}
-    owed = 0
-    for component in components:
-        source = attributions.get(component['posting_source_id'])
-        require(source is not None and source['document_line_id'] == component['document_line_id']
-                and source['amount_minor_units'] == component['amount_minor_units'],
-                'an obligation component does not name its own payable attribution')
-        owed += amount(component['amount_minor_units'], positive=True)
-    require(owed == total, 'the payable components do not add up to what the bill owes')
-
+    require(len(obligations) + len(existing) == (1 if total or existing else 0), 'a bill owes exactly one payable')
+    if not total and not existing:
+        require(not pending['ap_obligation_components'], 'zero bill cannot owe components')
+    if obligations or existing:
+        obligation = (obligations or existing)[0]
+        require(obligation['vendor_id'] == profile['vendor_id']
+                and obligation['ap_account_id'] == profile['ap_account_id']
+                and obligation['currency'] == currency and obligation['ordinal'] == 1,
+                'the payable does not match the bill it belongs to')
+        if existing:
+            require(not obligations, 'a correction cannot mint a second payable')
+        components = pending['ap_obligation_components']
+        require(len(components) == sum(by_envelope[e['id']][1]['amount_minor_units'] > 0 for e in envelopes), 'one obligation component per entered line')
+        require(all(component['key_id'] == obligation['id'] and component['currency'] == currency
+                    and component['revision_id'] == revision['id'] for component in components),
+                'an obligation component belongs elsewhere')
+        attributions = {source['id']: source for source in sources
+                        if payable and source['posting_line_id'] == payable[0]['id']}
+        owed = 0
+        for component in components:
+            source = attributions.get(component['posting_source_id'])
+            require(source is not None and source['document_line_id'] == component['document_line_id']
+                    and source['amount_minor_units'] == component['amount_minor_units'],
+                    'an obligation component does not name its own payable attribution')
+            owed += amount(component['amount_minor_units'], positive=True)
+        require(owed == total, 'the payable components do not add up to what the bill owes')
     _stock(s, data, indexed, require)
 
     plan_custom = data.get('custom_plan')

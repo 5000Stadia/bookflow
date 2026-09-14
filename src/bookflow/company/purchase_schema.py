@@ -125,7 +125,7 @@ def define_tables(metadata, column, table):
             ['purchase_profiles.transaction_id', 'purchase_profiles.revision_id'], name='fk_purchase_item_line_revision'),
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id', 'document_line_id'],
             ['document_lines.transaction_id', 'document_lines.revision_id', 'document_lines.id'], name='fk_purchase_item_line_envelope'),
-        positive('quantity_microunits'), positive('amount_minor_units'), object_check('line_snapshot'),
+        positive('quantity_microunits'), sa.CheckConstraint("typeof(amount_minor_units) = 'integer' AND amount_minor_units >= 0", name='ck_purchase_amount_minor_units_positive'), object_check('line_snapshot'),
         # A unit cost is what the amount was derived from, so a line whose amount was typed
         # outright carries none rather than a back-computed number nobody entered.
         sa.CheckConstraint("unit_cost_minor_units IS NULL OR (typeof(unit_cost_minor_units) = 'integer' "

@@ -27,7 +27,7 @@ from bookflow.company.journal_models import (
     MoneyInput, _Date, _Input, _Number, _Selector, _Version,
 )
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
-from bookflow.company.sales_models import Quantity
+from bookflow.company.sales_models import Quantity, SalesMoneyInput
 from bookflow.core.models import WriteOutput
 
 MoneyOutput = JournalMoneyOutput
@@ -105,8 +105,8 @@ class BillItemInput(_Input):
     item: _Selector
     description: Text | None = None
     quantity: Quantity = '1'
-    unit_cost: str | MoneyInput | None = None
-    amount: str | MoneyInput | None = None
+    unit_cost: str | SalesMoneyInput | None = None
+    amount: str | SalesMoneyInput | None = None
     customer: _Selector | None = None
     billable: bool = False
     class_id: _Selector | None = None

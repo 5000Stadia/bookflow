@@ -16,8 +16,20 @@ def define_tables(metadata, column, table):
         sa.CheckConstraint("json_valid(line_snapshot) AND json_type(line_snapshot) = 'object'", name='ck_money_out_item_snapshot'),
         sa.Index('ix_money_out_item_revision', 'revision_id', 'document_line_id'),
         description='Captured check/card purchase item facts; accounting remains on its journal line.')
-    return {'money_out_item_lines': rows}
+    profiles = table('money_out_revision_profiles',
+        C('revision_id', sa.String(26), 'Immutable purchase revision.', primary_key=True),
+        C('transaction_id', sa.String(26), 'Owning check/card.', nullable=False),
+        C('funding_snapshot', sa.Text, 'Captured account and payee intent, even when no money moves.', nullable=False),
+        sa.ForeignKeyConstraint(['transaction_id'], ['money_out_documents.transaction_id']),
+        sa.ForeignKeyConstraint(['transaction_id', 'revision_id'], ['transaction_revisions.transaction_id', 'transaction_revisions.id']),
+        sa.CheckConstraint("json_valid(funding_snapshot) AND json_type(funding_snapshot) = 'object'", name='ck_money_out_funding_snapshot'),
+        description='Captured funding intent without requiring a monetary posting.')
+    return {'money_out_item_lines': rows, 'money_out_revision_profiles': profiles}
 
 
 def guards():
     return tuple(f"CREATE TRIGGER money_out_item_lines_no_{action.lower()} BEFORE {action} ON money_out_item_lines BEGIN SELECT RAISE(ABORT, 'captured purchase items are immutable'); END" for action in ('UPDATE', 'DELETE'))
+
+
+def profile_guards():
+    return tuple(f"CREATE TRIGGER money_out_revision_profiles_no_{action.lower()} BEFORE {action} ON money_out_revision_profiles BEGIN SELECT RAISE(ABORT, 'captured funding is immutable'); END" for action in ('UPDATE', 'DELETE'))

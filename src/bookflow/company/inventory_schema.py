@@ -70,7 +70,7 @@ def define_tables(metadata, column, table):
         C('transaction_id', sa.String(26), 'Business document that caused this movement.', nullable=False),
         C('revision_id', sa.String(26), 'Immutable revision that supplies this movement.', nullable=False),
         C('posting_batch_id', sa.String(26), 'Accounting batch carrying this movement value.', nullable=False),
-        C('posting_line_id', sa.String(26), 'Inventory-asset posting line carrying this movement value.', nullable=False),
+        C('posting_line_id', sa.String(26), 'Inventory-asset posting line; absent exactly when value is zero.', nullable=True),
         C('document_line_id', sa.String(26), 'Entered line this movement is attributed to.', nullable=False),
         C('effective_date', sa.String(10), 'Accounting date reports value this movement on.', nullable=False),
         C('sequence', sa.BigInteger, 'Company-wide recorded order; decides same-day replay order.', nullable=False),
@@ -102,6 +102,7 @@ def define_tables(metadata, column, table):
         # One movement per asset posting line, both ways. Without the first half a movement
         # could claim a line already claimed and double the asset; without the second the
         # report total and the balance sheet would disagree with nothing to point at.
+        sa.CheckConstraint('(value_minor_units = 0 AND posting_line_id IS NULL) OR (value_minor_units != 0 AND posting_line_id IS NOT NULL)', name='ck_inventory_movement_value_link'),
         sa.UniqueConstraint('posting_line_id', name='uq_inventory_movement_posting_line'),
         sa.UniqueConstraint('sequence', name='uq_inventory_movement_sequence'),
         sa.UniqueConstraint('reverses_movement_id', name='uq_inventory_movement_reversal'),
@@ -114,9 +115,9 @@ def define_tables(metadata, column, table):
         # takes both out, a value adjustment and a recost move value alone, and only the two
         # derived kinds carry a link.
         sa.CheckConstraint(
-            "(kind = 'receipt' AND quantity_microunits > 0 AND value_minor_units > 0 "
+            "(kind = 'receipt' AND quantity_microunits > 0 AND value_minor_units >= 0 "
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
-            "(kind = 'issue' AND quantity_microunits < 0 AND value_minor_units < 0 "
+            "(kind = 'issue' AND quantity_microunits < 0 AND value_minor_units <= 0 "
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
             "(kind = 'value' AND quantity_microunits = 0 AND value_minor_units != 0 "
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "

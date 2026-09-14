@@ -115,8 +115,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         components = effects.rows(s, c.sales_tax_components, c.sales_tax_components.c.revision_id == revision['id'])
     batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'], order=c.posting_batches.c.id)
     extra_batches = [b for b in pending.get('posting_batches', []) if b['revision_id'] == revision['id']]
-    summaries = [journals.batch_output(s, batch) for batch in batches]
-    summaries += [journals.batch_output(s, batch, [line for line in pending['posting_lines'] if line['batch_id'] == batch['id']])
+    summaries = [journals.batch_output(s, batch, currency=revision['currency']) for batch in batches]
+    summaries += [journals.batch_output(s, batch, [line for line in pending['posting_lines'] if line['batch_id'] == batch['id']], currency=revision['currency'])
                   for batch in extra_batches]
     currency = revision['currency']
     values = {k: v for k, v in revision.items() if not k.endswith('_snapshot')}
@@ -397,8 +397,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     subtotal = calc.total((line['net_minor_units'] for line in lines), 'subtotal')
     tax = calc.total((line['tax_minor_units'] for line in lines), 'tax')
     total = calc.total((subtotal, tax))
-    if total <= 0:
-        raise _invalid('total', 'a posted sale must have a positive total')
+    if total < 0:
+        raise _invalid('total', 'a posted sale total must not be negative')
     if document_type == 'sales_receipt' and old_revision:
         from bookflow.company.sales_models import money
         received = inp.amount_received
@@ -580,9 +580,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         assets = _business_postings(header, revision, batch, resolved, pending, created, stock.costs)
         for movement in stock.movements:
             if movement.key is not None:
-                inventory_effects.bind(movement, assets[movement.key], transaction_id=header['id'],
-                                       revision_id=revision['id'], document_line_id=movement.key)
-    inventory_effects.bind_reversals(stock, pending['posting_lines'])
+                inventory_effects.bind(movement, assets.get(movement.key), transaction_id=header['id'],
+                                       revision_id=revision['id'], document_line_id=movement.key, batch=batch)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
     inventory_effects.check(s, stock, pending['posting_lines'])
     view_profile = pending['sales_profiles'][0] if pending['sales_profiles'] else profile_row(s, revision)
     output = SalesWriteOutput(**summary(header, revision, view_profile), revision=revision_output(s, revision, pending),

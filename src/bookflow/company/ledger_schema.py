@@ -131,7 +131,7 @@ def define_tables(metadata, column, table, common):
         sa.UniqueConstraint('transaction_id', 'revision_number', name='uq_revision_number'),
         sa.UniqueConstraint('supersedes_revision_id', name='uq_revision_successor'),
         fk(['transaction_id', 'supersedes_revision_id'], ['transaction_revisions.transaction_id', 'transaction_revisions.id'], 'fk_revision_supersedes'),
-        positive('revision_number'), positive('total_minor_units'), json_check('issuer_snapshot'), json_check('custom_fields_snapshot'),
+        positive('revision_number'), sa.CheckConstraint("typeof(total_minor_units) = 'integer' AND total_minor_units >= 0", name='ck_ledger_total_minor_units_positive'), json_check('issuer_snapshot'), json_check('custom_fields_snapshot'),
         description='Immutable rendered journal revisions and their original accounting dates.')
 
     document_line_identities = T('document_line_identities', *created(),

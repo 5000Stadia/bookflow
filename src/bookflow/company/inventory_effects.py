@@ -45,8 +45,8 @@ Decided before anything is built, so a refusal leaves nothing behind:
   refuses, because a warning-only mode needs a provisional-cost rule and a settlement pass.
 - **A closed period**, naming it, for the document's own date and for every correction date
   the change implies. The whole change is refused; deltas are never moved to today.
-- **A worthless movement**: Bookflow posts no zero-amount entry, so an issue whose value
-  rounds to nothing is refused rather than silently skipped.
+Zero-value quantities retain their commercial ownership and batch with no monetary leg.
+Their later recost corrections still target the original movement identity.
 
 ## The corrections are separate dated documents
 
@@ -162,12 +162,6 @@ def own_movements(s, transaction_id):
     return [row for row in rows if row['kind'] in INPUT_KINDS and row['id'] not in retired]
 
 
-def _worthless(entry):
-    return inventory.invalid(
-        'items', f'"{entry.item_name}" is worth nothing at the current average cost on this '
-                 'document, and Bookflow posts no zero-amount entry')
-
-
 def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequence=None):
     """Every movement and every correction this document implies, and nothing written yet.
 
@@ -199,7 +193,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
             corrects_movement_id=None, reverses_movement_id=row['id'],
-            revision_id=row['revision_id'], document_line_id=row['document_line_id'])
+            transaction_id=row['transaction_id'], revision_id=row['revision_id'], document_line_id=row['document_line_id'],
+            posting_line_id=None, posting_batch_id=None)
         rows(row['item_id']).append(values)
         change.movements.append(Movement(values, reverses_line_id=row['posting_line_id']))
         sequence += 1
@@ -223,8 +218,6 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 values['value_minor_units'] = replay(history + [values]).targets[identity]
             except StockRefusal as refusal:
                 raise refuse(refusal, entry.item_id, entry.item_name) from None
-        if not values['value_minor_units']:
-            raise _worthless(entry)
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']
@@ -268,21 +261,25 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
 
 def open_dates(s, change, dates=()):
     """Refuse the whole change, naming the period, if any date it writes to is closed."""
-    journals.open_dates(s, sorted({*dates, *(c.date for c in change.corrections)}))
+    journals.open_dates(s, sorted({*dates, *(m.values['effective_date'] for m in change.movements), *(c.date for c in change.corrections)}))
 
 
-def bind(movement, leg, *, transaction_id, revision_id, document_line_id):
+def bind(movement, leg, *, transaction_id, revision_id, document_line_id, batch=None):
     """Give one planned movement the posting and entered-line identities just minted."""
     movement.values.update(transaction_id=transaction_id, revision_id=revision_id,
-                           posting_batch_id=leg['batch_id'], posting_line_id=leg['id'],
+                           posting_batch_id=leg['batch_id'] if leg else batch['id'], posting_line_id=leg['id'] if leg else None,
                            document_line_id=document_line_id)
 
 
-def bind_reversals(change, posting_lines):
+def bind_reversals(change, posting_lines, batches=()):
     """Bind every reversal movement to the leg that reverses the one it names."""
     by_original = {leg['reversed_line_id']: leg for leg in posting_lines
                    if leg['reversed_line_id'] is not None}
     for movement in change.movements:
+        if movement.values.get('reverses_movement_id') and movement.reverses_line_id is None:
+            inverse = next(b for b in batches if b['kind'] == 'reversal' and b['revision_id'] == movement.values['revision_id'])
+            movement.values.update(posting_batch_id=inverse['id'], posting_line_id=None)
+            continue
         if movement.reverses_line_id is None:
             continue
         leg = by_original.get(movement.reverses_line_id)
@@ -302,7 +299,7 @@ def check(s, change, posting_lines):
     both halves need a movement or the ledger stops explaining the control account.
     """
     inventory.check_attribution(
-        [movement.values['posting_line_id'] for movement in change.movements],
+        [movement.values['posting_line_id'] for movement in change.movements if movement.values['value_minor_units']],
         posting_lines, inventory.asset_account_ids(s))
 
 

@@ -1,9 +1,10 @@
 {% set document = purchase.document %}
-{% set funding = purchase.revision.lines[0] %}
+{% set funding = purchase.funding %}
 <section class="workspace-card document-detail" aria-label="Recorded purchase">
 <h2>{{ purchase.title }}{% if document.check_number %} {{ document.check_number }}{% endif %}</h2>
 <p>{{ purchase.revision.date }} · {{ document.amount.amount }} {{ document.currency }} · {{ record.status|capitalize }} · Revision {{ purchase.revision.revision_number }}</p>
 <p>{{ funding.account_snapshot.full_name or funding.account_snapshot.name }}{% if funding.party_name %} · Payee: {{ funding.party_name }}{% endif %}</p>
+{% if document.amount.minor_units == 0 %}<p>No payment was made.</p>{% endif %}
 <p>Items {{ document.item_total.amount }} + Expenses {{ document.expense_total.amount }} = {{ document.amount.amount }} {{ document.currency }}</p>
 {% if document['items'] %}
 <section aria-label="Purchased items"><h3>Purchased items</h3>

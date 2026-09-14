@@ -82,7 +82,7 @@ def _partition(g, *, cash_account, home_currency):
     revs = [r for r in g['transaction_revisions'] if r['id'] == revision]
     require(len(revs) == 1)
     rev = revs[0]
-    require(rev['currency'] == home_currency and rev['total_minor_units'] > 0)
+    require(rev['currency'] == home_currency and rev['total_minor_units'] >= 0)
     inverses = {r['reverses_batch_id'] for r in g['posting_batches'] if r['kind'] == 'reversal'}
     batches = [r for r in g['posting_batches'] if r['kind'] in ('original', 'replacement') and r['id'] not in inverses]
     require(len(batches) == 1 and batches[0]['revision_id'] == revision and batches[0]['effective_date'] == rev['date'])
@@ -90,6 +90,9 @@ def _partition(g, *, cash_account, home_currency):
     legs = [r for r in g['posting_lines'] if r['batch_id'] == batch['id']]
     require(len({r['id'] for r in legs}) == len(legs))
     cash_legs = {r['id']: r for r in legs if r['account_id'] == cash_account}
+    if not rev['total_minor_units']:
+        require(h['type'] == 'sales_receipt' and not cash_legs)
+        raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
     if not cash_legs:
         raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
     require(all(r['debit_minor_units'] > 0 and r['credit_minor_units'] == 0 and r['currency'] == home_currency for r in cash_legs.values()))

@@ -465,6 +465,7 @@ def _purchasable_item(s, selector, field):
 
 def _item_line(s, line, header_class, currency, index):
     """One Items-tab row resolved into the amount it debits and the facts it captures."""
+    from bookflow.company.sales_models import money as sales_money
     field = f'items.{index}'
     row, account, account_basis = _purchasable_item(s, line.item, field + '.item')
     if account['currency'] != currency:
@@ -475,11 +476,11 @@ def _item_line(s, line, header_class, currency, index):
     if line.amount is not None:
         basis = 'amount'
         unit_cost = None
-        amount = parse_domestic_amount(line.amount, currency, field + '.amount').minor_units
+        amount = sales_money(line.amount, currency, field + '.amount').minor_units
     else:
         basis = 'unit_cost'
         if line.unit_cost is not None:
-            unit_cost = parse_domestic_amount(line.unit_cost, currency, field + '.unit_cost').minor_units
+            unit_cost = sales_money(line.unit_cost, currency, field + '.unit_cost').minor_units
         elif row['cost_minor_units'] is not None:
             unit_cost = int(row['cost_minor_units'])
         else:
@@ -488,8 +489,8 @@ def _item_line(s, line, header_class, currency, index):
         if unit_cost < 0:
             raise _invalid(field + '.unit_cost', 'must not be negative')
         amount = extension(quantity, unit_cost)
-    if amount <= 0:
-        raise _invalid(field + '.amount', 'an item line must be worth more than nothing')
+    if amount < 0:
+        raise _invalid(field + '.amount', 'an item amount must not be negative')
     customer = (_reference(_list_row(s, 'customer', c.customers, line.customer, field + '.customer', 'customer'))
                 if line.customer else None)
     profile = BillItemProfile(
@@ -669,9 +670,9 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
         lines = saved_lines(s, revision)
     saved_batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
                                  order=c.posting_batches.c.id)
-    summaries = [journals.batch_output(s, batch) for batch in saved_batches]
+    summaries = [journals.batch_output(s, batch, currency=revision['currency']) for batch in saved_batches]
     summaries += [journals.batch_output(s, batch, [line for line in pending['posting_lines']
-                                                   if line['batch_id'] == batch['id']])
+                                                   if line['batch_id'] == batch['id']], currency=revision['currency'])
                   for batch in pending.get('posting_batches', []) if batch['revision_id'] == revision['id']]
     currency = revision['currency']
     values = {k: v for k, v in revision.items() if not k.endswith('_snapshot')}
@@ -966,9 +967,9 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
     expense_total = checked_sum((line['amount_minor_units'] for line in grids['expense']), 'expenses.total')
     item_total = checked_sum((line['amount_minor_units'] for line in grids['item']), 'items.total')
     total = checked_sum((expense_total, item_total), 'total')
-    if total <= 0:
+    if total < 0:
         raise _invalid('items' if grids['item'] and not grids['expense'] else 'expenses',
-                       'a posted bill must have a positive total')
+                       'a posted bill total must not be negative')
     profile = BillProfile(**header_facts, expense_total_minor_units=expense_total,
                           item_total_minor_units=item_total)
 
@@ -1228,9 +1229,9 @@ def prepare(s, ctx, inp, operation):
         debits = _business_postings(s, header, revision, batch, resolved, pending, created, event)
         for movement in stock.movements:
             if movement.key is not None:
-                inventory_effects.bind(movement, debits[movement.key], transaction_id=header['id'],
-                                       revision_id=revision['id'], document_line_id=movement.key)
-    inventory_effects.bind_reversals(stock, pending['posting_lines'])
+                inventory_effects.bind(movement, debits.get(movement.key), transaction_id=header['id'],
+                                       revision_id=revision['id'], document_line_id=movement.key, batch=batch)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
     inventory_effects.check(s, stock, pending['posting_lines'])
 
     consumption = None
@@ -1276,7 +1277,7 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     profile = resolved['profile']
     currency = revision['currency']
     obligation = obligation_row(s, header['id'], pending)
-    if obligation is None:
+    if obligation is None and resolved['total']:
         obligation = dict(**created(), transaction_id=header['id'], ordinal=1,
                           vendor_id=profile.vendor.id, ap_account_id=profile.ap_account.id,
                           currency=currency, audit_event_id=event)
@@ -1312,16 +1313,22 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     debits = {}
     for envelope in envelopes:
         family, line = profiles[envelope['id']]
+        if not line['amount_minor_units']:
+            continue
         facts = LINE_FACTS[family].model_validate_json(line['line_snapshot'])
         cost = leg(facts.account, line['amount_minor_units'], True,
                    envelope['class_id'], envelope['class_name'], envelope['description'])
         debits[envelope['id']] = cost
         attribute(cost, envelope, line['amount_minor_units'])
+    if not resolved['total']:
+        return debits
     payable = leg(profile.ap_account, resolved['total'], False,
                   profile.class_id.id if profile.class_id else None,
                   profile.class_id.label if profile.class_id else None, resolved['memo'])
     for envelope in envelopes:
         line = profiles[envelope['id']][1]
+        if not line['amount_minor_units']:
+            continue
         source = attribute(payable, envelope, line['amount_minor_units'])
         pending['ap_obligation_components'].append(dict(
             **created(), transaction_id=header['id'], revision_id=revision['id'],

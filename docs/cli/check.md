@@ -121,6 +121,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document` | object | yes | no | — | — |
 | `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
+| `items[].document.funding_details` | dict \| null | no | yes | null | — |
 | `items[].document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
 | `items[].document.currency` | string | yes | no | — | — |
 | `items[].document.amount` | object | yes | no | — | — |
@@ -461,6 +462,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document` | object | yes | no | — | — |
 | `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
+| `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
 | `document.currency` | string | yes | no | — | — |
 | `document.amount` | object | yes | no | — | — |
@@ -759,6 +761,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document` | object | yes | no | — | — |
 | `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
+| `items[].document.funding_details` | dict \| null | no | yes | null | — |
 | `items[].document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
 | `items[].document.currency` | string | yes | no | — | — |
 | `items[].document.amount` | object | yes | no | — | — |
@@ -1050,6 +1053,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document` | object | yes | no | — | — |
 | `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
+| `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
 | `document.currency` | string | yes | no | — | — |
 | `document.amount` | object | yes | no | — | — |
@@ -1475,6 +1479,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document` | object | yes | no | — | — |
 | `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
+| `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
 | `document.currency` | string | yes | no | — | — |
 | `document.amount` | object | yes | no | — | — |
@@ -1887,6 +1892,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document` | object | yes | no | — | — |
 | `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
+| `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
 | `document.currency` | string | yes | no | — | — |
 | `document.amount` | object | yes | no | — | — |

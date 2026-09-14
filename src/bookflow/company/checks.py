@@ -1,7 +1,7 @@
 """Write a check or a card charge, find it again, read it, correct it and void it.
 
 ``_register()`` builds register allocations from expenses and captured purchase items. Posting is
-``registers.translate`` followed by the journal writer, which is the one path money takes. A
+the shared register allocation resolver followed by the journal writer, which is the one path money takes. A
 correction is the same translation with the retained line identities and
 ``operation='update'``, so it appends an exact reversal of the old accounting at its old date
 and a full replacement at the new one; a void is the journal writer's exact reversal at the
@@ -20,6 +20,7 @@ simply absent rather than a validator saying so in prose.
 """
 from __future__ import annotations
 
+import json
 import sqlalchemy as sa
 
 from bookflow.company import (
@@ -73,8 +74,8 @@ def _party(party):
 def document(s, noun, header, lines, check_number=None):
     """The document's own footer, derived from the revision that is stored.
 
-    The funding line is line one and the expense lines are the rest, which is how every one
-    of these is written; the totals are their amounts. Nothing is recomputed from a second
+    Positive money has a funding line first. A free purchase retains funding intent in its
+    immutable revision profile and has only commercial item envelopes. Nothing is recomputed from a second
     copy of the figures, because there is no second copy -- the entry is the document.
 
     The two facts that make it this document rather than another are checked rather than
@@ -82,11 +83,12 @@ def document(s, noun, header, lines, check_number=None):
     this document is drawn on. An entry rearranged in the journal editor until neither is
     true is refused by name; see ``money_out.unreadable`` for why that beats describing it.
     """
-    if len(lines) < 2:
+    if not lines:
         raise money_out.unreadable(noun, header, 'it no longer has a funding line and an expense line')
     captured = check_items.stored(s, lines)
     item_ids = {row["line_id"] for row in captured}
-    funding, expenses = lines[0], [line for line in lines[1:] if line["line_id"] not in item_ids]
+    funding = check_items.funding(s, lines)
+    expenses = [line for line in lines if line['kind'] == 'journal' and line['line_id'] != funding['line_id'] and line['line_id'] not in item_ids]
     snapshot = money_out.snapshot(funding)
     if funding['side'] != 'credit':
         raise money_out.unreadable(noun, header, 'money no longer leaves the account it is drawn on')
@@ -103,7 +105,7 @@ def document(s, noun, header, lines, check_number=None):
         kind=DOCUMENT_KIND[noun], account_id=funding['account_id'], funding=FUNDING_TYPE[noun],
         currency=currency, amount=Money(funding['amount_minor_units'], currency).to_dict(),
         expense_total=Money(total, currency).to_dict(), expense_lines=len(expenses),
-        check_number=check_number,
+        check_number=check_number, funding_details=funding if not funding['amount_minor_units'] else None,
         item_total=Money(checked_sum((row['amount_minor_units'] for row in captured), 'items.total'), currency).to_dict(),
         items=[check_items.output(row, row['line_id'], currency) for row in captured])
 
@@ -135,7 +137,7 @@ def _facts(s, inp, noun, header):
     document(s, noun, header, lines)
     previous_items = check_items.stored(s, lines)
     item_ids = {row['line_id'] for row in previous_items}
-    funding = lines[0]
+    funding = check_items.funding(s, lines)
     supplied = inp.model_fields_set
     given = lambda field: field in supplied
     return dict(
@@ -145,13 +147,13 @@ def _facts(s, inp, noun, header):
                 if funding['name_id'] else None),
         date=inp.date if given('date') else revision['date'],
         amount=(inp.amount if given('amount') else
-                MoneyInput(minor_units=funding['amount_minor_units'], currency=funding['currency'])),
+                Money(funding['amount_minor_units'], funding['currency']).to_dict()['amount']),
         memo=inp.memo if given('memo') else revision['memo'],
         # A correction that does not name a number keeps the one on the paper; None here
         # means "keep", and company/check_numbers.py is what knows what is already there.
         number=getattr(inp, 'number', None),
         class_id=inp.class_id if given('class_id') else None,
-        expenses=list(inp.expenses) if inp.expenses is not None else _saved_expenses([line for line in lines[1:] if line['line_id'] not in item_ids]),
+        expenses=list(inp.expenses) if inp.expenses is not None else _saved_expenses([line for line in lines if line['kind'] == 'journal' and line['line_id'] != funding['line_id'] and line['line_id'] not in item_ids]),
         items=check_items.resolve(s, inp.items, previous_items, inp.class_id, registers._home(s)),
         selected_line_id=funding['line_id'])
 
@@ -160,7 +162,8 @@ def _register(facts, s, noun, inp, header):
     """The register entry this document is, plus the figures its own footer shows."""
     currency = registers._home(s)
     account = _funding(s, facts['account'], noun)
-    amount = parse_domestic_amount(facts['amount'], currency, 'amount')
+    from bookflow.company.sales_models import money
+    amount = money(facts['amount'], currency, 'amount')
     totals = [parse_domestic_amount(line.amount, currency, f'expenses.{index}.amount').minor_units
               for index, line in enumerate(facts['expenses'])]
     expense_total = checked_sum(totals, 'expenses.total')
@@ -178,7 +181,7 @@ def _register(facts, s, noun, inp, header):
         **({'line_id': line.line_id} if line.line_id is not None else {}),
     ) for line in facts['expenses']]
     allocations += [RegisterAllocation(account=line['profile'].account.id,
-        amount=Money(line['amount_minor_units'], currency).to_dict(), memo=line['memo'],
+        amount=Money(line['amount_minor_units'], currency).to_dict()['amount'], memo=line['memo'],
         party=RegisterParty(name_type='customer', name_id=line['profile'].customer.id) if line['profile'].customer else None,
         class_id=line['profile'].class_id.id if line['profile'].class_id else None,
         class_mode='value' if line['profile'].class_id else 'none',
@@ -186,7 +189,7 @@ def _register(facts, s, noun, inp, header):
         for line in facts['items']]
     values = dict(
         account=facts['account'], date=facts['date'], memo=facts['memo'], payee=_party(facts['pay_to']),
-        direction=DIRECTION[FUNDING_TYPE[noun]], amount=facts['amount'], allocations=allocations,
+        direction=DIRECTION[FUNDING_TYPE[noun]], amount=amount.to_dict()['amount'], allocations=allocations,
         class_id=facts['class_id'], custom_fields=inp.custom_fields,
         custom_field_kinds=inp.custom_field_kinds)
     if header is None:
@@ -194,12 +197,13 @@ def _register(facts, s, noun, inp, header):
     else:
         # The register input requires a version and the document does not; the version the
         # person actually supplied is carried to ``registers.translate`` instead.
-        register = RegisterUpdateInput(
+        register = check_items.PurchaseRegisterUpdate(
             journal=header['id'], selected_line_id=facts['selected_line_id'],
             expected_version=inp.expected_version if inp.expected_version is not None
             else header['version'], **values)
     summary = MoneyOutSummary(
         kind=DOCUMENT_KIND[noun], account_id=account['id'], funding=FUNDING_TYPE[noun],
+        check_number=check_numbers.current(s, header['id'])['check_number'] if noun == 'check' and header else None,
         currency=currency, amount=amount.to_dict(),
         expense_total=Money(expense_total, currency).to_dict(),
         expense_lines=len(facts['expenses']), item_total=Money(item_total, currency).to_dict(),
@@ -279,11 +283,16 @@ def page(s, ctx, inp, noun):
     state = money_out.state_for(s, ctx, inp, noun, 'query')
     t, r, m = c.transactions, c.transaction_revisions, c.money_out_documents
     funding = c.document_lines.alias('funding_line')
+    profile = c.money_out_revision_profiles
+    def captured(field):
+        return sa.case((profile.c.revision_id.is_not(None), sa.func.json_extract(profile.c.funding_snapshot, '$.' + field)), else_=getattr(funding.c, field))
     query = (sa.select(t.c.id).select_from(
         t.join(r, r.c.id == t.c.current_revision_id)
         .join(m, m.c.transaction_id == t.c.id)
-        .join(funding, sa.and_(funding.c.revision_id == r.c.id, funding.c.position == 1)))
-        .where(m.c.kind == money_out.KIND[noun], *_shaped(noun, funding)))
+        .outerjoin(funding, sa.and_(funding.c.revision_id == r.c.id, funding.c.position == 1))
+        .outerjoin(profile, profile.c.revision_id == r.c.id))
+        .where(m.c.kind == money_out.KIND[noun], captured('side') == 'credit',
+            sa.func.json_extract(captured('account_snapshot'), '$.type') == FUNDING_TYPE[noun]))
     if inp.date_from:
         query = query.where(r.c.date >= inp.date_from)
     if inp.date_to:
@@ -293,10 +302,10 @@ def page(s, ctx, inp, noun):
     if inp.number:
         query = query.where(_number_filter(noun, inp.number))
     if inp.account:
-        query = query.where(funding.c.account_id == accounts.resolve_account(s.company, inp.account)['id'])
+        query = query.where(captured('account_id') == accounts.resolve_account(s.company, inp.account)['id'])
     if inp.payee:
         payee = parties.resolve_party(s.company, inp.payee_type.replace('_', '-'), inp.payee)
-        query = query.where(funding.c.name_type == inp.payee_type, funding.c.name_id == payee['id'])
+        query = query.where(captured('name_type') == inp.payee_type, captured('name_id') == payee['id'])
     if inp.query:
         query = query.where(sa.or_(_number_filter(noun, inp.query),
                                    r.c.memo.contains(inp.query, autoescape=True)))
@@ -339,12 +348,13 @@ def _translate(s, ctx, inp, noun, operation):
         # A voided cheque keeps its number: the paper it was written on is still gone, so
         # nothing here asks the chequebook for anything.
         return (JournalVoidInput(journal=header['id'], expected_version=inp.expected_version),
-                document(s, noun, header, lines, numbers.get(revision['id'])), header, None, [])
+                document(s, noun, header, lines, numbers.get(revision['id'])), header, None, [], check_items.funding(s, lines))
     facts = _facts(s, inp, noun, header)
     register, summary, instrument, items = _register(facts, s, noun, inp, header)
-    journal, _ = registers.translate(register, s, operation, moving=operation == 'update',
-                                     expected_version=inp.expected_version if header else None, owner='inventory')
-    return journal, summary, header, instrument, items
+    journal, funding = check_items.translate(s, register, summary, header, inp.expected_version if header else None)
+    if not summary.amount.minor_units:
+        summary = summary.model_copy(update={'funding_details': funding})
+    return journal, summary, header, instrument, items, funding
 
 
 def _finish(summary, planned):
@@ -355,9 +365,10 @@ def _finish(summary, planned):
 
 
 def prepare(s, ctx, inp, noun, operation):
-    journal, summary, header, instrument, items = _translate(s, ctx, inp, noun, operation)
+    journal, summary, header, instrument, items, funding = _translate(s, ctx, inp, noun, operation)
     fresh = journals.prepare(s, ctx, journal, operation, check_instrument=instrument,
-                             owner='inventory', force_revision=(operation == 'update' and check_items.changed(s, header, items)))
+                             owner='inventory', purchase_items=items, force_revision=(operation == 'update' and (check_items.changed(s, header, items) or check_items.funding_changed(s, header, funding))))
+    fresh.data['purchase_funding'] = funding
     item_rows, stock, item_outputs = check_items.attach(s, fresh, items)
     if operation != 'void' and fresh.data['changed']:
         summary = summary.model_copy(update={'items': item_outputs})
@@ -371,9 +382,10 @@ def apply(plan, ctx, s):
     # decisive here. A retry under the same idempotency key never reaches this: dispatch
     # replays the stored output, so the cheque keeps the number the first attempt gave it.
     inp, noun, operation = plan.data['input'], plan.data['noun'], plan.data['operation']
-    journal, summary, header, instrument, items = _translate(s, ctx, inp, noun, operation)
+    journal, summary, header, instrument, items, funding = _translate(s, ctx, inp, noun, operation)
     fresh = journals.prepare(s, ctx, journal, operation, check_instrument=instrument,
-                             owner='inventory', force_revision=(operation == 'update' and check_items.changed(s, header, items)))
+                             owner='inventory', purchase_items=items, force_revision=(operation == 'update' and (check_items.changed(s, header, items) or check_items.funding_changed(s, header, funding))))
+    fresh.data['purchase_funding'] = funding
     item_rows, stock, item_outputs = check_items.attach(s, fresh, items)
     if operation != 'void' and fresh.data['changed']:
         summary = summary.model_copy(update={'items': item_outputs})
@@ -383,6 +395,10 @@ def apply(plan, ctx, s):
         extra = (('money_out_documents', 'money_out_document', 'transaction_id', [money_out.marker(
             noun, header['id'], at=header['created_at'], actor_id=s.actor.id,
             interface=ctx.interface.value, event=fresh.data['event'])]),)
+    if operation != 'void' and fresh.data['changed']:
+        monetary = [l for l in fresh.data['pending']['document_lines'] if l['kind'] == 'journal']
+        funding['line_id'] = monetary[0]['line_id'] if monetary else None
+        extra += (('money_out_revision_profiles', 'money_out_revision_profile', 'revision_id', [dict(transaction_id=fresh.data['header']['id'], revision_id=fresh.preview.current_revision_id, funding_snapshot=json.dumps(funding, sort_keys=True))]),)
     if item_rows:
         extra += (('money_out_item_lines', 'money_out_item_line', 'document_line_id', item_rows),)
     planned = fresh.data.get('check_instrument') if fresh.data['changed'] else None

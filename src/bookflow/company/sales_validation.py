@@ -47,7 +47,7 @@ def _stock(s, data, indexed, require):
     legs, batches = indexed['posting_lines'], indexed['posting_batches']
     control = {row['id'] for row in effects.rows(
         s, c.accounts, c.accounts.c.system_role == inventory.ASSET_ROLE)}
-    claimed = [row['posting_line_id'] for row in movements]
+    claimed = [row['posting_line_id'] for row in movements if row['value_minor_units']]
     require(len(claimed) == len(set(claimed)), 'two stock movements claim one posting line')
     require(set(claimed) == {leg['id'] for leg in legs.values() if leg['account_id'] in control},
             'an inventory-asset posting is not attributed to exactly one item')
@@ -56,17 +56,23 @@ def _stock(s, data, indexed, require):
     prior = {row['id']: row for row in effects.rows(
         s, c.inventory_movements, c.inventory_movements.c.transaction_id == header['id'])}
     for row in movements:
-        leg = legs[row['posting_line_id']]
-        require(leg['batch_id'] == row['posting_batch_id']
-                and leg['account_id'] == row['asset_account_id']
-                and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units']
-                and batches[leg['batch_id']]['effective_date'] == row['effective_date'],
-                'a stock movement does not match the posting line that carries its value')
+        leg = legs.get(row['posting_line_id'])
+        batch = batches.get(row['posting_batch_id'])
+        require(batch is not None and batch['transaction_id'] == row['transaction_id']
+                and batch['effective_date'] == row['effective_date'], 'stock batch ownership/date')
+        if row['value_minor_units']:
+            require(leg is not None and leg['batch_id'] == row['posting_batch_id']
+                    and leg['account_id'] == row['asset_account_id']
+                    and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units'],
+                    'stock monetary attribution')
+        else:
+            require(row['posting_line_id'] is None and row['quantity_microunits'] != 0,
+                    'zero stock effect must have quantity and no monetary leg')
         require(row['kind'] in ('issue', 'reversal'), 'a sale moves stock only out or back in')
         if row['kind'] == 'reversal':
             original = prior.get(row['reverses_movement_id'])
             require(original is not None
-                    and leg['reversed_line_id'] == original['posting_line_id']
+                    and (leg['reversed_line_id'] if leg else None) == original['posting_line_id']
                     and row['quantity_microunits'] == -original['quantity_microunits']
                     and row['value_minor_units'] == -original['value_minor_units']
                     and row['item_id'] == original['item_id']
@@ -77,7 +83,7 @@ def _stock(s, data, indexed, require):
         line = lines.get(row['document_line_id'])
         require(line is not None and line['item_id'] == row['item_id']
                 and row['quantity_microunits'] == -line['base_quantity_microunits']
-                and row['revision_id'] == line['revision_id'] and row['value_minor_units'] < 0,
+                and row['revision_id'] == line['revision_id'] and row['value_minor_units'] <= 0,
                 'a stock issue does not match the entered line that sold it')
         facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
         require(facts.item_type in inventory.TRACKED_TYPES
@@ -140,7 +146,7 @@ def _validate(plan, s, ctx):
     currency = s.company.conn.execute(c.company_info.select()).mappings().one()['home_currency']
     for batch in batches:
         own = [leg for leg in legs if leg['batch_id'] == batch['id']]
-        require(bool(own), 'empty batch')
+        # Commercial revisions can carry quantity without any monetary effect.
         require(sorted(leg['line_no'] for leg in own) == list(range(1, len(own) + 1)), 'non-contiguous batch lines')
         for leg in own:
             debit, credit = amount(leg['debit_minor_units']), amount(leg['credit_minor_units'])

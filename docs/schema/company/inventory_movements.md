@@ -17,7 +17,7 @@ Database: `company`.
 | `transaction_id` | VARCHAR(26) | no | — | — | ix_inventory_movements_document | document_lines.transaction_id, posting_batches.transaction_id, posting_lines.transaction_id | Business document that caused this movement. |
 | `revision_id` | VARCHAR(26) | no | — | — | — | document_lines.revision_id | Immutable revision that supplies this movement. |
 | `posting_batch_id` | VARCHAR(26) | no | — | — | — | posting_batches.id | Accounting batch carrying this movement value. |
-| `posting_line_id` | VARCHAR(26) | no | — | unique | — | posting_lines.id | Inventory-asset posting line carrying this movement value. |
+| `posting_line_id` | VARCHAR(26) | yes | — | unique | — | posting_lines.id | Inventory-asset posting line; absent exactly when value is zero. |
 | `document_line_id` | VARCHAR(26) | no | — | — | — | document_lines.id | Entered line this movement is attributed to. |
 | `effective_date` | VARCHAR(10) | no | — | — | ix_inventory_movements_item | — | Accounting date reports value this movement on. |
 | `sequence` | BIGINT | no | — | unique | ix_inventory_movements_document, ix_inventory_movements_item | — | Company-wide recorded order; decides same-day replay order. |
