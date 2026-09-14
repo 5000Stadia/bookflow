@@ -11,7 +11,7 @@ from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F40
 COMPANY = 'Demo Plumbing Co'
 
 
-def _create(run, document_type, bank=None):
+def _create(run, document_type, bank=None, baseline=None):
     income = run('account create', {'name': 'Navigation income', 'type': 'income'})['id']
     customer = run('customer create', {'name': 'Navigation customer'})['id']
     code = next(row['id'] for row in run('sales-tax-code list', {})['items'] if not row['taxable'])
@@ -22,6 +22,14 @@ def _create(run, document_type, bank=None):
         bank = bank or run('account create', {'name': 'Navigation bank', 'type': 'bank'})['id']
         method = run('payment-method create', {'name': 'Navigation cash', 'kind': 'cash'})['id']
         extra = dict(deposit_to=bank, payment_method=method)
+    if baseline is not None:
+        # Read before posting, including the freshly created income/bank accounts.
+        # The actual control account returned by the sale must be among these IDs.
+        accounts = run('account query', {'limit': 200})['items']
+        for account in accounts:
+            if account['type'] == 'accounts_receivable' or account['id'] in (bank, income):
+                baseline[account['id']] = run('register query', dict(account=account['id'],
+                    date_from='2026-01-01', date_to='2026-12-31'))['current_balance']['balance']['minor_units']
     noun = document_type.replace('_', '-')
     sale = run(noun + ' post', dict(date='2026-01-12', customer=customer,
         memo='Original sale', lines=[dict(item=item)], **extra))
@@ -32,13 +40,12 @@ def _create(run, document_type, bank=None):
 @pytest.mark.parametrize('document_type', ['invoice', 'sales_receipt'])
 def test_sales_register_all_effects_and_journal_fences(client, document_type):
     run = lambda name, data, **kw: client.run(name, data, company=COMPANY, **kw)
-    sale, control, income = _create(run, document_type)
+    baseline = {}
+    sale, control, income = _create(run, document_type, baseline=baseline)
     noun = document_type.replace('_', '-')
     changed = run(noun + ' update', {document_type: sale['id'], 'expected_version': 1,
         'date': '2026-02-01', 'memo': 'Corrected sale'})
-    # Seed AR retains $100 taxable service + $8 tax + $20 exempt; the
-    # other seed invoice is void. Navigation bank/income start at zero.
-    baseline = {control: 10000 + 800 + 2000 if document_type == 'invoice' else 0, income: 0}
+    # The independently known tax-exempt sale adds exactly10.00 to each balance.
     for account in (control, income):
         current = run('register query', dict(account=account, date_from='2026-01-01', date_to='2026-12-31'))
         assert current['current_balance']['balance']['minor_units'] == baseline[account] + 1000
@@ -64,6 +71,8 @@ def test_sales_register_all_effects_and_journal_fences(client, document_type):
                 assert {r['category_label'] for r in effects} == {'Invoice' if document_type == 'invoice' else 'Sales receipt'}
                 assert {(r['revision_number'], r['memo']) for r in effects} == {(1, 'Original sale'), (2, 'Corrected sale')}
     assert edit_projection(sale, {'id': control}, lambda r: r['name']) is None
+    from bookflow.core import registry
+    rejected_writes = []
     for command, data in [
         ('journal show', {'journal': sale['id']}),
         ('journal update', {'journal': sale['id'], 'memo': 'Wrong editor'}),
@@ -72,9 +81,13 @@ def test_sales_register_all_effects_and_journal_fences(client, document_type):
             expected_version=changed['version'] + 1, selected_line_id=sale['revision']['lines'][0]['line_id'],
             direction='increase', amount='10.00', category=income)),
     ]:
+        is_write = registry.get(command).is_write
         with pytest.raises(BookflowError) as error:
-            run(command, data, reason='Type fence witness')
+            run(command, data, **({'reason': 'Type fence witness'} if is_write else {}))
         assert error.value.code == 'E_RECORD_NOT_FOUND', (command, error.value.details)
+        if is_write:
+            rejected_writes.append(command)
+    assert rejected_writes == ['journal update', 'journal void', 'register update']
 
 
 @pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
