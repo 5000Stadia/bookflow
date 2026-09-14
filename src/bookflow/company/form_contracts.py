@@ -34,6 +34,7 @@ from bookflow.company import (
 
 FORM_DEFINITIONS: dict[str, Any] = {
     'bill': bill_contract.FORM,
+    'item-receipt': bill_contract.FORM,
     'journal': journal_contract.FORM,
     'register': register_contract.FORM,
     'report': report_contract.FORM,

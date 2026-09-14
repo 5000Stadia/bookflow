@@ -18,8 +18,9 @@ a second movement on one line would double-count it.
   costing in quantity, an *output* of costing in value.
 - ``value`` -- a value-only write-up or write-down; quantity does not move. An input.
 - ``recost`` -- a zero-quantity value delta produced by the recalculation path, linked by
-  ``corrects_movement_id`` to the issue whose cost it corrects, and dated at that issue's own
-  effective date. **Never an input**: treating a correction as a new purchase or sale is
+  ``corrects_movement_id`` to an issue or an owned receipt, at that movement's own
+  effective date. Issue corrections are replay outputs; receipt corrections amend the
+  acquisition value at its original position. Issue corrections are **never inputs**: treating a correction as a new purchase or sale is
   exactly the mistake the costing decision forbids, and the discriminator is what stops it.
 - ``reversal`` -- the exact inverse of one named movement, written when the document that
   caused it is voided. Never an input either; it retires the movement it names.

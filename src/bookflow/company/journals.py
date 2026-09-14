@@ -231,6 +231,9 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
         if s.company.conn.execute(sa.select(c.money_out_item_lines.c.document_line_id).where(
                 c.money_out_item_lines.c.transaction_id == old_h['id']).limit(1)).first():
             raise invalid('journal', 'This purchase carries items; use check or card-charge update/void so stock and money change together.')
+    if old_h is not None and owner != 'inventory':
+        if sa.inspect(s.company.conn).has_table('item_receipts') and s.company.conn.execute(sa.select(c.item_receipts.c.id).where(c.item_receipts.c.transaction_id == old_h['id'])).first():
+            raise invalid('journal', 'This entry belongs to an item receipt; use item-receipt update/void.')
     if old_h is not None and owner is None:
         from bookflow.company.inventory import owning_document_kind
         held = owning_document_kind(s, old_h['id'])

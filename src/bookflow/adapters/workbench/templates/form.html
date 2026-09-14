@@ -6,6 +6,13 @@
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 {% if document_nav %}{% include "document_nav.html" %}{% endif %}
 <h1>{{ document.heading if document else heading }}</h1>
+{% if receipt_choices %}<details class="workflow-note" data-receipt-chooser><summary>Bill goods already received</summary>
+<form method="get" action="{{ base }}/post"><p>Select receipts from the same vendor. Enter the bill date on the next form.</p>
+{% for receipt in receipt_choices %}<label><input type="checkbox" name="receipt" value="{{ receipt.id }}"> {{ receipt.number }} · {{ receipt.profile.vendor.label }} · {{ receipt.date }}</label><br>{% endfor %}
+<button type="submit">Use selected receipts</button></form></details>{% endif %}
+{% if order_choices %}<details class="workflow-note" data-order-chooser><summary>Receive against a purchase order</summary><ul>
+{% for order in order_choices %}<li><a href="{{ base }}/post?purchase_order={{ order.id }}">{{ order.number }} · {{ order.vendor_name }}</a></li>{% endfor %}
+</ul></details>{% endif %}
 {% if noun == 'item' and verb == 'create' %}<p class="workflow-note">For a service you sell, enter a description, income account, price and sales tax code. For an item you purchase, enable purchases and enter its purchase description, expense account and cost. Inventory uses a cost-of-goods-sold account instead of an expense account.</p>{% endif %}
 {% if document %}<p class="muted">{{ document.help }}</p><details class="technical-details"><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun == 'deposit' and verb == 'post' %}<p class="muted">Bank your received payments together as one deposit.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
@@ -32,6 +39,7 @@
 <p>Expenses {{ result.document.expense_total.amount }} + Items {{ result.document.item_total.amount if result.document.item_total else '0' }} = {{ result.document.amount.amount }} {{ result.document.currency }}. Fully allocated.</p>
 <details data-purchase-raw-result><summary>All result fields</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
 </section>
+{% elif result and noun == 'item-receipt' %}<section class="workflow-note"><strong>{{ 'Preview (nothing written)' if preview else 'Received goods' }}</strong><p>{{ result.profile.vendor.label }} · {{ result.total.amount }} {{ result.total.currency }}</p><details><summary>All result fields</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details></section>
 {% elif result and not billing %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
 {% if noun == 'report' and error and error.code == 'E_QUERY_STALE' %}<p class="workflow-note" id="report-restart">The books or report settings changed. Your filters are retained below; run the report again to start at the first page.</p>{% endif %}
 {% if billing_progress %}{% include "billing_progress.html" %}{% endif %}
@@ -41,6 +49,7 @@
 {% if error and error.details.preference_changes %}<section class="workflow-note" aria-label="Latest relevant preference changes"><p>Latest relevant preference changes (not a comparison with an unknown preview):</p><ul>{% for change in error.details.preference_changes %}<li>{{ change.field }} · {{ change.updated_by }} via {{ change.updated_via }}{% if change.on_behalf_of %} on behalf of {{ change.on_behalf_of }}{% endif %} · {{ change.seconds_since_update }} seconds ago · {{ change.audit_event_id or 'company creation' }}</li>{% endfor %}</ul>{% if preferences_settings_url %}<a href="{{ preferences_settings_url }}">Company work preferences</a>{% endif %}</section>{% endif %}
 {% if billing %}{% include "billing.html" %}{% endif %}
 {% if workflow_note %}<div class="workflow-note">{{ workflow_note }}</div>{% endif %}
+{% if receipt_date %}<p><button type="button" data-receipt-date="{{ receipt_date }}">Use receipt date {{ receipt_date }} as bill date</button></p>{% endif %}
 
 {% macro reference_control(reference, name, cur, id, current, clearable) %}
 {% set refid = "reference-" ~ id %}
@@ -102,11 +111,12 @@
 {% elif item.kind == "object" %}
 {% for child in item.fields %}
 {% set child_value = value.get(child.name) if value is mapping else none %}
+{% if path.startswith('receipts:') and child.name == 'receipt_line' %}<p><strong>{{ receipt_source_labels.get(child_value, 'Selected received goods') }}</strong></p>{% endif %}
 {% if child.kind == "collection" %}
 {{ collection_control(child.collection, path ~ ":" ~ child.name, child_value or [], depth + 1, child.name) }}
 {% else %}
 {% set child_name = "c:" ~ path ~ ":" ~ child.name %}{% set child_id = child_name.replace(':', '-').replace('.', '-') %}
-<div class="collection-field"{% if child.name in ('id', 'line_id') %} hidden{% endif %}><label for="{{ child_id }}">{{ child.name.replace('_id', '').replace('_', ' ') }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{% if child.name in ("id", "line_id") %}<input type="hidden" id="{{ child_id }}" name="{{ child_name }}" value="{{ child_value or '' }}"><code class="stable-child-id">{{ child_value or "assigned when saved" }}</code>{% else %}{{ collection_scalar(child, child_name, child_value, child_id) }}{% endif %}</div>
+<div class="collection-field"{% if child.name in ('id', 'line_id', 'receipt_line', 'expected_receipt_version', 'order_line_id') %} hidden{% endif %}><label for="{{ child_id }}">{{ child.name.replace('_id', '').replace('_', ' ') }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{% if child.name in ("id", "line_id", "receipt_line", "expected_receipt_version", "order_line_id") %}<input type="hidden" id="{{ child_id }}" name="{{ child_name }}" value="{{ child_value or '' }}"><code class="stable-child-id">{{ child_value or "assigned when saved" }}</code>{% else %}{{ collection_scalar(child, child_name, child_value, child_id) }}{% endif %}</div>
 {% endif %}
 {% endfor %}
 {% else %}

@@ -10,7 +10,9 @@
 {% macro line_child(child, path, value, compact=false) %}
 {% set child_name = "c:" ~ path ~ ":" ~ child.name %}
 {% set child_id = child_name.replace(':', '-').replace('.', '-') %}
-{% if child.kind == "collection" %}{{ collection_control(child.collection, path ~ ":" ~ child.name, value or [], 1, child.label or child.name) }}
+{% if path.startswith('receipts:') and child.name == 'receipt_line' %}<input type="hidden" name="{{ child_name }}" value="{{ value or '' }}"><span>{{ receipt_source_labels.get(value, 'Selected received goods') }}</span>
+{% elif path.startswith('receipts:') and child.name == 'expected_receipt_version' %}<input type="hidden" name="{{ child_name }}" value="{{ value or '' }}"><span>Captured with this receipt selection</span>
+{% elif child.kind == "collection" %}{{ collection_control(child.collection, path ~ ":" ~ child.name, value or [], 1, child.label or child.name) }}
 {% else %}{{ collection_scalar(child, child_name, value, child_id, compact) }}{% endif %}
 {% endmacro %}
 
@@ -70,7 +72,7 @@
 <div class="document-row document-row-wide">{% for l in d.scope %}{{ field(l, l.index) }}{% endfor %}</div></section>{% endif %}
 
 {% if d.noun in ('check', 'card-charge') %}
-<p>Items record a new purchase received now. To pay an existing bill, use Pay Bills.</p>
+<p>Items record a new purchase received now. For goods already received, <a href="/c/{{ company_id }}/bill/post">enter a bill from receipts</a>, then use Pay Bills. To pay an existing bill, use Pay Bills.</p>
 <div data-purchase-allocation role="status" aria-live="polite">Enter an amount and allocate it to items or expenses.</div>
 {% endif %}
 {% if d.grids %}

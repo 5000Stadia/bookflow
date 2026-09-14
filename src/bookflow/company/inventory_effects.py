@@ -162,7 +162,7 @@ def own_movements(s, transaction_id):
     return [row for row in rows if row['kind'] in INPUT_KINDS and row['id'] not in retired]
 
 
-def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequence=None):
+def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequence=None, repricing=()):
     """Every movement and every correction this document implies, and nothing written yet.
 
     ``reversing`` is what the previous revision moved, from ``own_movements``; ``entries`` is
@@ -221,6 +221,25 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']
+        sequence += 1
+
+    # Immutable bill-owned deltas target the original physical receipt, never a
+    # second receipt or a later value input. Replaying below then owes sales their
+    # own dated COGS corrections.
+    for target, delta, vendor_id in repricing:
+        if not delta:
+            continue
+        lines = inventory.pair(target['asset_account_id'], target['offset_account_id'],
+            delta, currency, target['class_id'], 'Receipt purchase-price correction')
+        lines[1] = lines[1].model_copy(update={'name_type': 'vendor', 'name_id': vendor_id})
+        values = dict(id=new_id(), item_id=target['item_id'], kind=CORRECTION_KIND,
+            quantity_microunits=0, value_minor_units=delta, effective_date=target['effective_date'],
+            sequence=sequence, currency=currency, asset_account_id=target['asset_account_id'],
+            offset_account_id=target['offset_account_id'], class_id=target['class_id'],
+            corrects_movement_id=target['id'], reverses_movement_id=None)
+        rows(target['item_id']).append(values)
+        change.corrections.append(Correction(target['effective_date'], 'Receipt purchase-price correction',
+            lines, [Movement(values, line_index=1)]))
         sequence += 1
 
     owed = []

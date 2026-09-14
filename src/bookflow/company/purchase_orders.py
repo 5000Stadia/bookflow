@@ -329,10 +329,11 @@ def _line(s, line, header_class, currency, index):
 
 
 def summary(s, header, rev, conversion=None):
+    from bookflow.company.receiving import order_remaining
     currency = rev['currency']
     captured = PurchaseOrderProfile.model_validate_json(rev['profile_snapshot'])
     conversion = conversion if conversion is not None else conversion_row(s, header['id'])
-    return dict(header, date=rev['date'], vendor_id=rev['vendor_id'], vendor_name=captured.vendor.label,
+    return dict(header, receiving=order_remaining(s, header, rev), date=rev['date'], vendor_id=rev['vendor_id'], vendor_name=captured.vendor.label,
                 expected_date=rev['expected_date'], reference=rev['reference'], memo=rev['memo'],
                 currency=currency, total_minor_units=rev['total_minor_units'],
                 total=Money(rev['total_minor_units'], currency).to_dict(),
@@ -621,6 +622,9 @@ def prepare(s, ctx, inp, operation):
         if len(ctx.reason.strip()) > 140:
             raise _invalid('reason', 'must be at most 140 characters')
     if old_header:
+        from bookflow.company.receiving import physical_claims
+        if physical_claims(s, order_line_ids=[line['line_id'] for line in saved_lines(s, old_revision)]):
+            raise BookflowError('E_WORK_DEPENDENCY', message='Correct or void the physical receipts before changing this purchase order.')
         consumed = conversion_row(s, old_header['id'])
         if consumed is not None:
             # Not E_HAS_APPLICATIONS: that code tells the caller to unapply a settlement, and
@@ -804,6 +808,9 @@ def bill_source(s, selector):
             'next': 'Correct that bill instead, or enter a new bill without naming the order.'})
     rev = revision(s, header)
     lines = saved_lines(s, rev)
+    from bookflow.company.receiving import physical_claims
+    if physical_claims(s, order_line_ids=[line['line_id'] for line in lines]):
+        raise BookflowError('E_WORK_DEPENDENCY', message='This order has physical receipts; enter a linked bill from the receipts instead of receiving the order again.')
     if not lines:
         raise _invalid('purchase_order', 'the purchase order has no ordered lines')
     return header, rev, lines

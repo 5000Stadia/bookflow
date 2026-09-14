@@ -502,7 +502,7 @@ Example JSON output:
 
 ## `bill post`
 
-Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and its own lines -- an ordered item becomes an item row and an ordered account line becomes an expense row. A header field supplied here wins over the order on its own. The two line grids are one answer: write either `expenses` or `items`, an empty one included, and the bill is exactly the lines written here, because a caller who writes a line is saying what arrived. To change one grid and keep the other, send both. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice -- in full, even when this bill covers only part of what was ordered; there is no remaining quantity and no backorder. A withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Every item kind the company buys can be bought here, and an inventory part also moves its quantity on hand and its cost -- an item row is the only row that can, because an expense row names no item.
+Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and its own lines -- an ordered item becomes an item row and an ordered account line becomes an expense row. A header field supplied here wins over the order on its own. The two line grids are one answer: write either `expenses` or `items`, an empty one included, and the bill is exactly the lines written here, because a caller who writes a line is saying what arrived. To change one grid and keep the other, send both. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice -- in full, even when this bill covers only part of what was ordered; there is no remaining quantity and no backorder. A withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. Alternatively, `receipts` selects immutable received-line IDs, current receipt versions and quantities. The bill date is explicit, including when receipt dates differ. Matched items transfer receipt-owned AP to this bill without receiving stock again. Give an actual unit_cost or amount to correct acquisition value at each receipt date and affected issue costs at their sale dates. Omit cost to transfer exact original interval value. The selected receipts must share vendor, AP account and currency; new items and a whole-order source cannot be combined with receipt selections. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Every item kind the company buys can be bought here, and an inventory part also moves its quantity on hand and its cost -- an item row is the only row that can, because an expense row names no item.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -536,6 +536,11 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `vendor` | `--vendor` | string \| null | no | yes | null | — |
 | `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
+| `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
+| `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
+| `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
+| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
+| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].account` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
 | `expenses[].amount` | inside `--expenses` JSON array | string \| object | yes | no | — | — |
@@ -722,6 +727,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.receipts` | array[object] | no | no | [] | — |
+| `revision.receipts[].receipt_line` | string | yes | no | — | — |
+| `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `revision.receipts[].quantity` | string | yes | no | — | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -1015,6 +1026,7 @@ Example JSON output:
         "version": 1
       }
     },
+    "receipts": [],
     "revision_number": 1,
     "supersedes_revision_id": null,
     "total": {
@@ -1468,6 +1480,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.receipts` | array[object] | no | no | [] | — |
+| `revision.receipts[].receipt_line` | string | yes | no | — | — |
+| `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `revision.receipts[].quantity` | string | yes | no | — | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -1756,6 +1774,7 @@ Example JSON output:
         "version": 1
       }
     },
+    "receipts": [],
     "revision_number": 1,
     "supersedes_revision_id": null,
     "total": {
@@ -1845,7 +1864,7 @@ Example JSON output:
 
 ## `bill update`
 
-Correct a bill. The old accounting is reversed at its original date and replaced in full at the new one; every earlier revision stays readable. Supply `expenses` or `items` to replace that whole grid, carrying each surviving row’s `line_id`; the grid you leave out keeps its lines exactly as they were captured, and an empty list clears that grid. Leave both out to correct the header alone. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused.
+Correct a bill. The old accounting is reversed at its original date and replaced in full at the new one; every earlier revision stays readable. Supply `expenses` or `items` to replace that whole grid, carrying each surviving row’s `line_id`; the grid you leave out keeps its lines exactly as they were captured, and an empty list clears that grid. Leave both out to correct the header alone. A linked bill retains its receipt mappings when `receipts` is omitted; supply selections to replace them. Unchanged acquisition costs retain their original correction identities, so a header edit does not reopen unaffected historical dates. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1876,6 +1895,11 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
+| `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
+| `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
+| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
+| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
 | `bill` | `BILL` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
@@ -2067,6 +2091,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.receipts` | array[object] | no | no | [] | — |
+| `revision.receipts[].receipt_line` | string | yes | no | — | — |
+| `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `revision.receipts[].quantity` | string | yes | no | — | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2360,6 +2390,7 @@ Example JSON output:
         "version": 1
       }
     },
+    "receipts": [],
     "revision_number": 1,
     "supersedes_revision_id": null,
     "total": {
@@ -2460,7 +2491,7 @@ Example JSON output:
 
 ## `bill void`
 
-Void a bill with a required reason. Its accounting is reversed at its own date, its number stays occupied and its history stays readable.
+Void a bill with a required reason. Its accounting is reversed at its own date, its number stays occupied and its history stays readable. A linked bill releases its exact financial intervals and reverses its own acquisition-price corrections; physical receipts and PO quantity claims remain.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2652,6 +2683,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.receipts` | array[object] | no | no | [] | — |
+| `revision.receipts[].receipt_line` | string | yes | no | — | — |
+| `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `revision.receipts[].quantity` | string | yes | no | — | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2945,6 +2982,7 @@ Example JSON output:
         "version": 1
       }
     },
+    "receipts": [],
     "revision_number": 1,
     "supersedes_revision_id": null,
     "total": {

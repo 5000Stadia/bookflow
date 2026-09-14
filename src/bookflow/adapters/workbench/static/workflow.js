@@ -278,3 +278,15 @@
     closed = [];
   });
 })();
+
+// An explicit convenience choice; never submits or replaces a date automatically.
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-receipt-date]');
+  if (!button) return;
+  const input = document.querySelector('[data-generated-form] [name="f:date"]');
+  if (!input) return;
+  input.value = button.dataset.receiptDate;
+  input.dispatchEvent(new Event('input', {bubbles: true}));
+  input.dispatchEvent(new Event('change', {bubbles: true}));
+  input.focus();
+});

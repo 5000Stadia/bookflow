@@ -227,6 +227,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `receiving` | array[object] | no | no | [] | — |
+| `receiving[].order_line_id` | string | yes | no | — | — |
+| `receiving[].item_id` | string | yes | no | — | — |
+| `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -398,6 +404,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "memo": null,
   "number": "value",
+  "receiving": [],
   "reference": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -573,6 +580,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
+| `items[].receiving` | array[object] | no | no | [] | — |
+| `items[].receiving[].order_line_id` | string | yes | no | — | — |
+| `items[].receiving[].item_id` | string | yes | no | — | — |
+| `items[].receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `items[].receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `items[].receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].current_revision_id` | string | yes | no | — | — |
 | `items[].status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -698,6 +711,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `receiving` | array[object] | no | no | [] | — |
+| `receiving[].order_line_id` | string | yes | no | — | — |
+| `receiving[].item_id` | string | yes | no | — | — |
+| `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -864,6 +883,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "memo": null,
   "number": "value",
+  "receiving": [],
   "reference": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1056,6 +1076,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `receiving` | array[object] | no | no | [] | — |
+| `receiving[].order_line_id` | string | yes | no | — | — |
+| `receiving[].item_id` | string | yes | no | — | — |
+| `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -1227,6 +1253,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "memo": null,
   "number": "value",
+  "receiving": [],
   "reference": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1407,6 +1434,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `receiving` | array[object] | no | no | [] | — |
+| `receiving[].order_line_id` | string | yes | no | — | — |
+| `receiving[].item_id` | string | yes | no | — | — |
+| `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -1578,6 +1611,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "memo": null,
   "number": "value",
+  "receiving": [],
   "reference": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",

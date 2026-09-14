@@ -9,7 +9,8 @@ tested directly instead of through four commands.
 
 Walk the item's *input* movements -- receipts, issues and value adjustments that no reversal
 has retired -- in ``(effective_date, sequence, id)`` order, carrying on-hand quantity ``Q`` and
-asset value ``V``. A receipt adds both. A value adjustment moves value alone. An issue takes
+asset value ``V``. A receipt adds both, including active receipt-targeted purchase-price
+corrections at that original acquisition position. A value adjustment moves value alone. An issue takes
 quantity out and consumes value at the running weighted average:
 
     consumed = V                                   when the issue empties the stock
@@ -28,7 +29,9 @@ exact integers and ``round_half_even`` resolves the single division once.
 took back. Replaying either as if it were a new purchase or a new sale would fold a correction
 into the average that the correction was computed from -- the mistake the costing decision
 names explicitly. So the walk reads ``INPUT_KINDS`` only, and the two derived kinds are read
-solely to work out what is already posted.
+to work out what is already posted. A receipt-targeted recost is instead an explicit
+purchase-price input attached to the original receipt; it is never walked as a later
+value adjustment. Issue-targeted recosts remain replay outputs.
 
 ## What "already posted" means, and why nothing is corrected twice
 
@@ -137,7 +140,9 @@ def replay(rows: Iterable[Mapping]) -> Replay:
         change = int(row['quantity_microunits'])
         if row['kind'] == 'receipt':
             quantity += change
-            value += int(row['value_minor_units'])
+            # Receipt-targeted purchase-price corrections belong at acquisition,
+            # even when a bill is recorded after intervening issues.
+            value += int(row['value_minor_units']) + posted.get(row['id'], 0)
         elif row['kind'] == 'value':
             if quantity <= 0:
                 raise StockRefusal('unvalued_stock', row, quantity_microunits=quantity,

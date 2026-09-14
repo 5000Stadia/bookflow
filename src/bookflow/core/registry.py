@@ -271,6 +271,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.credit_settlement_cmds": ["customer-credit"],
     "bookflow.commands.refund_cmds": ["customer-refund"],
     "bookflow.commands.bill_cmds": ["bill"],
+    "bookflow.commands.receiving_cmds": ["item-receipt"],
     "bookflow.commands.bill_payment_cmds": ["bill", "bill payment"],
     "bookflow.commands.vendor_credit_cmds": ["vendor-credit"],
     "bookflow.commands.purchase_order_cmds": ["purchase-order"],
@@ -361,6 +362,7 @@ def all_nouns() -> list[str]:
 # Overrides where a noun's record type or identifier differs from the derivation (record type = noun; identifier = the
 # show command's first positional). `company show` takes no positional: the record is the selected company.
 NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
+    "item-receipt": {"record_type": "item_receipt", "identifier": "receipt", "output_identifier": "id", "ui_group": "Vendors", "display_field": "number", "singular_label": "Item receipt", "plural_label": "Item receipts"},
     "purchase-order": {"record_type": "purchase_order", "identifier": "purchase_order", "output_identifier": "id", "display_field": "number", "singular_label": "Purchase order", "plural_label": "Purchase orders"},
     "payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Customer payment", "plural_label": "Customer payments"},
     "invoice": {"record_type": "transaction", "identifier": "invoice", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Invoice", "plural_label": "Invoices"},

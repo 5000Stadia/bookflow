@@ -1134,3 +1134,6 @@ globals().update(_define_memorized_tables(metadata, _column, _table, _common))
 
 from bookflow.company.check_item_schema import define_tables as _define_check_item_tables
 globals().update(_define_check_item_tables(metadata, _column, _table))
+
+from bookflow.company.receiving_schema import define_tables as _define_receiving_tables
+globals().update(_define_receiving_tables(metadata, _column, _table, _common))

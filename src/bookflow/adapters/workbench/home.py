@@ -185,11 +185,8 @@ PANELS: tuple[Panel, ...] = (
                 id="receive-items",
                 title="Receive items",
                 summary="Record what arrived against the order.",
-                action=Action("Receive items", WRITE),
-                # Inventory itself is done -- an item line on a bill already moves stock and
-                # costs it. What is missing is the document that records a delivery arriving
-                # *before* its bill, so the two are not the same wait any more.
-                waits_on="an item receipt document, for goods that arrive before the bill does",
+                action=Action("Receive items", WRITE, ("item-receipt post",),
+                              "/item-receipt/post"),
             ),
             Step(
                 id="bill",

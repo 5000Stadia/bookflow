@@ -63,15 +63,17 @@ DESCRIPTIONS = {
              ' ordered; there is no remaining quantity and no backorder. A withdrawn order is'
              ' refused. Voiding the bill does not free the'
              ' order again: enter the replacement bill outright.'
+             ' Alternatively, `receipts` selects immutable received-line IDs, current receipt versions and quantities. The bill date is explicit, including when receipt dates differ. Matched items transfer receipt-owned AP to this bill without receiving stock again. Give an actual unit_cost or amount to correct acquisition value at each receipt date and affected issue costs at their sale dates. Omit cost to transfer exact original interval value. The selected receipts must share vendor, AP account and currency; new items and a whole-order source cannot be combined with receipt selections.'
              + _HEADER + _LINES),
     'update': ('Correct a bill. The old accounting is reversed at its original date and replaced in'
                ' full at the new one; every earlier revision stays readable. Supply `expenses` or'
                ' `items` to replace that whole grid, carrying each surviving row’s `line_id`; the'
                ' grid you leave out keeps its lines exactly as they were captured, and an empty'
                ' list clears that grid. Leave both out to correct the header alone.'
+               ' A linked bill retains its receipt mappings when `receipts` is omitted; supply selections to replace them. Unchanged acquisition costs retain their original correction identities, so a header edit does not reopen unaffected historical dates.'
                + _HEADER),
     'void': ('Void a bill with a required reason. Its accounting is reversed at its own date, its'
-             ' number stays occupied and its history stays readable.'),
+             ' number stays occupied and its history stays readable. A linked bill releases its exact financial intervals and reverses its own acquisition-price corrections; physical receipts and PO quantity claims remain.'),
     'show': ('Show a bill: its current or a selected immutable revision, captured vendor, payable,'
              ' terms and custom facts, its expense lines and item lines, its posting batches, what'
              ' is still open on it, and any other bill from this vendor carrying the same supplier'

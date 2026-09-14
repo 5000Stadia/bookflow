@@ -103,3 +103,7 @@ a.flow-tile:focus-visible{outline:2px solid #416da1;outline-offset:2px}
 .date-range-presets { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; margin:.35rem 0; font-size:.9rem; }
 .date-range-presets select { min-height:44px; min-width:0; max-width:100%; }
 input[data-date] { min-width:0; max-width:100%; }
+
+/* Received quantities and money stay readable within the table's own scroller. */
+.receipt-lines { min-width: 34rem; }
+.receipt-lines th:not(:first-child), .receipt-lines td:not(:first-child) { white-space: nowrap; overflow-wrap: normal; word-break: normal; font-variant-numeric: tabular-nums; }

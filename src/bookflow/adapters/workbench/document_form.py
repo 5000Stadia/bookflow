@@ -593,11 +593,16 @@ def layout(noun, leaves):
     primary_path = ('sources' if refund else
                     'expenses' if money_out or bill or vendor_credit else 'lines')
     grids = []
+    matched = bill and by_path.get('receipts', {}).get('collection', {}).get('values')
+    if matched:
+        grids.append(_grid('receipts', 'Received goods', by_path['receipts'],
+            (('receipt_line', 'Received item'), ('quantity', 'Qty to bill'), ('unit_cost', 'Actual cost'), ('amount', 'Actual amount')), {}))
+        placed.add('items')
     if not transfer:
         primary_lines = by_path.get(primary_path)
         if primary_lines is not None:
             grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}))
-        if bill or money_out:
+        if (bill or money_out) and not matched:
             item_lines = by_path.get('items')
             if item_lines is not None:
                 grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS))
@@ -853,7 +858,7 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     return dict(layout(noun, leaves),
                 noun=noun, verb=verb, title=TITLES[noun],
                 heading=heading(noun, verb, originals),
-                help=HELP[noun], computed=figures, line_amount=line_amount,
+                help=('Bill goods already received. Matched item lines transfer receipt-owned Accounts Payable to this bill without receiving inventory again. Price differences correct the receipt date and affected sale costs.' if bill and any(l['path'] == 'receipts' and l.get('collection', {}).get('values') for l in leaves) else HELP[noun]), computed=figures, line_amount=line_amount,
                 totals=totals, totals_empty=empty,
                 reconciliation=reconciliation, reconciled=reconciled,
                 preview=preview, creating=verb in ('post', 'create'),

@@ -922,3 +922,22 @@ for _name, _payload in _RECONCILE_EXAMPLES.items():
         _args.extend(['--reason', _RECONCILE_REASONS[_name]])
     _args.append('--json')
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)
+
+# Receiving uses the same registered commands in CLI, HTTP, Python and MCP.
+EXAMPLES.update({
+    'item-receipt post': Example(
+        f'bookflow item-receipt post --vendor "Northside Supply" --date 2026-04-02 --items \'[{{"item":"{ID}","quantity":"6","unit_cost":"10.00"}}]\' --company "Demo Plumbing Co" --reason "Receive goods before bill" --json',
+        {'vendor': 'Northside Supply', 'date': '2026-04-02', 'items': [{'item': ID, 'quantity': '6', 'unit_cost': '10.00'}]}),
+    'item-receipt show': Example(
+        f'bookflow item-receipt show {ID} --company "Demo Plumbing Co" --json', {'receipt': ID}),
+    'item-receipt query': Example(
+        'bookflow item-receipt query --unbilled-only --limit 50 --company "Demo Plumbing Co" --json', {'unbilled_only': True, 'limit': 50}),
+    'item-receipt update': Example(
+        f'bookflow item-receipt update {ID} --expected-version 1 --memo "Dock counted six" --company "Demo Plumbing Co" --reason "Record dock note" --json',
+        {'receipt': ID, 'expected_version': 1, 'memo': 'Dock counted six'}),
+    'item-receipt void': Example(
+        f'bookflow item-receipt void {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Return received goods" --json',
+        {'receipt': ID, 'expected_version': 1}),
+    'item-receipt history': Example(
+        f'bookflow item-receipt history {ID} --company "Demo Plumbing Co" --json', {'receipt': ID}),
+})

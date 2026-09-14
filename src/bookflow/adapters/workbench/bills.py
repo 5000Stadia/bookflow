@@ -89,6 +89,13 @@ def editable_values(record):
             row['unit_cost'] = line['unit_cost']['amount']
         row.update(_line_class(line, header_class))
         values['items'].append(row)
+    if revision.get('receipts'):
+        values['items'] = []
+        values['receipts'] = [dict(receipt_line=line['receipt_line'],
+            expected_receipt_version=line['expected_receipt_version'], quantity=line['quantity'],
+            amount=line['amount']['amount'] if line.get('amount') else None,
+            unit_cost=line['unit_cost']['amount'] if line.get('unit_cost') else None)
+            for line in revision['receipts']]
     return values
 
 

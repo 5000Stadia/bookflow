@@ -249,6 +249,12 @@ def _noun_meta(noun):
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun == 'item-receipt':
+        return dict(date=shown['date'], vendor=shown['profile']['vendor']['id'],
+            ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'],
+            items=[dict(line_id=line['line_id'], item=line['profile']['item']['id'],
+                quantity=line['quantity'], amount=line['amount']['amount'], description=line['description'],
+                order_line_id=line.get('order_line_id')) for line in shown['items']])
     if noun == "custom-field":
         return {**shown, "scopes": [scope["record_type"] for scope in shown["scopes"]]}
     if noun in Work.NOUNS:
@@ -1097,6 +1103,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                    # list spends on one is spent here on what the charge was for.
                    ["number", "date", "customer_name", "memo", "total", "status"] if noun == 'statement-charge' else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
+                   ["number", "date", "total", "status"] if noun == 'item-receipt' else
                    ["number", "date", "vendor_name", "due_date", "total", "status"] if noun == 'bill' else
                    list(definition.summary_columns) if definition is not None else
                    # No rows means no keys to derive columns from; an empty list is a page,
@@ -1422,7 +1429,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, error)
             originals = {'deposit': record_id, 'expected_version': shown['current']['version']}
         originals = originals or {}
-        if noun in Document.MONEY_OUT and verb == 'update' and attempted.get('originals'):
+        if noun in (*Document.MONEY_OUT, 'item-receipt', 'bill') and verb == 'update' and attempted.get('originals'):
             # Keep the baseline the person edited across preview/refusal/stale responses.
             # A newer server revision must not become an implicit replacement payload.
             originals = json.loads(attempted['originals'])
@@ -1438,6 +1445,30 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 value = request.query_params.get('f:' + field, request.query_params.get(field))
                 if value is not None and field in cmd.input_model.model_fields:
                     attempted['f:' + field] = value
+        receipt_source_labels = {}
+        receipt_date = None
+        receipt_choices = []
+        order_choices = []
+        if company_id and verb == 'post' and noun in ('bill', 'item-receipt'):
+            from bookflow.adapters.workbench import receiving as Receiving
+            if noun == 'bill':
+                receipt_choices = run(request, 'item-receipt query', {'unbilled_only': True, 'limit': 200}, company_id)['items']
+                receipt_source_labels = {line['id']: receipt['number'] + ' · ' + line['profile']['item']['label'] for receipt in receipt_choices for line in receipt['items']}
+                selected_ids = request.query_params.getlist('receipt')[:100]
+                selected_dates = {receipt['date'] for receipt in receipt_choices if receipt['id'] in selected_ids}
+                if len(selected_dates) == 1:
+                    receipt_date = next(iter(selected_dates))
+                if selected_ids and not attempted:
+                    selected = [run(request, 'item-receipt show', {'receipt': identity}, company_id) for identity in selected_ids]
+                    attempted.update(Receiving.receipt_selection(selected))
+                    workflow_note = 'Billing received goods. Enter the bill date explicitly, then adjust matched quantities and actual costs. This transfers the payable and does not receive stock again.'
+            else:
+                order_choices = run(request, 'purchase-order query', {'open_only': True, 'limit': 200}, company_id)['items']
+                selected_id = request.query_params.get('purchase_order')
+                if selected_id and not attempted:
+                    selected = run(request, 'purchase-order show', {'purchase_order': selected_id}, company_id)
+                    attempted.update(Receiving.order_selection(selected))
+                    workflow_note = 'Receiving from purchase order ' + selected['number'] + '. Enter the physical receipt date, reduce quantities to those delivered, and remove undelivered lines.'
         if noun in Document.MONEY_OUT and verb == 'post':
             # Open the payee picker on the list a check usually pays, and keep it honest when
             # nobody is entered: a leaf equal to its original is not submitted, so seeding the
@@ -1606,6 +1637,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     relationship = _matching_vendor_link(customer, vendor["id"])
                     if relationship is not None:
                         originals["expected_link_version"] = relationship["version"]
+        if noun == 'item-receipt' and verb == 'update' and shown and shown.get('purchase_order_id') and not attempted:
+            order = run(request, 'purchase-order show', {'purchase_order': shown['purchase_order_id']}, company_id)
+            attempted['f:purchase_order_version'] = str(order['version'])
+        if noun == 'bill' and shown and shown.get('revision', {}).get('receipts'):
+            for selection, line in zip(shown['revision']['receipts'], shown['revision']['items']):
+                receipt_source_labels[selection['receipt_line']] = line['line_snapshot']['item']['label']
         F.project_input_values(cmd.input_model, originals)
         meta = _noun_meta(noun)
         definition = meta.get("definition")
@@ -1825,7 +1862,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         ):
             return_context = {"token": return_token, "target": return_target}
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
-                      heading=Naming.heading(noun, verb, meta),
+                      heading=Naming.heading(noun, verb, meta), receipt_choices=receipt_choices, order_choices=order_choices, receipt_source_labels=receipt_source_labels, receipt_date=receipt_date,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
                       captured_custom_fields=(shown or {}).get("revision", {}).get("custom_fields", []),
                       captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],

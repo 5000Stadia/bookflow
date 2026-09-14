@@ -686,7 +686,9 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
     if summary_only:
         return BillRevisionSummaryOutput(**values)
     snapshot = json.loads(revision['custom_fields_snapshot'])
+    from bookflow.company.receipt_billing import selections_for_revision
     return BillRevisionOutput(
+        receipts=selections_for_revision(s, revision),
         **values, profile=json.loads(profile['profile_snapshot']),
         issuer_snapshot=json.loads(revision['issuer_snapshot']),
         custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot),
@@ -909,7 +911,7 @@ def _version(s, header, expected):
 # ---------------------------------------------------------------- writes
 
 
-def commercial(s, inp, old_header, old_revision, *, document_id):
+def commercial(s, inp, old_header, old_revision, *, document_id, received=None):
     old_profile = (BillProfile.model_validate_json(profile_row(s, old_revision)['profile_snapshot'])
                    if old_revision else None)
     date = (getattr(inp, 'date', None) or old_revision['date']) if old_revision else inp.date
@@ -938,6 +940,9 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
     for family, supplied, resolver in (('expense', inp.expenses, _expense_line),
                                        ('item', getattr(inp, 'items', None), _item_line)):
         kept = by_family(old_lines, family)
+        if family == 'item' and received is not None:
+            grids[family] = received['items']
+            continue
         if old_revision and supplied is None:
             grids[family] = [dict(line_id=line['line_id'], family=family, memo=line['memo'],
                                   amount_minor_units=line['amount_minor_units'],
@@ -986,7 +991,7 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
     warnings = list(dict.fromkeys(
         income_account_warning(line['profile']) for line in lines
         if getattr(line['profile'], 'account_basis', 'purchase') == 'income'))
-    return dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
+    return dict(received=received, profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
                 lines=lines, custom_plan=custom_plan, semantic=semantic, currency=currency,
                 expense_total=expense_total, item_total=item_total, total=total, warnings=warnings)
 
@@ -1091,6 +1096,8 @@ def prepare(s, ctx, inp, operation):
     source, entry = _from_order(s, inp, operation)
     old_header = resolve(s, inp.bill) if operation != 'post' else None
     old_revision = journals.revision(s, old_header) if old_header else None
+    from bookflow.company import receipt_billing
+    received, entry = receipt_billing.source(s, entry, operation, old_header, old_revision)
     meta = _version(s, old_header, inp.expected_version) if old_header else None
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
     if operation == 'void':
@@ -1134,9 +1141,9 @@ def prepare(s, ctx, inp, operation):
     resolved, changed_fields, custom_plan, sequence = None, [], None, None
 
     if operation != 'void':
-        resolved = commercial(s, entry, old_header, old_revision, document_id=header['id'])
+        resolved = commercial(s, entry, old_header, old_revision, document_id=header['id'], received=received)
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
-        if old_revision and not changed_fields and not resolved['custom_plan'].changed:
+        if old_revision and not changed_fields and not resolved['custom_plan'].changed and not (received and 'receipts' in inp.model_fields_set):
             return unchanged(old_header, old_revision)
         journals.open_dates(s, [resolved['date']] + ([old_revision['date']] if old_revision else []))
         _posting_accounts_active(s, resolved)
@@ -1202,7 +1209,7 @@ def prepare(s, ctx, inp, operation):
     # here -- negative stock on any earlier date, a closed period any delta would land in --
     # leaves nothing behind, because nothing has been written.
     stock = inventory_effects.plan(
-        s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['profile']),
+        s, entries=[] if operation == 'void' or received else _stock_entries(pending, resolved['profile']),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'], field='items')
     inventory_effects.open_dates(s, stock)
@@ -1256,7 +1263,9 @@ def prepare(s, ctx, inp, operation):
                              before=old_header, old_revision=old_revision, pending=pending,
                              sequence=sequence, event=event, custom_plan=custom_plan,
                              consumption=consumption, stock=stock,
-                             semantic=resolved['semantic'] if resolved else None))
+                             semantic=resolved['semantic'] if resolved else None, received=received))
+    if received:
+        receipt_billing.attach(s, ctx, plan, received)
     from bookflow.company.bill_validation import validate
     validate(plan, s, ctx)
     return plan
@@ -1316,7 +1325,7 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
         if not line['amount_minor_units']:
             continue
         facts = LINE_FACTS[family].model_validate_json(line['line_snapshot'])
-        cost = leg(facts.account, line['amount_minor_units'], True,
+        cost = leg(profile.ap_account if resolved.get('received') and family == 'item' else facts.account, line['amount_minor_units'], True,
                    envelope['class_id'], envelope['class_name'], envelope['description'])
         debits[envelope['id']] = cost
         attribute(cost, envelope, line['amount_minor_units'])
@@ -1348,6 +1357,9 @@ def apply(plan, ctx, s):
                               table_kinds=TABLE_KINDS, companion=fresh.data.get('consumption'))
     # The dated cost corrections this purchase owes earlier sales: their own documents, at
     # their own dates, in this same company transaction.
+    if fresh.data.get('received') and fresh.data.get('changed'):
+        from bookflow.company import receipt_billing
+        applied = receipt_billing.apply(s, ctx, fresh, applied)
     stock = fresh.data.get('stock')
     if stock is None or not stock.moves_stock:
         return applied

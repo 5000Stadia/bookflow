@@ -240,7 +240,16 @@ class PurchaseOrderRevisionOutput(PurchaseOrderRevisionSummaryOutput):
     lines: list[PurchaseOrderLineOutput]
 
 
+class PurchaseOrderReceivingOutput(_Input):
+    order_line_id: str
+    item_id: str
+    ordered_quantity_microunits: int
+    received_quantity_microunits: int
+    remaining_quantity_microunits: int
+
+
 class PurchaseOrderSummaryOutput(CommonOut):
+    receiving: list[PurchaseOrderReceivingOutput] = Field(default_factory=list)
     number: str
     current_revision_id: str
     status: Literal['open', 'partly_received', 'closed', 'voided']

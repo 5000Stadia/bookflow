@@ -18,7 +18,7 @@ Database: `company`.
 | `account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Account debited by this line, captured from the item's own purchase account. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Positive quantity bought, in millionths of one unit. |
 | `unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Home-currency cost of one unit; null when the amount was entered outright. |
-| `amount_minor_units` | BIGINT | no | — | — | — | — | Positive home-currency amount debited to the account. |
+| `amount_minor_units` | BIGINT | no | — | — | — | — | Nonnegative home-currency amount debited to the account. |
 | `customer_id` | VARCHAR(26) | yes | — | — | — | customers.id | Customer or job this cost is attributed to; null when unattributed. |
 | `billable` | BOOLEAN | no | — | — | — | — | Whether this cost is marked for rebilling to the named customer or job. |
 | `line_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of the resolved item, account, job and class facts. |

@@ -85,6 +85,10 @@ def _stock(s, data, indexed, require):
     from bookflow.company import bills, inventory
 
     header, pending = data['header'], data['pending']
+    if data.get('received'):
+        from bookflow.company.receipt_billing import validate
+        validate(s, data, indexed, require)
+        return
     movements = [movement.values for movement in data['stock'].movements]
     legs, batches = indexed['posting_lines'], indexed['posting_batches']
     control = {row['id'] for row in effects.rows(

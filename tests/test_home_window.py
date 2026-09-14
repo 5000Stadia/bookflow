@@ -87,20 +87,17 @@ def test_every_live_tile_navigates_to_a_usable_page(hosted):
 
 
 def test_the_purchasing_journey_is_offered_without_a_gap(hosted):
-    """Order, bill, pay: a business buys in one errand, and a missing tile stops the errand.
+    """Order, receive, bill, pay: a business buys in one errand, and a missing tile stops the errand.
 
     Pinned by name rather than left to the every-live-tile sweep above. That sweep only visits
     tiles that are already live, so un-wiring one of these would not fail a test -- it would
     quietly remove that tile's coverage, which is how `purchase-order` sat fully registered and
     fully routed while the window went on advertising it as waiting.
 
-    `receive-items` is deliberately absent: an item line on a bill already moves and costs stock,
-    but the document that records a delivery arriving before its bill does not exist yet, so that
-    tile is honestly still waiting.
     """
     browser = _browser(hosted)
     offered = {item.step.id: item for panel in resolved(hosted.company_id) for item in panel.steps}
-    for step_id in ("vendor-list", "purchase-order", "bill", "pay-bills"):
+    for step_id in ("vendor-list", "purchase-order", "receive-items", "bill", "pay-bills"):
         item = offered.get(step_id)
         assert item is not None and item.live, (
             step_id, "this leg of the purchasing journey is not offered on the home window",

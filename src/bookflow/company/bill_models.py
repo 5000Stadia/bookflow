@@ -144,6 +144,20 @@ class _BillFields(_Input):
         default_factory=lambda: CustomFieldKindExpectations({}))
 
 
+class ReceiptBillingInput(_Input):
+    receipt_line: _Selector
+    expected_receipt_version: _Version
+    quantity: Quantity
+    unit_cost: str | SalesMoneyInput | None = None
+    amount: str | SalesMoneyInput | None = None
+
+    @model_validator(mode='after')
+    def basis(self):
+        if self.unit_cost is not None and self.amount is not None:
+            raise ValueError('give unit_cost or amount, not both')
+        return self
+
+
 class BillPostInput(_BillFields):
     """A new bill, entered outright or made from a purchase order.
 
@@ -164,6 +178,7 @@ class BillPostInput(_BillFields):
     date: _Date
     vendor: _Selector | None = None
     purchase_order: _Selector | None = None
+    receipts: list[ReceiptBillingInput] | None = Field(default=None, min_length=1, max_length=100)
     expenses: Expenses | None = None
     items: Items | None = None
 
@@ -172,7 +187,9 @@ class BillPostInput(_BillFields):
         # A bill names its own vendor and carries its own lines, unless it is being entered
         # from a purchase order -- which supplies both. Either grid satisfies the line
         # requirement, because an order may have been placed entirely for items.
-        if self.purchase_order is None:
+        if self.receipts is not None and (self.purchase_order is not None or self.items):
+            raise ValueError("receipt selections cannot also receive new items or consume a whole order")
+        if self.purchase_order is None and self.receipts is None:
             if self.vendor is None:
                 raise ValueError('vendor is required unless the bill names a purchase order')
             if not (self.expenses or self.items):
@@ -184,6 +201,7 @@ class BillPostInput(_BillFields):
 
 
 class BillUpdateInput(_BillFields):
+    receipts: list[ReceiptBillingInput] | None = Field(default=None, min_length=1, max_length=100)
     bill: _Selector
     expected_version: _Version | None = None
     date: _Date | None = None
@@ -193,7 +211,7 @@ class BillUpdateInput(_BillFields):
 
     @model_validator(mode='after')
     def required_values(self) -> Self:
-        for field in ('date', 'vendor', 'expenses', 'items', 'number', 'ap_account'):
+        for field in ('date', 'vendor', 'expenses', 'items', 'receipts', 'number', 'ap_account'):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f'{field} cannot be null')
         return self
@@ -395,6 +413,7 @@ class BillRevisionSummaryOutput(CreatedOutput):
 
 
 class BillRevisionOutput(BillRevisionSummaryOutput):
+    receipts: list[ReceiptBillingInput] = Field(default_factory=list)
     issuer_snapshot: dict[str, str | None]
     custom_fields_snapshot: dict[str, SnapshotField]
     custom_fields: list[SnapshotField]
