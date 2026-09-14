@@ -2,9 +2,10 @@
 
 Status: reviewed policy contract for Row7; not implemented. Full implementation
 requires the owning identity plan's storage, administration, publication, migration
-and verification requirements. The membershipless hub-administrator visibility
-conflict between intention and blueprint remains an unresolved user decision;
-this contract does not settle that conflict or authorize dependent access changes.
+and verification requirements. Human decision: each company has its own administrator
+account; installation administration does not automatically grant company-book access.
+This settles the former membershipless hub-administrator visibility conflict. Runtime
+activation and migration still require implementation and verification.
 
 ## Company capability resolution
 
@@ -12,7 +13,9 @@ For a selected company, collect the actor's active organization membership for t
 
 Null grant/deny columns and empty lists both mean no override. Reject a capability appearing in both grant and deny in the same submitted policy rather than guessing user intent. Deduplicate names canonically or reject duplicates consistently in the typed schema. Unknown names reject; display canonical labels from the registry. An explicit grant never overrides the mandatory role threshold, active-user requirement, company visibility, principal binding, feature state or target graph authorization.
 
-For a hub administrator, administrative visibility and role privileges retain their existing contract. The capability resolver uses the hub_admin default entries plus applicable explicit grants/denies. Administrative status does not bypass an explicit applicable deny on a business action. A hub administrator with no membership has hub_admin defaults, not an inferred grant to every future capability. Transaction-delete capabilities have no role defaults, including hub_admin. Delete uses the same explicit organization/company grant inheritance for all actors, including a hub administrator: an explicit organization grant covers current and future companies in that organization; an exact-company grant covers only that company. Applicable denies at either scope still win. Default-off refers to role/default/bootstrap seeds, not erasure of an already explicit organization grant when a new company is created. User setup and its preview must clearly label organization grants as applying to current and future companies. No administrator receives Delete solely by administrator status. The separate question of membershipless hub-administrator visibility is awaiting the user decision.
+Installation administration and company administration are distinct. A hub administrator must have an applicable organization or exact-company membership to access company books, and company actions use that membership's role and capability policy. Hub-administrator status neither supplies a company role nor overrides an applicable company-action deny. Each company can have its own administrator account, with authority scoped to that company. Existing explicit organization membership inheritance remains governed by the same scope rules; installation status does not create such a membership.
+
+Transaction-delete capabilities have no role defaults, including hub_admin. Delete uses the same explicit organization/company grant inheritance for every actor: an explicit organization grant covers current and future companies in that organization; an exact-company grant covers only that company. Applicable denies at either scope still win. Default-off refers to role/default/bootstrap seeds, not erasure of an already explicit organization grant when a new company is created. User setup and its preview must clearly label organization grants as applying to current and future companies. No administrator receives Delete solely by administrator status.
 
 Effective company action authority for an agent is the intersection of its own resolved authorization and its authenticated bound human's authorization. Assigned principal sets compare all effective roles, scope visibility and capabilities using this same resolver. This may span more than currently visible companies; equality evaluation remains internal and its error presentation must not disclose inaccessible differences. User administration cannot depend on the actor guessing hidden scope names.
 
