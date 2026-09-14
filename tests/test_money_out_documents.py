@@ -305,13 +305,19 @@ COMMANDS = frozenset(f'{noun} {verb}' for noun in ('check', 'card-charge')
 @pytest.mark.timeout(300)
 def test_the_same_check_and_card_charge_through_python_cli_http_and_mcp(root, tmp_path):
     pytest.importorskip('mcp')
+    import sqlite3
+    from pathlib import Path
     from tests.mcp_matrix_support import Matrix, normalize
+    from tests.payment_raw_evidence import database
     from tests.test_mcp_registry_work import GHOST
 
     async def witness():
         matrix = Matrix()
         try:
-            await matrix.open(root, tmp_path)
+            # MCP starts outside the checkout; bind its subprocess to these sources,
+            # not whichever checkout the test venv's editable install last named.
+            await matrix.open(root, tmp_path, mcp_env={
+                'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')})
             for surface in matrix.documents:
                 calls = {}
 
@@ -367,6 +373,102 @@ def test_the_same_check_and_card_charge_through_python_cli_http_and_mcp(root, tm
                                                         'expected_version': fixed['version']}))['status'] == 'voided'
                 assert (await call('card-charge history',
                                    {'card_charge': charged['id'], 'limit': 5}))['count'] == 2
+                # Keep the expense-only journey above; items must also cross each actual
+                # adapter, including CLI collection encoding and the MCP subprocess.
+                income = (await matrix.call(surface, 'account create',
+                    dict(name='Parity sales', type='income')))['id']
+                cogs = (await matrix.call(surface, 'account create',
+                    dict(name='Parity cost of goods', type='cost_of_goods_sold')))['id']
+                item = (await matrix.call(surface, 'item create', dict(
+                    name='Parity copper', type='inventory_part', description='Copper',
+                    purchase_description='Purchased copper', price='20.00', cost='9.00',
+                    income_account_id=income, cogs_account_id=cogs)))['id']
+                customer = (await matrix.call(surface, 'customer create',
+                    dict(name='Parity customer')))['id']
+                classification = (await matrix.call(surface, 'class create',
+                    dict(name='Parity purchasing')))['id']
+                paths = list(matrix.roots[surface].rglob('company.db'))
+                assert len(paths) == 1
+                path = paths[0]
+                for noun, funding, funding_kind, selector in (
+                    ('check', bank, 'bank', 'check'),
+                    ('card-charge', card, 'credit_card', 'card_charge'),
+                ):
+                    purchase = dict(account=funding, date='2026-03-06', amount='11.00',
+                        expenses=[dict(account=expense, amount='4.83')],
+                        items=[dict(item=item, quantity='0.5', unit_cost='12.34',
+                            description='Half a copper unit', customer=customer,
+                            class_id=classification, billable=True)])
+                    if noun == 'check':
+                        purchase['number'] = 'PARITY-ITEMS'
+
+                    def assert_purchase(result):
+                        document = result['document']
+                        assert document['account_id'] == funding
+                        assert document['funding'] == funding_kind
+                        assert document['amount'] == dict(
+                            amount='11.00', currency='USD', minor_units=1100)
+                        assert document['expense_total'] == dict(
+                            amount='4.83', currency='USD', minor_units=483)
+                        assert document['item_total'] == dict(
+                            amount='6.17', currency='USD', minor_units=617)
+                        assert document['expense_lines'] == 1
+                        assert len(document['items']) == 1
+                        captured = document['items'][0]
+                        assert captured['quantity'] == '0.5'
+                        assert captured['description'] == 'Half a copper unit'
+                        assert captured['amount'] == dict(
+                            amount='6.17', currency='USD', minor_units=617)
+                        facts = captured['profile']
+                        assert facts['item']['id'] == item
+                        assert facts['item']['label'] == 'Parity copper'
+                        assert facts['item_type'] == 'inventory_part'
+                        assert facts['account_basis'] == 'asset'
+                        assert facts['quantity_microunits'] == 500000
+                        assert facts['unit_cost_minor_units'] == 1234
+                        assert facts['standard_cost_minor_units'] == 900
+                        assert facts['amount_basis'] == 'unit_cost'
+                        assert facts['customer']['id'] == customer
+                        assert facts['class_id']['id'] == classification
+                        assert facts['billable'] is True
+                        assert _net(result['revision']) == {
+                            funding: -1100, expense: 483, facts['account']['id']: 617}
+
+                    before = database(path)
+                    preview = await call(noun + ' post', purchase, dry_run=True)
+                    assert preview['dry_run']
+                    assert_purchase(preview)
+                    assert database(path) == before
+                    refused = await call(noun + ' post',
+                        {**purchase, 'amount': '10.99'}, rejected=True)
+                    assert refused['code'] == 'E_UNBALANCED_ENTRY'
+                    assert refused['details']['difference_minor_units'] == 1
+                    assert refused['details']['difference'] == dict(
+                        amount='0.01', currency='USD', minor_units=1)
+                    assert database(path) == before
+                    bought = await call(noun + ' post', purchase,
+                        idempotency_key=noun + '-items')
+                    assert bought['status'] == 'posted'
+                    assert_purchase(bought)
+                    with sqlite3.connect(path) as raw:
+                        assert raw.execute(
+                            'SELECT kind, quantity_microunits, value_minor_units, '
+                            'offset_account_id FROM inventory_movements '
+                            'WHERE transaction_id=?', (bought['id'],)).fetchall() == [
+                                ('receipt', 500000, 617, funding)]
+                    after = database(path)
+                    assert after != before
+                    replay = await call(noun + ' post', purchase,
+                        idempotency_key=noun + '-items')
+                    assert replay['idempotent_replay']
+                    assert replay['id'] == bought['id']
+                    assert replay['version'] == bought['version']
+                    assert replay['revision'] == bought['revision']
+                    assert replay['document'] == bought['document']
+                    assert database(path) == after
+                    shown = await call(noun + ' show', {selector: bought['id']})
+                    assert_purchase(shown)
+                    assert shown['document'] == bought['document']
                 assert set(calls) == COMMANDS
                 for name, data in list(calls.items()):
                     assert (await call(name, data, company=GHOST,
