@@ -147,3 +147,25 @@ def test_concurrent_deletes_and_revoked_permanent_retry(books):
     with pytest.raises(BookflowError) as denied:
         books['run']('invoice delete',dict(invoice=post['id'],expected_version=1,operation_key=('race-a','race-b')[1-loser]),reason='Concurrent deletion')
     assert denied.value.code=='E_PERMISSION' and database(path)==after
+
+
+@pytest.mark.parametrize('verb',['void','delete'])
+def test_work_cancellation_history_uses_release_branch_provenance(books,verb):
+    run=books['run'];service=service_item(books,'Partial work provenance')
+    source=run('work-order create',dict(customer=books['customer'],date='2017-01-01',title='Two visits',lines=[dict(item=service,quantity='2')]),reason='Create work')
+    post=run('work-order invoice',dict(work_order=source['id'],expected_version=source['version'],conversion_key='first-half',date='2017-01-02',percent='50'),reason='Bill half')
+    enable(books,'invoice',deny_post=False)
+    source=run('work-order show',dict(work_order=source['id']))
+    request=dict(work_order=source['id'],expected_version=source['version'],conversion_key='other-half',date='2017-01-02',percent='50')
+    preview=run('work-order invoice',request,reason='Preview remainder',dry_run=True)
+    run('invoice '+verb,dict(invoice=post['id'],expected_version=1),reason='Release prior half')
+    before=database(location(books))
+    with pytest.raises(BookflowError) as stale:
+        run('work-order invoice',dict(request,expected_facts_fingerprint=preview['facts_fingerprint']),reason='Old preview')
+    assert stale.value.code=='E_PREVIEW_STALE'
+    changes=stale.value.details['consumption_changes']
+    assert len(changes)==1 and changes[0]['transaction_id']==post['id']
+    assert changes[0]['changed_fields']==['billing_consumption','status']
+    with sqlite3.connect(location(books)) as db:
+        assert db.execute('SELECT command FROM audit_events WHERE id=?',(changes[0]['audit_event_id'],)).fetchone()==('invoice '+verb,)
+    assert database(location(books))==before

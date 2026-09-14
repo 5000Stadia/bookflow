@@ -135,16 +135,16 @@ def latest_consumption_changes(s, roots):
     newer, carried = r.alias('newer'), a.alias('carried')
     selected = lambda: sa.tuple_(a.c.root_document_id, a.c.root_line_id).in_(roots)
     keys = (a.c.root_document_id, a.c.root_line_id, a.c.transaction_id)
-    created = sa.select(*keys, r.c.audit_event_id).join(r, r.c.id == a.c.revision_id).where(selected())
-    removed = sa.select(*keys, newer.c.audit_event_id).join(newer,
+    created = sa.select(*keys, r.c.audit_event_id, sa.literal('allocation_revision').label('change_kind')).join(r, r.c.id == a.c.revision_id).where(selected())
+    removed = sa.select(*keys, newer.c.audit_event_id, sa.literal('allocation_revision').label('change_kind')).join(newer,
         newer.c.supersedes_revision_id == a.c.revision_id).where(selected(), ~sa.exists(sa.select(carried.c.id).where(
             carried.c.revision_id == newer.c.id, carried.c.root_document_id == a.c.root_document_id,
             carried.c.root_line_id == a.c.root_line_id)))
-    voided = sa.select(*keys, p.c.audit_event_id).join(t, sa.and_(t.c.id == a.c.transaction_id,
+    voided = sa.select(*keys, p.c.audit_event_id, sa.literal('status').label('change_kind')).join(t, sa.and_(t.c.id == a.c.transaction_id,
         t.c.current_revision_id == a.c.revision_id, t.c.status == 'voided')).join(p,
         p.c.id == t.c.void_posting_batch_id).where(selected())
     events = sa.union_all(created, removed, voided).subquery()
-    ranked = sa.select(events, e.c.actor_id, e.c.interface, e.c.at, e.c.command,
+    ranked = sa.select(events, e.c.actor_id, e.c.interface, e.c.at,
         sa.func.row_number().over(partition_by=(events.c.root_document_id, events.c.root_line_id),
                                   order_by=e.c.seq.desc()).label('rank')).join(e,
                                       e.c.id == events.c.audit_event_id).subquery()
@@ -154,7 +154,7 @@ def latest_consumption_changes(s, roots):
         transaction_id=row['transaction_id'], audit_event_id=row['audit_event_id'],
         updated_by=row['actor_id'], updated_via=row['interface'],
         seconds_since_update=max(0, int((now-datetime.fromisoformat(row['at'])).total_seconds())),
-        changed_fields=['billing_consumption', 'status' if row['command'].endswith((' void', ' delete')) else 'allocation_revision'])
+        changed_fields=['billing_consumption', row['change_kind']])
         for row in rows]
 
 
