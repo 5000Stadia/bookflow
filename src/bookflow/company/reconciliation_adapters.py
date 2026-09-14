@@ -446,7 +446,7 @@ def prepare_prospective(s, ctx, plan):
         if data.get('changed') is not False:
             if kind == 'journal_entry':
                 from bookflow.company import journals
-                journals.validate_pending_aggregate(s,data['header'],data['pending'],data.get('custom_plan'),custom_input=data['input'],creating=data.get('before') is None)
+                journals.validate_pending_aggregate(s,data['header'],data['pending'],data.get('custom_plan'),custom_input=data['input'],creating=data.get('before') is None,purchase=data.get('purchase',False))
             elif kind in ('sales_receipt','invoice'):
                 from bookflow.company import sales_validation
                 sales_validation.validate(plan,s,ctx)

@@ -41,7 +41,7 @@ show = command('permission show',scope='hub',capability='user',required_role='hu
 
 
 def state(session):
-    from bookflow.hub import permission_setup_catalog as build, permission_snapshot as snap
+    from bookflow.hub import permission_deletion_catalog as build, permission_snapshot as snap
     from bookflow.hub.permission_activation import _administrators
     row = session.hub.raw.execute('SELECT mode,generation FROM permission_state WHERE id=1').fetchone()
     bundle = runtime.catalog_for_root(session.hub) if row[0]=='policy_v1' else build.catalog_bundle()
@@ -69,7 +69,7 @@ activate = command('permission activate',scope='hub',capability='user',required_
 
 
 def preparation(inp,ctx,s,preview):
-    from bookflow.hub import permission_setup_catalog as build, permission_snapshot as snap
+    from bookflow.hub import permission_deletion_catalog as build, permission_snapshot as snap
     current = state(s)
     if inp.expected_generation != current.generation:
         raise BookflowError('E_VERSION_CONFLICT',details={'field':'expected_generation'})

@@ -109,12 +109,13 @@ class CatalogManifest:
 ROLES = ('readonly', 'standard', 'admin', 'owner')
 THRESHOLDS = ('authenticated', 'member', 'standard', 'admin', 'owner', 'hub_admin')
 _SCOPE_KINDS = ('hub', 'organization', 'company', 'future_company')
-DELETE_NAMES = tuple('transaction.' + family + '.delete' for family in
-                     ('journal_entry', 'invoice', 'sales_receipt', 'payment'))
+from bookflow.core.deletion_families import PREPARED_FAMILIES, PURCHASE_FAMILIES, capability as deletion_capability
+DELETE_NAMES = tuple(map(deletion_capability, PREPARED_FAMILIES))
 SCOPED_POLICY_VERSION = 'purchase-delete-activation-preparation-v1'
 SETUP_POLICY_VERSION = 'purchase-permission-setup-v1'
-SCOPED_POLICY_VERSIONS = (SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION)
-PURCHASE_DELETE_FAMILIES = ('check', 'card_charge')
+DELETE_POLICY_VERSION = 'purchase-deletion-v1'
+SCOPED_POLICY_VERSIONS = (SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
+PURCHASE_DELETE_FAMILIES = PURCHASE_FAMILIES
 SUPPORTED_DELETE_NAMES = (*DELETE_NAMES, *('transaction.'+family+'.delete' for family in PURCHASE_DELETE_FAMILIES))
 
 
@@ -283,7 +284,9 @@ def _normal_catalog_uncached(catalog):
             _fail('invalid_catalog', 'capabilities')
         for ts in (spec.company_thresholds, spec.registered_thresholds):
             _unique(ts, lambda x: x, 'thresholds')
-        if spec.name in SUPPORTED_DELETE_NAMES and (spec.company_thresholds != ('standard',) or spec.registered_thresholds):
+        if spec.name in SUPPORTED_DELETE_NAMES and (spec.company_thresholds != ('standard',) or
+                spec.registered_thresholds not in ((), ('standard',)) or
+                (spec.name in DELETE_NAMES and spec.registered_thresholds)):
             _fail('invalid_catalog', 'capabilities')
     company = set(_requirements(catalog, True))
     registered = set(_requirements(catalog))

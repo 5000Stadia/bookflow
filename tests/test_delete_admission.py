@@ -138,11 +138,12 @@ def test_fixture_policy_is_local_and_does_not_skip_resource_roles(commands, monk
     denied(lambda: access.require_resource(s, CAPABILITIES[0], 'standard'))
 
 
-def test_marker_metadata_is_strict_and_current_live_catalog_is_unchanged():
+def test_marker_metadata_is_strict_and_only_purchase_deletes_are_registered():
     from bookflow.hub.permission_catalog import DELETE_NAMES
     registry.load_all()
-    assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES == set(CAPABILITIES) == set(DELETE_NAMES)
-    assert not any(c.requires_explicit_grant for c in registry.all_commands(include_standalone=True))
+    assert set(CAPABILITIES) == set(DELETE_NAMES)
+    assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES == set(CAPABILITIES) | {'transaction.check.delete','transaction.card_charge.delete'}
+    assert {c.name for c in registry.all_commands(include_standalone=True) if c.requires_explicit_grant} == {'check delete','card-charge delete'}
     for extra in ({'explicit_grant_only': False}, {'policy_provider': 'allow'}):
         with pytest.raises(ValidationError):
             Input.model_validate(extra)
@@ -158,7 +159,8 @@ def test_read_inspection_marker_is_honest_in_help(commands, verb):
     from bookflow.adapters.mcp.catalog import command_help
     cmd = commands[0][verb]
     doc = command_help(cmd.name, 'input_schema')
-    assert 'explicit grant required (not activated)' in doc['authorization']
+    assert 'explicit grant required' in doc['authorization']
+    assert 'not activated' not in doc['authorization']
     assert 'explicit_grant_only' not in doc['input_schema']['properties']
 
 

@@ -86,6 +86,9 @@ def catalog_for_root(tx):
     if state == ('policy_v1', c.SETUP_POLICY_VERSION):
         from .permission_setup_catalog import catalog_bundle as setup_bundle
         bundle = setup_bundle()
+    if state == ('policy_v1', c.DELETE_POLICY_VERSION):
+        from .permission_deletion_catalog import catalog_bundle as deletion_bundle
+        bundle = deletion_bundle()
     return bundle
 
 

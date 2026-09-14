@@ -10,7 +10,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.session import Session, Actor
 from bookflow.hub import access, schema as h
 
-FAMILIES = ('journal_entry', 'invoice', 'sales_receipt', 'payment')
+from bookflow.core.deletion_families import PREPARED_FAMILIES as FAMILIES
 OWNED = ('transaction_revisions', 'document_line_identities', 'document_lines',
     'posting_batches', 'posting_lines', 'posting_line_sources', 'sales_profiles',
     'sales_line_profiles', 'sales_tax_components', 'sales_tax_line_keys',

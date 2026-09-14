@@ -110,11 +110,18 @@ def require_command_activation(s: Session, cmd) -> None:
     from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
     from .permission_access import activated
     if activated(s):
-        from .permission_setup_catalog import CATALOG
+        from .permission_deletion_catalog import CATALOG
         descriptor = next((x for x in CATALOG.commands if x.name == cmd.name), None)
         if descriptor is None or not descriptor.available:
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason':'command_unavailable'})
+        if cmd.explicit_grant_only or cmd.capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:
+            from .permission_runtime import catalog_for_root
+            activated_descriptor = next((x for x in catalog_for_root(s.hub).descriptor.commands if x.name == cmd.name), None)
+            if activated_descriptor != descriptor:
+                from bookflow.core.errors import BookflowError
+                raise BookflowError('E_PERMISSION', message='Activate the current permission catalog before using this Delete command.',
+                                    details={'reason':'command_not_activated'})
         return
     if cmd.explicit_grant_only or cmd.capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:
         require_explicit_grant(s, cmd.capability)

@@ -2,6 +2,138 @@
 
 # `check` commands
 
+## `check delete`
+
+Delete this purchase with a required reason and exact expected_version. Cancel its stock and accounting at their original dates; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. Reconciled, dependent or closed effects refuse atomically.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard; explicit grant required |
+| Capability | transaction.check.delete |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.delete` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check delete 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key purchase-delete-1 --reason "Remove duplicate purchase" --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string \| null | no | yes | null | Permanent retry identity; otherwise the context idempotency key is retained. |
+| `check` | `CHECK` | string | yes | no | — | minimum length 1 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.delete`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `family` | literal["check", "card_charge"] | yes | no | — | — |
+| `status` | literal["deleted"] | no | no | "deleted" | — |
+| `version` | integer | yes | no | — | — |
+| `revision_id` | string | yes | no | — | — |
+| `from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `cancellation_batch_id` | string \| null | yes | yes | — | — |
+| `cancelled_stock_movements` | integer | yes | no | — | — |
+| `changed` | boolean | no | no | true | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "cancellation_batch_id": null,
+  "cancelled_stock_movements": 1,
+  "changed": true,
+  "dry_run": false,
+  "family": "check",
+  "from_status": "posted",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "idempotent_replay": false,
+  "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "status": "deleted",
+  "version": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_DEPENDENCY` | The receipt is claimed by a deposit; an atomic coordinated correction is required. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `check history`
 
 Page a check’s immutable revisions in revision-number order, each with what its own footer showed and the correction and void batches it carries.

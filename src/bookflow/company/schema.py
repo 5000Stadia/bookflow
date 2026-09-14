@@ -1137,3 +1137,6 @@ globals().update(_define_check_item_tables(metadata, _column, _table))
 
 from bookflow.company.receiving_schema import define_tables as _define_receiving_tables
 globals().update(_define_receiving_tables(metadata, _column, _table, _common))
+
+from bookflow.company.purchase_deletion_schema import define_tables as _define_purchase_deletions
+globals().update(_define_purchase_deletions(metadata, _column, _table))

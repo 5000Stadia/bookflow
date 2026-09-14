@@ -227,6 +227,9 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
     if purchase_items is not None and owner != 'inventory':
         raise invalid('items', 'commercial item rows require their purchase coordinator')
     old_h = resolve(s, inp.journal) if operation != 'post' else None
+    if old_h is not None:
+        from bookflow.company.purchase_deletions import require_not_deleted
+        require_not_deleted(s, old_h['id'])
     if old_h is not None and owner != 'inventory':
         if s.company.conn.execute(sa.select(c.money_out_item_lines.c.document_line_id).where(
                 c.money_out_item_lines.c.transaction_id == old_h['id']).limit(1)).first():

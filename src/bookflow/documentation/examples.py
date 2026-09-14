@@ -946,3 +946,8 @@ EXAMPLES.update({
     'item-receipt history': Example(
         f'bookflow item-receipt history {ID} --company "Demo Plumbing Co" --json', {'receipt': ID}),
 })
+
+for noun, selector in (('check','check'),('card-charge','card_charge')):
+    EXAMPLES[noun+' delete'] = Example(
+        f'bookflow {noun} delete {ID} --expected-version 1 --operation-key purchase-delete-1 --reason "Remove duplicate purchase" --company "Demo Plumbing Co" --json',
+        {selector:ID,'expected_version':1,'operation_key':'purchase-delete-1'})

@@ -12,9 +12,8 @@ from bookflow.core.errors import ALL_CODES
 
 # These capability contracts have no role-default activation. Keep independent
 # from the frozen, pure permission catalog and from command import order.
-EXPLICIT_GRANT_ONLY_CAPABILITIES = frozenset(
-    'transaction.' + family + '.delete'
-    for family in ('journal_entry', 'invoice', 'sales_receipt', 'payment'))
+from bookflow.core.deletion_families import FAMILIES, capability as deletion_capability
+EXPLICIT_GRANT_ONLY_CAPABILITIES = frozenset(map(deletion_capability, FAMILIES))
 
 
 Role = str  # "member", "admin", "owner", "hub_admin", or None for any actor
@@ -99,7 +98,7 @@ class Command:
     replay: Callable[..., dict[str, Any]] | None = None  # read-only refresh after normal authorization and matching request-cache lookup
     permanent_recovery: Callable[..., MatchedRecovery | None] | None = None  # narrowly opted-in exact recovery before new-write reason/directive gates
 
-    explicit_grant_only: bool = False  # unavailable until reviewed live granular admission
+    explicit_grant_only: bool = False  # requires explicitly activated granular admission
 
     resource_requirements: tuple[tuple[str, str], ...] = ()  # additional (capability, role) checks
     authorize_input: Callable[..., None] | None = None  # conditional resources, before replay or plan
@@ -127,7 +126,7 @@ class Command:
         if self.standalone:
             return "none"
         rule = self.authorization or self.required_role or "authenticated"
-        return rule + "; explicit grant required (not activated)" if self.requires_explicit_grant else rule
+        return rule + "; explicit grant required" if self.requires_explicit_grant else rule
 
     @property
     def noun(self) -> str:

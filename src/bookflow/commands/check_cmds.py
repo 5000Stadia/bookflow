@@ -150,3 +150,31 @@ CHECK_COMMANDS = [(_write if verb in ('post', 'update', 'void') else _read)(noun
 check_post, check_show, check_update, check_void, check_query, check_history = CHECK_COMMANDS[:6]
 (card_charge_post, card_charge_show, card_charge_update, card_charge_void,
  card_charge_query, card_charge_history) = CHECK_COMMANDS[6:]
+
+
+def _delete(noun, model):
+    from bookflow.company import purchase_deletions as deletion
+    from bookflow.company.purchase_deletion_models import PurchaseDeleteOutput
+    from bookflow.core.deletion_families import capability
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp, noun)
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s, noun)
+    cmd = command(noun+' delete', scope='company',
+        description='Delete this purchase with a required reason and exact expected_version. Cancel its stock and accounting at their original dates; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. Reconciled, dependent or closed effects refuse atomically.',
+        input_model=model, output_model=PurchaseDeleteOutput, writes={'company'},
+        required_role='standard', capability=capability(POSITIONAL[noun]), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=[POSITIONAL[noun]],
+        version_source=(noun+' show', POSITIONAL[noun], 'version'),
+        error_codes=['E_RECORD_NOT_FOUND','E_VERSION_CONFLICT','E_VALIDATION','E_REASON_REQUIRED',
+                     'E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_IDEMPOTENCY_MISMATCH'])(planner)
+    cmd.resource_requirements = (('ledger.read','member'),)
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+from bookflow.company.purchase_deletion_models import CheckDeleteInput, CardChargeDeleteInput
+check_delete = _delete('check', CheckDeleteInput)
+card_charge_delete = _delete('card-charge', CardChargeDeleteInput)

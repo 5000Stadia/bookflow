@@ -550,10 +550,17 @@ def _permanent_recovery(cmd, inp, ctx, s, selector, source, dry_run):
         return None
     # Before authorization opens the company or the hook inspects saved facts.
     access.require_command_activation(s, cmd)
-    recovered_ctx = authorize(cmd, ctx, s, company_selector=selector, company_source=source,
-                              dry_run=dry_run, read_only=True, _recovery_only=True)
     from bookflow.core.registry import MatchedRecovery
     try:
+        try:
+            recovered_ctx = authorize(cmd, ctx, s, company_selector=selector, company_source=source,
+                                      dry_run=dry_run, read_only=True, _recovery_only=True)
+        except BookflowError as exc:
+            # A known older company cannot carry the new owner's receipt yet.
+            # Admission has already run; only the normal writer may migrate it.
+            if exc.code == 'E_SCHEMA_BEHIND' and not dry_run:
+                return None
+            raise
         result = cmd.permanent_recovery(inp, recovered_ctx, s)
         if result is None:
             return None
