@@ -5,7 +5,7 @@ validation and audit owner. The current public writers are intentionally unchang
 """
 from dataclasses import replace
 from . import identity_admin as b, permission_snapshot as s, permission_catalog as c
-from . import permission_runtime as runtime, permission_activation_catalog as build
+from . import permission_runtime as runtime
 from . import agent_authority as aa, permission_admin_audit as audit
 from .agent_authority import fail, typed, integer, increment
 from bookflow.core.ids import new_id
@@ -78,14 +78,8 @@ def _enroll(old, actor, entries, at, via, preview):
 def prepare(tx, *, actor_id, intent, catalog, context=None):
     typed(intent, b.ActivatePolicy, 'intent')
     integer(intent.expected_generation, 'generation')
-    selected = build
-    if catalog != build.catalog_bundle():
-        from . import permission_setup_catalog as selected
-    if catalog != selected.catalog_bundle():
-        from . import permission_deletion_catalog as selected
-    if catalog != selected.catalog_bundle():
-        from . import permission_sales_deletion_catalog as selected
-    if catalog != selected.catalog_bundle() or intent.expected_catalog_sha256 != selected.MANIFEST.descriptor_sha256:
+    selected = runtime.known_catalog(catalog.descriptor.version)
+    if selected is None or catalog != selected.catalog_bundle() or intent.expected_catalog_sha256 != selected.MANIFEST.descriptor_sha256:
         fail('catalog_mismatch', 'executable_catalog')
     try:
         old = s.load_root(tx, catalog=catalog)

@@ -65,7 +65,7 @@ def dependencies(s, ctx, header, inner):
         from bookflow.company import credits
         line_ids = s.company.conn.execute(sa.select(c.credit_source_claims.c.source_line_id).where(
             c.credit_source_claims.c.source_transaction_id == header['id']).distinct()).scalars()
-        claims = [claim for line in line_ids for claim in credits._active_claims(s, header['id'], line)]
+        claims = [claim for line in line_ids for claim in credits.active_source_claims(s, header['id'], line)]
         if claims:
             creditors = sorted({claim['credit_transaction_id'] for claim in claims})
             reconciliation.authority(s, creditors)

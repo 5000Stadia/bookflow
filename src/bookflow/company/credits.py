@@ -127,7 +127,7 @@ def _source_line(s, invoice_selector, line_selector, profile):
     return dict(header=header, revision=revision, line=line, taxes=taxes)
 
 
-def _active_claims(s, source_transaction_id, source_line_id, pending=None):
+def active_source_claims(s, source_transaction_id, source_line_id, pending=None):
     """Every claim on a permanent source line occurrence that no release has undone."""
     claims = c.credit_source_claims
     released = sa.select(claims.c.reverses_claim_id).where(claims.c.kind == 'release')
@@ -147,7 +147,7 @@ def _returned(s, entered, source, pending):
     """Price one returned line from the captured source cell and the residue still there."""
     line, taxes = source['line'], source['taxes']
     quantity = int(line['base_quantity_microunits'])
-    claims = _active_claims(s, source['header']['id'], line['line_id'], pending)
+    claims = active_source_claims(s, source['header']['id'], line['line_id'], pending)
     for claim in claims:
         if (claim['source_base_quantity_microunits'] != quantity
                 or claim['source_net_minor_units'] != line['net_minor_units']):

@@ -75,6 +75,33 @@ def test_co50_declaration_exact_and_other_families_remain_unavailable():
     from bookflow.hub import permission_sales_deletion_catalog as build
     migration=importlib.import_module('bookflow.storage.company_migrations.versions.0050_sales_deletions')
     assert migration.DDL==(str(CreateTable(c.sales_deletions).compile(dialect=dialect())),*sales_deletion_schema.guards())
+    from bookflow.core.deletion_families import SALES_FAMILIES
+    import re
+    check = next(x for x in c.sales_deletions.constraints if x.name == 'ck_sales_delete_family')
+    assert tuple(re.findall("'([^']+)'", str(check.sqltext))) == SALES_FAMILIES == ('invoice', 'sales_receipt')
     actions={row.key:row for row in build.CATALOG.company_actions}
     assert not actions['contract:delete:journal_entry'].available
     assert not actions['contract:delete:payment'].available
+
+
+def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
+    from types import SimpleNamespace
+    from bookflow.hub import permission_runtime as runtime
+    from bookflow.hub import permission_activation_catalog as activation, permission_setup_catalog as setup
+    from bookflow.hub import permission_deletion_catalog as purchase, permission_sales_deletion_catalog as sales
+    with sqlite3.connect(':memory:') as db:
+        db.execute('CREATE TABLE permission_state(id INTEGER,mode TEXT,catalog_version TEXT)')
+        db.execute('INSERT INTO permission_state VALUES(1,?,?)',('legacy','sales-deletion-v1'))
+        tx=SimpleNamespace(raw=db)
+        assert runtime.catalog_for_root(tx)==runtime.catalog_bundle()
+        for version,owner in (
+            ('purchase-delete-activation-preparation-v1',activation),
+            ('purchase-permission-setup-v1',setup),
+            ('purchase-deletion-v1',purchase),
+            ('sales-deletion-v1',sales),
+        ):
+            db.execute("UPDATE permission_state SET mode='policy_v1',catalog_version=?",(version,))
+            assert runtime.catalog_for_root(tx)==owner.catalog_bundle()
+        db.execute("UPDATE permission_state SET catalog_version='unrecognized-future'")
+        assert runtime.catalog_for_root(tx)==runtime.catalog_bundle()
+        assert runtime.current_catalog() is sales

@@ -74,25 +74,28 @@ class _MembershipVisibility:
 VISIBILITY = _MembershipVisibility()
 
 
+def known_catalog(version):
+    """Accepted explicit policy versions; never substitute the current build."""
+    from . import permission_activation_catalog, permission_setup_catalog
+    from . import permission_deletion_catalog, permission_sales_deletion_catalog
+    return {
+        c.SCOPED_POLICY_VERSION: permission_activation_catalog,
+        c.SETUP_POLICY_VERSION: permission_setup_catalog,
+        c.DELETE_POLICY_VERSION: permission_deletion_catalog,
+        c.SALES_DELETE_POLICY_VERSION: permission_sales_deletion_catalog,
+    }.get(version)
+
+
+def current_catalog():
+    """Executable descriptor owner; this accessor does not activate a root."""
+    return known_catalog(c.SALES_DELETE_POLICY_VERSION)
+
+
 def catalog_for_root(tx):
     """Select only a recognized explicitly stored build; legacy stays frozen."""
-    bundle = catalog_bundle()
-    # Only an explicitly activated, recognized stored policy selects the new build.
-    # Legacy reads retain the exact pre-cutover bundle and calculator semantics.
     state = tx.raw.execute('SELECT mode,catalog_version FROM main.permission_state WHERE id=1').fetchone()
-    if state == ('policy_v1', c.SCOPED_POLICY_VERSION):
-        from .permission_activation_catalog import catalog_bundle as activated_bundle
-        bundle = activated_bundle()
-    if state == ('policy_v1', c.SETUP_POLICY_VERSION):
-        from .permission_setup_catalog import catalog_bundle as setup_bundle
-        bundle = setup_bundle()
-    if state == ('policy_v1', c.DELETE_POLICY_VERSION):
-        from .permission_deletion_catalog import catalog_bundle as deletion_bundle
-        bundle = deletion_bundle()
-    if state == ('policy_v1', c.SALES_DELETE_POLICY_VERSION):
-        from .permission_sales_deletion_catalog import catalog_bundle as sales_deletion_bundle
-        bundle = sales_deletion_bundle()
-    return bundle
+    selected = known_catalog(state[1]) if state[0] == 'policy_v1' else None
+    return selected.catalog_bundle() if selected is not None else catalog_bundle()
 
 
 def observe_current(tx) -> s.ObservedPair:

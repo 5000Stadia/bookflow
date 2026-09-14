@@ -110,8 +110,8 @@ def require_command_activation(s: Session, cmd) -> None:
     from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
     from .permission_access import activated
     if activated(s):
-        from .permission_sales_deletion_catalog import CATALOG
-        descriptor = next((x for x in CATALOG.commands if x.name == cmd.name), None)
+        from .permission_runtime import current_catalog
+        descriptor = next((x for x in current_catalog().CATALOG.commands if x.name == cmd.name), None)
         if descriptor is None or not descriptor.available:
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason':'command_unavailable'})
