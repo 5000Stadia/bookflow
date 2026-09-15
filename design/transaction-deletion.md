@@ -79,9 +79,10 @@ Deferred, with the reason:
 ## Implementation boundary
 
 This supersedes the former product prohibition on user-facing deletion. Existing
-immutable-table guards remain required. No delete command is implemented by this
-document. The owning plan must settle deleted-state storage and preserving
-migration, history/filter behavior, numbering, retry/replay behavior, restoration
-policy, each supported type's dependencies and preview/confirmation flow before
-code. Accounting, authorization and migration changes require independent review.
+immutable-table guards remain required. Each family named deletable above ships a
+`delete` command carrying its own `transaction.<family>.delete` capability. A
+family added to that list settles deleted-state storage and preserving migration,
+history/filter behavior, numbering, retry/replay behavior, restoration policy, its
+own dependencies and preview/confirmation flow before code. Accounting,
+authorization and migration changes require independent review.
 Payment/application planning must accommodate this lifecycle alongside voiding.
