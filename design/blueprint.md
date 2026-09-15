@@ -365,7 +365,7 @@ Any `create` or `post` command may carry an idempotency key. Table `idempotency_
 
 ### 6.6 Deactivation, void, and deletion
 
-List records are never deleted through the API. `deactivate` sets `active = false`; deactivated records are excluded from `list` unless `--include-inactive`, and cannot be referenced by new transactions. User-facing transaction deletion is a separate permission-controlled action defined in `design/transaction-deletion.md` and `design/permission-resolution.md`; it preserves immutable history and remains unimplemented. Company-folder deletion is a distinct action: `company delete` requires the owner role and the literal company id repeated in `--confirm`.
+List records are never deleted through the API. `deactivate` sets `active = false`; deactivated records are excluded from `list` unless `--include-inactive`, and cannot be referenced by new transactions. User-facing transaction deletion is a separate permission-controlled action defined in `design/transaction-deletion.md` and `design/permission-resolution.md`; it preserves immutable history, and it is implemented for invoices, sales receipts, customer payments, checks, credit-card charges and vendor bills, each behind its own `transaction.<family>.delete` capability. Company-folder deletion is a distinct action: `company delete` requires the owner role and the literal company id repeated in `--confirm`.
 
 ## 7. Audit log
 
@@ -725,11 +725,12 @@ Cash-basis reporting uses these stored allocations and declared recognition rule
 
 Voiding a document with applications is rejected with `E_HAS_APPLICATIONS` until they are explicitly unapplied, or the paying type's void command explicitly includes that unapplication atomically (10.4). Inventory, fulfillment, and reconciliation dependencies are also validated by the owning type; a void cannot erase later dependent movements. Zeroing the original amounts or excluding its original batches from reports is forbidden. Open-period checks apply to the reversal and every associated unapplication; a closed-period transaction cannot be voided by choosing a later reversal date through this command.
 
-User-facing deletion is a separate planned transaction action in addition to void
-(10.5), including invoices, checks and other applicable business transactions.
-Its owning contract is [Transaction deletion](transaction-deletion.md). The current
-implemented posting types still expose update/void only; deletion requires its own
-permission, lifecycle, migration and dependency implementation before exposure.
+User-facing deletion is a separate transaction action in addition to void (10.5).
+Its owning contract is [Transaction deletion](transaction-deletion.md), which names
+both the families that have it — invoices, sales receipts, customer payments,
+checks, credit-card charges and vendor bills — and, for every other posted type,
+the reason it does not. Each carries its own permission, lifecycle, migration and
+dependency implementation; a family without one exposes update/void only.
 
 ### 10.6 Closing date
 

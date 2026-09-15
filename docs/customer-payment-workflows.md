@@ -109,7 +109,7 @@ Required follow-ups remain required under the active project goal.
 | CP19 | Existing cross-job credit transfer requires its own explicit balanced operation; new family receipt never implicitly transfers old credit. |
 | CP20 | Existing captured terms facts remain readable on invoices; no fabricated discount settlement. |
 | CP21 | Typed discount account/class, eligibility and settlement are required follow-up work. |
-| CP22 | Explicit unapply/void for wrong-payer correction; banking/deposit correction is a dependency. D104 Delete remains required with permission, immutable audit and balanced cancellation. |
+| CP22 | Explicit unapply/void for wrong-payer correction; banking/deposit correction is a dependency. D104 Delete ships as `payment delete`: an explicit family grant separate from `ledger.post`, immutable history and number retention, and balanced cancellation of the cash and receivable postings at their original dates. |
 | CP23 | Applied-invoice correction with complete deterministic restatement and dependency diagnostics; explicit unapply before void. |
 | CP24 | Payment list filters method/date/status/text/available credit before pagination; original/current history and lookup. |
 | CP25 | Receipt debits bank/UF and credits AR; later deposit movement must not recognize cash twice. |

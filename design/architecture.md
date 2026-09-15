@@ -4283,12 +4283,34 @@ invoice/credit-memo shared run, and `uq_transaction_receivable_number` is delibe
 those two, so a charge numbered 1 is never refused because invoice 1 exists. The anchor numbers
 them separately for the same reason.
 
-**Nothing can settle one, and it says so.** `applications_paid_transaction_id_type` admits a
-document of type `invoice` and nothing else, and `co0034` does not touch it. Naming a charge where
-an invoice goes therefore fails, and `payment_queries.invoice_facts` catches that failure, asks
-whether the selector named a statement charge, and answers with `found_type` and a sentence saying
-what was found — so the boundary is reported rather than read as a typo. What settling one would
-need is in *What this does not do* below.
+**A payment settles one, exactly as it settles an invoice.** `co0043` widened the three insertion
+fences and the one CHECK that each admitted the invoice alone — `applications_paid_transaction_id_type`
+(the settlement edge itself), `payment_selection_items_invoice_id_type` (a shared draft's selected
+rows), `settlement_line_keys_transaction_id_type` (the durable line ordinals a settlement allocates
+against) and `ck_recovery_invoice_type` on `payment_selection_recovery_items` (the attempted-edit
+evidence a large selection uploads). Which receivables a customer's money can settle is written
+once, as `ledger_schema.SETTLEABLE_RECEIVABLE_TYPES`, and every reader takes it from there rather
+than from a type name of its own: `payment_queries.invoice_facts` resolves either type,
+`payment_selection` resolves against the tuple, `payment_preparation._candidate_query` filters
+`t.type IN` it — which is what puts a charge in `payment invoices` — `payment_dependencies.OWNER_TYPES`
+is built from it, `payment_recovery` reads it for both its presence check and its evidence, and
+`receivable_reports._OPEN` filters on `SETTLEABLE_RECEIVABLE_SQL`, which is what lists a charge in
+`report open-invoices`. No table gained a column and nothing was backfilled: `applications` and
+`payment_selection_items` already foreign-key `transactions.id` with no type column, and a charge
+already writes the `sales_profiles` row `applications_exact_party` joins. Widening a fence admits
+new rows and never invents one, so a company upgraded through `co0043` owes exactly what it owed
+before.
+
+**Voiding a settled charge is refused.** `sales.prepare` guards the void on
+`SETTLEABLE_RECEIVABLE_TYPES` too, rather than on the type name `invoice`, so it covers every
+settleable receivable by construction instead of by a second list someone has to remember to
+widen. A charge a payment or credit is still applied to raises `E_HAS_APPLICATIONS` carrying the
+blocking application ids, `action: unapply_first` and a `next` naming `payment unapply` —
+disclosed only after `payment_authority.authorize` over both ends of every edge named, the way
+`sales_deletions` authorizes before naming the credit memos that hold an invoice. That guard is
+the half a widening leaves behind if it is forgotten: a charge goes through the invoice's own
+writer, so before it landed a paid charge could be voided with no refusal, leaving a live
+application pointing at a document worth nothing and a negative amount owing on the aging.
 
 **What `co0034` does.** Three CHECK constraints widened by table rebuild — `transactions`
 (twelfth document type), `sales_profiles` (a commercial type with no due date) and
@@ -4299,27 +4321,9 @@ kind CHECK already admits. No table is created, nothing is backfilled and no set
 trigger or capacity changes.
 
 **What this does not do.** No `statement-charge update` and no `history`: a wrong charge is voided
-and re-entered, which is what a sixty-dollar document is worth. No browser page and no `ui_group`,
-so nothing registers a tile that goes nowhere; the window it wants is the customer register, and
-`registers.py` would need to read a customer's Accounts Receivable rows the way it reads a bank
-account's. No demo seed extension. No finance charges — a different anchor feature that computes
-its own amounts from an aging.
+and re-entered, which is what a sixty-dollar document is worth. No demo seed extension. No finance
+charges — a different anchor feature that computes its own amounts from an aging.
 
-And, the real one: **a payment cannot settle a charge.** Doing it needs, in one increment:
-`applications_paid_transaction_id_type` and `payment_selection_items_invoice_id_type` widened to
-admit `statement_charge` (a migration, since both are triggers);
-`payment_queries.invoice_facts` and the three `sales.resolve(..., 'invoice')` calls in
-`payment_selection` widened to either type; `payment_preparation._candidate_query`'s
-`t.type='invoice'` condition widened, which is what makes a charge appear in `payment invoices`;
-`settlement_line_keys_transaction_id_type` widened, since the per-line settlement keys an
-invoice writes are what `application_allocations_owned_sources` verifies; `payment_recovery`'s
-`ck invoice_type` CHECK and its `invoice_type='invoice'` writes; `payment_dependencies`'s
-`owner_type` pair; and `receivable_reports._OPEN`, whose `document_type='invoice'` filter is why
-`report open-invoices` cannot list one. The storage under all of it already fits — `applications`
-and `payment_selection_items` both foreign-key `transactions.id` with no type column, and a charge
-already writes the `sales_profiles` row `applications_exact_party` joins — so this is a widening
-of nine type filters and four triggers, not a data-model change. What it is not is small, and
-half-doing it is how a settled charge disappears from an aging that still balances.
 ## Purchase orders, and the bill entered from one
 
 `purchase-order post/show/query/update/void/history` records what was ordered from a vendor.
