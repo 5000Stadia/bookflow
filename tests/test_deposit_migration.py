@@ -56,7 +56,7 @@ def co19(tmp_path_factory):
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')
     root=parent/'root'
     code='import bookflow,sys,io;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset();co="Demo Plumbing Co";p=c.customer.create(name="Deposit migration bytes",company=co);c.attachment.add(record_type="customer",record_id=p["id"],original_filename="deposit-bytes.bin",input_stream=io.BytesIO(b"A\\x00B\\x80\\xff"),company=co)'
-    result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+    result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (parent/'seed.log').write_text(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr
     return root
@@ -265,3 +265,4 @@ def test_n4_storage_claim_release_redeposit_and_owned_inverse(client,sale,monkey
         db.raw.execute('ROLLBACK')
 
 from tests.test_service_sales_lifecycle import sale
+from tests import provenance

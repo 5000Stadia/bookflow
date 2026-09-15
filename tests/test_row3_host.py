@@ -22,6 +22,7 @@ from bookflow.core.config import os_login
 from bookflow.core.context import client_version
 from bookflow.core.ids import is_ulid
 from tests.conftest import as_user, make_actor
+from tests import provenance
 
 PASSWORD = "correct-horse-battery"
 OUTSIDER_PASSWORD = "another-long-password"
@@ -1657,7 +1658,7 @@ def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
     probe.bind(("127.0.0.1", 0))
     port = probe.getsockname()[1]
     probe.close()
-    env = {**os.environ, "BOOKFLOW_DATA_ROOT": str(root)}
+    env = provenance.child_env(BOOKFLOW_DATA_ROOT=str(root))
     proc = subprocess.Popen([str(BIN), "serve", "--bind", f"127.0.0.1:{port}"],
                             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     descriptor = root / "host.json"

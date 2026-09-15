@@ -7,6 +7,7 @@ import sys
 import anyio
 
 from tests.test_row3_host import hosted, live
+from tests import provenance
 
 
 def test_installed_input_rejections_publish_exact_error_files_and_no_writes(hosted, live, tmp_path, monkeypatch):
@@ -35,9 +36,9 @@ def test_installed_input_rejections_publish_exact_error_files_and_no_writes(host
         ('undo', {'event_id': '01ARZ3NDEKTSV4RRFFQ69G5FAV'}, {}),
     ]
     async def witness():
-        binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+        binary = provenance.launcher()
         params = StdioServerParameters(command=binary, args=['mcp', '--url', live, '--input-dir', str(inbox), '--output-dir', str(outbox)],
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id, 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()
@@ -74,10 +75,9 @@ def test_installed_retained_recovery_denial_preserves_reference_and_uncertainty(
     secret = headers['Authorization'].removeprefix('Bearer ')
     outbox = tmp_path / 'outbox'; outbox.mkdir(mode=0o700)
     async def witness():
-        params = StdioServerParameters(command=os.environ['BOOKFLOW_MCP_TEST_BINARY'],
+        params = StdioServerParameters(command=provenance.launcher(required=True),
             args=['mcp', '--url', live, '--output-dir', str(outbox)],
-            env={'BOOKFLOW_TOKEN': secret, 'BOOKFLOW_COMPANY': hosted.company_id,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()
@@ -116,10 +116,9 @@ def test_installed_upload_limit_rejection_delivers_error_file_and_cleans_stage(h
     inbox.mkdir(mode=0o700); outbox.mkdir(mode=0o700)
     source = inbox / 'receipt.pdf'; source.write_bytes(b'%PDF-1.4\nToo large for this company')
     async def witness():
-        params = StdioServerParameters(command=os.environ['BOOKFLOW_MCP_TEST_BINARY'],
+        params = StdioServerParameters(command=provenance.launcher(required=True),
             args=['mcp', '--url', live, '--input-dir', str(inbox), '--output-dir', str(outbox)],
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()
@@ -164,9 +163,9 @@ def test_installed_hub_target_rejections_are_command_error_files_without_planner
     outbox = tmp_path/'outbox'
     outbox.mkdir(mode=0o700)
     async def witness():
-        binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+        binary = provenance.launcher()
         params = StdioServerParameters(command=binary,args=['mcp','--url',live,'--output-dir',str(outbox)],
-            env={'BOOKFLOW_TOKEN':hosted.secret,'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')},cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_DATA_ROOT=str(tmp_path/'absent')),cwd=str(tmp_path))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as session:
                 await session.discover()

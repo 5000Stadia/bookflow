@@ -22,6 +22,7 @@ from tests.conftest import make_actor
 from tests.test_row3_host import hosted, live, PASSWORD
 from tests.test_row7_credentials import writer
 from tests.test_row5_browser_acceptance import CHROME, _Cdp
+from tests import provenance
 
 
 @pytest.mark.timeout(180)
@@ -58,11 +59,10 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
         ('2027-03-28T21:59:59+00:00', 'a1', 'last'),
         ('2027-03-28T22:00:00+00:00', 'a1', 'after'),
     ]
-    binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+    binary = provenance.launcher()
     def params(secret, label):
         return StdioServerParameters(command=binary, args=['mcp', '--url', live, '--client-name', label],
-            env={'BOOKFLOW_TOKEN': secret, 'BOOKFLOW_COMPANY': hosted.company_id,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
 
     async def seed():
         async with AsyncExitStack() as stack:
@@ -152,8 +152,8 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
                 args = [str(Path(binary).with_name('python')), '-c',
                     'import bookflow,json,os; c=bookflow.connect(data_root=os.environ["BOOKFLOW_DATA_ROOT"]); print(json.dumps(c.run("audit list", json.loads(os.environ["WEEK_QUERY"]), company=os.environ["BOOKFLOW_COMPANY"])))']
             result = subprocess.run(args, capture_output=True, text=True, cwd=tmp_path,
-                env={**os.environ, 'BOOKFLOW_DATA_ROOT': str(hosted.root), 'BOOKFLOW_COMPANY': hosted.company_id,
-                     'WEEK_QUERY': json.dumps(query)}, timeout=20)
+                env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(hosted.root), BOOKFLOW_COMPANY=hosted.company_id,
+                                         WEEK_QUERY=json.dumps(query)), timeout=20)
             assert result.returncode == 0, result.stderr
             page = json.loads(result.stdout)
             found.extend(row['id'] for row in page['items'])

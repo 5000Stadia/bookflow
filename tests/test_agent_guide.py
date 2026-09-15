@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from importlib import resources
 
 from tests.test_row3_host import hosted, live  # noqa: F401
+from tests import provenance
 
 
 MARKER = re.compile(r"<!-- bookflow-example: (executable|illustrative) -->")
@@ -125,7 +126,7 @@ def test_literal_agent_guide_journey_against_real_host(hosted, live):
         capture_output=True,
         text=True,
         timeout=30,
-        env={"BOOKFLOW_URL": live, "BOOKFLOW_TOKEN": hosted.secret},
+        env=provenance.child_env(BOOKFLOW_URL=live, BOOKFLOW_TOKEN=hosted.secret),
     )
     assert completed.returncode == 0, completed.stderr
     receipt = json.loads(completed.stdout)

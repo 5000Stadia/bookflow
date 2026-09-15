@@ -16,17 +16,18 @@ from bookflow.commands.host_cmds import start_serving
 from bookflow.core import registry
 from bookflow.core.context import client_version
 from tests.test_row3_host import hosted, live, Hosted
+from tests import provenance
 
 
 class Wire:
     """Literal legacy MCP wire allows closing stdin without killing the process."""
     def __init__(self, url, fixture, directory, protocol="legacy"):
         self.protocol=protocol
-        binary=os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow')))
+        binary=provenance.launcher()
         self.process=subprocess.Popen([binary,'mcp','--url',url,'--client-name','process-lifetime'],
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,cwd=directory,
-            env={**os.environ,'BOOKFLOW_TOKEN':fixture.secret,'BOOKFLOW_COMPANY':fixture.company_id,
-                 'BOOKFLOW_DATA_ROOT':str(directory/'absent')})
+            env=provenance.child_env(BOOKFLOW_TOKEN=fixture.secret,BOOKFLOW_COMPANY=fixture.company_id,
+                 BOOKFLOW_DATA_ROOT=str(directory/'absent')))
         self.messages=queue.Queue()
         self.observed=[]
         self.stderr=[]

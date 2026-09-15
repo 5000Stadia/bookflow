@@ -14,6 +14,7 @@ from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import migrate_to_head
 from tests.payment_raw_evidence import table
+from tests import provenance
 
 BASE='1e7ae551f29eb3e5ecbbecc5055db80c060452ce'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0021_deposit_operations')
@@ -38,7 +39,7 @@ def test_co20_complete_raw_rows_and_local_ddl_preserved(tmp_path):
     archive=subprocess.check_output(['git','archive',BASE,'src'],cwd=Path(__file__).parents[1])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')
     script='import bookflow,sys;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset()'
-    result=subprocess.run([sys.executable,'-c',script,str(root)],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+    result=subprocess.run([sys.executable,'-c',script,str(root)],cwd=source,env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (tmp_path/'co20-seed.log').write_text(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr
     path=next(root.glob('organizations/*/Demo Plumbing Co/company.db'))

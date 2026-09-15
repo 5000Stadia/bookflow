@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from bookflow.core.publication import PublicationPermit
 from bookflow.hub import schema as h
 from tests.test_row3_host import hosted, live
+from tests import provenance
 
 
 @pytest.mark.timeout(90)
@@ -33,9 +34,9 @@ def test_actual_mcp_own_detach_receipt_and_independent_loss(hosted, live, tmp_pa
     monkeypatch.setattr(PublicationPermit, 'check', barrier)
 
     async def witness():
-        params = StdioServerParameters(command=os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow'))),
+        params = StdioServerParameters(command=provenance.launcher(),
             args=['mcp', '--url', live], cwd=str(tmp_path),
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')})
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()

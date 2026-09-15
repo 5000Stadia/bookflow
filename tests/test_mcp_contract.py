@@ -11,6 +11,7 @@ from bookflow.adapters.mcp.envelopes import validate
 from bookflow.adapters.mcp.files import Directories
 from bookflow.adapters.mcp.launcher import host_origin
 from bookflow.core.errors import BookflowError
+from tests import provenance
 
 
 def test_catalog_complete_and_cursor_bound():
@@ -174,8 +175,9 @@ def test_real_stdio_lists_three_tools_without_reachable_host(tmp_path):
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
     async def witness():
-        env = {"BOOKFLOW_TOKEN": "not-a-real-credential", "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent")}
-        params = StdioServerParameters(command=os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow"))),
+        env = provenance.child_env(BOOKFLOW_TOKEN="not-a-real-credential",
+                                   BOOKFLOW_DATA_ROOT=str(tmp_path / "absent"))
+        params = StdioServerParameters(command=provenance.launcher(),
                                       args=["mcp", "--url", "http://127.0.0.1:1"], env=env, cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:

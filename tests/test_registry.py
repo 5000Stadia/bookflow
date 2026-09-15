@@ -1,6 +1,7 @@
 from bookflow.core import registry
 from bookflow.core.context import CONTEXT_FIELD_NAMES
 from bookflow.core.errors import ALL_CODES
+from tests import provenance
 
 
 def test_every_command_is_complete():
@@ -86,5 +87,6 @@ assert 'payment-method query' in registry.REGISTRY
         check=False,
         capture_output=True,
         text=True,
+        env=provenance.child_env(),
     )
     assert completed.returncode == 0, completed.stderr

@@ -8,6 +8,7 @@ import anyio
 import pytest
 
 from tests.test_row3_host import hosted, live
+from tests import provenance
 
 
 @pytest.mark.timeout(90)
@@ -18,9 +19,8 @@ def test_real_mcp_authorized_secret_and_lowercase_self_revocation_receipt(hosted
     user = Config.load(hosted.root / 'config.toml').user_table(hosted.login)['user_id']
 
     async def witness():
-        params = StdioServerParameters(command=os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow'))),
-            args=['mcp', '--url', live], env={'BOOKFLOW_TOKEN': hosted.secret,
-                'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+        params = StdioServerParameters(command=provenance.launcher(),
+            args=['mcp', '--url', live], env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()

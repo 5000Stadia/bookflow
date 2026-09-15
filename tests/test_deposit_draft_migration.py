@@ -20,6 +20,7 @@ from bookflow.storage.migrate import HEADS,migrate_to_head,feature_admission
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import preserved,table,attachments,upgrade_to,ddl_with_cash_flow_section
 from tests.test_bill_payment_migration import _rebuilt_since
+from tests import provenance
 
 BASE='5fa513dd4bdb31517673e1510e7ddf2fc636c827'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0024_deposit_drafts')
@@ -58,7 +59,7 @@ r=d.run('post',dict(operation_key='g3-preserved',document=dict(mode='inline',dep
 c.attachment.add(record_type='customer',record_id=p['id'],original_filename='G3.bin',input_stream=io.BytesIO(b'A\\0\\xff'),company=co)
 print(json.dumps(dict(path=str(database_path(c)),operation=r.operation_id)))
 '''
-    result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src')+':'+str(Path(__file__).parents[1]),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+    result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=provenance.child_env(str(source/'src')+':'+str(Path(__file__).parents[1]), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (parent/'seed.log').write_text(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr
     return parent,root,source
@@ -171,7 +172,7 @@ except bookflow.BookflowError as e:print(e.code);sys.exit(0 if e.code=='E_SCHEMA
 sys.exit(3)
 '''
     result=subprocess.run([sys.executable,'-c',code,str(world['root'])],cwd=predecessor[2],
-        env=dict(os.environ,PYTHONPATH=str(predecessor[2]/'src'),BOOKFLOW_DATA_ROOT=str(world['root'])),
+        env=provenance.child_env(str(predecessor[2]/'src'), BOOKFLOW_DATA_ROOT=str(world['root'])),
         capture_output=True,text=True)
     (tmp_path/'old-refusal.log').write_text(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr

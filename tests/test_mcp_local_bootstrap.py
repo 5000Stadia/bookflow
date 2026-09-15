@@ -6,6 +6,7 @@ import subprocess
 import sys
 import bookflow
 from tests.mcp_matrix_support import normalize
+from tests import provenance
 
 
 def test_installed_cli_bootstrap_preview_create_reopen_and_conflict(tmp_path):
@@ -24,11 +25,11 @@ def test_installed_cli_bootstrap_preview_create_reopen_and_conflict(tmp_path):
                     assert rejected
                     doc = exc.to_dict()
             else:
-                binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow')))
+                binary = provenance.launcher()
                 args = [binary,'init','--json',*(['--dry-run'] if preview else [])]
                 for key,value in raw.items():
                     args.extend(['--'+key.replace('_','-'),value])
-                result = subprocess.run(args,env={**os.environ,'BOOKFLOW_DATA_ROOT':str(root)},capture_output=True,text=True,timeout=30)
+                result = subprocess.run(args,env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True,timeout=30)
                 assert (result.returncode != 0) == rejected,(result.stdout,result.stderr)
                 doc = json.loads(result.stderr.strip().splitlines()[-1] if rejected else result.stdout)
             results.setdefault(surface,[]).append(doc)

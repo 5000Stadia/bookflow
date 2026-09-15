@@ -26,6 +26,7 @@ from bookflow.commands.host_cmds import start_serving
 from bookflow.storage.engine import open_database
 from tests.conftest import BIN
 from tests.test_row3_host import PASSWORD, WB, hosted  # noqa: F401
+from tests import provenance
 
 ORGANIZATION = "Fresh Install Org"
 COMPANY = "Riverbend Plumbing"
@@ -96,7 +97,7 @@ def test_fresh_install_reads_its_own_audit_trail_from_the_cli(fresh):
     # The reported reproduction was the packaged CLI, so ask it the same way.
     out = subprocess.run([str(BIN), "--json", "--company", COMPANY, "audit", "list"],
                          capture_output=True, text=True,
-                         env={"BOOKFLOW_DATA_ROOT": str(root), "PATH": "/usr/bin:/bin"})
+                         env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(root), PATH="/usr/bin:/bin"))
     assert out.returncode == 0, (out.stdout, out.stderr)
     assert {"invoice post", "payment receive"} <= {row["command"] for row in json.loads(out.stdout)["items"]}
 

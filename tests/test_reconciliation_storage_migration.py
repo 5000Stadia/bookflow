@@ -28,6 +28,7 @@ from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head, feature_admission
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import table, attachments
+from tests import provenance
 
 BASE='a041caa2b98365649112eac55d600c586ca22b08'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0022_reconciliation_storage')
@@ -102,7 +103,7 @@ def old(tmp_path_factory):
     archive=subprocess.check_output(['git','archive',BASE,'src'],cwd=Path(__file__).parents[1])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')
     code='import bookflow,sys,io;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset();co="Demo Plumbing Co";a=c.customer.create(name="N preservation",company=co);c.attachment.add(record_type="customer",record_id=a["id"],original_filename="N.bin",input_stream=io.BytesIO(b"A\\0\\xff"),company=co)'
-    result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+    result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (parent/'old-seed.log').write_text(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr
     return root,source
@@ -141,7 +142,7 @@ def test_old_upgrade_preserves_all_rows_rowids_storage_classes_custom_ddl_attach
     # Actual immediately preceding binary rejects the N schema. A remains future.
     script='import bookflow,sys;c=bookflow.connect(data_root=sys.argv[1]);\ntry:c.run(sys.argv[2],{} if sys.argv[2]=="company show" else dict(date="2026-01-01",lines=[dict(account="Checking",side="debit",amount="1"),dict(account="Opening Balance Equity",side="credit",amount="1")]),company="Demo Plumbing Co")\nexcept bookflow.BookflowError as e:print(e.code);sys.exit(0 if e.code=="E_SCHEMA_UNKNOWN" else 2)\nsys.exit(3)'
     for command in ('company show','journal post'):
-        result=subprocess.run([sys.executable,'-c',script,str(root),command],cwd=old[1],env=dict(os.environ,PYTHONPATH=str(old[1]/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+        result=subprocess.run([sys.executable,'-c',script,str(root),command],cwd=old[1],env=provenance.child_env(str(old[1]/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
         (tmp_path/(command.replace(' ','-')+'-old.log')).write_text(result.stdout+result.stderr)
         assert result.returncode==0,result.stdout+result.stderr
 

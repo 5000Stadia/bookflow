@@ -14,6 +14,7 @@ from bookflow.storage.migrate import migrate_to_head
 from bookflow import BookflowError
 from tests.test_tax_policy_migration import co14_root
 from tests.test_payment_migration import raw_snapshot
+from tests import provenance
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0016_tax_work_allocations')
 
@@ -24,7 +25,7 @@ def co15_root(tmp_path_factory):
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')
     root=directory/'data'
     result=subprocess.run([sys.executable,'-c','import bookflow,sys;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset()',str(root)],cwd=source,
-        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root),PYTHONDONTWRITEBYTECODE='1'),capture_output=True,text=True)
+        env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root), PYTHONDONTWRITEBYTECODE='1'),capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
     return root
 

@@ -6,6 +6,7 @@ from tests.conftest import Cli
 from tests.test_row3_host import Hosted
 from bookflow.commands.host_cmds import start_serving
 from bookflow.core.context import client_version
+from tests import provenance
 
 
 @pytest.mark.timeout(180)
@@ -88,8 +89,7 @@ def test_mcp_reads_current_public_correction_and_void_with_company_isolation(boo
         async def journey():
             checkout = Path(__file__).resolve().parents[1]
             params = StdioServerParameters(command=sys.executable, args=['-c','from bookflow.bootstrap import main; main()','mcp','--url',url],
-                cwd=str(checkout), env={'BOOKFLOW_TOKEN':issued['secret'], 'BOOKFLOW_COMPANY':cid,
-                    'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent'), 'PYTHONPATH':str(checkout/'src')+':'+str(checkout)})
+                cwd=str(checkout), env=provenance.child_env([checkout/'src', checkout], BOOKFLOW_TOKEN=issued['secret'], BOOKFLOW_COMPANY=cid, BOOKFLOW_DATA_ROOT=str(tmp_path/'absent')))
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.discover()

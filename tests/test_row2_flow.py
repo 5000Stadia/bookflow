@@ -15,6 +15,7 @@ from bookflow.core import clock
 from bookflow.hub import schema as h
 from bookflow.storage.engine import open_database
 from tests.conftest import as_user, make_actor
+from tests import provenance
 
 
 def _second_admin(root, client, login="second"):
@@ -430,7 +431,7 @@ def test_directive_previews_match_real(client, root):
 
 def test_follow_keeps_high_water(cli, root):
     import subprocess, time, signal, os
-    env = {**os.environ, "BOOKFLOW_DATA_ROOT": str(root)}
+    env = provenance.child_env(BOOKFLOW_DATA_ROOT=str(root))
     from tests.conftest import BIN
     p = subprocess.Popen([str(BIN), "audit", "tail", "--follow", "--company", "Demo Plumbing Co", "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     time.sleep(3)

@@ -38,6 +38,7 @@ def demo_runner(client, company, why, *, dry_run=False):
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user, make_actor
 from tests.demo_oracle import (DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
+from tests import provenance
 
 REFERENCE = 'Reference Plumbing Co'
 DEMO = 'Demo Plumbing Co'
@@ -46,7 +47,7 @@ EXPECTED = json.loads(files('bookflow.demo').joinpath('reference-expected.json')
 
 def cli_run(root, *args):
     process = subprocess.run([sys.executable, '-m', 'bookflow.adapters.cli.app', '--json', *args],
-        env={**os.environ, 'BOOKFLOW_DATA_ROOT': str(root)}, capture_output=True, text=True)
+        env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(root)), capture_output=True, text=True)
     assert process.returncode == 0, (process.stdout, process.stderr)
     return json.loads(process.stdout)
 
@@ -507,5 +508,5 @@ def test_public_boolean_schema_defaults_and_first_default_reset(tmp_path, monkey
     assert [r['display_name'] for r in c.company.list()['items']] == [DEMO]
     assert c.journal.query(company=DEMO)['count'] == DEMO_POSITION['journal_entries']
     help_result = subprocess.run([sys.executable,'-m','bookflow.adapters.cli.app','demo','reset','--help'],
-        capture_output=True,text=True,env={**os.environ,'NO_COLOR':'1'})
+        capture_output=True,text=True,env=provenance.child_env(NO_COLOR='1'))
     assert help_result.returncode == 0 and '--include-reference' in help_result.stdout

@@ -11,6 +11,7 @@ from bookflow.storage.engine import open_database
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_row8_journal import database_path
 from tests.test_row5_undo import _event
+from tests import provenance
 
 
 def run(client, name, data=None, **ctx):
@@ -268,7 +269,7 @@ for noun,kind in [('invoice','bank'),('sales-receipt','credit_card')]:
 '''
     root=parent/'root'
     result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,
-        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+        env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (parent/'legacy-run.log').write_text(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr
     return root,json.loads((parent/'legacy-cases.json').read_text())

@@ -10,6 +10,7 @@ from bookflow.core.errors import BookflowError
 from tests.test_row7_identity_migration import _make, _dump
 from tests.test_row7_credentials import authority, writer
 from tests.conftest import make_actor
+from tests import provenance
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +52,8 @@ with open_database(Path(sys.argv[1]), writable=True) as db:
     sa.event.listen(db.conn, 'after_cursor_execute', interrupt)
     migrate_to_head(db, 'hub', None)
 '''
-    result = subprocess.run([sys.executable, '-c', code, str(path)], capture_output=True)
+    result = subprocess.run([sys.executable, '-c', code, str(path)], capture_output=True,
+                            env=provenance.child_env())
     assert result.returncode == 73, result.stderr.decode()
     assert current_revision_raw(path) == 'hub0008'
     with sqlite3.connect(path) as conn:

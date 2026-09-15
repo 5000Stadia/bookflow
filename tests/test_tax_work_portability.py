@@ -10,6 +10,7 @@ import pytest
 from tests.test_tax_work_migration import co15_root
 from tests.test_tax_policy_portability import attach
 from tests.test_tax_policy_sales import sale, tax_sale
+from tests import provenance
 
 
 @pytest.fixture(scope='module')
@@ -29,7 +30,7 @@ bill=run('estimate invoice',request)
 print(json.dumps(dict(source=source,bill=bill,request=request,item=item)))
 '''
     result=subprocess.run([sys.executable,'-c',script,str(root)],cwd=root,
-        env=dict(os.environ,PYTHONPATH=str(co15_root.parent/'source'/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+        env=provenance.child_env(str(co15_root.parent/'source'/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
     return root,json.loads(result.stdout)
 

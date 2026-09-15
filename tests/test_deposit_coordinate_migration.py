@@ -18,6 +18,7 @@ from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import migrate_to_head
 from tests.payment_raw_evidence import table,attachments
+from tests import provenance
 
 BASE='703c002945b2ccbd564d98ea20b0a0d5f690f300'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0023_deposit_coordinate')
@@ -53,7 +54,7 @@ with sqlite3.connect(path) as db: db.execute('INSERT INTO local_external VALUES 
 c.attachment.add(record_type='customer',record_id=p['id'],original_filename='C-bytes.bin',input_stream=io.BytesIO(b'A\\0B\\x80\\xff'),company=co)
 print(json.dumps(dict(path=str(path),operation=post.operation_id)))
 '''
-    run=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src')+':'+str(Path(__file__).parents[1]),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+    run=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=provenance.child_env(str(source/'src')+':'+str(Path(__file__).parents[1]), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (parent/'seed.log').write_text(run.stdout+run.stderr)
     assert run.returncode==0,run.stderr
     return parent,root,source
@@ -134,7 +135,7 @@ with open_database(Path(sys.argv[1]),writable=sys.argv[2]=='write') as db:
   print(getattr(e,'code',type(e).__name__))
  else: raise AssertionError('old binary admitted successor')
 """
-        run=subprocess.run([sys.executable,'-c',code,str(path),verb],cwd=binary,env=dict(os.environ,PYTHONPATH=str(binary/'src')),capture_output=True,text=True)
+        run=subprocess.run([sys.executable,'-c',code,str(path),verb],cwd=binary,env=provenance.child_env(str(binary/'src')),capture_output=True,text=True)
         assert run.returncode==0 and 'E_SCHEMA_UNKNOWN' in run.stdout,run.stdout+run.stderr
     with sqlite3.connect(path) as db:assert raw(db)==before
     (tmp_path/'preservation.json').write_text(json.dumps(dict(before=before,attachments=files),indent=2))

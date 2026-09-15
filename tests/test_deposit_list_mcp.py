@@ -15,21 +15,14 @@ import pytest
 
 import bookflow
 from tests.test_row3_host import hosted, live  # noqa: F401
+from tests import provenance
 
 POPULATION = 7
 
 
 def _binary(tmp_path):
-    """The MCP server process, running the code under test rather than an installed copy."""
-    override = os.environ.get('BOOKFLOW_MCP_TEST_BINARY')
-    if override:
-        return override
-    source = str(Path(bookflow.__file__).resolve().parent.parent)
-    program = f'import sys; sys.path.insert(0, {source!r}); from bookflow.bootstrap import main; main()'
-    shim = tmp_path / 'bookflow-under-test'
-    shim.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} -c {shlex.quote(program)} "$@"\n')
-    shim.chmod(0o700)
-    return str(shim)
+    """The MCP server process. tests/provenance.py owns which copy of the product it runs."""
+    return provenance.launcher()
 
 
 @pytest.mark.timeout(300)
@@ -58,8 +51,7 @@ def test_actual_mcp_query_next_page_and_show(hosted, live, tmp_path):
     async def witness():
         params = StdioServerParameters(command=_binary(tmp_path), args=['mcp', '--url', live,
             '--client-name', 'deposit-list-mcp-witness'],
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': company,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=company, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 start = perf_counter()
