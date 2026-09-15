@@ -50,15 +50,14 @@ def _validate(plan, s, ctx):
     if not data.get('changed', True):
         return
     operation = data['operation']
-    require(operation in ('post', 'void', 'apply', 'unapply'), 'wrong operation')
+    require(operation in ('post', 'update', 'void', 'apply', 'unapply'), 'wrong operation')
     header, pending, old = data['header'], data['pending'], data['before']
     require(header['type'] == 'vendor_credit', 'wrong document type')
     require(header['updated_by'] == s.actor.id and header['updated_via'] == ctx.interface.value,
             'header writer attribution')
     currency = s.company.conn.execute(c.company_info.select()).mappings().one()['home_currency']
 
-    tables = (vendor_credits.SETTLEMENT_TABLE_KINDS if operation in ('apply', 'unapply')
-              else vendor_credits.TABLE_KINDS)
+    tables = vendor_credits.table_kinds_for(operation)
     require(set(pending) == {table for table, _, _ in tables}, 'incomplete graph')
     indexed = {}
     for name, _, key in tables:
@@ -84,8 +83,13 @@ def _validate(plan, s, ctx):
         _settling(s, data, header, pending, currency, operation)
         return
 
+    # A settlement edge names the document on the paying side rather than owning a
+    # `transaction_id` of its own; every other row this write mints belongs to the credit.
     require(all(row['transaction_id'] == header['id']
-                for name, _, _ in tables for row in pending[name]), 'cross-document history')
+                for name, _, _ in tables if name != 'ap_applications' for row in pending[name]),
+            'cross-document history')
+    require(all(row['source_transaction_id'] == header['id']
+                for row in pending.get('ap_applications', [])), 'cross-document settlement')
     _accounting(s, data, header, pending, indexed, currency, operation)
 
 
@@ -114,6 +118,80 @@ def _batches(pending, indexed, currency, noun):
         require(debit == credit and debit > 0, 'a posting batch does not balance')
 
 
+def _exact_inverse(s, replaced, mirrored):
+    """The legs offered back against the batch they undo, cell for cell.
+
+    A void and a correction both invert the current business batch; reading it once is what
+    stops the two from disagreeing about what an exact inverse is.
+    """
+    original = effects.rows(s, c.posting_lines, c.posting_lines.c.batch_id == replaced['id'],
+                            order=c.posting_lines.c.line_no)
+    mirrored = sorted(mirrored, key=lambda leg: leg['line_no'])
+    require(len(original) == len(mirrored), 'the reversal has a different number of lines')
+    for before, after in zip(original, mirrored):
+        require(after['reversed_line_id'] == before['id']
+                and after['account_id'] == before['account_id']
+                and after['debit_minor_units'] == before['credit_minor_units']
+                and after['credit_minor_units'] == before['debit_minor_units'],
+                'the reversal is not an exact inverse')
+
+
+def _corrected_settlements(s, header, pending, revision, key, currency):
+    """A correction leaves every bill owing exactly what it owed, out of the new capacity.
+
+    The superseded revision's components are retired with it, so every standing edge is
+    released and the same bill settled again on the same date out of the corrected revision.
+    Read here from storage rather than from the writer's arithmetic: what is released has to
+    be what is actually standing, and what is retaken has to add up, per bill and per date, to
+    exactly what it replaced.
+    """
+    from bookflow.company import ap_settlement, bill_payment_validation as settlement
+
+    edges = pending['ap_applications']
+    standing = {row['id']: row for row in ap_settlement.active_applications(s, header['id'])}
+    releases = [row for row in edges if row['kind'] == 'unapply']
+    retakes = [row for row in edges if row['kind'] == 'apply']
+    require(len(releases) == len(standing) == len({row['reverses_application_id'] for row in releases}),
+            'a correction does not release every settlement standing on the credit')
+    mirrored = ('source_key_id', 'source_component_id', 'obligation_transaction_id',
+                'obligation_key_id', 'amount_minor_units', 'currency', 'effective_date')
+    for row in releases:
+        original = standing.get(row['reverses_application_id'])
+        require(original is not None and all(row[name] == original[name] for name in mirrored),
+                'a release does not exactly reverse the settlement it takes back')
+    components = {row['id']: row for row in pending['ap_source_components']}
+    drawn = {}
+    for row in retakes:
+        component = components.get(row['source_component_id'])
+        require(component is not None and row['source_key_id'] == key['id']
+                and row['currency'] == component['currency'] == currency
+                and row['reverses_application_id'] is None
+                and amount(row['amount_minor_units'], positive=True) <= component['amount_minor_units'],
+                'a retaken settlement does not come out of the corrected credit')
+        require(row['effective_date'] >= revision['date'],
+                'a credit cannot settle a bill before the credit existed')
+        drawn[component['id']] = drawn.get(component['id'], 0) + row['amount_minor_units']
+        settlement._settled_bill(s, row, key, currency)
+    for identifier, units in drawn.items():
+        require(units <= components[identifier]['amount_minor_units'],
+                'a corrected component is settled past its own capacity')
+
+    def owed(rows):
+        totals = {}
+        for row in rows:
+            name = (row['obligation_transaction_id'], row['obligation_key_id'], row['effective_date'])
+            totals[name] = totals.get(name, 0) + row['amount_minor_units']
+        return totals
+
+    require(owed(retakes) == owed(standing.values()),
+            'a correction changes what a bill owes')
+    # The same two concurrency fences every other settlement write runs, because a bill
+    # settled past its gross and a credit spent past its capacity are one rule each, read
+    # fresh against storage, and not a second pair that happens to agree.
+    settlement.settlement_fence(s, edges, source_transaction_id=header['id'])
+    settlement.source_capacity_fence(s, edges, pending['ap_source_components'], noun='credit')
+
+
 def _accounting(s, data, header, pending, indexed, currency, operation):
     from bookflow.company import ap_settlement, journals
 
@@ -135,23 +213,14 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
         require(len(replaced) == 1 and batches[0]['reverses_batch_id'] == replaced[0]['id']
                 and batches[0]['effective_date'] == replaced[0]['effective_date'],
                 'the reversal does not invert the current business batch at its own date')
-        original = effects.rows(s, c.posting_lines, c.posting_lines.c.batch_id == replaced[0]['id'],
-                                order=c.posting_lines.c.line_no)
-        mirrored = sorted(pending['posting_lines'], key=lambda leg: leg['line_no'])
-        require(len(original) == len(mirrored), 'the reversal has a different number of lines')
-        for before, after in zip(original, mirrored):
-            require(after['reversed_line_id'] == before['id']
-                    and after['account_id'] == before['account_id']
-                    and after['debit_minor_units'] == before['credit_minor_units']
-                    and after['credit_minor_units'] == before['debit_minor_units'],
-                    'the reversal is not an exact inverse')
+        _exact_inverse(s, replaced[0], pending['posting_lines'])
         require(not ap_settlement.active_applications(s, header['id']),
                 'a voided credit still settles a bill')
         return
 
     from bookflow.company import bills
 
-    require(header['status'] == 'posted', 'a new credit is posted')
+    require(header['status'] == 'posted', 'a credit that is written is posted')
     revisions = pending['transaction_revisions']
     require(len(revisions) == 1, 'wrong revision count')
     revision = revisions[0]
@@ -159,8 +228,35 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
             'the header does not point at the new revision')
     require(revision['name_type'] == 'vendor' and revision['currency'] == currency,
             'a vendor credit names its vendor in home currency')
-    require(len(batches) == 1 and batches[0]['kind'] == 'original'
-            and batches[0]['effective_date'] == revision['date'], 'wrong business batch')
+    if operation == 'update':
+        old_revision = data['old_revision']
+        require(revision['revision_number'] == old_revision['revision_number'] + 1
+                and revision['supersedes_revision_id'] == old_revision['id'],
+                'a correction does not succeed the revision it replaces')
+        replaced = effects.rows(s, c.posting_batches,
+                                c.posting_batches.c.revision_id == old_revision['id'],
+                                c.posting_batches.c.kind != 'reversal')
+        reversal = [row for row in batches if row['kind'] == 'reversal']
+        replacement = [row for row in batches if row['kind'] == 'replacement']
+        require(len(replaced) == 1 and len(batches) == 2 and len(reversal) == 1 and len(replacement) == 1,
+                'a correction reverses exactly one batch and posts exactly one replacement')
+        require(reversal[0]['revision_id'] == old_revision['id']
+                and reversal[0]['reverses_batch_id'] == replaced[0]['id']
+                and reversal[0]['effective_date'] == replaced[0]['effective_date'],
+                'the reversal does not invert the superseded batch at its own date')
+        require(replacement[0]['revision_id'] == revision['id']
+                and replacement[0]['replaces_batch_id'] == replaced[0]['id']
+                and replacement[0]['reverses_batch_id'] is None
+                and replacement[0]['effective_date'] == revision['date'],
+                'the replacement does not stand in for the batch it replaces')
+        _exact_inverse(s, replaced[0], [leg for leg in pending['posting_lines']
+                                        if leg['batch_id'] == reversal[0]['id']])
+        batches = replacement
+    else:
+        require(revision['revision_number'] == 1 and revision['supersedes_revision_id'] is None,
+                'a new credit starts at its first revision')
+        require(len(batches) == 1 and batches[0]['kind'] == 'original'
+                and batches[0]['effective_date'] == revision['date'], 'wrong business batch')
 
     profiles = pending['vendor_credit_profiles']
     require(len(profiles) == 1 and profiles[0]['revision_id'] == revision['id']
@@ -188,8 +284,18 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
                 for line in envelopes), 'a purchase envelope carries no accounting of its own')
     identities = {line['line_id'] for line in envelopes}
     require(len(identities) == len(envelopes), 'a line identity is used twice')
-    require(identities == {row['id'] for row in pending['document_line_identities']},
-            'a line identity this document does not own')
+    minted = {row['id'] for row in pending['document_line_identities']}
+    require(minted <= identities, 'a minted line identity no row on this revision names')
+    kept = identities - minted
+    if operation == 'update':
+        # A row carried across a correction keeps the identity the superseded revision gave
+        # it, and only that one: an identity retired by an earlier correction cannot return,
+        # because the row a reader follows through the history would then be two rows.
+        prior = {line['line_id'] for line in effects.rows(
+            s, c.document_lines, c.document_lines.c.revision_id == data['old_revision']['id'])}
+        require(kept <= prior, 'a retired line identity cannot return')
+    else:
+        require(not kept, 'a new credit mints every line identity it uses')
 
     by_envelope = {line['document_line_id']: line for line in expenses}
     total = 0
@@ -231,11 +337,21 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
             'the payable debit is not attributed line by line')
 
     keys = pending['ap_source_keys']
-    require(len(keys) == 1 and keys[0]['ordinal'] == 1 and keys[0]['source_type'] == 'vendor_credit',
-            'a vendor credit carries exactly one settlement source')
-    key = keys[0]
+    if operation == 'update':
+        # The source is minted once: a correction hangs new capacity off the one the document
+        # has always carried, so the vendor, the payable and the currency an application is
+        # checked against cannot move underneath the bills already settled.
+        require(not keys, 'a correction mints a second settlement source')
+        key = ap_settlement.source_key_row(s, header['id'])
+        require(key is not None and key['source_type'] == 'vendor_credit',
+                'a correction of a credit that carries no settlement source')
+    else:
+        require(len(keys) == 1 and keys[0]['ordinal'] == 1 and keys[0]['source_type'] == 'vendor_credit',
+                'a vendor credit carries exactly one settlement source')
+        key = keys[0]
+        require(key['audit_event_id'] == data['event'], 'the source was minted by another event')
     require(key['vendor_id'] == profile['vendor_id'] and key['ap_account_id'] == profile['ap_account_id']
-            and key['currency'] == currency and key['audit_event_id'] == data['event'],
+            and key['currency'] == currency,
             'the source does not match the credit it belongs to')
     # A credit is a source and never a payable: an obligation key here would put it on a report
     # called unpaid bills, at a negative balance, as a document nobody owes.
@@ -262,6 +378,11 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
         carried += amount(component['amount_minor_units'], positive=True)
     require(carried == total, 'the source components do not add up to what the credit is worth')
     require(seen == {line['id'] for line in envelopes}, 'a credited line without its source component')
+
+    if operation == 'update':
+        _corrected_settlements(s, header, pending, revision, key, currency)
+    else:
+        require(not pending.get('ap_applications'), 'a new credit settles nothing')
 
 
 def _settling(s, data, header, pending, currency, operation):

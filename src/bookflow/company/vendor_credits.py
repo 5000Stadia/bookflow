@@ -40,7 +40,8 @@ from bookflow.company.parties import resolve_party
 from bookflow.company.vendor_credit_facts import BillExpenseProfile, Origin, Vendor, VendorCreditProfile
 from bookflow.company.vendor_credit_models import (
     VendorCreditComponentOutput, VendorCreditExpenseOutput, VendorCreditOutput,
-    VendorCreditPageOutput, VendorCreditRevisionOutput, VendorCreditSettlementOutput,
+    VendorCreditHistoryOutput, VendorCreditPageOutput, VendorCreditRevisionOutput,
+    VendorCreditRevisionSummaryOutput, VendorCreditSettlementOutput,
     VendorCreditSourceOutput, VendorCreditSummaryOutput, VendorCreditWriteOutput, reference_key,
 )
 from bookflow.core import audit, clock
@@ -69,6 +70,11 @@ TABLE_KINDS = (
 
 # Attaching and detaching write settlement history and nothing else: no revision, no posting.
 SETTLEMENT_TABLE_KINDS = (('ap_applications', 'ap_application', 'id'),)
+
+# A correction writes both: the new revision's whole graph, and the settlement edges that
+# release the superseded revision's capacity and take the same settlements again out of the
+# new one. The edges go last because each names a component this same write just minted.
+UPDATE_TABLE_KINDS = TABLE_KINDS + SETTLEMENT_TABLE_KINDS
 
 
 def json_text(value):
@@ -118,57 +124,174 @@ def saved_lines(s, revision):
 # ---------------------------------------------------------------- what a credit captures
 
 
-def resolve_header(s, inp):
+def _supplied(inp, field):
+    return field in inp.model_fields_set
+
+
+def _ownership(previous, field, found):
+    """A correction may not move the credit onto another vendor, payable or currency.
+
+    The settlement source is minted once and permanently carries that triple; every
+    application is checked against it by the storage trigger and by ``_compatible``. A
+    correction that changed any of the three would leave the credit saying one thing while its
+    capacity could still only answer the other -- so the three are guards here, in the same
+    words ``customer-refund update`` refuses paying somebody else back.
+    """
+    raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={
+        'reason': 'vendor_credit_ownership', 'credit_id': previous['header']['id'],
+        'field': field, field + '_id': found,
+        'next': 'A correction keeps the vendor, payable account and currency of the credit it '
+                'corrects; a credit from another vendor, or against another payable, is a '
+                'different credit and is entered as one.'})
+
+
+def resolve_header(s, inp, previous=None):
     """Every header fact a vendor-credit revision captures, and where each one came from.
 
     The bill's resolution minus terms and a due date: a credit is not owed on a date. The
     vendor, the payable account, the account rules and the class come from the bill's own
     resolvers, so a credit can never be owed out of an account a bill could not be owed out of.
+
+    One reader for both writes. A new credit has nothing to fall back on and every field is
+    the caller's; a correction keeps the captured value -- and the captured origin -- of every
+    field the caller left out, which is how a wrong date or memo alone is corrected without
+    quietly restating where the payable account came from.
     """
     info = bills._info(s)
     currency = info['home_currency']
-    origins = {}
+    captured = previous['profile'] if previous else None
+    origins = dict(captured.origins) if captured else {}
 
-    row = resolve_party(s.company, 'vendor', inp.vendor)
-    if not row['active']:
+    row = resolve_party(s.company, 'vendor', inp.vendor or (captured.vendor.id if captured else None))
+    # A vendor deactivated after the credit was written must not block correcting its memo:
+    # the correction cannot move the credit onto another vendor anyway.
+    if captured is None and not row['active']:
         raise BookflowError('E_INACTIVE_REFERENCE',
                             details={'record_type': 'vendor', 'record_id': row['id'], 'field': 'vendor'})
+    if captured is not None and row['id'] != captured.vendor.id:
+        _ownership(previous, 'vendor', row['id'])
     vendor = Vendor(**bills._reference(row).model_dump(),
                     **{k: row.get(k) for k in ('company_name', 'email', 'phone', 'account_number')})
     origins['vendor'] = Origin(kind='explicit')
 
-    ap_account, origins['ap_account'] = bills._ap_account(s, inp.ap_account, currency, None,
-                                                          noun='vendor credit')
-    reference = (inp.supplier_reference or '').strip() or None
-    if inp.supplier_reference is not None:
-        origins['supplier_reference'] = Origin(kind='explicit')
-    klass = (bills._reference(bills._list_row(s, 'class', c.classes, inp.class_id, 'class_id', 'class'))
-             if inp.class_id else None)
-    if inp.class_id is not None:
-        origins['class_id'] = Origin(kind='explicit')
-    issuer = {key: value for key, value in info.items()
-              if key in ('id', 'legal_name', 'home_currency')
-              or key.startswith(('address_', 'legal_address_'))}
+    ap_account, ap_origin = bills._ap_account(s, inp.ap_account, currency, captured,
+                                              noun='vendor credit')
+    if captured is None:
+        origins['ap_account'] = ap_origin
+    elif ap_account.id != captured.ap_account.id:
+        _ownership(previous, 'ap_account', ap_account.id)
+    # On a correction the captured origin stands whether or not the account was named: the
+    # field is a guard rather than a choice, so naming the account the credit already has must
+    # not restate a company default as something a person typed -- which would turn a save
+    # nobody changed into a reversal batch and a replacement batch.
+
+    if captured is None or _supplied(inp, 'supplier_reference'):
+        reference = (inp.supplier_reference or '').strip() or None
+        if inp.supplier_reference is not None or captured is not None:
+            origins['supplier_reference'] = Origin(kind='explicit')
+    else:
+        reference = captured.supplier_reference
+
+    if captured is None or _supplied(inp, 'class_id'):
+        klass = (bills._reference(bills._list_row(s, 'class', c.classes, inp.class_id, 'class_id', 'class'))
+                 if inp.class_id else None)
+        if inp.class_id is not None or captured is not None:
+            origins['class_id'] = Origin(kind='explicit')
+    else:
+        klass = captured.class_id
+
+    if previous:
+        issuer = json.loads(previous['revision']['issuer_snapshot'])
+    else:
+        issuer = {key: value for key, value in info.items()
+                  if key in ('id', 'legal_name', 'home_currency')
+                  or key.startswith(('address_', 'legal_address_'))}
     return dict(vendor=vendor, ap_account=ap_account, supplier_reference=reference,
                 supplier_reference_key=reference_key(reference), class_id=klass,
                 currency=currency, origins=origins, issuer=issuer)
 
 
-def commercial(s, inp):
-    """Resolve the whole credit: header, lines, total and the number it takes."""
-    header = resolve_header(s, inp)
+def _credited_grid(s, inp, header, previous):
+    """The credited rows this revision carries, and the identity each one keeps.
+
+    Supplying ``expenses`` replaces the grid outright; leaving it out on a correction keeps
+    every captured row exactly as it was written, down to the account name the credit was
+    entered under, so correcting the date cannot silently re-resolve a renamed account.
+    """
     currency = header['currency']
-    lines = [bills._expense_line(s, line, header['class_id'], currency, index)
-             for index, line in enumerate(inp.expenses)]
+    if previous is None:
+        return [bills._expense_line(s, line, header['class_id'], currency, index)
+                for index, line in enumerate(inp.expenses)]
+    saved = saved_lines(s, previous['revision'])
+    if inp.expenses is None:
+        return [dict(line_id=line['line_id'], memo=line['memo'],
+                     amount_minor_units=line['amount_minor_units'],
+                     profile=BillExpenseProfile.model_validate_json(line['line_snapshot']))
+                for line in saved]
+    prior, seen, lines = {line['line_id'] for line in saved}, set(), []
+    for index, line in enumerate(inp.expenses):
+        key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
+        # A retired identity cannot return, and no identity may name two rows: the row a
+        # reader follows through the history has to stay one row.
+        if key is not None and (key not in prior or key in seen):
+            raise _invalid('expenses.line_id',
+                           'use a unique current line identity from this credit; retired '
+                           'identities cannot return')
+        if key:
+            seen.add(key)
+        resolved = bills._expense_line(s, line, header['class_id'], currency, index)
+        resolved['line_id'] = key
+        lines.append(resolved)
+    return lines
+
+
+def commercial(s, inp, previous=None):
+    """Resolve the whole credit: header, lines, total and the number it takes."""
+    header = resolve_header(s, inp, previous)
+    currency = header['currency']
+    old_revision = previous['revision'] if previous else None
+    date = (inp.date or old_revision['date']) if old_revision else inp.date
+    memo = inp.memo if previous is None or _supplied(inp, 'memo') else old_revision['memo']
+    lines = _credited_grid(s, inp, header, previous)
+    for line in lines:
+        line.setdefault('line_id', None)
     total = checked_sum((line['amount_minor_units'] for line in lines), 'expenses.total')
-    number, sequence = effects.allocate(s, DOCUMENT_TYPE, inp.number)
+    number, sequence = effects.allocate(
+        s, DOCUMENT_TYPE,
+        inp.number if inp.number is not None else (old_revision['number'] if previous else None),
+        previous['header']['id'] if previous else None)
     profile = VendorCreditProfile(
         vendor=header['vendor'], ap_account=header['ap_account'],
         supplier_reference=header['supplier_reference'],
         supplier_reference_key=header['supplier_reference_key'], class_id=header['class_id'],
         expense_total_minor_units=total, currency=currency, origins=header['origins'])
     return dict(profile=profile, lines=lines, total=total, currency=currency, number=number,
-                sequence=sequence, issuer=header['issuer'], memo=inp.memo, date=inp.date)
+                sequence=sequence, issuer=header['issuer'], memo=memo, date=date)
+
+
+# ---------------------------------------------------------------- what changed, and whether anything did
+
+
+def _line_semantic(line):
+    return {'line_id': line['line_id'], 'memo': line['memo'],
+            'amount_minor_units': line['amount_minor_units'],
+            'profile': line['profile'].model_dump(mode='json')}
+
+
+def saved_semantic(s, revision):
+    """What the stored revision says about itself, in the shape a fresh resolution says it."""
+    stored = profile_row(s, revision)
+    return dict(
+        date=revision['date'], number=revision['number'], memo=revision['memo'],
+        profile=VendorCreditProfile.model_validate_json(stored['profile_snapshot']).model_dump(mode='json'),
+        lines=[_line_semantic(dict(line, profile=BillExpenseProfile.model_validate_json(
+            line['line_snapshot']))) for line in saved_lines(s, revision)])
+
+
+def resolved_semantic(resolved):
+    return dict(date=resolved['date'], number=resolved['number'], memo=resolved['memo'],
+                profile=resolved['profile'].model_dump(mode='json'),
+                lines=[_line_semantic(line) for line in resolved['lines']])
 
 
 # ---------------------------------------------------------------- the settlement seam
@@ -231,7 +354,16 @@ def _source_output(s, header, revision, edges, pending=None):
         applied=Money(attached.get(row['id'], 0), currency).to_dict()) for row in components])
 
 
-def revision_output(s, header, revision, edges, pending=None):
+def revision_output(s, header, revision, edges, pending=None, *, summary_only=False):
+    """One revision as a reader sees it, or its header alone when a history page asks.
+
+    ``summary_only`` is what ``vendor-credit history`` pages: everything the revision says
+    about itself apart from the grid and the captured facts, so a document with two hundred
+    credited rows pages its revisions without loading two hundred rows per revision. The
+    applications it reports are the ones hung on that revision's own capacity, which is why a
+    superseded revision reads as settling nothing: a correction released every edge it held
+    and the corrected revision took them again.
+    """
     pending = pending or {}
     currency = revision['currency']
     owned = {row['id'] for row in ([r for r in pending.get('ap_source_components', [])
@@ -247,7 +379,12 @@ def revision_output(s, header, revision, edges, pending=None):
                                                    if line['batch_id'] == batch['id']])
                   for batch in pending.get('posting_batches', []) if batch['revision_id'] == revision['id']]
     envelopes = [line for line in pending.get('document_lines', []) if line['revision_id'] == revision['id']]
-    if envelopes:
+    if summary_only:
+        lines = envelopes
+        line_count = len(lines) if lines else s.company.conn.execute(
+            sa.select(sa.func.count()).select_from(c.document_lines).where(
+                c.document_lines.c.revision_id == revision['id'])).scalar_one()
+    elif envelopes:
         details = {row['document_line_id']: row for row in pending['vendor_credit_expense_lines']}
         lines = [merged_line(line, details[line['id']]) for line in envelopes]
     else:
@@ -258,8 +395,10 @@ def revision_output(s, header, revision, edges, pending=None):
     values.update(expense_total_minor_units=profile['expense_total_minor_units'],
                   expense_total=Money(profile['expense_total_minor_units'], currency).to_dict(),
                   total=Money(revision['total_minor_units'], currency).to_dict(),
-                  line_count=len(lines), batches=summaries,
+                  line_count=line_count if summary_only else len(lines), batches=summaries,
                   applications=bill_payments.application_outputs(mine, currency, numbers))
+    if summary_only:
+        return VendorCreditRevisionSummaryOutput(**values)
     return VendorCreditRevisionOutput(
         **values, profile=json.loads(profile['profile_snapshot']),
         issuer_snapshot=json.loads(revision['issuer_snapshot']),
@@ -300,6 +439,38 @@ def show(s, inp):
                                                        bill_payments._bill_numbers(
                                                            s, sorted({row['obligation_transaction_id']
                                                                       for row in edges}))))
+
+
+def history(s, ctx, inp):
+    """Every immutable revision of one credit, oldest first, the way a credit memo pages its own.
+
+    The current header rides along -- number, status and the version a correction has to
+    supply -- so a reader can tell at a glance which of the revisions listed is the one the
+    books are standing on now.
+    """
+    from bookflow.company.query import continuation, page_state
+
+    class Contract:
+        cursor = inp.cursor
+        query = None
+
+        def model_dump(self, **kw):
+            return inp.model_dump(**kw)
+
+    state = page_state(s, 'vendor-credit history', Contract(), ctx.on_behalf_of)
+    header = resolve(s, inp.credit)
+    edges = bill_payments._edges(s, header)
+    query = sa.select(c.transaction_revisions).where(
+        c.transaction_revisions.c.transaction_id == header['id']).order_by(
+        c.transaction_revisions.c.revision_number)
+    found = [dict(row) for row in s.company.conn.execute(
+        query.offset(state.offset).limit(inp.limit + 1)).mappings()]
+    more, found = len(found) > inp.limit, found[:inp.limit]
+    return VendorCreditHistoryOutput(
+        **{k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
+        items=[revision_output(s, header, revision, edges, summary_only=True) for revision in found],
+        count=len(found), has_more=more, next_cursor=continuation(state, len(found), more),
+        audit_watermark=state.sequence)
 
 
 def page(s, ctx, inp):
@@ -372,7 +543,7 @@ def page(s, ctx, inp):
 # ---------------------------------------------------------------- writing one credit
 
 
-def _business_postings(s, header, revision, batch, resolved, pending, created, event):
+def _business_postings(s, header, revision, batch, resolved, pending, created, event, *, source_key=None):
     """Cr each credited account its own line; Dr Accounts Payable the total, once.
 
     The mirror of the bill: the payable falls by one figure because that is what the vendor
@@ -417,10 +588,14 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     payable = leg(profile.ap_account, resolved['total'], True,
                   profile.class_id.id if profile.class_id else None,
                   profile.class_id.label if profile.class_id else None, resolved['memo'])
-    source_key = dict(**created(), transaction_id=header['id'], ordinal=1,
-                      source_type=DOCUMENT_TYPE, vendor_id=profile.vendor.id,
-                      ap_account_id=profile.ap_account.id, currency=currency, audit_event_id=event)
-    pending['ap_source_keys'].append(source_key)
+    # The settlement source is minted once and never again: it is the permanent identity of
+    # what this credit can settle, and a correction hangs the new revision's capacity off the
+    # same one rather than starting a second store of money on one document.
+    if source_key is None:
+        source_key = dict(**created(), transaction_id=header['id'], ordinal=1,
+                          source_type=DOCUMENT_TYPE, vendor_id=profile.vendor.id,
+                          ap_account_id=profile.ap_account.id, currency=currency, audit_event_id=event)
+        pending['ap_source_keys'].append(source_key)
     for envelope in envelopes:
         line = profiles[envelope['id']]
         attribution = attribute(payable, envelope, line['amount_minor_units'])
@@ -435,61 +610,140 @@ def _has_applications(s, header):
     return bool(ap_settlement.active_applications(s, header['id']))
 
 
-def prepare_write(s, ctx, inp, operation):
-    """``post`` and ``void``: the two moments a vendor credit changes the ledger."""
-    old_header = resolve(s, inp.credit) if operation == 'void' else None
-    old_revision = journals.revision(s, old_header) if old_header else None
-    if operation == 'void':
-        if not ctx.reason or not ctx.reason.strip():
-            raise BookflowError('E_REASON_REQUIRED')
-        if len(ctx.reason.strip()) > 140:
-            raise _invalid('reason', 'must be at most 140 characters')
-        if inp.expected_version is not None:
-            journals.version_meta(s, old_header, inp.expected_version)
-        if _has_applications(s, old_header):
-            raise BookflowError('E_HAS_APPLICATIONS', details={
-                'credit_id': old_header['id'],
-                'next': 'Unapply what this credit settled before voiding it.'})
+def _unchanged_plan(s, inp, previous):
+    """Nothing to correct: the saved credit, said back, with no revision written."""
+    return Plan(_output(s, previous['header'], previous['revision'],
+                        model=VendorCreditWriteOutput, changed=False, changed_fields=[]),
+                dict(input=inp, operation='update', changed=False))
+
+
+def _for_correction(s, inp):
+    """The credit a correction is written against, or the named reason it cannot be."""
+    header = resolve(s, inp.credit)
+    if inp.expected_version is not None:
+        journals.version_meta(s, header, inp.expected_version)
+    if header['status'] != 'posted':
+        raise BookflowError('E_APPLICATION_INACTIVE', details={
+            'credit_id': header['id'], 'status': header['status'],
+            'next': 'A voided credit gave nothing back; enter the corrected credit instead.'})
+    revision = journals.revision(s, header)
+    stored = profile_row(s, revision)
+    return dict(header=header, revision=revision, profile_row=stored,
+                profile=VendorCreditProfile.model_validate_json(stored['profile_snapshot']))
+
+
+def _retake_applications(s, ctx, header, resolved, pending, at, event):
+    """Release every bill this credit answers, then answer the same bills again, exactly.
+
+    An application names one *revision-local* component, and a correction retires the whole of
+    the superseded revision's capacity. Left alone, the standing edges would still hold bills
+    settled against capacity the current revision no longer has, while ``_free_capacity`` --
+    which reads the current revision's components -- reported the corrected credit wholly
+    free: the same credit spendable twice, and bills whose open balance depends on which of
+    the two readers you ask. So each standing application is reversed cell for cell and the
+    same bill is settled again for the same amount on the same date out of the corrected
+    revision's components.
+
+    What every bill owes is therefore unchanged by a correction. That is also why the
+    settlement dates are not re-tested against the closing date the way ``unapply`` tests
+    them: an unapply changes what the books said was open on that date and this does not move
+    it by a cent.
+    """
+    active = ap_settlement.active_applications(s, header['id'])
+    if not active:
+        return
+    currency = resolved['currency']
+    source = source_row(s, header['id'])
+    if source is None:
+        raise BookflowError('E_INTERNAL', message='This credit carries no settlement source')
+
+    def edge(**values):
+        pending['ap_applications'].append(dict(
+            id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
+            audit_event_id=event, source_transaction_id=header['id'],
+            source_key_id=source['id'], currency=currency, **values))
+
+    for row in active:
+        edge(kind='unapply', reverses_application_id=row['id'],
+             **{key: row[key] for key in ('source_component_id', 'obligation_transaction_id',
+                                          'obligation_key_id', 'amount_minor_units',
+                                          'effective_date')})
+    # One settlement per bill and date, in the order the credit answered them, because which
+    # credited line supplied which cent is this write's to decide again and what the bill owes
+    # is not.
+    wanted, index = [], {}
+    for row in active:
+        key = (row['obligation_transaction_id'], row['obligation_key_id'], row['effective_date'])
+        if key not in index:
+            index[key] = len(wanted)
+            wanted.append([key, 0])
+        wanted[index[key]][1] += row['amount_minor_units']
+    settled = checked_sum((units for _, units in wanted), 'applications.total')
+    earliest = min(date for (_, _, date), _ in wanted)
+    if earliest < resolved['date']:
+        raise _invalid('date', f'this credit already answers a bill on {earliest}; a correction '
+                               f'dated {resolved["date"]} would settle a bill before the credit '
+                               f'existed. Unapply that settlement first, or keep the credit on '
+                               f'or before {earliest}.')
+    supply = [[row, row['amount_minor_units']] for row in pending['ap_source_components']]
+    available = checked_sum((units for _, units in supply), 'capacity.total')
+    if settled > available:
+        raise BookflowError('E_APPLICATION_CAPACITY', details={
+            'credit_id': header['id'], 'credit_number': header['number'],
+            'requested_minor_units': settled, 'available_minor_units': available,
+            'requested': Money(settled, currency).to_dict(),
+            'available': Money(available, currency).to_dict(),
+            'next': 'This credit already answers more than the correction would be worth. '
+                    'Unapply what it holds down to the corrected amount first, then correct it.'})
+    position = 0
+    for (obligation_transaction_id, obligation_key_id, date), units in wanted:
+        remaining = units
+        while remaining:
+            component, free = supply[position]
+            if not free:
+                position += 1
+                continue
+            taken = min(free, remaining)
+            supply[position][1] -= taken
+            remaining -= taken
+            edge(kind='apply', reverses_application_id=None,
+                 source_component_id=component['id'],
+                 obligation_transaction_id=obligation_transaction_id,
+                 obligation_key_id=obligation_key_id, amount_minor_units=taken,
+                 effective_date=date)
+
+
+def _compose(s, ctx, inp, resolved, previous=None):
+    """The whole graph one write stores: the revision, its effect, and the capacity it carries.
+
+    One builder for the first credit and for every correction of it. A correction adds three
+    things and changes nothing else: the superseded batch reversed at its own date, a
+    replacement posted at the corrected one, and the settlements released and retaken so the
+    credit is never worth two different figures in between.
+    """
+    journals.open_dates(s, [resolved['date']] + ([previous['revision']['date']] if previous else []))
+    bills._posting_accounts_active(s, dict(profile=resolved['profile'], lines=resolved['lines']))
     at, event = clock.now_iso(), new_id()
 
     def created():
         return dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
 
     row_provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
-    pending = {table: [] for table, _, _ in TABLE_KINDS}
-
-    if operation == 'void':
-        if old_header['status'] == 'voided':
-            return Plan(_output(s, old_header, old_revision, model=VendorCreditWriteOutput, changed=False),
-                        dict(input=inp, operation='void', changed=False))
-        journals.open_dates(s, [old_revision['date']])
-        header = dict(old_header)
-        current_batch = effects.rows(s, c.posting_batches,
-                                     c.posting_batches.c.revision_id == old_revision['id'],
-                                     c.posting_batches.c.kind != 'reversal')[0]
-        inverse = effects.reverse(s, header, old_revision, current_batch, event, created, pending)
-        header.update(version=old_header['version'] + 1, updated_at=at, updated_by=s.actor.id,
-                      updated_via=ctx.interface.value, status='voided', voided_at=at,
-                      voided_by=s.actor.id, void_reason=ctx.reason.strip(),
-                      void_posting_batch_id=inverse['id'])
-        plan = Plan(_output(s, header, old_revision, pending, model=VendorCreditWriteOutput,
-                            changed_fields=['status']),
-                    dict(input=inp, operation='void', changed=True, header=header, before=old_header,
-                         old_revision=old_revision, pending=pending, sequence=None, event=event,
-                         resolved=None))
-        from bookflow.company.vendor_credit_validation import validate
-        validate(plan, s, ctx)
-        return plan
-
-    resolved = commercial(s, inp)
-    journals.open_dates(s, [resolved['date']])
-    bills._posting_accounts_active(s, dict(profile=resolved['profile'], lines=resolved['lines']))
+    pending = {table: [] for table, _, _ in (UPDATE_TABLE_KINDS if previous else TABLE_KINDS)}
     currency = resolved['currency']
-    header = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type=DOCUMENT_TYPE,
-                  status='posted', voided_at=None, voided_by=None, void_reason=None,
-                  void_posting_batch_id=None)
-    revision = dict(**created(), transaction_id=header['id'], revision_number=1,
-                    supersedes_revision_id=None, date=resolved['date'], number=resolved['number'],
+    if previous:
+        old_header, old_revision = previous['header'], previous['revision']
+        header = dict(old_header, version=old_header['version'] + 1, updated_at=at,
+                      updated_by=s.actor.id, updated_via=ctx.interface.value)
+    else:
+        old_header = old_revision = None
+        header = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type=DOCUMENT_TYPE,
+                      status='posted', voided_at=None, voided_by=None, void_reason=None,
+                      void_posting_batch_id=None)
+    revision = dict(**created(), transaction_id=header['id'],
+                    revision_number=old_revision['revision_number'] + 1 if previous else 1,
+                    supersedes_revision_id=old_revision['id'] if previous else None,
+                    date=resolved['date'], number=resolved['number'],
                     name_type='vendor', name_id=resolved['profile'].vendor.id, memo=resolved['memo'],
                     total_minor_units=resolved['total'], currency=currency,
                     issuer_snapshot=json_text(resolved['issuer']),
@@ -505,11 +759,16 @@ def prepare_write(s, ctx, inp, operation):
         expense_total_minor_units=resolved['total'],
         profile_snapshot=json_text(profile.model_dump())))
     for position, line in enumerate(resolved['lines'], 1):
-        identity = dict(**created(), transaction_id=header['id'])
-        pending['document_line_identities'].append(identity)
+        # A row carried over from the superseded revision keeps its identity, so the row a
+        # reader follows through the history is the same row; a row entered here mints one.
+        identity = line.get('line_id')
+        if identity is None:
+            minted = dict(**created(), transaction_id=header['id'])
+            pending['document_line_identities'].append(minted)
+            identity = minted['id']
         facts = line['profile']
         envelope = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
-                        line_id=identity['id'], position=position, kind='purchase', account_id=None,
+                        line_id=identity, position=position, kind='purchase', account_id=None,
                         side=None, amount_minor_units=None, currency=currency, account_snapshot=None,
                         name_type='vendor', name_id=profile.vendor.id, party_name=profile.vendor.label,
                         class_id=facts.class_id.id if facts.class_id else None,
@@ -522,18 +781,108 @@ def prepare_write(s, ctx, inp, operation):
             amount_minor_units=line['amount_minor_units'],
             customer_id=facts.customer.id if facts.customer else None,
             line_snapshot=json_text(facts.model_dump())))
+    old_batch = source_key = None
+    if previous:
+        batches = effects.rows(s, c.posting_batches,
+                               c.posting_batches.c.revision_id == old_revision['id'],
+                               c.posting_batches.c.kind != 'reversal')
+        if len(batches) != 1:
+            raise BookflowError('E_VALIDATION',
+                                message='Vendor credit has ambiguous current posting evidence.')
+        old_batch = batches[0]
+        effects.reverse(s, header, old_revision, old_batch, event, created, pending)
+        source_key = source_row(s, header['id'])
+        if source_key is None:
+            raise BookflowError('E_INTERNAL', message='This credit carries no settlement source')
     batch = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
-                 kind='original', effective_date=revision['date'], reverses_batch_id=None,
-                 replaces_batch_id=None, audit_event_id=event)
+                 kind='replacement' if previous else 'original', effective_date=revision['date'],
+                 reverses_batch_id=None,
+                 replaces_batch_id=old_batch['id'] if old_batch else None, audit_event_id=event)
     pending['posting_batches'].append(batch)
-    _business_postings(s, header, revision, batch, resolved, pending, created, event)
-    plan = Plan(_output(s, header, revision, pending, model=VendorCreditWriteOutput),
-                dict(input=inp, operation='post', changed=True, header=header, before=None,
-                     old_revision=None, pending=pending, sequence=resolved['sequence'],
-                     event=event, resolved=resolved))
+    _business_postings(s, header, revision, batch, resolved, pending, created, event,
+                       source_key=source_key)
+    if previous:
+        _retake_applications(s, ctx, header, resolved, pending, at, event)
+    changed_fields = (bills._changes(saved_semantic(s, old_revision), resolved_semantic(resolved))
+                      if previous else [])
+    plan = Plan(_output(s, header, revision, pending, model=VendorCreditWriteOutput,
+                        changed_fields=changed_fields),
+                dict(input=inp, operation='update' if previous else 'post', changed=True,
+                     header=header, before=old_header, old_revision=old_revision, pending=pending,
+                     sequence=resolved['sequence'], event=event, resolved=resolved,
+                     previous=previous))
     from bookflow.company.vendor_credit_validation import validate
     validate(plan, s, ctx)
     return plan
+
+
+def prepare_void(s, ctx, inp):
+    old_header = resolve(s, inp.credit)
+    old_revision = journals.revision(s, old_header)
+    if not ctx.reason or not ctx.reason.strip():
+        raise BookflowError('E_REASON_REQUIRED')
+    if len(ctx.reason.strip()) > 140:
+        raise _invalid('reason', 'must be at most 140 characters')
+    if inp.expected_version is not None:
+        journals.version_meta(s, old_header, inp.expected_version)
+    if _has_applications(s, old_header):
+        raise BookflowError('E_HAS_APPLICATIONS', details={
+            'credit_id': old_header['id'],
+            'next': 'Unapply what this credit settled before voiding it.'})
+    at, event = clock.now_iso(), new_id()
+
+    def created():
+        return dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
+
+    pending = {table: [] for table, _, _ in TABLE_KINDS}
+    if old_header['status'] == 'voided':
+        return Plan(_output(s, old_header, old_revision, model=VendorCreditWriteOutput, changed=False),
+                    dict(input=inp, operation='void', changed=False))
+    journals.open_dates(s, [old_revision['date']])
+    header = dict(old_header)
+    current_batch = effects.rows(s, c.posting_batches,
+                                 c.posting_batches.c.revision_id == old_revision['id'],
+                                 c.posting_batches.c.kind != 'reversal')[0]
+    inverse = effects.reverse(s, header, old_revision, current_batch, event, created, pending)
+    header.update(version=old_header['version'] + 1, updated_at=at, updated_by=s.actor.id,
+                  updated_via=ctx.interface.value, status='voided', voided_at=at,
+                  voided_by=s.actor.id, void_reason=ctx.reason.strip(),
+                  void_posting_batch_id=inverse['id'])
+    plan = Plan(_output(s, header, old_revision, pending, model=VendorCreditWriteOutput,
+                        changed_fields=['status']),
+                dict(input=inp, operation='void', changed=True, header=header, before=old_header,
+                     old_revision=old_revision, pending=pending, sequence=None, event=event,
+                     resolved=None))
+    from bookflow.company.vendor_credit_validation import validate
+    validate(plan, s, ctx)
+    return plan
+
+
+def prepare_update(s, ctx, inp):
+    """Correct a posted vendor credit with another revision, or say why it cannot be."""
+    previous = _for_correction(s, inp)
+    # An empty patch has no accounting effect and does not create another revision.
+    if not (inp.model_fields_set - {'credit', 'expected_version'}):
+        return _unchanged_plan(s, inp, previous)
+    resolved = commercial(s, inp, previous)
+    if resolved_semantic(resolved) == saved_semantic(s, previous['revision']):
+        return _unchanged_plan(s, inp, previous)
+    # A correction always releases and retakes capacity that bills are standing on, so it
+    # always says why, the way every other write that moves somebody else's residue does.
+    if not ctx.reason or not ctx.reason.strip():
+        raise BookflowError('E_REASON_REQUIRED')
+    if len(ctx.reason.strip()) > 140:
+        raise _invalid('reason', 'must be at most 140 characters')
+    return _compose(s, ctx, inp, resolved, previous)
+
+
+def prepare_write(s, ctx, inp, operation):
+    """``post``, ``update`` and ``void``: the three moments a vendor credit changes the ledger."""
+    if operation == 'void':
+        return prepare_void(s, ctx, inp)
+    if operation == 'update':
+        return prepare_update(s, ctx, inp)
+    return _compose(s, ctx, inp, commercial(s, inp))
 
 
 # ------------------------------------------------ pointing the credit at a bill, and taking it back
@@ -682,6 +1031,12 @@ def prepare(s, ctx, inp, operation):
     return prepare_write(s, ctx, inp, operation)
 
 
+def table_kinds_for(operation):
+    if operation == 'update':
+        return UPDATE_TABLE_KINDS
+    return SETTLEMENT_TABLE_KINDS if operation in ('apply', 'unapply') else TABLE_KINDS
+
+
 def apply(plan, ctx, s):
     # Rebuilt inside the writer transaction, the way every document here does it: open
     # balances, numbering and dates are only decisive at the moment of the write.
@@ -695,8 +1050,9 @@ def apply(plan, ctx, s):
     validate(fresh, s, ctx)
     data = fresh.data
     command_name = 'vendor-credit ' + operation
-    if operation in ('post', 'void'):
-        return effects.persist(fresh, ctx, s, command_name=command_name, table_kinds=TABLE_KINDS)
+    if operation in ('post', 'void', 'update'):
+        return effects.persist(fresh, ctx, s, command_name=command_name,
+                               table_kinds=table_kinds_for(operation))
     header, before = data['header'], data['before']
     touched = [Touched('transaction', header['id'], 'update', before['version'], header['version'],
                        header, before, db='company')]

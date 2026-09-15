@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from bookflow.commands.common import CommonOut
 from bookflow.company.bill_models import MoneyOutput, SupplierReference, Text, reference_key
@@ -80,6 +80,55 @@ class VendorCreditPostInput(_Input):
         return self
 
 
+class VendorCreditUpdateInput(_Input):
+    """A correction of a saved vendor credit: what changes is what is supplied.
+
+    ``expenses`` replaces the whole credited grid, each row keeping its ``line_id`` so the row
+    a reader follows through the history is the same row; leave it out and the captured lines
+    stand exactly as they were, which is how a wrong date, memo, reference or class alone is
+    corrected. ``vendor`` and ``ap_account`` stay what they always were -- optional guards,
+    never choices -- because a credit's settlement source is minted once and permanently
+    carries the vendor, the payable account and the currency an application has to match. A
+    credit that came back from somebody else, or against a different payable, is a different
+    credit and not a correction of this one.
+    """
+
+    credit: _Selector
+    expected_version: _Version | None = None
+    date: _Date | None = None
+    expenses: Expenses | None = None
+    number: _Number | None = None
+    supplier_reference: SupplierReference | None = None
+    memo: Text | None = None
+    class_id: _Selector | None = None
+    vendor: _Selector | None = Field(
+        default=None,
+        description='Optional guard: the vendor you expect this credit to be from. The '
+                    'correction is refused when it belongs to anyone else.')
+    ap_account: _Selector | None = Field(
+        default=None,
+        description='Optional guard: the Accounts Payable account you expect this credit to be '
+                    'credited against. The correction is refused when it is another one.')
+
+    @model_validator(mode='after')
+    def required_values(self) -> Self:
+        for field in ('date', 'expenses', 'number', 'vendor', 'ap_account'):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null')
+        return self
+
+    @model_serializer(mode='wrap')
+    def only_supplied(self, handler):
+        # A field left out and a field set to null are different corrections, and the
+        # idempotency hash is taken from this dump: without this they would collide, and a
+        # retry under one key would replay the wrong one.
+        values = handler(self)
+        for key in ('supplier_reference', 'memo', 'class_id'):
+            if key not in self.model_fields_set:
+                values.pop(key, None)
+        return values
+
+
 class VendorCreditVoidInput(_Input):
     credit: _Selector
     expected_version: _Version | None = None
@@ -93,6 +142,10 @@ class VendorCreditShowInput(_Input):
 class VendorCreditPageInput(_Input):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=8192)
+
+
+class VendorCreditHistoryInput(VendorCreditPageInput):
+    credit: _Selector
 
 
 class VendorCreditQueryInput(VendorCreditPageInput):
@@ -235,8 +288,8 @@ class VendorCreditSettlementOutput(_Input):
 class VendorCreditRevisionSummaryOutput(CreatedOutput):
     """Everything a revision says about itself apart from what it captured and credited.
 
-    Split out from the full revision the way the bill's is, so a ``history`` verb can page
-    revisions without their line grids when one is built. Nothing pages it today.
+    Split out from the full revision the way the bill's is, so ``vendor-credit history``
+    pages revisions without their line grids.
     """
 
     transaction_id: str
@@ -296,6 +349,21 @@ class VendorCreditOutput(VendorCreditSummaryOutput):
 class VendorCreditWriteOutput(VendorCreditOutput, WriteOutput):
     changed: bool = True
     changed_fields: list[str] = Field(default_factory=list)
+
+
+class VendorCreditHistoryOutput(_Input):
+    """Every immutable revision of one vendor credit, oldest first, with the current header."""
+
+    id: str
+    version: int
+    current_revision_id: str
+    number: str
+    status: Literal['posted', 'voided']
+    items: list[VendorCreditRevisionSummaryOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int
 
 
 class VendorCreditPageOutput(_Input):

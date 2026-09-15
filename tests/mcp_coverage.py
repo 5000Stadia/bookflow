@@ -399,10 +399,12 @@ vendor query
 vendor show
 vendor update
 vendor-credit apply
+vendor-credit history
 vendor-credit post
 vendor-credit query
 vendor-credit show
 vendor-credit unapply
+vendor-credit update
 vendor-credit void
 vendor-type activate
 vendor-type create

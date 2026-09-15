@@ -592,8 +592,15 @@ EXAMPLES.update({
          "memo": "Returned fittings",
          "expenses": [{"account": "Office Supplies", "amount": "46.25",
                        "memo": "Returned fittings"}]}),
+    "vendor-credit update": Example(
+        f'bookflow vendor-credit update {ID} --expected-version 1 --supplier-reference CN-119'
+        ' --company "Demo Plumbing Co" --reason "The credit note number was mistyped" --json',
+        {"credit": ID, "expected_version": 1, "supplier_reference": "CN-119"}),
     "vendor-credit show": Example(
         f'bookflow vendor-credit show {ID} --company "Demo Plumbing Co" --json', {"credit": ID}),
+    "vendor-credit history": Example(
+        f'bookflow vendor-credit history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"credit": ID, "limit": 25}),
     "vendor-credit query": Example(
         'bookflow vendor-credit query --vendor "Northside Supply" --date-from 2026-04-01'
         ' --status posted --limit 25 --company "Demo Plumbing Co" --json',

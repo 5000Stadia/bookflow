@@ -478,6 +478,190 @@ Example JSON output:
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
+## `vendor-credit history`
+
+Page immutable vendor credit revisions in revision-number order with the current header and version, their posting batches and the bills each revision answers; restart on company audit changes.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/vendor-credit.history` |
+| External binary body | none |
+
+### CLI
+
+`bookflow vendor-credit history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `credit` | `CREDIT` | string | yes | no | — | minimum length 1 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/vendor-credit.history`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `current_revision_id` | string | yes | no | — | — |
+| `number` | string | yes | no | — | — |
+| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].id` | string | yes | no | — | — |
+| `items[].created_at` | string | yes | no | — | — |
+| `items[].created_by` | string | yes | no | — | — |
+| `items[].created_via` | string | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].revision_number` | integer | yes | no | — | — |
+| `items[].supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].number` | string | yes | no | — | — |
+| `items[].name_type` | literal["vendor"] | yes | no | — | — |
+| `items[].name_id` | string | yes | no | — | — |
+| `items[].memo` | string \| null | yes | yes | — | — |
+| `items[].expense_total` | object | yes | no | — | — |
+| `items[].expense_total.amount` | string | yes | no | — | — |
+| `items[].expense_total.currency` | string | yes | no | — | — |
+| `items[].expense_total.minor_units` | integer | yes | no | — | — |
+| `items[].total` | object | yes | no | — | — |
+| `items[].total.amount` | string | yes | no | — | — |
+| `items[].total.currency` | string | yes | no | — | — |
+| `items[].total.minor_units` | integer | yes | no | — | — |
+| `items[].expense_total_minor_units` | integer | yes | no | — | — |
+| `items[].total_minor_units` | integer | yes | no | — | — |
+| `items[].currency` | string | yes | no | — | — |
+| `items[].audit_event_id` | string | yes | no | — | — |
+| `items[].line_count` | integer | yes | no | — | — |
+| `items[].batches` | array[object] | yes | no | — | — |
+| `items[].batches[].id` | string | yes | no | — | — |
+| `items[].batches[].created_at` | string | yes | no | — | — |
+| `items[].batches[].created_by` | string | yes | no | — | — |
+| `items[].batches[].created_via` | string | yes | no | — | — |
+| `items[].batches[].total` | object | yes | no | — | — |
+| `items[].batches[].total.amount` | string | yes | no | — | — |
+| `items[].batches[].total.currency` | string | yes | no | — | — |
+| `items[].batches[].total.minor_units` | integer | yes | no | — | — |
+| `items[].batches[].transaction_id` | string | yes | no | — | — |
+| `items[].batches[].revision_id` | string | yes | no | — | — |
+| `items[].batches[].kind` | literal["original", "replacement", "reversal"] | yes | no | — | — |
+| `items[].batches[].effective_date` | string | yes | no | — | — |
+| `items[].batches[].reverses_batch_id` | string \| null | yes | yes | — | — |
+| `items[].batches[].replaces_batch_id` | string \| null | yes | yes | — | — |
+| `items[].batches[].audit_event_id` | string | yes | no | — | — |
+| `items[].batches[].debit_total` | object | yes | no | — | — |
+| `items[].batches[].debit_total.amount` | string | yes | no | — | — |
+| `items[].batches[].debit_total.currency` | string | yes | no | — | — |
+| `items[].batches[].debit_total.minor_units` | integer | yes | no | — | — |
+| `items[].batches[].credit_total` | object | yes | no | — | — |
+| `items[].batches[].credit_total.amount` | string | yes | no | — | — |
+| `items[].batches[].credit_total.currency` | string | yes | no | — | — |
+| `items[].batches[].credit_total.minor_units` | integer | yes | no | — | — |
+| `items[].batches[].debit_minor_units` | integer | yes | no | — | — |
+| `items[].batches[].credit_minor_units` | integer | yes | no | — | — |
+| `items[].batches[].currency` | string | yes | no | — | — |
+| `items[].batches[].line_count` | integer | yes | no | — | — |
+| `items[].applications` | array[object] | yes | no | — | — |
+| `items[].applications[].id` | string | yes | no | — | — |
+| `items[].applications[].created_at` | string | yes | no | — | — |
+| `items[].applications[].created_by` | string | yes | no | — | — |
+| `items[].applications[].created_via` | string | yes | no | — | — |
+| `items[].applications[].kind` | literal["apply", "unapply"] | yes | no | — | — |
+| `items[].applications[].source_transaction_id` | string | yes | no | — | — |
+| `items[].applications[].source_key_id` | string | yes | no | — | — |
+| `items[].applications[].source_component_id` | string | yes | no | — | — |
+| `items[].applications[].obligation_transaction_id` | string | yes | no | — | — |
+| `items[].applications[].obligation_key_id` | string | yes | no | — | — |
+| `items[].applications[].bill_number` | string | yes | no | — | — |
+| `items[].applications[].amount` | object | yes | no | — | — |
+| `items[].applications[].amount.amount` | string | yes | no | — | — |
+| `items[].applications[].amount.currency` | string | yes | no | — | — |
+| `items[].applications[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].applications[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].applications[].currency` | string | yes | no | — | — |
+| `items[].applications[].effective_date` | string | yes | no | — | — |
+| `items[].applications[].reverses_application_id` | string \| null | yes | yes | — | — |
+| `items[].applications[].audit_event_id` | string | yes | no | — | — |
+| `items[].applications[].active` | boolean | yes | no | — | — |
+| `count` | integer | yes | no | — | — |
+| `has_more` | boolean | yes | no | — | — |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `audit_watermark` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "audit_watermark": 1,
+  "count": 0,
+  "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "has_more": false,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "next_cursor": null,
+  "number": "value",
+  "status": "posted",
+  "version": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `vendor-credit post`
 
 Enter a vendor credit: money a vendor owes you back for a return, an overcharge or a rebate. Accounts Payable is debited the total and each line credits the account the original cost went to, so what the vendor is owed falls by exactly what was credited. `expenses` is one to 200 rows of account, amount, memo, optional customer or job and optional class, naming the accounts the credit gives back; a row without its own `class_id` takes the credit’s, and `class_mode` set to `none` leaves one row unclassified. `ap_account` is the Accounts Payable account the credit is credited against and defaults to the only active one when the company has exactly one; it must match the bills this credit will settle. `supplier_reference` is the vendor’s own credit-note number, kept as typed. A credit is not a payable: it is never due, never appears on `report unpaid-bills`, and settles nothing until `vendor-credit apply` points it at a bill. Vendor credits take their own number series; they do not share the bill series.
@@ -1123,7 +1307,7 @@ Example JSON output:
 
 ## `vendor-credit show`
 
-Show a vendor credit: its captured vendor and payable, its credited lines, its posting batches, what it still has free, and every bill it has been applied to and detached from.
+Show a vendor credit: its captured vendor and payable, its credited lines, its posting batches, what it still has free, and every bill it has been applied to and detached from. Pass `revision_number` to read a superseded revision instead of the current one.
 
 | Contract | Value |
 |---|---|
@@ -2032,9 +2216,497 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
+## `vendor-credit update`
+
+Correct a vendor credit with a required reason and another immutable revision. What you supply replaces what was captured and what you leave out stands, so a wrong date, memo, credit-note reference or class is corrected on its own; supply `expenses` to change the credited rows and the whole grid is replaced, each row keeping its `line_id` so a reader can follow the same row through the history. The superseded revision is reversed at its own date and a replacement is posted at the corrected one, so both periods must be open. Every bill this credit answers is released and settled again for the same amount on the same date out of the corrected credit, so no bill silently changes what it owes and the credit is never spendable twice; a correction worth less than what the credit already answers is refused with `E_APPLICATION_CAPACITY`, and one dated after a settlement it already made is refused by date. The number is kept unless you give a new one. A correction cannot change who gave the credit: `vendor` and `ap_account` stay guards rather than choices, because the settlement source carrying them is minted once. A voided credit cannot be corrected. An empty patch writes nothing and reports `changed` false. Pass `expected_version` to refuse a write over somebody else, and reuse one idempotency key to retry safely.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/vendor-credit.update` |
+| External binary body | none |
+
+### CLI
+
+`bookflow vendor-credit update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --supplier-reference CN-119 --company "Demo Plumbing Co" --reason "The credit note number was mistyped" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `credit` | `CREDIT` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+| `date` | `--date` | string \| null | no | yes | null | — |
+| `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
+| `expenses[].account` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
+| `expenses[].amount` | inside `--expenses` JSON array | string \| object | yes | no | — | — |
+| `expenses[].memo` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
+| `expenses[].customer` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
+| `expenses[].class_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
+| `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `vendor` | `--vendor` | string \| null | no | yes | null | Optional guard: the vendor you expect this credit to be from. The correction is refused when it belongs to anyone else. |
+| `ap_account` | `--ap-account` | string \| null | no | yes | null | Optional guard: the Accounts Payable account you expect this credit to be credited against. The correction is refused when it is another one. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/vendor-credit.update`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `created_via` | string | yes | no | — | — |
+| `updated_at` | string | yes | no | — | — |
+| `updated_by` | string | yes | no | — | — |
+| `updated_via` | string | yes | no | — | — |
+| `type` | literal["vendor_credit"] | yes | no | — | — |
+| `number` | string | yes | no | — | — |
+| `current_revision_id` | string | yes | no | — | — |
+| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `voided_at` | string \| null | yes | yes | — | — |
+| `voided_by` | string \| null | yes | yes | — | — |
+| `void_reason` | string \| null | yes | yes | — | — |
+| `void_posting_batch_id` | string \| null | yes | yes | — | — |
+| `date` | string | yes | no | — | — |
+| `vendor_id` | string | yes | no | — | — |
+| `vendor_name` | string | yes | no | — | — |
+| `ap_account_id` | string | yes | no | — | — |
+| `supplier_reference` | string \| null | yes | yes | — | — |
+| `memo` | string \| null | yes | yes | — | — |
+| `expense_total` | object | yes | no | — | — |
+| `expense_total.amount` | string | yes | no | — | — |
+| `expense_total.currency` | string | yes | no | — | — |
+| `expense_total.minor_units` | integer | yes | no | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `expense_total_minor_units` | integer | yes | no | — | — |
+| `total_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `settlement_current` | object | yes | no | — | — |
+| `settlement_current.credit_id` | string | yes | no | — | — |
+| `settlement_current.source_key_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.amount_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.unapplied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.amount` | object | yes | no | — | — |
+| `settlement_current.amount.amount` | string | yes | no | — | — |
+| `settlement_current.amount.currency` | string | yes | no | — | — |
+| `settlement_current.amount.minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied` | object | yes | no | — | — |
+| `settlement_current.applied.amount` | string | yes | no | — | — |
+| `settlement_current.applied.currency` | string | yes | no | — | — |
+| `settlement_current.applied.minor_units` | integer | yes | no | — | — |
+| `settlement_current.unapplied` | object | yes | no | — | — |
+| `settlement_current.unapplied.amount` | string | yes | no | — | — |
+| `settlement_current.unapplied.currency` | string | yes | no | — | — |
+| `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `revision` | object | yes | no | — | — |
+| `revision.id` | string | yes | no | — | — |
+| `revision.created_at` | string | yes | no | — | — |
+| `revision.created_by` | string | yes | no | — | — |
+| `revision.created_via` | string | yes | no | — | — |
+| `revision.transaction_id` | string | yes | no | — | — |
+| `revision.revision_number` | integer | yes | no | — | — |
+| `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `revision.date` | string | yes | no | — | — |
+| `revision.number` | string | yes | no | — | — |
+| `revision.name_type` | literal["vendor"] | yes | no | — | — |
+| `revision.name_id` | string | yes | no | — | — |
+| `revision.memo` | string \| null | yes | yes | — | — |
+| `revision.expense_total` | object | yes | no | — | — |
+| `revision.expense_total.amount` | string | yes | no | — | — |
+| `revision.expense_total.currency` | string | yes | no | — | — |
+| `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.total` | object | yes | no | — | — |
+| `revision.total.amount` | string | yes | no | — | — |
+| `revision.total.currency` | string | yes | no | — | — |
+| `revision.total.minor_units` | integer | yes | no | — | — |
+| `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.total_minor_units` | integer | yes | no | — | — |
+| `revision.currency` | string | yes | no | — | — |
+| `revision.audit_event_id` | string | yes | no | — | — |
+| `revision.line_count` | integer | yes | no | — | — |
+| `revision.batches` | array[object] | yes | no | — | — |
+| `revision.batches[].id` | string | yes | no | — | — |
+| `revision.batches[].created_at` | string | yes | no | — | — |
+| `revision.batches[].created_by` | string | yes | no | — | — |
+| `revision.batches[].created_via` | string | yes | no | — | — |
+| `revision.batches[].total` | object | yes | no | — | — |
+| `revision.batches[].total.amount` | string | yes | no | — | — |
+| `revision.batches[].total.currency` | string | yes | no | — | — |
+| `revision.batches[].total.minor_units` | integer | yes | no | — | — |
+| `revision.batches[].transaction_id` | string | yes | no | — | — |
+| `revision.batches[].revision_id` | string | yes | no | — | — |
+| `revision.batches[].kind` | literal["original", "replacement", "reversal"] | yes | no | — | — |
+| `revision.batches[].effective_date` | string | yes | no | — | — |
+| `revision.batches[].reverses_batch_id` | string \| null | yes | yes | — | — |
+| `revision.batches[].replaces_batch_id` | string \| null | yes | yes | — | — |
+| `revision.batches[].audit_event_id` | string | yes | no | — | — |
+| `revision.batches[].debit_total` | object | yes | no | — | — |
+| `revision.batches[].debit_total.amount` | string | yes | no | — | — |
+| `revision.batches[].debit_total.currency` | string | yes | no | — | — |
+| `revision.batches[].debit_total.minor_units` | integer | yes | no | — | — |
+| `revision.batches[].credit_total` | object | yes | no | — | — |
+| `revision.batches[].credit_total.amount` | string | yes | no | — | — |
+| `revision.batches[].credit_total.currency` | string | yes | no | — | — |
+| `revision.batches[].credit_total.minor_units` | integer | yes | no | — | — |
+| `revision.batches[].debit_minor_units` | integer | yes | no | — | — |
+| `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
+| `revision.batches[].currency` | string | yes | no | — | — |
+| `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.applications` | array[object] | yes | no | — | — |
+| `revision.applications[].id` | string | yes | no | — | — |
+| `revision.applications[].created_at` | string | yes | no | — | — |
+| `revision.applications[].created_by` | string | yes | no | — | — |
+| `revision.applications[].created_via` | string | yes | no | — | — |
+| `revision.applications[].kind` | literal["apply", "unapply"] | yes | no | — | — |
+| `revision.applications[].source_transaction_id` | string | yes | no | — | — |
+| `revision.applications[].source_key_id` | string | yes | no | — | — |
+| `revision.applications[].source_component_id` | string | yes | no | — | — |
+| `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
+| `revision.applications[].obligation_key_id` | string | yes | no | — | — |
+| `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].amount` | object | yes | no | — | — |
+| `revision.applications[].amount.amount` | string | yes | no | — | — |
+| `revision.applications[].amount.currency` | string | yes | no | — | — |
+| `revision.applications[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.applications[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.applications[].currency` | string | yes | no | — | — |
+| `revision.applications[].effective_date` | string | yes | no | — | — |
+| `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
+| `revision.applications[].audit_event_id` | string | yes | no | — | — |
+| `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
+| `revision.profile` | object | yes | no | — | — |
+| `revision.profile.vendor` | object | yes | no | — | — |
+| `revision.profile.vendor.id` | string | yes | no | — | — |
+| `revision.profile.vendor.label` | string | yes | no | — | — |
+| `revision.profile.vendor.version` | integer | yes | no | — | — |
+| `revision.profile.vendor.company_name` | string \| null | no | yes | null | — |
+| `revision.profile.vendor.email` | string \| null | no | yes | null | — |
+| `revision.profile.vendor.phone` | string \| null | no | yes | null | — |
+| `revision.profile.vendor.account_number` | string \| null | no | yes | null | — |
+| `revision.profile.ap_account` | object | yes | no | — | — |
+| `revision.profile.ap_account.id` | string | yes | no | — | — |
+| `revision.profile.ap_account.name` | string | yes | no | — | — |
+| `revision.profile.ap_account.full_name` | string | yes | no | — | — |
+| `revision.profile.ap_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.ap_account.type` | string | yes | no | — | — |
+| `revision.profile.ap_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.supplier_reference` | string \| null | no | yes | null | — |
+| `revision.profile.supplier_reference_key` | string \| null | no | yes | null | — |
+| `revision.profile.class_id` | object \| null | no | yes | null | — |
+| `revision.profile.class_id.id` | string | yes | no | — | — |
+| `revision.profile.class_id.label` | string | yes | no | — | — |
+| `revision.profile.class_id.version` | integer | yes | no | — | — |
+| `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.currency` | string | yes | no | — | — |
+| `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.expenses` | array[object] | yes | no | — | — |
+| `revision.expenses[].id` | string | yes | no | — | — |
+| `revision.expenses[].created_at` | string | yes | no | — | — |
+| `revision.expenses[].created_by` | string | yes | no | — | — |
+| `revision.expenses[].created_via` | string | yes | no | — | — |
+| `revision.expenses[].transaction_id` | string | yes | no | — | — |
+| `revision.expenses[].revision_id` | string | yes | no | — | — |
+| `revision.expenses[].line_id` | string | yes | no | — | — |
+| `revision.expenses[].position` | integer | yes | no | — | — |
+| `revision.expenses[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.expenses[].account_id` | string | yes | no | — | — |
+| `revision.expenses[].amount` | object | yes | no | — | — |
+| `revision.expenses[].amount.amount` | string | yes | no | — | — |
+| `revision.expenses[].amount.currency` | string | yes | no | — | — |
+| `revision.expenses[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.expenses[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.expenses[].currency` | string | yes | no | — | — |
+| `revision.expenses[].memo` | string \| null | yes | yes | — | — |
+| `revision.expenses[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.expenses[].class_id` | string \| null | yes | yes | — | — |
+| `revision.expenses[].class_name` | string \| null | yes | yes | — | — |
+| `revision.expenses[].name_type` | string \| null | yes | yes | — | — |
+| `revision.expenses[].name_id` | string \| null | yes | yes | — | — |
+| `revision.expenses[].party_name` | string \| null | yes | yes | — | — |
+| `revision.expenses[].line_snapshot` | object | yes | no | — | — |
+| `revision.expenses[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.expenses[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.expenses[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.expenses[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.expenses[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.expenses[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.expenses[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.source` | object \| null | no | yes | null | — |
+| `revision.source.id` | string | yes | no | — | — |
+| `revision.source.created_at` | string | yes | no | — | — |
+| `revision.source.created_by` | string | yes | no | — | — |
+| `revision.source.created_via` | string | yes | no | — | — |
+| `revision.source.transaction_id` | string | yes | no | — | — |
+| `revision.source.ordinal` | integer | yes | no | — | — |
+| `revision.source.source_type` | literal["vendor_credit"] | yes | no | — | — |
+| `revision.source.vendor_id` | string | yes | no | — | — |
+| `revision.source.ap_account_id` | string | yes | no | — | — |
+| `revision.source.currency` | string | yes | no | — | — |
+| `revision.source.audit_event_id` | string | yes | no | — | — |
+| `revision.source.components` | ForwardRef("list['VendorCreditComponentOutput']") | no | no | [] | — |
+| `applications` | array[object] | no | no | [] | — |
+| `applications[].id` | string | yes | no | — | — |
+| `applications[].created_at` | string | yes | no | — | — |
+| `applications[].created_by` | string | yes | no | — | — |
+| `applications[].created_via` | string | yes | no | — | — |
+| `applications[].kind` | literal["apply", "unapply"] | yes | no | — | — |
+| `applications[].source_transaction_id` | string | yes | no | — | — |
+| `applications[].source_key_id` | string | yes | no | — | — |
+| `applications[].source_component_id` | string | yes | no | — | — |
+| `applications[].obligation_transaction_id` | string | yes | no | — | — |
+| `applications[].obligation_key_id` | string | yes | no | — | — |
+| `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].amount` | object | yes | no | — | — |
+| `applications[].amount.amount` | string | yes | no | — | — |
+| `applications[].amount.currency` | string | yes | no | — | — |
+| `applications[].amount.minor_units` | integer | yes | no | — | — |
+| `applications[].amount_minor_units` | integer | yes | no | — | — |
+| `applications[].currency` | string | yes | no | — | — |
+| `applications[].effective_date` | string | yes | no | — | — |
+| `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
+| `applications[].audit_event_id` | string | yes | no | — | — |
+| `applications[].active` | boolean | yes | no | — | — |
+| `changed` | boolean | no | no | true | — |
+| `changed_fields` | array[string] | no | no | [] | — |
+
+Example JSON output:
+
+```json
+{
+  "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "applications": [],
+  "changed": true,
+  "changed_fields": [],
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "created_via": "cli",
+  "currency": "USD",
+  "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "date": "2026-01-01",
+  "dry_run": false,
+  "expense_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "expense_total_minor_units": 1,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "memo": null,
+  "number": "value",
+  "revision": {
+    "applications": [],
+    "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "batches": [],
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "currency": "USD",
+    "date": "2026-01-01",
+    "expense_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "expense_total_minor_units": 1,
+    "expenses": [],
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "issuer_snapshot": {},
+    "line_count": 1,
+    "memo": null,
+    "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "name_type": "vendor",
+    "number": "value",
+    "profile": {
+      "ap_account": {
+        "full_name": "value",
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "name": "value",
+        "normal_balance": "debit",
+        "number": null,
+        "type": "value"
+      },
+      "class_id": null,
+      "currency": "USD",
+      "expense_total_minor_units": 1,
+      "origins": {},
+      "supplier_reference": null,
+      "supplier_reference_key": null,
+      "vendor": {
+        "account_number": null,
+        "company_name": null,
+        "email": null,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "label": "value",
+        "phone": null,
+        "version": 1
+      }
+    },
+    "revision_number": 1,
+    "source": null,
+    "supersedes_revision_id": null,
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "total_minor_units": 1,
+    "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "settlement_current": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "amount_minor_units": 1,
+    "applied": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "applied_minor_units": 1,
+    "credit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "status": "voided",
+    "unapplied": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "unapplied_minor_units": 1,
+    "version": 1
+  },
+  "status": "posted",
+  "supplier_reference": null,
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "total_minor_units": 1,
+  "type": "vendor_credit",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "updated_by": "value",
+  "updated_via": "cli",
+  "vendor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "vendor_name": "value",
+  "version": 1,
+  "void_posting_batch_id": null,
+  "void_reason": null,
+  "voided_at": null,
+  "voided_by": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `vendor-credit void`
 
-Void a vendor credit with a required reason. Its accounting is reversed at its own date, its number stays occupied and its history stays readable. Anything it still settles must be unapplied first, so voiding never silently reopens a bill.
+Void a vendor credit with a required reason. Its accounting is reversed at its own date, its number stays occupied and its history stays readable. Anything it still settles must be unapplied first, so voiding never silently reopens a bill. A credit typed wrong is corrected with `vendor-credit update` rather than voided: that keeps one document where one credit note arrived.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

@@ -4028,7 +4028,8 @@ route and a page and can no longer stand for something that does not.
 **Still not in the browser.** `credit-memo void`, `customer-refund void` and `vendor-credit void`
 are reachable only as generated forms from their record pages; `vendor-credit apply` and
 `unapply` have no page of their own, so a vendor credit is pointed at a bill through the command
-surface; `customer-refund` and `vendor-credit` have no `history` command to page; and nothing
+surface; `customer-refund` has no `history` command to page and `vendor-credit history` has no
+page of its own yet, so both documents' revisions are reached only by the arrows; and nothing
 prints a credit memo.
 
 ## Sales tax liability, and the document that remits it
@@ -4137,11 +4138,63 @@ unchanged: before an application a credit is a negative AP row aged by its own d
 its row nets to zero and is omitted. `_UNPAID` already reads the real applied sum. `aging.py`
 stays one rule for both sides.
 
-**What this does not do.** There is no `vendor-credit update`, no `history` and no demo seed
-extension. A credit takes its own number series rather than sharing the bill series:
-the anchor product's shared-sequence behaviour is a receivables rule about invoices and credit
-memos, and the payables document it credits is numbered by the supplier's own reference. Purchase
-discounts, purchase tax and vendor refunds are their own documents and none of them exists.
+**Correcting one.** `vendor-credit update` writes another immutable revision under the contract
+`credit-memo update` and `customer-refund update` use: `expected_version`, a required reason, a
+reusable idempotency key, and every earlier revision left readable. `vendor_credits.resolve_header`
+and `_credited_grid` are the one reader both `post` and `update` go through -- what was supplied
+over what the revision captured, so an omitted field keeps its captured value and an omitted
+`expenses` keeps the whole grid down to the account name the credit was entered under. A supplied
+grid replaces it outright, each row keeping its `document_line_identities` row through its
+`line_id`, so the row a reader follows through the history is one row; a retired identity cannot
+return. `_compose` builds one graph for both verbs: the superseded batch reversed at its own date,
+a replacement posted at the corrected one -- both periods open -- and the settlements released and
+retaken below. `saved_semantic` against `resolved_semantic` decides whether anything moved at all:
+an empty patch, or one resolving to what is already stored, writes nothing and reports `changed`
+false without asking for a reason.
+
+**Why a correction has to touch the settlement edge.** An `ap_source_components` row belongs to one
+revision, and `ap_applications` names it by id. A correction retires the superseded revision's
+components, so left alone the standing edges would hold bills settled against capacity the current
+revision no longer has, while `bill_payments._free_capacity` -- which indexes components by the
+*current* revision's envelopes -- reported the corrected credit wholly free. The same credit,
+spendable twice, and a bill whose open balance depends on which reader you ask.
+`_retake_applications` therefore reverses every standing application cell for cell and settles the
+same bill again for the same amount on the same date out of the corrected revision's components,
+redrawing which credited line supplies which cent. What every bill owes is unchanged by a
+correction, which is why the settlement dates are not re-tested against the closing date the way
+`unapply` tests them: an unapply moves what the books said was open on that date and this does not
+move it by a cent. `bill_payment_validation.settlement_fence` and `source_capacity_fence` are run
+over the released and retaken edges together, the same two concurrency fences every other
+settlement write runs.
+
+**What a correction may never do.** The `ap_source_keys` row is minted once and permanently carries
+the `(vendor, payable account, currency)` triple every application is checked against, by
+`_compatible` and by `ap_applications_exact_party`. So `vendor` and `ap_account` are guards on the
+update rather than choices, and a correction naming either differently answers
+`E_APPLICATION_INCOMPATIBLE` with `reason: vendor_credit_ownership`; naming the ones it already has
+is accepted and, deliberately, does not restate the captured `origins['ap_account']` -- a credit
+that took the company's only active payable captured that as `default`, and flipping it to
+`explicit` would turn a save nobody typed into a reversal batch and a replacement batch. A voided
+credit answers `E_APPLICATION_INACTIVE`. A correction worth less than what the credit already
+answers answers `E_APPLICATION_CAPACITY` naming both figures, and one dated after a settlement the
+credit already made is refused by date. There is no reconciliation fence and none is possible: a
+vendor credit is not in `reconciliation_models.PRODUCER_ROLES`, and its legs are Accounts Payable
+and the expense-family accounts `bills.EXPENSE_ACCOUNTS` allows, never a `STATEMENT_ACCOUNTS` one,
+so no finished statement can be holding one. `tests/test_vendor_credit_update.py` holds that as a
+check rather than a comment.
+
+**Reading the revisions.** `vendor-credit show` already took `revision_number`;
+`vendor-credit history` pages every revision oldest first with the current header, through
+`revision_output(summary_only=True)` -- the header, the batches and the applications hung on that
+revision's own capacity, without the line grid. A superseded revision therefore reads as settling
+nothing, because the correction released every edge it held and the corrected revision took them
+again.
+
+**What this does not do.** There is no demo seed extension. A credit takes its own number series
+rather than sharing the bill series: the anchor product's shared-sequence behaviour is a
+receivables rule about invoices and credit memos, and the payables document it credits is numbered
+by the supplier's own reference. Purchase discounts, purchase tax and vendor refunds are their own
+documents and none of them exists.
 
 ## Statement charges, and the invoice line with no invoice around it
 
