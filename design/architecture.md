@@ -2392,6 +2392,37 @@ The database keeps status `voided`; `deleted` is overlaid by `payment show`,
 read passes `include_deleted`. Retries are answered from the tombstone's own
 request/result snapshots under current authority, so the same key never acts twice.
 
+The person-visible half lives in the workbench. `adapters/workbench/permissions.py`
+derives its Delete checkboxes, their capabilities, the sentence naming what can be
+deleted and the effective-permission list from `core.deletion_families`: every
+family in `TOMBSTONE_TABLE` gets a `<family>_delete` checkbox labelled from
+`registry.noun_meta`, so a family becomes grantable in Users & permissions as soon
+as its storage ships. The payment workspace (`adapters/workbench/payments.py`,
+`static/payments.js`) offers Delete only when `membership effective` admits
+`capability('payment')` -- the same effective state that page displays -- because
+role alone cannot see an explicit grant. Its `delete` mode reuses the workspace's
+reason/preview/save flow with an added explicit confirmation checkbox, draws the
+receipt beside the confirmation with no other action reachable from it, and after
+the write redraws the record from `payment show` with `include_deleted` as an
+attributed deletion block with no further actions.
+
+Every workbench read of a receipt that may be deleted passes `include_deleted`:
+the application page and its history (whose `payment show` had refused with
+`E_RECORD_NOT_FOUND` once a retained application's payer was deleted, breaking the
+promise that history stays readable), the workspace's direct `?payment=` and
+draft-context reads, and the JS `payment show` and `payment history` calls. A
+deleted receipt's workspace link opens read-only whatever `mode` the link asks for.
+
+Two seams outside the workbench had to be corrected before the command could run
+anywhere but in-process. `payment_deletions.prepare` passes `s.credential` as the
+kernel's binding, the way `deposit_cmds._binding` already does: a hosted session
+carries no OS login, so the kernel's own `OSBinding.from_session` fallback refused
+every HTTP, browser and MCP request with `E_UNAUTHENTICATED`. And
+`publication_payment` treats a root as a *write* root only when the command writes
+under `ledger.post`, so a family Delete's roots are re-checked at the `ledger.read`
+threshold it declares instead of demanding the posting capability it is defined to
+work without.
+
 ### Inert permission-administration storage (B1)
 
 Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membership

@@ -22,6 +22,12 @@
   let key = 'WB-' + crypto.randomUUID();
   let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null, reviewEpoch = 0;
   const busyStatus=el('p');busyStatus.id='payment-busy-status';busyStatus.setAttribute('role','status');busyStatus.hidden=true;root.prepend(busyStatus);
+  // The record's action button says what the action does; the page it opens is
+  // titled with the work. One owner each, so a new verb is named once per place.
+  const VERB_LABELS={apply:'Apply available credit',update:'Correct receipt',
+    unapply:'Unapply recorded applications',void:'Void unapplied receipt',delete:'Delete payment'};
+  const MODE_TITLES={receive:'Receive customer payment',apply:'Apply existing payment credit',update:'Correct receipt',
+    unapply:'Unapply recorded applications',void:'Void unapplied receipt',delete:'Delete this payment'};
   function resetDraftView() {
     draft=null;draftAttempt=null;reviewedDraft=null;selected.clear();candidates=[];nextCursor=null;
     recoveryView=null;recoveryConfirmed=null;document.getElementById('payment-recovery-panel')?.remove();
@@ -39,9 +45,11 @@
     }
   }
   async function error(err) {
-    const message=err.code==='E_REASON_REQUIRED'&&['update','unapply','void'].includes(mode)?
-      'Enter a reason for this payment correction, unapply or void.':err.message;
+    const message=err.code==='E_REASON_REQUIRED'&&['update','unapply','void','delete'].includes(mode)?
+      'Enter a reason for this payment correction, unapply, void or deletion.':err.message;
     $('error').hidden=false; $('error').querySelector('p').textContent=[err.code,message].filter(Boolean).join(' — ');
+    // A refused deletion is re-consented to, never carried over on a stale tick.
+    if(mode==='delete') $('confirm').checked=false;
     const area=$('error').querySelector('[data-comparisons]'); area.replaceChildren();
     for (const row of err.details?.changes || err.details?.settlement_changes || []) {
       area.append(el('p', `${row.actor_id || 'Unknown actor'} at ${row.at || 'unknown time'}: ${(row.fields || []).concat(row.settlement_fields || []).join(', ') || 'Fields unknown'}. Latest writer: ${row.latest_writer_id || 'unknown'}.`));
@@ -74,7 +82,7 @@
           }
         }
         if(payment) {
-          const current=await command('payment show',{payment:payment.id});
+          const current=await command('payment show',{payment:payment.id,include_deleted:true});
           reviewedPayment=current;
           area.append(el('p',`Saved receipt: ${money(payment.revision.total)}; current receipt: ${money(current.revision.total)}; your entered cash: ${$('amount').value} ${config.currency}.`));
           for(const [label,saved,value] of [
@@ -325,13 +333,20 @@
       }
       if(rows.length!==descriptor.total_count) throw {message:'Preview is incomplete. Do not save.'};complete[descriptor.kind]=rows;
     }
-    preview={request:{...request,input:{...request.input,expected_facts_fingerprint:out.facts_fingerprint}},out,complete};
+    preview={request:{...request,input:{...request.input,...(out.facts_fingerprint?{expected_facts_fingerprint:out.facts_fingerprint}:{})}},out,complete};
     drawPreview();
     } finally {lockSubmitted(false);}
     $('save').disabled=false;$('save-new').disabled=mode!=='receive';note('Complete proposed effects loaded. Review, then save.');
   }
   function drawPreview() {
-    const area=$('preview-result');area.hidden=false;area.replaceChildren(el('h2',preview.out.idempotent_replay?'Original recorded effect — no new payment':'Proposed payment effect'));
+    const area=$('preview-result');area.hidden=false;area.replaceChildren(el('h2',preview.out.idempotent_replay?'Original recorded effect — no new payment':mode==='delete'?'Proposed cancellation — nothing saved':'Proposed payment effect'));
+    if(mode==='delete') {
+      const out=preview.out;
+      area.append(el('p',`Payment ${out.number} will be marked deleted at version ${out.version}, from ${out.from_status}.`),
+        el('p',`${out.cancelled_posting_lines} posting line(s) will be cancelled at their original dates${out.cancellation_batch_id?'':'; no reversal batch is needed'}.`),
+        el('p','Its original details, revisions, number and audit history remain readable afterwards. There is no restore action.'));
+      return;
+    }
     area.append(el('p',`Received ${units(preview.out.current.received_minor_units)}; applied ${units(preview.out.current.applied_minor_units)}; available ${units(preview.out.current.available_minor_units)} ${config.currency}.`));
     if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {
@@ -349,20 +364,23 @@
   async function save(newAfter=false,retry=false) {
     if(!retry) {
       if(!preview) throw {message:'Preview these values before saving.'};
+      if(mode==='delete'&&!$('confirm').checked) throw {message:'Confirm cancellation before deleting this payment.'};
       submitted=preview.request;sessionStorage.setItem(storageKey,exact.stringify(submitted));
     }
     if(!submitted) throw {message:'No submitted request to recover.'};
+    const performed=submitted.command;
     lockSubmitted(true);
     try {
       const out=await command(submitted.command,submitted.input,submitted.context);
       submitted=null;sessionStorage.removeItem(storageKey);lockSubmitted(false);invalidate();$('error').hidden=true;
-      payment=await command('payment show',{payment:out.id});
+      payment=await command('payment show',{payment:out.id,include_deleted:true});
       if(newAfter) {
         key='WB-'+crypto.randomUUID();resetDraftView();mode='receive';
         $('amount').value='';$('memo').value='';$('reference').value='';$('number').value='';
         const url=new URL(location.href);url.search='';history.replaceState(null,'',url);await drawCustom();await loadInvoices();
         note('Payment '+payment.number+' saved. New blank payment started; customer/date/method/destination retained.');
-      } else {mode='show';await drawRecord(payment);note(out.idempotent_replay?'Recovered original payment. No new financial effect.':'Payment saved successfully.');}
+      } else {mode='show';await drawRecord(payment);note(out.idempotent_replay?'Recovered original payment. No new financial effect.':
+        performed==='payment delete'?'Payment deleted. Its history is retained and readable below.':'Payment saved successfully.');}
     } catch(err) {
       if(err.code && !['E_INTERNAL','E_DB_BUSY','E_UNAUTHENTICATED'].includes(err.code)) {submitted=null;sessionStorage.removeItem(storageKey);lockSubmitted(false);}
       throw err;
@@ -405,7 +423,7 @@
     reviewed.replaceChildren(el('h3','Reviewed comparison — your entries are retained'), ...Array.from($('error').querySelector('[data-comparisons]').childNodes));
     $('error').hidden=true;
     if(payment) {
-      const current=await command('payment show',{payment:payment.id});
+      const current=await command('payment show',{payment:payment.id,include_deleted:true});
       if(reviewedPayment && current.version!==reviewedPayment.version)
         throw {code:'E_VERSION_CONFLICT',message:'The receipt changed again while you were reviewing. Review the new comparison before adopting it.'};
       payment=current;reviewedPayment=null;
@@ -637,24 +655,40 @@
     }
     $('selection-status').textContent='Select whole recorded applications to reverse at their original dates. No ledger posting is created.';
   }
-  async function drawRecord(record) {
-    $('form').hidden=true;$('record').hidden=false;$('title').textContent='Payment '+record.number;
+  // `confirming` draws the same receipt facts beside a confirmation form: the reader
+  // needs to see what they are about to delete, and must not be able to start another
+  // action from inside that confirmation.
+  async function drawRecord(record,confirming=false) {
+    if(!confirming) {$('form').hidden=true;$('title').textContent='Payment '+record.number+(record.deletion?' — deleted':'');}
+    $('record').hidden=false;
     const section=$('record'),r=record.revision,c=record.current;section.replaceChildren(el('h2','Internal payment receipt · revision '+r.revision_number),
       el('p',`${r.profile.payer.label} · ${r.date} · ${money(r.total)}`),el('p',`${r.profile.payment_method.label} · ${r.reference||'No reference'} · ${r.profile.deposit_account.full_name}`),el('p',r.memo||''),
       el('p',r.id===record.current_revision_id?'Latest recorded receipt facts.':'Historical receipt facts; actions use current settlement below.'),
-      el('h3','Current settlement'),el('p',`${c.status}. Applied ${units(c.applied_minor_units)}; unapplied credit ${units(c.available_minor_units)} ${c.currency}.`));
+      el('h3','Current settlement'),el('p',`${record.status}. Applied ${units(c.applied_minor_units)}; unapplied credit ${units(c.available_minor_units)} ${c.currency}.`));
+    if(record.deletion) {
+      const d=record.deletion,block=el('div');block.className='warn';block.setAttribute('aria-label','Deleted payment');
+      block.append(el('h3','Deleted payment'),
+        el('p',`Deleted by ${d.created_by_name||d.created_by} via ${d.created_via} at ${d.created_at}. Reason: ${d.reason}.`),
+        el('p',`Cancelled from ${d.from_status}${d.cancellation_batch_id?'; its cash and receivable postings were reversed at their original dates':'; it held no live postings to reverse'}.`),
+        el('p','Retained history: this receipt is hidden from lists and registers, can no longer be edited or voided, and there is no restore action.'));
+      section.append(block);
+    }
     const actions=el('div');actions.className='payment-actions';
     for(const snapshot of Object.values(r.custom_fields_snapshot||{})) section.append(el('p',`${snapshot.name || snapshot.label || 'Custom field'}: ${snapshot.value===null?'Cleared':String(snapshot.value)}`));
-    for(const verb of ['apply','update','unapply','void']) if(config.allowed.includes(verb)) actions.append(button(verb==='apply'?'Apply available credit':verb==='update'?'Correct receipt':verb==='unapply'?'Unapply recorded applications':'Void unapplied receipt',async()=>startMode(verb)));
-    actions.append(button('Print internal receipt',()=>window.print()),button('History',async()=>showHistory()),link('Notes and attachments',`/c/${config.company}/payment/${record.id}`),link('New payment',`/c/${config.company}/receive-payments`));section.append(actions);
+    if(!confirming) {
+      for(const verb of ['apply','update','unapply','void','delete']) if(config.allowed.includes(verb)&&!record.deletion)
+        actions.append(button(VERB_LABELS[verb],async()=>startMode(verb)));
+      actions.append(button('Print internal receipt',()=>window.print()),button('History',async()=>showHistory()),link('Notes and attachments',`/c/${config.company}/payment/${record.id}`+(record.deletion?'?include_deleted=1':'')),link('New payment',`/c/${config.company}/receive-payments`));
+    }
+    section.append(actions);
     const components=c.component_count>c.components.length?(await pages('payment settlement',{payment:record.id,kind:'components'})).items:c.components;
     for(const component of components) section.append(el('p',`${component.party_name}: owned credit ${units(component.available_minor_units)} ${component.currency}`));
   }
   async function showHistory() {
-    const result=await pages('payment history',{payment:payment.id}),section=$('history');section.hidden=false;section.replaceChildren(el('h2','Recorded history'));
+    const result=await pages('payment history',{payment:payment.id,include_deleted:true}),section=$('history');section.hidden=false;section.replaceChildren(el('h2','Recorded history'));
     for(const row of result.items) {
       const card=el('div');card.className='payment-effect';card.append(el('span',row.kind.replaceAll('_',' ')+' · audit '+row.audit_sequence+' '));
-      if(row.revision) card.append(button('Receipt revision '+row.revision.revision_number,async()=>drawRecord(await command('payment show',{payment:payment.id,revision:row.revision.revision_number}))));
+      if(row.revision) card.append(button('Receipt revision '+row.revision.revision_number,async()=>drawRecord(await command('payment show',{payment:payment.id,revision:row.revision.revision_number,include_deleted:true}))));
       if(row.operation_key) card.append(button('Original operation',async()=>recoverOperation(row.operation_key)));
       if(row.application) card.append(link('Application history',`/c/${config.company}/application/${row.application.id}/history`));
       section.append(card);
@@ -693,12 +727,17 @@
   }
   async function startMode(verb,preserved=null) {
     $('balances').hidden=true;$('payer-balance').replaceChildren();$('family-balance').replaceChildren();
-    mode=verb;invalidate();$('record').hidden=true;$('form').hidden=false;$('history').hidden=true;draft=preserved;selected.clear();key='WB-'+crypto.randomUUID();
-    $('title').textContent={receive:'Receive customer payment',apply:'Apply existing payment credit',update:'Correct receipt',unapply:'Unapply recorded applications',void:'Void unapplied receipt'}[mode];
+    mode=verb;invalidate();$('record').hidden=verb!=='delete';$('form').hidden=false;$('history').hidden=true;draft=preserved;selected.clear();key='WB-'+crypto.randomUUID();
+    $('title').textContent=MODE_TITLES[mode];
     $('amount-label').textContent=mode==='apply'?'Amount to allocate':'Amount received';
     const edit=['receive','update'].includes(mode);
-    $('header').hidden=['unapply','void'].includes(mode);$('selection').hidden=['update','void'].includes(mode);
+    $('header').hidden=['unapply','void','delete'].includes(mode);$('selection').hidden=['update','void','delete'].includes(mode);
     $('reason-label').hidden=['receive','apply'].includes(mode);$('reason').required=!$('reason-label').hidden;$('save-new').hidden=mode!=='receive';
+    // Deleting is confirmed on its own terms: explicit consent, and buttons that
+    // say what they do rather than what a receipt form's buttons say.
+    $('deletion-notice').hidden=mode!=='delete';$('confirm').checked=false;
+    $('preview').textContent=mode==='delete'?'Preview cancellation':'Preview payment';
+    $('save').textContent=mode==='delete'?'Delete payment':'Save & Close';
     for(const id of ['number','method','destination','memo','reference']) $(id).disabled=!edit;
     $('customer').disabled=mode!=='receive';$('find-customer').hidden=mode!=='receive';$('ar').disabled=mode!=='receive';
     $('date').value=payment?.revision.date||BookflowDates.range('today')[0];
@@ -709,12 +748,13 @@
       }
       for(const [id,value] of [['number',payment.revision.number],['amount',mode==='apply'?units(payment.current.available_minor_units):payment.revision.total.amount],['reference',payment.revision.reference||''],['memo',payment.revision.memo||''],['method',payment.revision.profile.payment_method.id],['destination',payment.revision.profile.deposit_account.id]]) $(id).value=value;
     }
-    for(const id of ['auto','calculate','clear','refresh-draft']) $(id).hidden=['unapply','void','update'].includes(mode);
+    for(const id of ['auto','calculate','clear','refresh-draft']) $(id).hidden=['unapply','void','update','delete'].includes(mode);
     if(preserved) {await chooseCustomer(preserved.context.customer_id);$('date').value=preserved.context.date;$('ar').value=preserved.context.ar_account_id;await reloadDraft();await loadInvoices();}
     else if(mode==='unapply') await loadApplications();
     else if(mode==='apply') {await makeDraft();await loadInvoices();}
     drawDestination();await drawCustom();
     if(mode==='void') note('Unapply every recorded application first. Voiding reverses receipt cash and AR at its original dates.');
+    if(mode==='delete') {await drawRecord(payment,true);note('Enter a reason, preview the cancellation, confirm it, then Delete payment. Nothing is recorded until then.');}
   }
   async function initialize() {
     $('date').value=BookflowDates.range('today')[0];

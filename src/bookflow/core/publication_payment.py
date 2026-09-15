@@ -23,6 +23,7 @@ payment recovery show
 payment recovery items
 payment recovery query
 payment calculate
+payment delete
 payment history
 payment invoices
 payment operation items
@@ -58,7 +59,11 @@ def capture(cmd, inp, s, result, *, dry_run=False):
     from bookflow.company import schema as c, sales, payment_operations, payment_dependencies
     from bookflow.company import sales_defaults
     roots = set()
-    write = (cmd.is_write and (cmd.name in PAYMENT_COMMANDS or cmd.name == 'invoice update')) or cmd.name == 'payment preview items'
+    # A root is a write root when the command writes under posting authority. A family
+    # Delete writes under its own grant plus ledger.read and never under ledger.post, so
+    # its roots are re-checked at the read threshold the command itself declares.
+    write = (cmd.is_write and cmd.capability == 'ledger.post'
+             and (cmd.name in PAYMENT_COMMANDS or cmd.name == 'invoice update')) or cmd.name == 'payment preview items'
 
     def add(kind, identifier):
         if identifier:
@@ -130,7 +135,7 @@ def capture(cmd, inp, s, result, *, dry_run=False):
     elif cmd.name in {'payment query', 'invoice query'}:
         for row in result['items']:
             add('transaction', row['id'])
-    elif cmd.name in {'payment receive', 'payment apply', 'payment unapply', 'payment void', 'payment update', 'payment show'}:
+    elif cmd.name in {'payment receive', 'payment apply', 'payment unapply', 'payment void', 'payment update', 'payment show', 'payment delete'}:
         # A preview of a new receipt has no durable identity. Existing-payment
         # previews retain their input owner even if output hides prospective IDs.
         if not (dry_run and cmd.name == 'payment receive'):

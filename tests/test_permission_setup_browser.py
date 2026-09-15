@@ -67,13 +67,13 @@ def test_loaded_user_permissions_do_not_follow_an_editable_target(register_brows
     run('membership.grant',dict(user=z['user_id'],company=site.company_id,expected_version=3,
         grants=['customer-work','transaction.check.delete','ledger.read'],denies=['ledger.post']))
     current_rows=run('membership.list',dict(company=site.company_id))['items']
-    b.evaluate(edit+'.elements.card_delete.click()')
+    b.evaluate(edit+'.elements.card_charge_delete.click()')
     b.evaluate(edit+'.elements.reason.value="Retain this stale attempt"')
     b.evaluate('window.oldPermissions='+edit+';true')
     b.evaluate(edit+'.querySelector("button[value=save]").click()')
     b.wait_for('!window.oldPermissions.isConnected')
     assert 'E_VERSION_CONFLICT' in b.evaluate('document.querySelector(".error").textContent')
-    assert b.evaluate(edit+'.elements.card_delete.checked')
+    assert b.evaluate(edit+'.elements.card_charge_delete.checked')
     assert b.evaluate(edit+'.elements.reason.value')=='Retain this stale attempt'
     assert b.evaluate(edit+'.elements.expected_version.value')=='3'
     assert run('membership.list',dict(company=site.company_id))['items']==current_rows

@@ -2,6 +2,7 @@
 from fastapi import Request
 
 from bookflow.core import registry
+from bookflow.core.deletion_families import PAYMENT_FAMILIES, capability
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 from urllib.parse import urlencode
@@ -38,7 +39,10 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
                 **({'cursor': request.query_params['cursor']} if request.query_params.get('cursor') else {})}, company_id)
             record = shown['record']
             invoice = run(request, 'invoice show', {'invoice': record['paid_transaction_id'], 'include_deleted': True}, company_id)
-            payment = run(request, 'payment show', {'payment': record['paying_transaction_id']}, company_id)
+            # Retained settlement history outlives the receipt: an application whose payer
+            # was later deleted is still readable, so this read asks for the deleted facts
+            # exactly as the invoice read above already does.
+            payment = run(request, 'payment show', {'payment': record['paying_transaction_id'], 'include_deleted': True}, company_id)
             for row in history['items']:
                 value = row.get('application') or row.get('allocation')
                 if value:
@@ -76,18 +80,29 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             cred = credential(request)
             allowed = [verb for verb in ('receive', 'apply', 'update', 'unapply', 'void')
                        if role_allows(registry.get('payment ' + verb), company, hub_admin=cred.hub_admin)]
+            # Delete answers to its own explicit family grant rather than to the posting
+            # role, so the workspace reads the same effective admission the Users &
+            # permissions page displays instead of inferring one from the role.
+            family, = PAYMENT_FAMILIES
+            if any(row['requirement']['capability'] == capability(family) and row['admitted']
+                   for row in run(request, 'membership effective', {'company': company_id}, None)['permissions']):
+                allowed.append('delete')
             # Direct document links establish composite authority before a shell
             # or a browser's saved intent may disclose those document facts.
             payment = request.query_params.get('payment')
             selection = request.query_params.get('selection')
-            initial = run(request, 'payment show', {'payment': payment}, company_id) if payment else None
+            # A deleted receipt keeps its links: the workspace opens it read-only.
+            initial = run(request, 'payment show', {'payment': payment, 'include_deleted': True}, company_id) if payment else None
             draft = run(request, 'payment selection show', {'selection': selection}, company_id) if selection else None
             if draft and draft['context']['payment_id'] and not initial:
-                initial = run(request, 'payment show', {'payment': draft['context']['payment_id']}, company_id)
+                initial = run(request, 'payment show', {'payment': draft['context']['payment_id'], 'include_deleted': True}, company_id)
             config = dict(company=company_id, actor=cred.user_id, allowed=allowed, initial=initial, draft=draft,
                 preferences=company.get('info', {}), currency=company.get('home_currency', 'USD'),
                 customer=request.query_params.get('customer'), invoice=request.query_params.get('invoice'),
-                operation=request.query_params.get('operation'), mode=request.query_params.get('mode',
+                operation=request.query_params.get('operation'),
+                # A deleted receipt is retained history and has no editing mode to open,
+                # whatever a saved link asks for.
+                mode='show' if initial and initial.get('deletion') else request.query_params.get('mode',
                     'apply' if draft and draft['context']['mode'] == 'existing_credit' else 'receive' if draft else 'show' if payment else 'receive'))
             response = render('payments.html', request, company_id=company_id, payment_workspace=config)
             response.headers['Cache-Control'] = 'no-store'

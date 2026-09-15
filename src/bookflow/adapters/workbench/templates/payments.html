@@ -37,7 +37,8 @@
 <button type="button" id="payment-more" hidden>Next page</button>
 <div id="payment-totals" aria-live="polite"></div>
 </section>
-<label id="payment-reason-label">Reason for correction / unapply / void (required)<input id="payment-reason" maxlength="140"></label>
+<label id="payment-reason-label">Reason for correction / unapply / void / deletion (required)<input id="payment-reason" maxlength="140"></label>
+<section id="payment-deletion-notice" hidden aria-label="Delete this payment"><h2>Cancel this payment and retain its history</h2><p>Deletion cancels this receipt’s cash and receivable postings at their original dates. Unapply every recorded application first.</p><p>The payment will leave normal lists and registers. Its original details, revisions, number and audit history remain readable. There is no restore action.</p><label><input type="checkbox" id="payment-confirm"> I confirm cancellation of this payment.</label></section>
 <div class="payment-actions"><button type="button" id="payment-preview">Preview payment</button><button type="button" id="payment-save" disabled>Save &amp; Close</button><button type="button" id="payment-save-new" disabled>Save &amp; New</button></div>
 </form>
 <section id="payment-preview-result" hidden aria-label="Payment preview"></section>

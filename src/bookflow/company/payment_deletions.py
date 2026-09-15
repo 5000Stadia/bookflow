@@ -106,9 +106,14 @@ def prepare(s, ctx, inp):
     old = sales.resolve(s, inp.payment, NOUN)
     require_not_deleted(s, old['id'])
     intent = DeleteIntent(family=FAMILY, transaction_id=old['id'], expected_version=inp.expected_version)
-    prepared = transaction_deletion.require_ready(transaction_deletion.prepare_delete(s, ctx, intent))
+    # The authenticated producer: the host's credential, or — with no host, as on the
+    # CLI — this login's OS binding, which each owner derives for itself when none is
+    # supplied. Deriving one under a hosted session cannot work, because the host holds
+    # no OS login: an unsupplied binding refuses every request that is not in-process.
+    binding = getattr(s, 'credential', None)
+    prepared = transaction_deletion.require_ready(transaction_deletion.prepare_delete(s, ctx, intent, binding=binding))
     # Independent reload of the same evidence, by the owner that never prepared it.
-    verification.validate_delete(s, ctx, prepared)
+    verification.validate_delete(s, ctx, prepared, binding=binding)
     dependencies(s, old['id'])
     tombstone = prepared.tombstone
     output = PaymentDeleteOutput(id=tombstone.transaction_id, version=tombstone.after_version,
