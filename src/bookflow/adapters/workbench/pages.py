@@ -488,6 +488,20 @@ def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
     return path + (f"?{query}" if query else "")
 
 
+def _source_watermark(request: Request, attempted: dict[str, str] | None = None) -> str | None:
+    """The audit position a drill-down was started at, or none where it was not stated.
+
+    Read the same way wherever a drill-down lands -- a report page or the document page
+    behind one of its rows -- so a chain of links cannot lose the position it was read at
+    partway down. Anything that is not a short decimal is dropped rather than shown.
+    """
+    stated = (attempted or {}).get("_source_report_watermark",
+                                   request.query_params.get("source_report_watermark"))
+    if stated is not None and (not stated.isascii() or not stated.isdigit() or len(stated) > 20):
+        return None
+    return stated
+
+
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
                     output: dict[str, Any]) -> str:
     route_noun = Routing.segment(noun)
@@ -1353,6 +1367,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     return render('error.html', request, error=err.to_dict(), restart_url=request.url.path)
                 return page_error(request, err)
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
                       work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
@@ -1437,9 +1452,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return render('billing_pick_source.html', request, company_id=company_id,
                 noun=noun, verb=verb, sources=sources, source_title=source_title)
         attempted = attempted or {}
-        source_report_watermark = attempted.get("_source_report_watermark", request.query_params.get("source_report_watermark"))
-        if source_report_watermark is not None and (not source_report_watermark.isascii() or not source_report_watermark.isdigit() or len(source_report_watermark) > 20):
-            source_report_watermark = None
+        source_report_watermark = _source_watermark(request, attempted)
         if noun == "report" and not cmd.is_write and not attempted:
             for field in cmd.input_model.model_fields:
                 value = request.query_params.get("f:" + field, request.query_params.get(field))
@@ -1938,13 +1951,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       credit=Credits.detail_context(noun, result, company_id, preview=preview) if result and noun in Credits.NOUNS and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt', 'credit-memo') and verb == 'history' else None,
                       credit_history=Credits.history_context(result, company_id) if result and noun == 'vendor-credit' and verb == 'history' else None,
-                      statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
+                      statement=S.view(result, report_input, company_id, cmd.name, source_report_watermark) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
                       summaries=Summary.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Summary.COMMANDS else None,
                       stock=Stock.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Stock.COMMANDS else None,
                       customer_statement=Statement.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Statement.COMMANDS else None,
-                      transaction_detail=Detail.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Detail.COMMANDS else None,
+                      transaction_detail=Detail.view(result, report_input, company_id, source_report_watermark) if result and report_input is not None and cmd.name in Detail.COMMANDS else None,
                       missing_checks=MissingChecks.view(result, report_input, company_id) if result and report_input is not None and cmd.name in MissingChecks.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,

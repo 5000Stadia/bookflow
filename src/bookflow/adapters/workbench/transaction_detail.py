@@ -28,6 +28,29 @@ def document_noun(document_type):
     return noun if registry.get(f"{noun} show") is not None else None
 
 
+def document_link(company_id, row, watermark=None):
+    """The record page a report row's own document opens at, or none where it has no page.
+
+    One spelling of this link for every accounting report, because a second one drifts from
+    the first. Two things ride along with it. A report sums immutable effects, so a document
+    deleted out of ordinary lists is still named by the rows it posted and must still open
+    behind them: the link asks for retained history wherever the document's own read command
+    offers it, which is asked of the registry rather than kept here as a list of the families
+    that can be deleted. And the audit position the report was read at travels too, so the
+    document answers the question the statement asked rather than a fresh one.
+    """
+    noun = document_noun(row.get("transaction_type")) if row.get("transaction_id") else None
+    if noun is None:
+        return None
+    query = {}
+    if "include_deleted" in registry.get(f"{noun} show").input_model.model_fields:
+        query["include_deleted"] = "1"
+    if watermark is not None:
+        query["source_report_watermark"] = str(watermark)
+    return (f"/c/{company_id}/{noun}/{row['transaction_id']}"
+            + ("?" + urlencode(query) if query else ""))
+
+
 def collection_fields(name, values):
     """The repeated control's own form keys, which is how a list survives the next page."""
     fields = {f"collection:{name}": "1"}
@@ -35,17 +58,19 @@ def collection_fields(name, values):
     return fields
 
 
-def view(result, inputs, company_id):
+def view(result, inputs, company_id, source_watermark=None):
     period = result["metadata"]["period"]
     watermark = result["metadata"]["audit_watermark"]
     ledger = {"f:date_from": period["date_from"], "f:date_to": period["date_to"],
               "source_report_watermark": watermark}
+    # Where this page was itself opened from a statement, the position that statement was
+    # read at is the one the reader is asking about; a page opened directly asks about its own.
+    source = watermark if source_watermark is None else source_watermark
     rows = []
     for row in result["rows"]:
-        noun = document_noun(row["transaction_type"]) if row["transaction_id"] else None
         rows.append({**row,
             "kind_label": KINDS.get(row["kind"]),
-            "document_url": f"/c/{company_id}/{noun}/{row['transaction_id']}" if noun else None,
+            "document_url": document_link(company_id, row, source),
             "ledger_url": f"/c/{company_id}/report/general-ledger?" + urlencode(
                 {**ledger, "f:account": row["account_id"]}),
             "split_url": (f"/c/{company_id}/report/general-ledger?" + urlencode(

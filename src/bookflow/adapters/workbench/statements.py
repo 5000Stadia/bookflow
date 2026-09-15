@@ -1,6 +1,8 @@
 """Presentation of typed statement results; all amounts come from core commands."""
 from urllib.parse import urlencode
 
+from bookflow.adapters.workbench.transaction_detail import document_link
+
 
 COMMANDS = {"report profit-and-loss", "report balance-sheet", "report trial-balance",
             "report general-ledger", "report cash-flows", "report income-tax-summary",
@@ -14,9 +16,15 @@ SECTIONS = {"income": "Income", "cost_of_goods_sold": "Cost of goods sold", "exp
             "other_income": "Other income", "other_expense": "Other expense"}
 
 
-def view(result, inputs, company_id, command=None):
+def view(result, inputs, company_id, command=None, source_watermark=None):
     period = result["metadata"]["period"]
     dimensional = command in DIMENSIONAL
+    general_ledger = command == "report general-ledger"
+    # A figure on a statement opens the ledger; a ledger line opens the document that
+    # posted it. The position the reader started from is the one they are asking about,
+    # so a ledger opened from a statement hands that statement's watermark on rather
+    # than re-anchoring the question to its own.
+    source = result["metadata"]["audit_watermark"] if source_watermark is None else source_watermark
     rows = []
     for row in result["rows"]:
         # A grouping row -- a tax line, which is not an account -- has no ledger
@@ -27,6 +35,8 @@ def view(result, inputs, company_id, command=None):
         query = {"f:account": row["account_id"], "f:date_from": period["date_from"] or "0001-01-01",
                  "f:date_to": period["date_to"], "source_report_watermark": result["metadata"]["audit_watermark"]}
         extra = {}
+        if general_ledger:
+            extra["document_url"] = document_link(company_id, row, source)
         if dimensional:
             # The row's own cells, already in column order, paired with the column
             # they belong to, so the template never walks two lists in step.

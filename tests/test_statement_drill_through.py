@@ -1,0 +1,320 @@
+"""A figure on a statement reaches the transactions behind it, and they reach their documents.
+
+An accounting report is not a printed page. A reader who does not believe a figure follows it
+down to the entries that made it and then to the document that posted them, and the chain is
+only real if every link opens. So the journey here is walked rather than described: each link
+is taken out of the rendered page and fetched, because a rendered href that nothing follows is
+exactly how the dimensional Total column came to be shipped untested.
+
+Two things travel the whole way down. The audit position the statement was read at, so the
+document answers the question the statement asked rather than a fresh one. And retained
+history, because a report sums immutable effects: deleting a document hides it from ordinary
+lists without changing a single figure, so the rows it posted still name it and it must still
+open behind them.
+"""
+import json
+from html.parser import HTMLParser
+
+import pytest
+from fastapi.testclient import TestClient
+
+from bookflow.adapters.workbench import statements, transaction_detail
+
+from tests.test_financial_statements_browser import fill
+from tests.test_row3_host import PASSWORD, hosted  # noqa: F401
+from tests.test_row5_browser_acceptance import CHROME, _Cdp, browser_site  # noqa: F401
+
+PERIOD = {"f:date_from": "2000-01-01", "f:date_to": "2100-12-31"}
+
+
+class _Anchors(HTMLParser):
+    """Every link in a fragment, as the href and the words it is written on."""
+
+    def __init__(self):
+        super().__init__()
+        self.found: list[list[str]] = []
+        self._open: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        href = dict(attrs).get("href")
+        if tag == "a" and href:
+            self._open = [href, ""]
+            self.found.append(self._open)
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            self._open = None
+
+    def handle_data(self, data):
+        if self._open is not None:
+            self._open[1] += data
+
+
+def _anchors(fragment):
+    parser = _Anchors()
+    parser.feed(fragment)
+    return [(href, " ".join(text.split())) for href, text in parser.found]
+
+
+class _Form(HTMLParser):
+    """The report's own filter form, read back exactly as a browser would submit it."""
+
+    def __init__(self):
+        super().__init__()
+        self.action = None
+        self.fields: dict[str, str] = {}
+        self._inside = False
+        self._select = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form" and "data-generated-form" in attrs:
+            self._inside, self.action = True, attrs.get("action")
+        elif not self._inside:
+            return
+        elif tag == "input" and attrs.get("name"):
+            self.fields[attrs["name"]] = attrs.get("value", "")
+        elif tag == "select" and attrs.get("name"):
+            self._select = attrs["name"]
+        elif tag == "option" and self._select:
+            if "selected" in attrs or self._select not in self.fields:
+                self.fields[self._select] = attrs.get("value", "")
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self._inside = False
+        elif tag == "select":
+            self._select = None
+
+
+def _readable(url, answer):
+    assert answer.status_code == 200, f"{url} answered {answer.status_code}: {answer.text[:600]}"
+    body = answer.text.split("<main>", 1)[-1].split("</main>", 1)[0]
+    assert 'class="error"' not in body, f"{url} rendered an error: {body[:600]}"
+    return answer.text
+
+
+def _page(browser, url):
+    """One page of the journey, refused rather than followed if it did not come out readable."""
+    return _readable(url, browser.get(url))
+
+
+def _run_report(browser, url):
+    """Open a report link the way a person does: follow it, then run what it filled in."""
+    page = _page(browser, url)
+    form = _Form()
+    form.feed(page)
+    assert form.action, f"{url} offered no report to run"
+    return _readable(form.action, browser.post(form.action, data={**form.fields, "action": "submit"},
+                                               headers={"X-Bookflow-Workbench": "1"}))
+
+
+def _report_rows(page):
+    """Only the report's own table, so the surrounding navigation is never mistaken for a row."""
+    start = page.index('id="report-lines"')
+    return page[start:page.index("</table>", start)]
+
+
+def _ledger_link(page, company_id):
+    """The one link a figure on a statement offers: that account's general ledger."""
+    found = [href for href, _ in _anchors(page)
+             if href.startswith(f"/c/{company_id}/report/general-ledger?")]
+    assert found, "no figure on this statement opened a general ledger"
+    return found[0]
+
+
+def _document_links(page, company_id):
+    """Every ledger row's own document link, which is the step this file exists for."""
+    return [(href, text) for href, text in _anchors(_report_rows(page))
+            if href.startswith(f"/c/{company_id}/") and "/report/" not in href]
+
+
+# --------------------------------------------------------------- the presentation itself
+
+
+def _ledger_result(rows, watermark=7):
+    return {"rows": rows, "columns": [], "next_cursor": None,
+            "metadata": {"audit_watermark": watermark, "period": {"date_from": "2017-01-01", "date_to": "2017-12-31"}}}
+
+
+def test_a_ledger_row_links_its_document_and_keeps_the_position_it_was_read_at():
+    """The check test for the journey below: without the link there is nothing to follow.
+
+    This is the presentation on its own, so it names what the journey can only demonstrate --
+    that the document link exists at all, that a family which can be deleted asks for its
+    retained history, and that the audit position handed in from the source statement is the
+    one carried on, not the ledger's own.
+    """
+    rows = [{"kind": "opening", "account_id": "A", "transaction_id": None, "transaction_type": None},
+            {"kind": "posting", "account_id": "A", "transaction_id": "T1", "transaction_type": "invoice"},
+            {"kind": "posting", "account_id": "A", "transaction_id": "T2", "transaction_type": "journal_entry"}]
+    shown = statements.view(_ledger_result(rows), {}, "CO", "report general-ledger", "312")
+    opening, invoice, journal = shown["rows"]
+
+    assert opening["document_url"] is None, "a summary row names no document and must not link"
+    assert invoice["document_url"] == "/c/CO/invoice/T1?include_deleted=1&source_report_watermark=312"
+    # A journal entry has no retained-deletion storage, so it asks for none.
+    assert journal["document_url"] == "/c/CO/journal/T2?source_report_watermark=312"
+
+    # A ledger opened directly, with no statement above it, anchors on its own watermark.
+    alone = statements.view(_ledger_result(rows), {}, "CO", "report general-ledger")
+    assert alone["rows"][1]["document_url"].endswith("source_report_watermark=7")
+
+    # The account drill-down the statement already had is untouched by any of this.
+    assert invoice["ledger_url"] == ("/c/CO/report/general-ledger?f%3Aaccount=A"
+                                     "&f%3Adate_from=2017-01-01&f%3Adate_to=2017-12-31"
+                                     "&source_report_watermark=7")
+
+
+def test_every_deletable_family_can_be_reached_from_a_report():
+    """The families whose documents can be hidden from lists all ask for their history.
+
+    Named from the deletion registry rather than from a list kept here, so a family that
+    ships a deletion tomorrow is covered on the day it ships.
+    """
+    from bookflow.core.deletion_families import TOMBSTONE_TABLE
+    for family in TOMBSTONE_TABLE:
+        noun = transaction_detail.document_noun(family)
+        if noun is None:  # a family whose stored type is not its own report row
+            continue
+        link = transaction_detail.document_link("CO", {"transaction_id": "X", "transaction_type": family})
+        assert "include_deleted=1" in link, f"{family} could not be opened as retained history"
+
+
+# ------------------------------------------------------------------------- the journey
+
+
+@pytest.mark.timeout(600)
+def test_a_statement_figure_is_followed_to_the_document_behind_it(hosted):  # noqa: F811
+    browser = TestClient(hosted.handle.app)
+    assert browser.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    company = hosted.company_id
+
+    # 1. A profit and loss, read at some audit position, and one of its figures.
+    statement = _run_report(browser, f"/c/{company}/report/profit-and-loss?"
+                            + "&".join(f"{key}={value}" for key, value in PERIOD.items()))
+    ledger_url = _ledger_link(statement, company)
+    assert "source_report_watermark=" in ledger_url
+    watermark = ledger_url.split("source_report_watermark=")[1].split("&")[0]
+
+    # 2. The general ledger behind that figure, which is where the chain used to stop.
+    ledger = _run_report(browser, ledger_url)
+    documents = _document_links(ledger, company)
+    assert documents, "a general ledger row named a document but offered no way to open it"
+    assert all(f"source_report_watermark={watermark}" in href for href, _ in documents), \
+        "a drill-down link lost the audit position the statement was read at"
+
+    # 3. The documents themselves, opened by following the links a person would click.
+    #    Every distinct one on the page, not the first: a ledger names several document
+    #    families, and a family whose page does not open is exactly the dead end this row
+    #    is about.
+    for href in dict.fromkeys(href for href, _ in documents):
+        transaction_id = href.split("?")[0].rsplit("/", 1)[-1]
+        document = _page(browser, href)
+        assert transaction_id in document, f"following {href} did not open what the row named"
+        assert f"audit watermark {watermark}" in document, \
+            "the document did not say which reading of the books sent the reader here"
+
+    # 4. A document deleted out of ordinary lists is still summed by the report, so the row
+    #    that names it still opens it. This is the same chain, one deleted document later.
+    deleted = _delete_a_sale(hosted)
+    ledger = _run_report(browser, f"/c/{company}/report/general-ledger?f:account={deleted['account']}"
+                         + f"&f:date_from={deleted['date']}&f:date_to={deleted['date']}"
+                         + f"&source_report_watermark={watermark}")
+    hidden = [href for href, _ in _document_links(ledger, company) if deleted["id"] in href]
+    assert hidden, "the deleted sale's ledger rows no longer offered the document behind them"
+    retained = _page(browser, hidden[0])
+    assert deleted["number"] in retained
+    assert deleted["reason"] in retained, \
+        "the retained document did not present itself as deleted history"
+
+    # 5. The by-job page's Total column joins the same chain, which nothing had followed.
+    dimensional = _run_report(browser, f"/c/{company}/report/profit-and-loss-by-job?"
+                              + "&".join(f"{key}={value}" for key, value in PERIOD.items()))
+    total_url = _ledger_link(dimensional, company)
+    from_total = _document_links(_run_report(browser, total_url), company)
+    assert from_total, "the by-job Total column reached a ledger with no way on to a document"
+    _page(browser, from_total[0][0])
+
+
+def _delete_a_sale(hosted):  # noqa: F811
+    """One sale of this test's own, posted and then deleted, with the grant that requires.
+
+    Every step goes through the running host, which is the one process that may write this
+    data root, so the deletion is the product's own rather than a fixture reaching around it.
+    """
+    company = hosted.company_id
+    reason = "The sale a report must still reach after it is deleted"
+    why = {"X-Bookflow-Reason": reason}
+    # The demo company's own commercial example, dated past anything else it holds.
+    posted = hosted.ok("invoice.post", {"customer": "Commercial Example Customer",
+                                        "date": "2031-04-07", "number": "DRILL-DELETED-1",
+                                        "sales_tax_item": "Commercial Example Tax 8%",
+                                        "customer_tax_code": "Tax", "terms": "Net 30",
+                                        "lines": [{"item": "Commercial Example Service", "quantity": "1"}]},
+                       company=company, headers=why)
+    state = hosted.ok("permission.show")
+    hosted.ok("permission.activate", {"expected_generation": state["generation"],
+                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=why)
+    member = next(row for row in hosted.ok("membership.list", {"company": company})["items"]
+                  if row["scope_type"] == "company" and row["scope_id"] == company)
+    hosted.ok("membership.grant", {"user": member["user_id"], "company": company,
+                                   "expected_version": member["version"],
+                                   "grants": ["transaction.invoice.delete"]}, headers=why)
+    hosted.ok("invoice.delete", {"invoice": posted["id"], "expected_version": posted["version"]},
+              company=company, headers=why)
+    ledger = hosted.ok("report.general-ledger", {"date_from": "2031-04-07", "date_to": "2031-04-07",
+                                                 "limit": 50}, company=company)
+    account = next(row["account_id"] for row in ledger["rows"] if row.get("transaction_id") == posted["id"])
+    return {"id": posted["id"], "number": "DRILL-DELETED-1", "date": "2031-04-07",
+            "account": account, "reason": reason}
+
+
+# ----------------------------------------------------------------- in a real browser
+
+
+@pytest.mark.timeout(600)
+@pytest.mark.skipif(not CHROME.exists(), reason="Chrome is unavailable")
+def test_a_person_clicks_a_statement_figure_through_to_the_document(browser_site, tmp_path):  # noqa: F811
+    """The same chain in an actual engine, clicked rather than fetched.
+
+    Kept to one walk: a profit-and-loss figure, the ledger under it, and the document
+    under that. What it adds over the journey above is that each step is a real anchor a
+    person can press, on a page a browser actually laid out.
+    """
+    site = browser_site
+    browser = _Cdp(tmp_path / "drill-chrome")
+    transaction = ("[...document.querySelectorAll('#report-lines a')].find(a =>"
+                   " a.getAttribute('href').startsWith('/c/')"
+                   " && !a.getAttribute('href').includes('/report/'))")
+    try:
+        browser.viewport(1280, 900)
+        browser.navigate(site.base_url + "/login")
+        browser.evaluate("""(() => {document.querySelector('[name=username]').value=%s;
+            document.querySelector('[name=password]').value=%s;
+            document.querySelector('form[hx-post="/login"]').requestSubmit();})()"""
+            % (json.dumps(site.login), json.dumps(PASSWORD)))
+        browser.wait_for("!!document.querySelector('.nav-group, a.flow-tile')")
+
+        browser.navigate(f"{site.base_url}/c/{site.company_id}/report/profit-and-loss")
+        fill(browser, {"date_from": "2000-01-01", "date_to": "2100-12-31", "limit": "50"})
+        browser.wait_for("!!document.querySelector('#statement-accounts tbody a')")
+
+        # The figure opens the ledger under it, carrying where it was read from.
+        browser.evaluate("document.querySelector('#statement-accounts tbody a').click()")
+        browser.wait_for("!!document.querySelector('#report-source-state')")
+        watermark = browser.evaluate(
+            "new URLSearchParams(location.search).get('source_report_watermark')")
+        fill(browser, {"limit": "50"})
+        browser.wait_for("!!" + transaction)
+
+        # The ledger line opens the document that posted it -- the step this row adds.
+        wording = browser.evaluate(transaction + ".textContent.trim()")
+        browser.evaluate(transaction + ".click()")
+        browser.wait_for("!!document.querySelector('.record-heading')")
+        assert watermark in browser.evaluate(
+            "document.querySelector('#report-source-state').textContent")
+        printed = browser.evaluate("document.body.innerText")
+        assert wording.split()[-1] in printed, f"{wording} opened a page that does not name it"
+    finally:
+        browser.close()

@@ -20,7 +20,7 @@
 </td>
 {% if statement.general_ledger %}
 <td role="cell" class="document-wide">{{ label('Date / reference') }}<strong>{{ row.kind|capitalize }}</strong>{% if row.effective_date %}<div>{{ row.effective_date }}</div>{% endif %}
-{% if row.transaction_type %}<div>{{ row.transaction_type.replace('_', ' ')|capitalize }} {{ row.transaction_number or '' }}</div>{% endif %}{% if row.batch_kind %}<div>{{ row.batch_kind|capitalize }} effect</div>{% endif %}</td>
+{% if row.transaction_type %}<div>{% if row.document_url %}<a href="{{ row.document_url }}">{{ row.transaction_type.replace('_', ' ')|capitalize }} {{ row.transaction_number or '' }}</a>{% else %}{{ row.transaction_type.replace('_', ' ')|capitalize }} {{ row.transaction_number or '' }}{% endif %}</div>{% endif %}{% if row.batch_kind %}<div>{{ row.batch_kind|capitalize }} effect</div>{% endif %}</td>
 <td role="cell" class="document-wide document-prose">{{ label('Description / captured details') }}<div class="report-description">{{ row.description or '' }}</div>
 {% if row.kind == 'posting' %}<details class="report-captured"><summary>Captured posting details</summary>
 {% if row.party_name %}<p>Party: {{ row.party_name }}</p>{% endif %}{% if row.class_name %}<p>Class: {{ row.class_name }}</p>{% endif %}
