@@ -150,7 +150,11 @@ credit_memo_update = command(
                  ' versions advance. If a use spans replacement lines, its application is cancelled'
                  ' and replaced by one application per line; invoice settlement exposes the current'
                  ' application IDs for later unapply. An unused standalone credit may change customer'
-                 ' or receivable account; linked returns keep exact source ownership. Preview with'
+                 ' or receivable account; linked returns keep exact source ownership.'
+                 ' A correction that would post a line whose item carries stock is refused,'
+                 ' whether you supply that line or leave the grid out and let it be retained,'
+                 ' because a credit memo moves no inventory and restores no cost: replace the'
+                 ' grid with non-stock lines to correct such a credit, or void it. Preview with'
                  ' expected_version, then save with expected_facts_fingerprint and an idempotency key'
                  ' reused for retries.'),
     input_model=CreditMemoUpdateInput, output_model=CreditMemoWriteOutput, writes={'company'},

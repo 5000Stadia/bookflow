@@ -3679,13 +3679,30 @@ back with `inventory adjust`, which moves the quantity and what it is worth toge
 stock-carrying set is the item master's own `TRACKED_TYPES`, read where
 `sales_defaults.resolve_line` reads it, because a second list here is the list the next
 stock-carrying type is silently left out of. Both kinds of line are covered, because both are
-wrong in the same way: a named stock item and a return against a stocked invoice line alike. The
-refusal sits in `credits.commercial`, on the entered lines only, so it fires on `credit-memo
-post` and on any `credit-memo update` that supplies a grid, on a preview as well as a save, and
-before a row is written. Lines a correction retains untouched are not re-judged, and every
-credit memo already stored against a stock item still reads, voids and pages its history: this
-refuses new ones rather than invalidating old ones. Moving the inventory and restoring the cost
-is a feature of its own and is not in this release.
+wrong in the same way: a named stock item and a return against a stocked invoice line alike.
+
+**What is judged is the grid that would be posted, not the grid that was typed.**
+`credits._refuse_stocked_document` runs in `credits.prepare` at the one boundary every written
+credit crosses — after a correction that changes nothing has returned without a revision, and
+before anything is written — over `resolved['lines']`, which is every line the write would post:
+the ones a caller entered and the ones a correction retained because it left `lines` out. Judging
+only entered lines was a hole the size of the feature: `credit-memo update --date` on a credit
+already stored against a stock item supplied no line to refuse, so it re-posted that credit's
+wrong stock accounting onto a new revision. Reading an old wrong document is not the same act as
+posting it again, and only the second one is refused.
+
+So `show`, `history`, `query` and `void` are untouched: they resolve no grid and post nothing new
+— a void reverses exactly what the credit did post, which never included stock — and every credit
+memo already stored against a stock item still opens, still lists, still pages its history and can
+still be taken back. What a correction may do is replace that grid with non-stock lines, which is
+how a document written wrong is made right; what it may not do is post the stock-carrying grid a
+second time. The two corrections that write nothing are left alone and stay legal: a patch naming
+no field at all, which `credit_corrections.prepare_update` answers before any grid is resolved, and
+a patch whose values equal the stored ones, which `credit_corrections.unchanged` answers with the
+same `changed=False` and no revision. Both are measured as writing nothing, by comparing the whole
+company database before and after, rather than argued.
+
+Moving the inventory and restoring the cost is a feature of its own and is not in this release.
 
 **The endpoint rule** (`credit_returns.py`) decides every cent a return carries. A captured
 source line of base quantity `Q` and net `N` gives a returned half-open interval `[a,b)`

@@ -201,7 +201,7 @@ def _refuse_stocked(profile, field):
     therefore hand the money back and leave the quantity sold with its cost still in cost of
     goods sold, which is two wrong balances rather than one missing feature. Moving the stock
     and restoring the cost is a feature of its own; until it is built the line is refused
-    rather than approximated, which is what `credit-memo post`'s help says this release does.
+    rather than approximated, which is what the credit memo help says this release does.
 
     The stock-carrying set is the item master's own, read through the same name the sales
     grid and the stock ledger read, because a second list here is the list the next
@@ -221,6 +221,27 @@ def _refuse_stocked(profile, field):
                  'reason': 'stocked_credit_unsupported',
                  'item_id': profile.item.id, 'item_name': profile.item.label,
                  'item_type': profile.item_type})
+
+
+def _refuse_stocked_document(lines):
+    """Refuse the resolved grid a write is about to post, whoever put its lines there.
+
+    A correction that leaves ``lines`` out re-posts the document from what was captured, so
+    judging only the lines a caller supplied let an omitted-grid ``credit-memo update`` post a
+    stored stocked credit's wrong accounting a second time -- the same two wrong balances, on a
+    new revision, with nothing entered to refuse. What is judged is therefore the final grid:
+    every line the write would post, retained and entered alike, each named by the position it
+    holds in that grid and by the half of the line that carries the item.
+
+    Reading such a document is untouched by this. ``show``, ``history``, ``query`` and ``void``
+    resolve no grid and post nothing new -- void reverses exactly what the credit did post --
+    so a credit already stored against a stock item still opens, still lists, and can still be
+    taken back. Replacing its grid with non-stock lines is a correction like any other, which
+    is how a bad document is made good.
+    """
+    for index, line in enumerate(lines):
+        field = f'lines.{index}.source_line' if line['source'] else f'lines.{index}.item'
+        _refuse_stocked(line['profile'], field)
 
 
 # ------------------------------------------------------------------ resolving the whole document
@@ -253,7 +274,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
     lines, sources, identities = [], {}, set()
     if retained:
         lines = correction.retained_lines(s, saved, pending)
-    for index, entered in enumerate(inp.lines or []):
+    for entered in inp.lines or []:
         line_id = entered.line_id.upper() if entered.line_id else None
         if line_id and (line_id not in saved or line_id in identities):
             raise _invalid('lines.line_id', 'use each current credit memo line identity at most once')
@@ -267,7 +288,6 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                 found = _source_line(s, entered.source_invoice, entered.source_line, profile)
                 sources[entered.source_invoice][entered.source_line] = found
             resolved = _returned(s, entered, found, pending)
-            _refuse_stocked(resolved['profile'], f'lines.{index}.source_line')
             resolved['claim_rows'] = [
                 dict(id=new_id(), kind='claim', source_transaction_id=resolved['source']['transaction_id'],
                      source_line_id=resolved['source']['line_id'], start_microunits=start, end_microunits=end,
@@ -289,7 +309,6 @@ def commercial(s, inp, *, document_id, pending, previous=None):
             resolved, line_warnings = sales_defaults.resolve_line(
                 s, SalesLineInput(**supplied), profile, defer_tax=True,
                 previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults)
-            _refuse_stocked(resolved['profile'], f'lines.{index}.item')
             resolved['line_id'] = line_id
             resolved['source'] = None
             resolved['intervals'] = ()
@@ -410,6 +429,11 @@ def prepare(s, ctx, inp, *, previous=None):
         from bookflow.company.credit_corrections import unchanged, unchanged_plan
         if unchanged(s, previous, resolved):
             return unchanged_plan(s, inp, previous, resolved['fingerprint'])
+    # Past here the document is written. A correction that changes nothing has already returned
+    # above without a revision or a posting, so this is the one boundary every posted grid
+    # crosses -- a new credit's and a correction's, entered lines and retained ones alike.
+    _refuse_stocked_document(resolved['lines'])
+    if previous:
         from bookflow.company.credit_restatement import compatible
         compatible(s, ctx, previous, resolved)
     if header['version'] > 9223372036854775807:
