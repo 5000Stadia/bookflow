@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from bookflow.core import registry
-from bookflow.hub import permission_catalog as c
+from bookflow.hub import permission_catalog as c, permission_runtime as runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 R = c.Requirement
@@ -22,6 +22,22 @@ def owner(fn):
 
 
 def test_complete_unfiltered_registry_descriptors_and_action_owners():
+    """The descriptor an activation stores must be the commands this build executes.
+
+    The subject here is the TIP -- permission_runtime.current_catalog() -- and never
+    permission_catalog.FROZEN_CATALOG. The tip is what `permission activate` writes
+    into a root and what hub.access.require_command_activation admits a command
+    against, so the tip is the thing that has to equal the registry.
+
+    The frozen ancestor is the opposite kind of object: the shared base every
+    accepted version was built on, which must not move at all. This assertion used
+    to name it, and that was a standing instruction to append a new command to the
+    ancestor -- an edit that rewrites descriptors installations already activated
+    and stored, and locks them out of their own books. Three changes made it in a
+    single day, one of them reaching a deployment rehearsal, before the assertion
+    was pointed at the tip instead. tests/test_permission_catalog_history.py holds
+    the ancestor still; this holds the tip honest.
+    """
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     expected = []
@@ -39,9 +55,10 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
             actions[cmd.name] = (
                 {R(cmd.capability, cmd.required_role or 'authenticated'), *(R(*r) for r in cmd.resource_requirements)},
                 {x for x in (owner(cmd.plan), owner(cmd.authorize_input), owner(cmd.permanent_recovery), owner(cmd.transfer.prepare) if cmd.transfer else None) if x})
-    assert c.FROZEN_COMMANDS == tuple(sorted(expected, key=lambda d: d.name))
-    assert c.FROZEN_MANIFEST.standalone_names == tuple(sorted(cmd.name for cmd in commands if cmd.standalone))
-    actual = {a.key: a for a in c.FROZEN_COMPANY_ACTIONS if not a.key.startswith('contract:')}
+    tip = runtime.current_catalog()
+    assert tip.CATALOG.commands == tuple(sorted(expected, key=lambda d: d.name))
+    assert tip.MANIFEST.standalone_names == tuple(sorted(cmd.name for cmd in commands if cmd.standalone))
+    actual = {a.key: a for a in tip.CATALOG.company_actions if not a.key.startswith('contract:')}
     assert actual.keys() == actions.keys()
     for name, (requirements, owners) in actions.items():
         assert set(actual[name].requirements) == requirements
