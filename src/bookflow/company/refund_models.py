@@ -5,10 +5,14 @@ money leaves, and writes one document. It settles nothing: there is no invoice o
 side of a refund, only credit capacity, so what stops the same credit being spent twice is a
 consumption row rather than a settlement edge.
 
-There is no ``update``. A refund is one amount to one customer on one date out of one account;
-correcting any of those is a different refund, so the correction path is void and write again,
-and the document carries exactly one revision for its whole life -- which is what lets its
-receivable attribution name one posting row for ever rather than one per revision.
+``customer-refund update`` corrects a saved refund with another immutable revision, the way
+every other posted document is corrected: what is supplied replaces what was captured, the
+superseded effect is reversed at its own date and a replacement is posted at the corrected one,
+and the consumptions the old revision made are released and retaken in the same write. Each
+revision carries its own header row, so ``ar_posting_source_id`` names that revision's own
+receivable attribution rather than one shared across the document's life. What no correction
+changes is who is paid: the customer, the receivable account and the currency come from the
+credits being paid out.
 """
 from __future__ import annotations
 
@@ -65,11 +69,49 @@ class CustomerRefundPostInput(_Input):
 
 class CustomerRefundShowInput(_Input):
     refund: _Selector
+    revision_number: _Version | None = Field(
+        default=None,
+        description='Read a superseded revision of this refund instead of the current one; '
+                    'omit for what the refund says now.')
 
 
 class CustomerRefundVoidInput(_Input):
     refund: _Selector
     expected_version: _Version | None = None
+
+
+class CustomerRefundUpdateInput(_Input):
+    """A correction of a saved customer refund: what changes is what is supplied.
+
+    ``sources`` replaces the whole list of credits the refund pays out, each with how much of
+    it goes; leave it out and the captured sources stand exactly as they were, which is how the
+    date, the memo, the bank account or the check number alone is corrected. ``customer`` stays
+    what it always was -- an optional guard on the credits, never a choice -- because a refund
+    that paid somebody else is a different refund and not a correction of this one.
+    """
+
+    refund: _Selector
+    expected_version: _Version | None = None
+    date: _Date | None = None
+    sources: Annotated[list[RefundSourceInput], Field(min_length=1, max_length=200)] | None = None
+    funding_account: _Selector | None = None
+    method: _Selector | None = None
+    check_number: CheckNumber | None = None
+    reference: Reference | None = None
+    memo: Text | None = None
+    number: _Number | None = None
+    class_id: _Selector | None = None
+    customer: _Selector | None = Field(
+        default=None,
+        description='Optional guard: the customer you expect these credits to belong to. The '
+                    'correction is refused when they belong to anyone else.')
+
+    @model_validator(mode='after')
+    def required_values(self) -> Self:
+        for field in ('date', 'sources', 'funding_account', 'method', 'number'):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null')
+        return self
 
 
 class CustomerRefundQueryInput(_Input):

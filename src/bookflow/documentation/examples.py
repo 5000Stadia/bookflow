@@ -704,6 +704,10 @@ EXAMPLES.update({
         'bookflow customer-refund query --customer "Rivera Construction" --limit 25'
         ' --company "Demo Plumbing Co" --json',
         {"customer": "Rivera Construction", "limit": 25}),
+    "customer-refund update": Example(
+        f'bookflow customer-refund update {ID} --expected-version 1 --check-number 1042'
+        ' --company "Demo Plumbing Co" --reason "The first cheque was spoiled" --json',
+        {"refund": ID, "expected_version": 1, "check_number": "1042"}),
     "customer-refund void": Example(
         f'bookflow customer-refund void {ID} --expected-version 1 --company "Demo Plumbing Co"'
         ' --reason "Drawn on the wrong bank account" --json',

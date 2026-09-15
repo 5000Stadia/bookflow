@@ -3862,15 +3862,37 @@ historical key joins in refund labels and receivable reports retain their histor
 Linked returns continue to enforce exact invoice source dimensions. Credit void still refuses
 active applications or refunds.
 
-`customer-refund` has no update either, and for
-the settled reason: a refund is one customer, one amount, one date and one account, so changing
-any of them makes it a different refund and the document carries one revision for life. A
-refund's source is a credit memo only; refunding unapplied payment overage needs
+`customer-refund update` corrects a refund the way `credit-memo update` corrects a credit.
+`refunds._resolve` merges what was supplied over what the revision captured — one reader for
+both `post` and `update`, so an omitted field keeps its captured value and nothing is resolved
+twice — and `refunds._compose` builds one graph: the superseded batch reversed at its own date,
+a replacement posted at the corrected one, an exact release for every consumption the old
+revision made, and the corrected consumptions taken in the same write, so `credits.facts` never
+sees a credit spent twice in between. `refunds._sources` takes the released capacity as a
+per-component credit back onto what the books report available, which is why a refund may be
+corrected upward to what its own credit still holds. Both dates must be open. Each revision
+carries its own `customer_refund_profiles` row, so `ar_posting_source_id` names that revision's
+own receivable attribution rather than one shared for the document's life, and
+`customer-refund show` takes `revision_number` to read a superseded one. The entered line keeps
+its `document_line_identities` row across revisions.
+
+What a correction cannot change is who is paid: the customer, the receivable account and the
+currency come from the credits and are compared against the stored profile, answering
+`E_APPLICATION_INCOMPATIBLE` with `reason: customer_refund_ownership`. A voided refund answers
+`E_APPLICATION_INACTIVE`; one a finished bank reconciliation holds answers
+`E_RECONCILIATION_DEPENDENCY`, through the same `reconciliation_keys` join
+`payment_deletions.dependencies` uses. Every correction carries a reason, because it always
+releases and retakes capacity other documents own. An empty patch, or one resolving to what is
+already stored, writes nothing and reports `changed` false. A correction does not advance the
+versions of the credit memos it releases and retakes, exactly as `customer-refund post` does not
+when it first consumes them. `customer-refund void` is unchanged and still carries no
+reconciliation fence of its own.
+
+A refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family. Price allowances against a source line,
-stocked returns and cost restoration, cross-party (parent↔job) credit, cash-basis treatment, the
-refund's reconciliation producer and print are outside the release entirely and are refused
-rather than approximated; the command help says so.
+family. Price allowances against a source line, stocked returns and cost restoration,
+cross-party (parent↔job) credit, cash-basis treatment, the refund's reconciliation producer and
+print are outside the release entirely.
 
 ## The three credit documents in the browser
 
@@ -3931,6 +3953,32 @@ refund's says which credits it paid out and what each was worth first. Below 700
 and every table becomes one block per row, asserted at 390px in
 `tests/test_credit_windows_browser.py` as each element's own `scrollWidth` against its own
 `clientWidth`.
+
+**Correcting a refund in the browser.** The saved refund carries its own way in: the page says a
+refund typed wrong is corrected rather than voided, and `detail_context` puts a `Correct this
+refund` link beside that sentence for a posted refund only -- a preview has nothing saved to
+correct and a voided refund paid nothing, both of which the command refuses. The form behind it
+is the generated one, and `pages._editable_values` routes `customer-refund` to
+`credits.refund_editable_values`: the projection of the saved document onto the exact fields
+`customer-refund update` declares. Without it the generic fallback handed the form the whole
+`customer-refund show` output, whose `funding_account_id`, `payment_method_id`, `customer_id` and
+nested sources are not what the command takes, so the bank account, the method, the customer, the
+class and the entire grid of credits rendered blank on a document that had all five.
+
+Two things in that projection are load-bearing. A leaf equal to its baseline is never submitted,
+so every value must round-trip exactly or an untouched save becomes a real correction: the amounts
+are the document's own minor units rendered through `Money`, and the receivable account and the
+currency are deliberately absent because a correction cannot change them. And a source amount is
+projected only when the document captured one. A refund posted without amounts pays out everything
+each credit is worth and captures `origins['amount']` as `default`; that origin is part of the
+profile `refunds.prepare_update` compares a correction against, so putting a figure in a defaulted
+cell would flip it to `explicit` and turn a save nobody typed into a reversal batch and a
+replacement batch. `tests/test_customer_refund_correction_form.py` submits the controls the page
+actually renders and holds the whole of this as raw database equality -- an untouched save leaves
+`company.db` byte for byte what it was -- with a changed field beside it that has to move the same
+bytes. `tests/test_customer_refund_update_browser.py` walks the journey in real Chrome at 1280 and
+390: refund a credit from the credit memo's page, correct the refund from the refund's page,
+preview, save, and read the revision it replaced.
 
 **The three tiles are live.** Credit memo and Refund on the Customers panel, Vendor credit on the
 Vendors panel. `tests/test_credit_windows_browser.py` performs the availability contract rather

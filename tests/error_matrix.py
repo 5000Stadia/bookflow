@@ -1157,6 +1157,24 @@ MATRIX["customer-refund post"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+MATRIX["customer-refund update"] = {
+    "E_RECORD_NOT_FOUND": "unknown refund, credit memo, customer, funding account or method",
+    "E_INACTIVE_REFERENCE": "deactivated funding account, method or class",
+    "E_VALIDATION": "a funding account that is not a bank account, a check number on something that is not a check, the same credit twice, a guard customer the credits do not belong to, a date before a credit memo, a reason longer than 140 characters, or ambiguous current posting evidence",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "the superseded revision's date or the corrected one in a closed period",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by another refund",
+    "E_APPLICATION_INACTIVE": "a voided refund, or a voided credit memo named as a source",
+    "E_APPLICATION_INCOMPATIBLE": "credits belonging to different customers, receivable accounts or currencies, or a correction that would pay back somebody else",
+    "E_CREDIT_UNAVAILABLE": "more than a credit is worth once this refund's own consumptions are handed back",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "no reason given for a correction",
+    "E_RECONCILIATION_DEPENDENCY": "a finished bank reconciliation holds the refund",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
 MATRIX["customer-refund void"] = {
     "E_RECORD_NOT_FOUND": "unknown refund",
     "E_VERSION_CONFLICT": "stale expected_version",
@@ -1168,7 +1186,7 @@ MATRIX["customer-refund void"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
-MATRIX["customer-refund show"] = {"E_RECORD_NOT_FOUND": "unknown refund"}
+MATRIX["customer-refund show"] = {"E_RECORD_NOT_FOUND": "unknown refund or revision number"}
 MATRIX["customer-refund query"] = {
     "E_RECORD_NOT_FOUND": "unknown customer, funding account or method filter",
     "E_QUERY_STALE": "company audit changed between refund pages",

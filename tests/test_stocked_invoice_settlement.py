@@ -364,3 +364,133 @@ def test_a_line_whose_two_rows_cannot_be_named_refuses_and_writes_nothing(books,
     assert refused.value.details['fields'] == [
         {'field': 'invoice', 'problem': 'stored component has ambiguous accounting attribution'}]
     assert database(path) == before
+
+
+# ---------------------------------------------------------------- settling one with credit
+
+"""Settling a stocked invoice with a credit memo rather than with cash.
+
+`credit_settlement` routes through the same `payments._target_components` the cash side uses,
+so it inherits the four-row problem and the fix for it: a stock-carrying line's receivable and
+income rows are what a credit settles, and its cost pair is not a candidate. Everything below
+reads the settled rows out of the stored allocations by the accounts they posted to, so a
+credit that reached the inventory credit instead of the income credit would show here.
+
+    Bought   2 x 8.00    ->  16.00 into Inventory Asset, 16.00 owed to the supplier
+    Sold     1 x 12.00   ->  12.00 receivable, 12.00 income, 8.00 cost, 8.00 left in stock
+    Credit      5.00     ->   5.00 off the income, 5.00 off the receivable, stock untouched
+"""
+
+GOODWILL = '5.00'   # the credit written against the same customer
+CREDITED = 500      # what that credit is worth
+
+
+def _exempt_code(books):
+    return next(row['id'] for row in books['run']('sales-tax-code list', {})['items']
+                if not row['taxable'])
+
+
+def _sellable_service(books, name='Goodwill'):
+    """A plain service item, so the credit memo itself carries no stock of its own."""
+    return books['client'].item.create(
+        company=books['company'], name=name, type='service', sales_enabled=True,
+        purchase_enabled=False, description=name, price=GOODWILL,
+        income_account_id=books['income'], sales_tax_code_id=_exempt_code(books))['id']
+
+
+def _credit(books, amount=GOODWILL, date='2017-01-03', name='Goodwill'):
+    return books['run']('credit-memo post', dict(
+        customer=books['customer'], date=date,
+        lines=[dict(item=_sellable_service(books, name), quantity='1', unit_price=amount)]),
+        reason='Credit the customer')
+
+
+def _invoice_version(books, invoice_id):
+    return books['run']('invoice show', dict(invoice=invoice_id))['version']
+
+
+def _apply_credit(books, credit, invoice_id, amount, date='2017-01-03'):
+    return books['run']('customer-credit apply', dict(
+        credit_memo=credit['id'], expected_version=credit['version'], date=date,
+        applications=[dict(invoice=invoice_id, amount=amount,
+                           expected_version=_invoice_version(books, invoice_id))]),
+        reason='Apply the credit')
+
+
+def test_a_credit_applied_to_a_stocked_invoice_settles_its_income_never_its_inventory(books):
+    run = books['run']
+    item = _inventory_part(books)
+    asset = _inventory_asset(books)
+    invoice = _stocked_invoice(books, item)
+    receivable = invoice['revision']['profile']['control_account']['id']
+    credit = _credit(books)
+
+    # The credit memo itself is the only thing that moves money: income down, receivable down.
+    before = _net(books)
+    assert before == {asset: HELD, books['payable']: -1600, receivable: 1200 - CREDITED,
+                      books['income']: -1200 + CREDITED, books['cogs']: COST}
+
+    applied = _apply_credit(books, credit, invoice['id'], GOODWILL)
+
+    # Applying it posts nothing at all -- not "still balances", identical, cent for cent.
+    assert _net(books) == before
+    assert run('invoice settlement', dict(invoice=invoice['id']))['due_minor_units'] == 1200 - CREDITED
+    assert _stock(books, item, '2017-01-03') == ('1', HELD)
+    # The settled rows are the receivable debit and the income credit the sale captured.
+    assert _settled(books, invoice['id']) == [('net', receivable, books['income'], CREDITED)]
+    assert {row[2] for row in _settled(books, invoice['id'])}.isdisjoint({asset, books['cogs']})
+
+    application = applied['effect']['applications'][0]['application_id']
+    undone = run('customer-credit unapply', dict(
+        credit_memo=credit['id'], expected_version=applied['version'],
+        applications=[dict(application_id=application,
+                           invoice_expected_version=_invoice_version(books, invoice['id']))]),
+        reason='Take the credit back off')
+    assert undone['current']['available_minor_units'] == CREDITED
+    assert run('invoice settlement', dict(invoice=invoice['id']))['due_minor_units'] == 1200
+    assert _settled(books, invoice['id']) == []
+    assert _net(books) == before
+    assert _stock(books, item, '2017-01-03') == ('1', HELD)
+
+    again = _apply_credit(books, dict(credit, version=undone['version']), invoice['id'], GOODWILL)
+    assert again['current']['applied_minor_units'] == CREDITED
+    assert _settled(books, invoice['id']) == [('net', receivable, books['income'], CREDITED)]
+    assert _net(books) == before
+    assert _stock(books, item, '2017-01-03') == ('1', HELD)
+
+
+def test_a_credit_settles_what_the_cash_left_of_a_stocked_invoice(books):
+    """Cash first, then the credit: the credit may only reach what the payment did not take."""
+    run = books['run']
+    item = _inventory_part(books)
+    asset = _inventory_asset(books)
+    invoice = _stocked_invoice(books, item)
+    receivable = invoice['revision']['profile']['control_account']['id']
+
+    paid = run('payment receive', _receipt(books, invoice, '7', 'stocked-credit-cash', 1),
+               reason='Part payment')
+    cash = _cash(books, paid['id'])
+    assert run('invoice settlement', dict(invoice=invoice['id']))['due_minor_units'] == 500
+    assert _settled(books, invoice['id']) == [('net', receivable, books['income'], 700)]
+
+    credit = _credit(books)
+    before = _net(books)
+    applied = _apply_credit(books, credit, invoice['id'], GOODWILL)
+
+    assert _net(books) == before == {asset: HELD, books['payable']: -1600,
+                                     books['income']: -1200 + CREDITED, books['cogs']: COST,
+                                     cash: 700}
+    assert run('invoice settlement', dict(invoice=invoice['id']))['due_minor_units'] == 0
+    assert applied['current']['available_minor_units'] == 0
+    # Two settlements of the same line, the cash and the credit, both against its income row.
+    assert _settled(books, invoice['id']) == [('net', receivable, books['income'], CREDITED),
+                                              ('net', receivable, books['income'], 700)]
+    assert {row[2] for row in _settled(books, invoice['id'])}.isdisjoint({asset, books['cogs']})
+    assert _stock(books, item, '2017-01-03') == ('1', HELD)
+
+    # And nothing is left for a second credit to reach.
+    spare = _credit(books, name='Goodwill again')
+    before = database(_path(books))
+    with pytest.raises(BookflowError) as refused:
+        _apply_credit(books, spare, invoice['id'], GOODWILL)
+    assert refused.value.code == 'E_APPLICATION_CAPACITY' and database(_path(books)) == before

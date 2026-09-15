@@ -268,6 +268,8 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
         return Purchases.editable_values(shown)
     if noun == 'credit-memo':
         return Credits.editable_values(shown)
+    if noun == 'customer-refund':
+        return Credits.refund_editable_values(shown)
     if noun == "journal":
         revision = shown.get("revision", {})
         return {
