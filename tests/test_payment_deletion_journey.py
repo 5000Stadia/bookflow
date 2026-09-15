@@ -100,6 +100,10 @@ def test_retained_application_history_and_payment_links_survive_deletion(books, 
 
     settlement = office.installer.get(f'/c/{company}/application/{application}')
     assert settlement.status_code == 200, settlement.text
+    # Current settlement names the receipt a person is actually looking at. The
+    # `application show` accounting statuses are unchanged; the page shows the
+    # deletion it has already loaded instead of calling a deleted receipt voided.
+    assert '; payment deleted.' in settlement.text and 'payment voided' not in settlement.text
 
     # A saved editing link to a deleted receipt opens its retained history, not a form.
     asked = json.loads(clerk.get(f'/c/{company}/receive-payments?payment={payment}&mode=update').text.split(
@@ -238,13 +242,17 @@ def test_payment_delete_journey_in_real_chrome(register_browser, width, tmp_path
     assert 'Duplicate receipt — keep this reason' in retained and 'no restore action' in retained
     assert not b.evaluate('!!' + action)
     # Hidden from an ordinary read, exactly as the retained-deletion contract says.
-    # (`payment query` is not asked here: it fails over HTTP for every caller once
-    # permissions are activated — a pre-existing publication defect, see the report.)
-    ordinary = b.evaluate("fetch('/companies/" + site.company_id + "/commands/payment.show',"
-        "{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',"
-        "'X-Bookflow-Workbench':'1'},body:JSON.stringify({payment:" + json.dumps(paid['id']) + "})})"
-        ".then(async r=>({status:r.status,body:await r.json()}))", await_promise=True)
+    def command(name, body):
+        return b.evaluate("fetch('/companies/" + site.company_id + "/commands/" + name + "',"
+            "{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',"
+            "'X-Bookflow-Workbench':'1'},body:JSON.stringify(" + json.dumps(body) + ")})"
+            ".then(async r=>({status:r.status,body:await r.json()}))", await_promise=True)
+
+    ordinary = command('payment.show', dict(payment=paid['id']))
     assert ordinary['body']['code'] == 'E_RECORD_NOT_FOUND', ordinary
+    listed = command('payment.query', {})
+    assert listed['status'] == 200, listed
+    assert paid['id'] not in [row['id'] for row in listed['body']['items']], listed
     _contained(b, width)
     (folder / f'deleted-{width}.png').write_bytes(base64.b64decode(
         b.call('Page.captureScreenshot', {'captureBeyondViewport': True, 'fromSurface': True})['data']))

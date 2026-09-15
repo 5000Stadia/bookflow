@@ -5,7 +5,7 @@
 <p><a href="/c/{{ company_id }}/receive-payments?payment={{ payment.id }}">Payment {{ payment.number }}</a> → <a href="/c/{{ company_id }}/invoice/{{ invoice.id }}{{ '?include_deleted=1' if invoice.deletion else '' }}">Invoice {{ invoice.number }}</a></p>
 {% if payment.deletion %}<p class="warn" aria-label="Deleted payment">Payment {{ payment.number }} was deleted on {{ payment.deletion.created_at }} by {{ payment.deletion.created_by_name or payment.deletion.created_by }}: {{ payment.deletion.reason }}. This settlement history is retained and readable; there is no restore action.</p>{% endif %}
 <p>The recorded application and its reversals remain immutable. Current availability and invoice due are separate.</p>
-<section><h2>Current settlement</h2><p>Invoice {{ application.current_invoice.status }}; payment {{ application.current_payment.status }}.</p><p><a href="/c/{{ company_id }}/receive-payments?payment={{ payment.id }}">Inspect available payment credit and actions</a></p></section>
+<section><h2>Current settlement</h2><p>Invoice {{ application.current_invoice.status }}; payment {{ payment.status if payment.deletion else application.current_payment.status }}.</p><p><a href="/c/{{ company_id }}/receive-payments?payment={{ payment.id }}">Inspect available payment credit and actions</a></p></section>
 <section><h2>Application and allocation history</h2><p>{{ application_history.total_count }} recorded entries</p>
 {% for entry in application_history['items'] %}<div class="payment-effect">
 <p>{{ entry.kind.replace('_',' ') }} · {{ entry.amount_label }} · <a href="/c/{{ company_id }}/audit/{{ entry.audit_event_id }}">Audit {{ entry.audit_sequence }}</a></p>

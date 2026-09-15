@@ -3377,10 +3377,16 @@ physical ID. Preview and commit therefore cannot disagree.
 
 Hosted requests carry their authenticated producer on `Session.credential`, set by
 `adapters/http/execution.run_hosted` from the credential it already revalidated
-and cleared when the request leaves. The deposit commands pass it as the binding,
-so `deposit_dependency_history.execution_binding` revalidates the actual bearer or
-session cookie instead of deriving an OS login the host does not have. A local
-session leaves it None and the private layer builds its `OSBinding` as before.
+and cleared when the request leaves. Finishing the publication permit is inside
+that window on both the successful and the failed path, because capture re-asks
+the company's own resource requirements and `identity_admin_binding.session_operation`
+admits them through this producer; cleared any earlier, every hosted read whose
+capture consults company permissions answers `E_IO {stage: publication, reason:
+receipt_certificate}` under an activated policy. The deposit commands pass it as
+the binding, so `deposit_dependency_history.execution_binding` revalidates the
+actual bearer or session cookie instead of deriving an OS login the host does not
+have. A local session leaves it None and the private layer builds its `OSBinding`
+as before.
 
 Correcting or voiding a deposit needs the authenticated `dependency_guard` its own
 dry run issues; committing without one is `E_PREVIEW_STALE`. Claiming a receipt
