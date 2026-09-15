@@ -2486,7 +2486,30 @@ False, so the control had never worked for any family.
 `permission_bill_deletion_catalog` follows the payment descriptor. It is the first delta
 with no frozen preparation to flip: the `transaction.bill.delete` capability spec, the
 `contract:delete:bill` company action and the `bill delete` command all arrive in it.
-`BILL_DELETE_POLICY_VERSION` is the current catalog, and `co0052` is the company head.
+`co0052` is the company head.
+
+### Where a new command enters the permission catalog
+
+The historical catalogs are a delta chain — activation, setup, purchase, sales, payment,
+bill, credit correction — and every one of them is `replace(previous.CATALOG, ...)` over
+the single shared ancestor `permission_catalog.FROZEN_CATALOG`. An activation writes the
+exact descriptor it accepted into the root; every later read rebuilds that descriptor from
+the module `permission_runtime.known_catalog` names for the stored version, and
+`permission_snapshot._load_root` refuses the root when the rebuilt descriptor differs by
+one field. So a command written into the frozen ancestor is not a local edit: it rewrites
+every version below it, including versions installations activated months earlier, and
+those installations can no longer load their own permission state. Nothing in the product
+repairs that, because `permission activate` performs the same read before it can move the
+root forward, and every company-scoped command reaches it through
+`permission_runtime.observe_current`.
+
+A new command therefore enters through a new delta module, registered in
+`known_catalog` — the single owner of version to module — with `current_catalog()` naming
+the tip. `permission_credit_correction_catalog` is that delta for `customer-refund update`,
+`vendor-credit update` and `vendor-credit history`, each with the company action its
+planner still owns, and `CREDIT_CORRECTION_POLICY_VERSION` is the current catalog.
+`tests/test_permission_catalog_history.py` pins the command count and descriptor sha256 of
+every accepted version, so an ancestor edit fails there instead of on somebody's books.
 
 ### Inert permission-administration storage (B1)
 
