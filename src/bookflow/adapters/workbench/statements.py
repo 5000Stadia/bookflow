@@ -36,14 +36,13 @@ def view(result, inputs, company_id, command=None):
     next_fields = {f"f:{key}": (str(value).lower() if isinstance(value, bool) else str(value))
                    for key, value in inputs.items() if key != "cursor" and value is not None}
     next_fields["f:cursor"] = result["next_cursor"]
-    return {**result, "rows": rows, "next_fields": next_fields,
-            "basic_report": command in {"report trial-balance", "report general-ledger"},
-            "general_ledger": command == "report general-ledger",
-            "cash_flows": command == "report cash-flows",
-            "tax_summary": command == "report income-tax-summary"}
     shown = {**result, "rows": rows, "next_fields": next_fields,
              "basic_report": command in {"report trial-balance", "report general-ledger"},
              "general_ledger": command == "report general-ledger",
+             "cash_flows": command == "report cash-flows",
+             "tax_summary": command == "report income-tax-summary",
+             # Which page reads this result, named here rather than worked out in
+             # the template, exactly as the four above are.
              "dimensional": dimensional}
     if dimensional:
         shown["dimension_label"] = DIMENSION_LABEL[result["dimension"]]

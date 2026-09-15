@@ -1262,7 +1262,12 @@ these continuations, preserving their original generation metadata across pages.
 Existing TB/GL continuation semantics remain unchanged.
 
 Workbench `statements.py` and `statement.html` project these results without
-accounting logic. The filter form restarts a report; a separate Next account page
+accounting logic. `statements.py` also names which page reads each result --
+`basic_report`, `cash_flows`, `tax_summary` and `dimensional` on the projected
+dictionary -- and `form.html` includes the template that flag selects, falling
+back to `statement.html`. A result whose page is not named there is rendered by
+`statement.html`, whose row markup only the single-amount statements satisfy.
+The filter form restarts a report; a separate Next account page
 form preserves its validated input and cursor. All report submissions display
 read results directly rather than a saved-write flash. GL drill-down carries the
 source watermark only as browser context, compares it with returned metadata and
