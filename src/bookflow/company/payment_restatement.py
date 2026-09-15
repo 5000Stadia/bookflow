@@ -1,7 +1,7 @@
 """Invoice-side logical allocation recipe independent of regenerated physical IDs."""
 import json
 
-from bookflow.company import schema as c, document_effects as effects
+from bookflow.company import schema as c, document_effects as effects, sales
 from bookflow.company import payment_queries as query, payment_calculations as calc, journals
 from bookflow.company.payment_cancellation import live_allocations
 from bookflow.core.errors import BookflowError
@@ -51,22 +51,24 @@ def prepare(plan, s, ctx):
         raise BookflowError('E_HAS_APPLICATIONS', details={'invoice_id': old['id'], 'field': 'date'})
     recognition = {row['id']: row for row in pending['posting_lines'] if row['reversed_line_id'] is None}
     sources = [row for row in pending['posting_line_sources'] if row['reversed_source_id'] is None]
-    net = {row['document_line_id']: row['net_minor_units'] for row in pending['sales_line_profiles']}
+    captured = {row['document_line_id']: row for row in pending['sales_line_profiles']}
+    net = {line_id: row['net_minor_units'] for line_id, row in captured.items()}
     components = {}
     for line in lines:
         values = [(None, net[line['id']])] + [(tax, tax['tax_minor_units']) for tax in pending['sales_tax_components'] if tax['document_line_id'] == line['id']]
         for tax, units in values:
             if not units:
                 continue
-            tax_id = tax['id'] if tax else None
-            matching = [row for row in sources if row['document_line_id'] == line['id'] and row['tax_component_id'] == tax_id]
-            ar = [row for row in matching if recognition[row['posting_line_id']]['debit_minor_units'] > 0]
-            credit = [row for row in matching if recognition[row['posting_line_id']]['credit_minor_units'] > 0]
-            if len(ar) != 1 or len(credit) != 1:
+            pair = sales.component_attribution(sources, document_line_id=line['id'],
+                item_snapshot=captured[line['id']]['item_snapshot'], tax=tax,
+                control_account_id=profile['control_account_id'], capacity=units, currency=revision['currency'],
+                leg=lambda row: recognition[row['posting_line_id']])
+            if pair is None:
                 raise BookflowError('E_VALIDATION', message='Ambiguous revised invoice attribution.')
+            ar, credit = pair
             key = calc.ComponentKey(ordinals[line['line_id']], int(tax is not None), tax['tax_item_id'] if tax else '')
-            components[key] = dict(capacity=units, line=line, tax=tax, ar=ar[0], recognition=credit[0],
-                semantic=semantic(dict(account_id=recognition[credit[0]['posting_line_id']]['account_id'], net_minor_units=net[line['id']], tax=tax)))
+            components[key] = dict(capacity=units, line=line, tax=tax, ar=ar, recognition=credit,
+                semantic=semantic(dict(account_id=recognition[credit['posting_line_id']]['account_id'], net_minor_units=net[line['id']], tax=tax)))
     available = {key: value['capacity'] for key, value in components.items()}
     allocations, changed_payments, recipes = [], set(), []
     live_by_application = {}

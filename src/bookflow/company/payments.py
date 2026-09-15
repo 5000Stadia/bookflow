@@ -174,20 +174,22 @@ def _target_components(s, facts, pending, created, event):
     taxes = effects.rows(s, c.sales_tax_components, c.sales_tax_components.c.revision_id == revision['id'])
     result = {}
     for line in lines:
-        values = [(None, None, line['net_minor_units'])] + [(tax['id'], tax['tax_item_id'], tax['tax_minor_units'])
+        values = [(None, line['net_minor_units'])] + [(tax, tax['tax_minor_units'])
                   for tax in taxes if tax['document_line_id'] == line['id']]
-        for physical, tax_item, capacity in values:
+        for tax, capacity in values:
             if not capacity:
                 continue
-            related = [row for row in sources if row['document_line_id'] == line['id'] and row['tax_component_id'] == physical]
-            ar = [row for row in related if row['account_id'] == facts['profile']['control_account_id'] and row['debit_minor_units'] > 0]
-            rec = [row for row in related if row['credit_minor_units'] > 0]
-            if len(ar) != 1 or len(rec) != 1:
+            pair = sales.component_attribution(sources, document_line_id=line['id'], item_snapshot=line['item_snapshot'],
+                tax=tax, control_account_id=facts['profile']['control_account_id'],
+                capacity=capacity, currency=revision['currency'])
+            if pair is None:
                 raise _invalid('invoice', 'stored component has ambiguous accounting attribution')
+            ar, rec = pair
+            physical, tax_item = (tax['id'], tax['tax_item_id']) if tax is not None else (None, None)
             key = calc.ComponentKey(ordinals[line['line_id']], 1 if physical else 0, tax_item or '')
             result[key] = dict(capacity=capacity, line=line, tax_component_id=physical, tax_item_id=tax_item,
-                ar=ar[0], recognition=rec[0], semantic=dict(account_id=rec[0]['account_id'],
-                    net_minor_units=line['net_minor_units'], tax=next((t for t in taxes if t['id'] == physical), None)))
+                ar=ar, recognition=rec, semantic=dict(account_id=rec['account_id'],
+                    net_minor_units=line['net_minor_units'], tax=tax))
     allocations, inverse = c.application_allocations, c.application_allocations.alias('inverse')
     live = s.company.conn.execute(sa.select(allocations).where(allocations.c.target_transaction_id == header['id'],
         allocations.c.kind == 'allocation', ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_allocation_id == allocations.c.id)))).mappings()

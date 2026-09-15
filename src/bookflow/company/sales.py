@@ -86,6 +86,39 @@ def saved_lines(s, revision):
     return [dict(row) for row in s.company.conn.execute(query).mappings()]
 
 
+def component_attribution(sources, *, document_line_id, item_snapshot, tax, control_account_id,
+                          capacity, currency, leg=lambda row: row):
+    """The one receivable row and the one recognition row a stored sale component owns.
+
+    A component is one logical thing the customer owes -- a line's net, or one tax on that
+    line -- and settling it needs the two posting rows that put it on the books: the debit
+    that made it receivable, and the credit that recognised it as income or as tax owed to an
+    agency. On a service line those are the only two rows carrying the line, so "the debit"
+    and "the credit" name them. A stock-carrying line posts two more against the same line and
+    the same null tax component -- the cost debited to Cost of Goods Sold and credited out of
+    Inventory Asset -- and then direction alone names nothing: there are two credits and the
+    inventory one has no part in what the customer owes.
+
+    So both sides are read off the accounts the revision captured, never off the row order,
+    the account's type or its name: the profile's control account for the receivable, and for
+    the recognition either the line's captured income account or the component's captured
+    liability account. The cost pair is excluded because it is posted to neither. Returns
+    ``None`` unless exactly one row answers each side for this component's own capacity and
+    currency, which is the caller's refusal to guess rather than a licence to pick.
+    """
+    recognition_account_id = (tax['liability_account_id'] if tax is not None
+                              else SalesLineProfile.model_validate_json(item_snapshot).income_account.id)
+    related = [row for row in sources if row['document_line_id'] == document_line_id
+               and row['tax_component_id'] == (tax['id'] if tax is not None else None)]
+    ar = [row for row in related if leg(row)['account_id'] == control_account_id and leg(row)['debit_minor_units'] > 0]
+    recognition = [row for row in related if leg(row)['account_id'] == recognition_account_id and leg(row)['credit_minor_units'] > 0]
+    if len(ar) != 1 or len(recognition) != 1:
+        return None
+    if any(row['amount_minor_units'] != capacity or row['currency'] != currency for row in (ar[0], recognition[0])):
+        return None
+    return ar[0], recognition[0]
+
+
 def summary(header, revision, profile):
     captured = SalesProfile.model_validate_json(profile['profile_snapshot'])
     currency = revision['currency']
