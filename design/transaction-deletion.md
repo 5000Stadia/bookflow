@@ -42,6 +42,39 @@ their original proof and history. Requests and retries must not duplicate revers
 or release effects. Deletion does not confer permission to erase audit history or
 bypass company isolation.
 
+## Family dispositions
+
+Every posted transaction type in `company/ledger_schema.py::TRANSACTION_TYPES` has a
+disposition here. A type is either deletable, or it is listed with the reason its
+own lifecycle serves the person without deletion. A type absent from this section
+does not exist.
+
+Deletable: `invoice`, `sales_receipt`, `check`, `card_charge`, `payment`, `bill`.
+
+Deferred, with the reason:
+
+- `journal_entry` — `check`, `card_charge` and `transfer` all store as this type with
+  a `money_out_documents` marker, and two of them already delete through the purchase
+  owner. A delete for this type must first settle which of those rows it may touch,
+  and must re-apply the stocked-purchase, item-receipt and inventory fences the void
+  planner owns.
+- `deposit` — `deposit void` already reverses the deposit at its original date and
+  returns every banked receipt to Undeposited Funds. The deposit readers declare
+  deletion unavailable (`feature: transaction_deleted`).
+- `bill_payment` — a payment pointed at the wrong bill is re-pointed with
+  `bill payment unapply` and `bill payment apply`, producing no document to remove.
+  A deleted cheque's number occupancy is unsettled.
+- `credit_memo` — `credit-memo update` corrects one in place, including one already
+  applied and refunded.
+- `sales_tax_payment` — nothing records a remittance as filed and nothing settles
+  against it; the void's own reversal already returns the agency to what it was owed.
+- `customer_refund` — the document carries one revision for its whole life by design,
+  which is what lets its receivable attribution name one posting row for ever.
+- `vendor_credit` — the gap here is the absent correction verb, not deletion.
+- `statement_charge` — `sales.prepare` raises `E_HAS_APPLICATIONS` only for
+  `invoice`, so the shared void writer does not refuse a settled statement charge;
+  that behaviour is settled before this type gains a delete.
+
 ## Implementation boundary
 
 This supersedes the former product prohibition on user-facing deletion. Existing
