@@ -3669,6 +3669,24 @@ and tax cent is taken from what that invoice captured. A document is all of one 
 is refused — the tax calculator rounds across a whole document, so a document holding one
 calculated cell and one captured cell would carry a tax total that is neither.
 
+**A credited line that carries stock is refused, not approximated.** A credit memo's accounting
+is income, the tax it takes back and the receivable, and nothing else: it has no inventory
+movement on it and no cost to put back. A stock-carrying line would therefore hand the money
+back and leave the quantity sold with its cost still in Cost of Goods Sold — two wrong balances
+rather than one missing feature — so `credits._refuse_stocked` refuses it, naming the line, the
+item and the remedy: credit the money with a service or non-stock item, and bring the quantity
+back with `inventory adjust`, which moves the quantity and what it is worth together. The
+stock-carrying set is the item master's own `TRACKED_TYPES`, read where
+`sales_defaults.resolve_line` reads it, because a second list here is the list the next
+stock-carrying type is silently left out of. Both kinds of line are covered, because both are
+wrong in the same way: a named stock item and a return against a stocked invoice line alike. The
+refusal sits in `credits.commercial`, on the entered lines only, so it fires on `credit-memo
+post` and on any `credit-memo update` that supplies a grid, on a preview as well as a save, and
+before a row is written. Lines a correction retains untouched are not re-judged, and every
+credit memo already stored against a stock item still reads, voids and pages its history: this
+refuses new ones rather than invalidating old ones. Moving the inventory and restoring the cost
+is a feature of its own and is not in this release.
+
 **The endpoint rule** (`credit_returns.py`) decides every cent a return carries. A captured
 source line of base quantity `Q` and net `N` gives a returned half-open interval `[a,b)`
 exactly `floor(N·b/Q) − floor(N·a/Q)` cents, and a captured tax cell `T` gives the net interval
@@ -3807,10 +3825,11 @@ the settled reason: a refund is one customer, one amount, one date and one accou
 any of them makes it a different refund and the document carries one revision for life. A
 refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family. Price allowances against a source line,
-stocked returns and cost restoration, cross-party (parent↔job) credit, cash-basis treatment, the
+family. Price allowances against a source line, credited lines that carry stock and the cost
+restoration they would need, cross-party (parent↔job) credit, cash-basis treatment, the
 refund's reconciliation producer and print are outside the release entirely and are refused
-rather than approximated; the command help says so.
+rather than approximated; the command help says so, and says why: not that there is nothing to
+return against, but that moving the inventory back and restoring the cost is not built.
 
 ## The three credit documents in the browser
 

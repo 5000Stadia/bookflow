@@ -35,6 +35,7 @@ from bookflow.company.credit_models import (
     CreditMemoOutput, CreditMemoPageOutput, CreditMemoWriteOutput, CreditRevisionOutput,
     CreditRevisionSummaryOutput, CreditSourceOutput, CreditTaxComponentOutput,
 )
+from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.core import clock
@@ -184,6 +185,44 @@ def _returned(s, entered, source, pending):
                 intervals=intervals)
 
 
+# ------------------------------------------------------------------ what a credit cannot do yet
+
+
+def _article(item_type):
+    readable = item_type.replace('_', ' ')
+    return ('an ' if readable[0] in 'aeiou' else 'a ') + readable
+
+
+def _refuse_stocked(profile, field):
+    """Refuse a credited line whose item carries stock, named or returned.
+
+    A credit memo posts income, the tax it takes back and the receivable, and nothing else:
+    there is no inventory movement on it and no cost to put back. A stock-carrying line would
+    therefore hand the money back and leave the quantity sold with its cost still in cost of
+    goods sold, which is two wrong balances rather than one missing feature. Moving the stock
+    and restoring the cost is a feature of its own; until it is built the line is refused
+    rather than approximated, which is what `credit-memo post`'s help says this release does.
+
+    The stock-carrying set is the item master's own, read through the same name the sales
+    grid and the stock ledger read, because a second list here is the list the next
+    stock-carrying type is silently left out of.
+    """
+    if profile.item_type not in TRACKED_TYPES:
+        return
+    raise BookflowError('E_VALIDATION', message=(
+        f'Returning stock is not supported yet. The line at `{field}` credits '
+        f'"{profile.item.label}", {_article(profile.item_type)} item, and a credit memo moves '
+        'no inventory and restores no cost: posting it would hand the money back and leave the '
+        'quantity sold with its cost still in cost of goods sold, so stock and cost of goods '
+        'sold would both be wrong. Credit the money with a service or non-stock item, and bring '
+        'the quantity back with `inventory adjust`, which moves the quantity and what it is '
+        'worth together.'),
+        details={'fields': [{'field': field, 'problem': 'this item carries stock'}],
+                 'reason': 'stocked_credit_unsupported',
+                 'item_id': profile.item.id, 'item_name': profile.item.label,
+                 'item_type': profile.item_type})
+
+
 # ------------------------------------------------------------------ resolving the whole document
 
 
@@ -214,7 +253,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
     lines, sources, identities = [], {}, set()
     if retained:
         lines = correction.retained_lines(s, saved, pending)
-    for entered in inp.lines or []:
+    for index, entered in enumerate(inp.lines or []):
         line_id = entered.line_id.upper() if entered.line_id else None
         if line_id and (line_id not in saved or line_id in identities):
             raise _invalid('lines.line_id', 'use each current credit memo line identity at most once')
@@ -228,6 +267,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                 found = _source_line(s, entered.source_invoice, entered.source_line, profile)
                 sources[entered.source_invoice][entered.source_line] = found
             resolved = _returned(s, entered, found, pending)
+            _refuse_stocked(resolved['profile'], f'lines.{index}.source_line')
             resolved['claim_rows'] = [
                 dict(id=new_id(), kind='claim', source_transaction_id=resolved['source']['transaction_id'],
                      source_line_id=resolved['source']['line_id'], start_microunits=start, end_microunits=end,
@@ -249,6 +289,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
             resolved, line_warnings = sales_defaults.resolve_line(
                 s, SalesLineInput(**supplied), profile, defer_tax=True,
                 previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults)
+            _refuse_stocked(resolved['profile'], f'lines.{index}.item')
             resolved['line_id'] = line_id
             resolved['source'] = None
             resolved['intervals'] = ()

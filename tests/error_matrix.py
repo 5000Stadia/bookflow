@@ -1010,11 +1010,13 @@ MATRIX["vendor-credit query"] = {
 
 # A credit memo refuses for the invoice's reasons -- it is the same resolver on the same
 # accounts -- plus the two only a return can hit: asking for more of a line than is left, and
-# a source line the invoice has since corrected out from under the claim.
+# a source line the invoice has since corrected out from under the claim. It also refuses what
+# it cannot post: a line whose item carries stock, because a credit memo moves no inventory and
+# restores no cost, so posting one would give the money back and leave the quantity sold.
 MATRIX["credit-memo post"] = {
     "E_RECORD_NOT_FOUND": "unknown customer, item, account, class, tax item, source invoice or source line",
     "E_INACTIVE_REFERENCE": "deactivated customer, item, account, class or tax item",
-    "E_VALIDATION": "no single active Accounts Receivable account, an ineligible posting account, a source invoice for another customer, a priced return, a document mixing returns with named items, or a zero total",
+    "E_VALIDATION": "no single active Accounts Receivable account, an ineligible posting account, a source invoice for another customer, a priced return, a line whose item carries stock, a document mixing returns with named items, or a zero total",
     "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
     "E_AMOUNT_PRECISION": "more decimals than the home currency has",
     "E_PERIOD_CLOSED": "credit date on or before the closing date",
