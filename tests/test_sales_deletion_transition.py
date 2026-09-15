@@ -6,6 +6,7 @@ from tests.test_bill_item_lines import books
 from tests.test_sales_deletion import sale
 from tests.test_purchase_deletion import location, enable
 from tests.payment_raw_evidence import database, table
+from tests.test_bill_payment_migration import _rebuilt_since
 
 
 def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monkeypatch):
@@ -21,16 +22,24 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
     before=database(path);observed=[];original=migrate.migrate_to_head
     def observing(db,chain,*args,**kwargs):
         result=original(db,chain,*args,**kwargs)
-        if chain=='company' and result==('co0049','co0052'):
+        # The destination is whatever the chain's head is today, not a literal: naming one
+        # is a pin that the next migration silently falsifies, and this observer would then
+        # simply never fire while the assertion below still read as a passing check.
+        if chain=='company' and result==('co0049',migrate.HEADS['company']):
             for name,rows in before['tables'].items():
                 if name!='alembic_version':assert table(db.raw,name)==rows,name
-            assert set(before['ddl']) <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+            # Every co49 object survives except the ones a later revision deliberately
+            # rebuilds -- co0053 respells three CHECKs and the two guards that mirror them.
+            # Which those are is derived from the migrations themselves, never listed here.
+            rebuilt=_rebuilt_since('co0049')
+            kept={row for row in before['ddl'] if row[1] not in rebuilt}
+            assert kept <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
             assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
             observed.append(result)
         return result
     monkeypatch.setattr(migrate,'migrate_to_head',observing)
     result=b['run']('invoice delete',dict(invoice=post['id'],expected_version=post['version'],operation_key='co49-first'),reason='First keyed sales deletion')
-    assert observed==[('co0049','co0052')]
+    assert observed==[('co0049',migrate.HEADS['company'])]
     assert result['status']=='deleted'
     with sqlite3.connect(path) as db:
         db.execute('PRAGMA foreign_keys=ON')

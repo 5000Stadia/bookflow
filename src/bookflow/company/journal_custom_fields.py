@@ -12,6 +12,7 @@ from pydantic import ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_
 
 from bookflow.company import custom_fields as cf, schema as c
 from bookflow.company.custom_fields import CustomFieldKind, CustomFieldValuePatch
+from bookflow.company.work_models import WORK_KINDS
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.models import StrictModel
@@ -187,7 +188,7 @@ def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id
         _require(not slots and not previous)
     # When an aggregate exists, its selected immutable revision is the authority
     # for preserved labels, rather than the supplied preparation dictionary.
-    if record_type in {"proposal", "estimate", "work_order"}:
+    if record_type in WORK_KINDS:
         header_type = connection.execute(sa.select(c.work_documents.c.kind).where(
             c.work_documents.c.id == record_id)).scalar_one_or_none()
         if header_type is not None:

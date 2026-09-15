@@ -339,8 +339,31 @@ EXAMPLES.update({
     'work-order complete': Example(f'bookflow work-order complete {ID} --expected-version 1 --actual-start 2026-09-03T10:00:00-05:00 --actual-end 2026-09-03T11:00:00-05:00 --company "Demo Plumbing Co" --reason "Customer work completed" --json', {'work_order': ID, 'expected_version': 1, 'actual_start': '2026-09-03T10:00:00-05:00', 'actual_end': '2026-09-03T11:00:00-05:00'}),
 })
 
+# Recorded time: a much smaller input than a quote, because a person logging hours is saying
+# who, for whom, when, how long and as what. The duration is decimal hours.
+_TIME = {'employee': 'Dana Fitter', 'customer': 'Riverside Apartments', 'date': '2026-09-03',
+         'duration': '1.5', 'item': 'Mainline Clearing', 'note': 'Cleared the main drain and tested flow.'}
+EXAMPLES['time-activity create'] = Example(
+    'bookflow time-activity create ' + ' '.join('--' + k.replace('_', '-') + ' ' + _shlex.quote(v)
+                                                for k, v in _TIME.items())
+    + ' --company "Demo Plumbing Co" --reason "Monday timesheet" --json', dict(_TIME))
+EXAMPLES['time-activity show'] = Example(
+    f'bookflow time-activity show {ID} --company "Demo Plumbing Co" --json', {'time_activity': ID})
+EXAMPLES['time-activity update'] = Example(
+    f'bookflow time-activity update {ID} --duration 2 --expected-version 1 --company "Demo Plumbing Co" --reason "Timesheet said two hours" --json',
+    {'time_activity': ID, 'duration': '2', 'expected_version': 1})
+EXAMPLES['time-activity void'] = Example(
+    f'bookflow time-activity void {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Logged against the wrong job" --json',
+    {'time_activity': ID, 'expected_version': 1})
+EXAMPLES['time-activity query'] = Example(
+    f'bookflow time-activity query --customer "Riverside Apartments" --date-from 2026-09-01 --date-to 2026-09-30 --limit 25 --company "Demo Plumbing Co" --json',
+    {'customer': 'Riverside Apartments', 'date_from': '2026-09-01', 'date_to': '2026-09-30', 'limit': 25})
+EXAMPLES['time-activity history'] = Example(
+    f'bookflow time-activity history {ID} --limit 25 --company "Demo Plumbing Co" --json', {'time_activity': ID, 'limit': 25})
+
 # Linked work billing uses canonical sources and permanent conversion intent.
-for _noun, _selector in (("estimate", "estimate"), ("work-order", "work_order")):
+for _noun, _selector in (("estimate", "estimate"), ("work-order", "work_order"),
+                         ("time-activity", "time_activity")):
     EXAMPLES[_noun + " billing"] = Example(
         f'bookflow {_noun} billing {ID} --company "Demo Plumbing Co" --limit 50 --json', {_selector: ID, 'limit': 50})
     EXAMPLES[_noun + " invoice"] = Example(

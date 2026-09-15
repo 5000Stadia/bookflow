@@ -112,6 +112,14 @@ class WorkOrderSalesReceiptInput(ReceiptConversionInput):
     work_order: CanonicalId
 
 
+class TimeActivityInvoiceInput(ConversionInput, InvoiceFields):
+    time_activity: CanonicalId
+
+
+class TimeActivitySalesReceiptInput(ReceiptConversionInput):
+    time_activity: CanonicalId
+
+
 class BillingReadInput(StrictModel):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=8192)
@@ -123,3 +131,7 @@ class EstimateBillingInput(BillingReadInput):
 
 class WorkOrderBillingInput(BillingReadInput):
     work_order: CanonicalId
+
+
+class TimeActivityBillingInput(BillingReadInput):
+    time_activity: CanonicalId

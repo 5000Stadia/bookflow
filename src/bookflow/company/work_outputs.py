@@ -6,6 +6,7 @@ from bookflow.company.journal_outputs import CreatedOutput, JournalMoneyOutput a
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company.work_models import WORK_KINDS
 from bookflow.company.work_tax_facts import WorkFacts2, WorkLineFacts2
 from bookflow.core.models import WriteOutput
 from bookflow.company.tax_attribution import TaxDetails
@@ -109,7 +110,7 @@ class WorkLinkOutput(CreatedOutput):
 
 
 class WorkSummaryOutput(CommonOut):
-    kind: Literal['proposal', 'estimate', 'work_order']
+    kind: Literal[WORK_KINDS]
     number: str
     status: str
     active: bool

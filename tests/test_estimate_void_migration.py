@@ -52,8 +52,12 @@ def test_the_frozen_replacement_is_the_constraint_the_metadata_now_declares():
     declared = next(constraint for constraint in c.work_documents.constraints
                     if getattr(constraint, 'name', None) == 'ck_work_status')
     assert WIDENED in str(declared.sqltext)
-    assert 'voided' not in str(declared.sqltext).split('work_order')[1], (
-        'only the quote kinds take the new state')
+    # co0053 gave recorded time the same withdrawal, so `voided` is no longer the quote kinds'
+    # alone. What this line has always been claiming is narrower and still true: the work order
+    # is the kind that does not take it, because work is cancelled rather than withdrawn.
+    work_order_clause = next(part for part in str(declared.sqltext).split(' OR ')
+                             if "'work_order'" in part)
+    assert 'voided' not in work_order_clause, 'a work order still cannot be voided'
 
 
 def test_a_fresh_database_reaches_the_head_carrying_both_widened_objects(tmp_path):

@@ -370,6 +370,15 @@ term list
 term query
 term show
 term update
+time-activity billing
+time-activity create
+time-activity history
+time-activity invoice
+time-activity query
+time-activity sales-receipt
+time-activity show
+time-activity update
+time-activity void
 token issue
 token list
 token revoke

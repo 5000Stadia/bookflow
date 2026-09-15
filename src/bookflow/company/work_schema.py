@@ -46,7 +46,7 @@ def define_tables(metadata, column, table, common):
                 check(f"json_valid({name}) AND json_type({name}) = 'object'", name)]
 
     work_documents = T('work_documents', *common(),
-        text('kind', 'Document kind: proposal, estimate or work_order.', 16),
+        text('kind', 'Document kind: proposal, estimate, work_order or time_activity.', 16),
         text('number', 'Visible number unique within kind.', 64),
         ident('current_revision_id', 'Current immutable revision owned by this document.'),
         text('status', 'Current commercial decision or operational state.', 16),
@@ -54,9 +54,9 @@ def define_tables(metadata, column, table, common):
         ident('estimate_group_id', 'Standalone estimate root or source proposal grouping alternatives.',
               'work_documents.id', nullable=True),
         sa.UniqueConstraint('kind', 'number', name='uq_work_kind_number'),
-        check("kind IN ('proposal','estimate','work_order')", 'kind'),
+        check("kind IN ('proposal','estimate','work_order','time_activity')", 'kind'),
         check("(kind = 'estimate' AND estimate_group_id IS NOT NULL) OR (kind <> 'estimate' AND estimate_group_id IS NULL)", 'group'),
-        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled'))", 'status'),
+        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled')) OR (kind = 'time_activity' AND status IN ('recorded','voided'))", 'status'),
         check('active IN (0,1)', 'active'), exact('version', positive=True),
         check('length(trim(number)) BETWEEN 1 AND 64', 'number'),
         owner(['id', 'current_revision_id'], ['work_revisions.document_id', 'work_revisions.id'], 'current_revision', True),
