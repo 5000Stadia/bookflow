@@ -24,10 +24,13 @@ _LINES = (
 )
 _LIMITS = (
     ' Not supported in this release, and refused rather than approximated: a price allowance'
-    ' against a source line without returning any of it; a stocked return, which moves no'
-    ' inventory and restores no cost because no stocked sale exists to return against; a credit'
-    ' from one customer settling another customer or job; cash-basis treatment, since every'
-    ' report is accrual today; and printing, which the document print work owns.'
+    ' against a source line without returning any of it; a line whose item carries stock,'
+    ' whether you name the item or return a stocked invoice line, because moving the inventory'
+    ' back and restoring the cost is not built -- credit the money with a service or non-stock'
+    ' item, and bring the quantity back with `inventory adjust`, which moves the quantity and'
+    ' what it is worth together; a credit from one customer settling another customer or job;'
+    ' cash-basis treatment, since every report is accrual today; and printing, which the'
+    ' document print work owns.'
 )
 _NUMBERING = (
     ' A credit memo takes the next number from the invoice series, so invoices and credits read'
@@ -147,7 +150,11 @@ credit_memo_update = command(
                  ' versions advance. If a use spans replacement lines, its application is cancelled'
                  ' and replaced by one application per line; invoice settlement exposes the current'
                  ' application IDs for later unapply. An unused standalone credit may change customer'
-                 ' or receivable account; linked returns keep exact source ownership. Preview with'
+                 ' or receivable account; linked returns keep exact source ownership.'
+                 ' A correction that would post a line whose item carries stock is refused,'
+                 ' whether you supply that line or leave the grid out and let it be retained,'
+                 ' because a credit memo moves no inventory and restores no cost: replace the'
+                 ' grid with non-stock lines to correct such a credit, or void it. Preview with'
                  ' expected_version, then save with expected_facts_fingerprint and an idempotency key'
                  ' reused for retries.'),
     input_model=CreditMemoUpdateInput, output_model=CreditMemoWriteOutput, writes={'company'},
