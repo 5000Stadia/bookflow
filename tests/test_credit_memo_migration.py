@@ -17,7 +17,7 @@ from bookflow.company import schema as c
 from bookflow.company.credit_schema import guard_statements, settlement_guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import upgrade_to, table, preserved, ddl_with_cash_flow_section
 from tests.test_bill_payment_migration import _rebuilt_since, _superseded_after
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0028_customer_credits')
@@ -116,7 +116,8 @@ def test_the_widened_shapes_admit_the_credit_and_refuse_anything_else(tmp_path):
         assert "WHERE type IN ('invoice', 'credit_memo')" in sql('uq_transaction_receivable_number')
 
 
-def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tmp_path):
+def _populated_raw_fixture(tmp_path):
+    """Synthetic raw document rows and local DDL, not a populated settlement graph."""
     path = tmp_path / 'company.db'
     _at(path, 'co0027')
     with sqlite3.connect(path) as raw:
@@ -163,16 +164,25 @@ def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tm
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
         before = {name: table(raw, name) for name in names}
-        # This migration's own rebuilds, plus whatever the revisions after it rewrite -
-        # derived, because a hand-listed exclusion goes stale the moment another lands.
-        rebuilt = ({'transactions', 'document_lines', 'applications', 'application_allocations'}
-                   | set(M.REPLACED) | _rebuilt_since(M.revision))
-        objects = {row for row in raw.execute(
+        objects = set(raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-        ).fetchall() if row[1] not in rebuilt}
+        ).fetchall())
+    return path, names, before, objects
+
+
+def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tmp_path):
+    path, names, before, objects = _populated_raw_fixture(tmp_path)
+    # Only this transition runs: later migrations cannot excuse a changed object here.
+    rebuilt = set(M.CHANGED) | set(M.REPLACED)
+    objects = {row for row in objects if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0027', HEADS['company'])
+        # This asserts what THIS migration adds and preserves, so this migration is what it
+        # runs. Through the whole chain a later revision's new column reads as an unexpected
+        # addition -- and because that assertion comes first, the foreign-key, integrity and
+        # rebuilt-table checks below it stopped running. No backup evidence is lost: this test
+        # passed a backups directory and never asserted anything about its contents.
+        assert upgrade_to(db, M.revision) == M.revision
         after = {name: table(db.raw, name) for name in names}
         # The four rebuilt tables keep every stored value; two of them also gain a column,
         # which is exactly the difference the columns list is allowed to show.
@@ -188,15 +198,31 @@ def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tm
         assert objects <= objects_after
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
-        # The settlement pair came through the rebuild with its widened shape and nothing in
-        # it. A populated settlement graph is eight composite parents deep, so the proof that
-        # its rows survive is the migration's own both-direction typeof/quote/blob EXCEPT,
-        # which runs on every rebuilt table and raises rather than continuing.
+        # These settlement tables are empty in this synthetic fixture. This checks their
+        # widened shape, not preservation of a populated settlement graph.
         for name, added in (('applications', 'credit_source_key_id'),
                             ('application_allocations', 'credit_source_component_id')):
             columns = [row[1] for row in db.raw.execute(f'PRAGMA table_xinfo({name})')]
             assert columns[-1] == added and columns[:-1] == before[name]['columns']
             assert db.raw.execute('SELECT count(*) FROM ' + name).fetchone() == (0,)
+
+
+def test_populated_raw_fixture_to_head_preserves_values_and_unreplaced_ddl(tmp_path):
+    """Retain the HEAD-upgrade claim for these exact synthetic rows, independently."""
+    path, names, before, objects = _populated_raw_fixture(tmp_path)
+    rebuilt = _rebuilt_since('co0027')
+    with open_database(path, writable=True) as db:
+        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0027', HEADS['company'])
+        assert {name: preserved(db.raw, name, before[name]) for name in names} == before
+        current = set(db.raw.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
+        ).fetchall())
+        expected = ddl_with_cash_flow_section(objects)
+        assert {row for row in expected if row[1] not in rebuilt} <= current
+        # Rebuilt objects may change definition, but must still exist with the same kind/owner.
+        assert {(r[0], r[1], r[2]) for r in objects} <= {(r[0], r[1], r[2]) for r in current}
+        assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
+        assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
 
 
 def test_an_unexpected_settlement_guard_stops_the_migration(tmp_path):

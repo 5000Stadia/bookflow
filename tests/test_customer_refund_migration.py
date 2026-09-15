@@ -18,7 +18,7 @@ from bookflow.company.credit_schema import settlement_guard_statements
 from bookflow.company.refund_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import upgrade_to, table, preserved, ddl_with_cash_flow_section
 from tests.test_bill_payment_migration import _rebuilt_since
 from tests.test_credit_memo_migration import _superseded_after
 
@@ -125,7 +125,8 @@ def test_the_widened_shapes_admit_the_refund_and_refuse_anything_else(tmp_path):
             raise AssertionError('an undeclared document type must be refused by storage')
 
 
-def test_a_populated_previous_database_keeps_every_value_and_every_local_object(tmp_path):
+def _populated_raw_fixture(tmp_path):
+    """Synthetic raw document rows and local DDL, not a populated settlement graph."""
     path = tmp_path / 'company.db'
     _at(path, PREVIOUS)
     with sqlite3.connect(path) as raw:
@@ -172,16 +173,25 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
         before = {name: table(raw, name) for name in names}
-        # Everything this revision and every later one rebuilds or reissues is read from the
-        # migration modules, never listed here: a hand-written set of names is falsified by the
-        # next revision that widens a table, and silently, because the set still looks right.
-        rebuilt = _rebuilt_since(PREVIOUS)
-        objects = {row for row in raw.execute(
+        objects = set(raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-        ).fetchall() if row[1] not in rebuilt}
+        ).fetchall())
+    return path, names, before, objects
+
+
+def test_a_populated_previous_database_keeps_every_value_and_every_local_object(tmp_path):
+    path, names, before, objects = _populated_raw_fixture(tmp_path)
+    # Only this transition runs: later migrations cannot excuse a changed object here.
+    rebuilt = set(M.CHANGED) | set(M.REPLACED)
+    objects = {row for row in objects if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PREVIOUS, HEADS['company'])
+        # This asserts what THIS migration adds and preserves, so this migration is what it
+        # runs. Through the whole chain a later revision's new column reads as an unexpected
+        # addition -- and because that assertion comes first, the foreign-key, integrity and
+        # rebuilt-table checks below it stopped running. No backup evidence is lost: this test
+        # passed a backups directory and never asserted anything about its contents.
+        assert upgrade_to(db, M.revision) == M.revision
         # Byte for byte, including the embedded NUL and the raw blob, and at the same rowids:
         # a rebuilt table that reordered or re-encoded a value fails here. This revision adds
         # no column to a rebuilt table, so nothing is allowed to differ at all.
@@ -195,6 +205,24 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
         assert db.raw.execute('SELECT count(*) FROM customer_refund_profiles').fetchone() == (0,)
         assert db.raw.execute('SELECT count(*) FROM customer_refund_consumptions').fetchone() == (0,)
+
+
+def test_populated_raw_fixture_to_head_preserves_values_and_unreplaced_ddl(tmp_path):
+    """Retain the HEAD-upgrade claim for these exact synthetic rows, independently."""
+    path, names, before, objects = _populated_raw_fixture(tmp_path)
+    rebuilt = _rebuilt_since(PREVIOUS)
+    with open_database(path, writable=True) as db:
+        assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PREVIOUS, HEADS['company'])
+        assert {name: preserved(db.raw, name, before[name]) for name in names} == before
+        current = set(db.raw.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
+        ).fetchall())
+        expected = ddl_with_cash_flow_section(objects)
+        assert {row for row in expected if row[1] not in rebuilt} <= current
+        # Rebuilt objects may change definition, but must still exist with the same kind/owner.
+        assert {(r[0], r[1], r[2]) for r in objects} <= {(r[0], r[1], r[2]) for r in current}
+        assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
+        assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
 
 
 def test_a_rewritten_document_type_guard_stops_the_migration(tmp_path):
