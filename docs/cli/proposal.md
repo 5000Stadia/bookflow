@@ -374,7 +374,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
@@ -382,6 +382,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.income_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.type` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cogs_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.cogs_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.asset_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.asset_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.profile.unit` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.unit.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.unit.label` | string | yes | no | — | — |
@@ -1141,7 +1155,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
@@ -1149,6 +1163,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.income_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.type` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cogs_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.cogs_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.asset_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.asset_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.profile.unit` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.unit.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.unit.label` | string | yes | no | — | — |
@@ -1860,7 +1888,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
@@ -1868,6 +1896,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.income_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.type` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cogs_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.cogs_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.asset_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.asset_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.profile.unit` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.unit.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.unit.label` | string | yes | no | — | — |
@@ -2901,7 +2943,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
@@ -2909,6 +2951,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.income_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.type` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cogs_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.cogs_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.asset_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.asset_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.profile.unit` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.unit.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.unit.label` | string | yes | no | — | — |
@@ -3652,7 +3708,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
@@ -3660,6 +3716,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.income_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.type` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cogs_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.cogs_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.cogs_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.asset_account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.asset_account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.asset_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.profile.unit` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.unit.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.unit.label` | string | yes | no | — | — |
