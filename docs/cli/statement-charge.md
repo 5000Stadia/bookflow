@@ -2071,7 +2071,7 @@ Example JSON output:
 
 ## `statement-charge void`
 
-Void a statement charge with a required reason. Its accounting is reversed at its own date, so the customer’s balance, their aging and their statement all go back to what they were; its number stays occupied and its history stays readable.
+Void a statement charge with a required reason. Its accounting is reversed at its own date, so the customer’s balance, their aging and their statement all go back to what they were; its number stays occupied and its history stays readable. A charge a payment or credit is still applied to is refused with `E_HAS_APPLICATIONS` naming those applications, exactly as an invoice is: release them with `payment unapply` first, so the money that settled the charge is never left pointing at a document worth nothing.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -3188,6 +3188,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |

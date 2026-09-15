@@ -71,9 +71,10 @@ Deferred, with the reason:
 - `customer_refund` — the document carries one revision for its whole life by design,
   which is what lets its receivable attribution name one posting row for ever.
 - `vendor_credit` — the gap here is the absent correction verb, not deletion.
-- `statement_charge` — `sales.prepare` raises `E_HAS_APPLICATIONS` only for
-  `invoice`, so the shared void writer does not refuse a settled statement charge;
-  that behaviour is settled before this type gains a delete.
+- `statement_charge` — the void it shares with the invoice now refuses a settled
+  charge with `E_HAS_APPLICATIONS`, on `ledger_schema.SETTLEABLE_RECEIVABLE_TYPES`
+  rather than on a type name, so the lifecycle is whole; a wrong charge is voided
+  and re-entered, which is what a sixty-dollar document is worth.
 
 ## Implementation boundary
 

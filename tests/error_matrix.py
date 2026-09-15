@@ -1255,6 +1255,7 @@ MATRIX["billing-group create"] = {
 }
 MATRIX["statement-charge void"] = {
     "E_RECORD_NOT_FOUND": "unknown statement charge",
+    "E_HAS_APPLICATIONS": "the charge still carries active applications; unapply them before voiding",
     "E_VERSION_CONFLICT": "stale expected_version",
     "E_VALIDATION": "a reason longer than 140 characters",
     "E_REASON_REQUIRED": "no reason given",
