@@ -20,6 +20,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.commands.common import CommonOut
+from bookflow.company.bill_deletion_models import BillDeletionInfo
 from bookflow.company.bill_facts import BillExpenseProfile, BillItemProfile, BillProfile, Reference
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_custom_fields import SnapshotField
@@ -241,6 +242,8 @@ class BillVoidInput(_Input):
 class BillShowInput(_Input):
     bill: _Selector
     revision_number: _Version | None = None
+    include_deleted: bool = Field(default=False,
+        description='Explicitly read a retained deleted bill and its deletion attribution; ordinary reads omit it.')
 
 
 class BillPageInput(_Input):
@@ -249,6 +252,8 @@ class BillPageInput(_Input):
 
 
 class BillQueryInput(BillPageInput):
+    include_deleted: bool = Field(default=False,
+        description='Include retained deleted bills and their deletion attribution; ordinary pages omit them.')
     date_from: _Date | None = None
     date_to: _Date | None = None
     due_from: _Date | None = None
@@ -273,6 +278,8 @@ class BillQueryInput(BillPageInput):
 
 class BillHistoryInput(BillPageInput):
     bill: _Selector
+    include_deleted: bool = Field(default=False,
+        description='Explicitly read a retained deleted bill and its deletion attribution; ordinary reads omit it.')
 
 
 class BillExpenseOutput(CreatedOutput):
@@ -435,7 +442,8 @@ class BillSummaryOutput(CommonOut):
     type: Literal['bill']
     number: str
     current_revision_id: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'deleted']
+    deletion: BillDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     voided_at: str | None
     voided_by: str | None
     void_reason: str | None
@@ -482,7 +490,8 @@ class BillHistoryOutput(_Input):
     version: int
     current_revision_id: str
     number: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'deleted']
+    deletion: BillDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     items: list[BillRevisionSummaryOutput]
     count: int
     has_more: bool

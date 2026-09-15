@@ -1,7 +1,7 @@
 """Literal activated purchase delta and full executable parity, without a count pin."""
 from bookflow.core import registry
 from bookflow.core.deletion_families import FAMILIES, TOMBSTONE_TABLE, capability
-from bookflow.hub import permission_catalog as c, permission_payment_deletion_catalog as build, permission_sales_deletion_catalog as previous
+from bookflow.hub import permission_catalog as c, permission_bill_deletion_catalog as build, permission_payment_deletion_catalog as previous
 from tests.test_permission_catalog import R, owner
 
 
@@ -23,7 +23,7 @@ def test_complete_purchase_delete_catalog_and_finite_family_availability():
     for name,(requirements,owners) in actions.items():
         assert set(actual[name].requirements)==requirements,name
         assert set(actual[name].remaining_graph_owners)==owners,name
-    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'payment delete'}
+    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'bill delete'}
     assert build.CATALOG.defaults==previous.CATALOG.defaults
     assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES==frozenset(map(capability,FAMILIES))
     contracts={x.key:x for x in build.CATALOG.company_actions if x.key.startswith('contract:')}
@@ -55,7 +55,7 @@ def test_current_conditional_resource_inventory_and_purchase_examples():
                 actual.setdefault(owner,set()).add((str(path.relative_to(root)),node.lineno))
     assert {x.owner:set(x.call_sites) for x in build.CATALOG.conditional_sources}==actual
     registry.load_all()
-    for noun in ('check','card-charge','invoice','sales-receipt','payment'):
+    for noun in ('check','card-charge','invoice','sales-receipt','payment','bill'):
         cmd=registry.get(noun+' delete')
         assert cmd.explicit_grant_only and cmd.permanent_recovery
         assert cmd.input_model.model_validate(EXAMPLES[cmd.name].input).expected_version==1
@@ -83,8 +83,14 @@ def test_manifest_and_native_shape_reuse_only_validated_immutable_descriptors():
 
 def test_historical_purchase_delta_remains_exact():
     from bookflow.hub import permission_setup_catalog as setup, permission_deletion_catalog as purchase
+    from bookflow.hub import permission_sales_deletion_catalog as sales
     assert {x.name for x in purchase.CATALOG.commands}-{x.name for x in setup.CATALOG.commands} == {'check delete','card-charge delete'}
     assert purchase.CATALOG.defaults == setup.CATALOG.defaults
     assert {x.key for x in purchase.CATALOG.company_actions if x.key.startswith('contract:') and x.available} == {'contract:delete:check','contract:delete:card_charge'}
-    assert {x.name for x in previous.CATALOG.commands}-{x.name for x in purchase.CATALOG.commands} == {'invoice delete','sales-receipt delete'}
-    assert previous.CATALOG.defaults == purchase.CATALOG.defaults
+    assert {x.name for x in sales.CATALOG.commands}-{x.name for x in purchase.CATALOG.commands} == {'invoice delete','sales-receipt delete'}
+    assert sales.CATALOG.defaults == purchase.CATALOG.defaults
+    assert {x.name for x in previous.CATALOG.commands}-{x.name for x in sales.CATALOG.commands} == {'payment delete'}
+    # The bill delta is the only one that had no frozen preparation to flip: its
+    # capability and its delete contract arrive with its command.
+    assert {x.name for x in build.CATALOG.capabilities}-{x.name for x in previous.CATALOG.capabilities} == {'transaction.bill.delete'}
+    assert {x.key for x in build.CATALOG.company_actions}-{x.key for x in previous.CATALOG.company_actions} == {'contract:delete:bill','bill delete'}

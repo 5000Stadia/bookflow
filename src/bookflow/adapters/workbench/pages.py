@@ -1130,10 +1130,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     },
                 ))
             columns = requested_columns
+        # Which lists offer the deleted-record controls is derived from the one owner of
+        # the deletion families, never hand-listed here: a family whose retained storage
+        # ships gains them in the same change.
+        from bookflow.adapters.workbench.permissions import DELETABLE
         return render(
             "list.html",
             request,
             has_show=registry.get(f"{noun} show") is not None,
+            deletable=noun.replace('-', '_') in DELETABLE
+                      and 'include_deleted' in cmd.input_model.model_fields,
+            deleted_label=Naming.subject(noun, meta),
             company_id=company_id,
             noun=noun,
             items=items,
@@ -1235,7 +1242,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     else:
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
-        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt') else None
+        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt', 'bill') else None
         purchase_noun = command_noun if purchase_record else None
         if command_noun == 'journal' and company_id:
             try:

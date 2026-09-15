@@ -713,13 +713,28 @@ def current_settlement(s, header, obligation=None, revision=None):
                              applied_sources(s, keys).get(obligation['id']) if obligation else None)
 
 
+def _deletion(s, header, include_deleted):
+    """Retained deletion facts for this bill, or nothing; hidden unless asked for."""
+    from bookflow.company.bill_deletions import deletion_info
+    return deletion_info(s, header, include_deleted)
+
+
+def _visible_summary(s, header, value, include_deleted):
+    """One place a deleted bill becomes visibly deleted, for every read that shows one."""
+    deletion = _deletion(s, header, include_deleted)
+    if deletion:
+        value.update(status='deleted', deletion=deletion)
+    return value
+
+
 def show(s, inp):
     header = resolve(s, inp.bill)
     requested = journals.revision(s, header, inp.revision_number)
     profile = profile_row(s, requested)
     return BillOutput(
-        **summary(header, requested, profile, current_settlement(s, header),
-                  order_ids(s, [header['id']]).get(header['id'])),
+        **_visible_summary(s, header, summary(header, requested, profile, current_settlement(s, header),
+                           order_ids(s, [header['id']]).get(header['id'])),
+                           getattr(inp, 'include_deleted', False)),
         revision=revision_output(s, header, requested),
         duplicate_references=duplicate_references(
             s, profile['vendor_id'], profile['supplier_reference_key'], header['id']))
@@ -738,6 +753,7 @@ def page(s, ctx, inp, *, history=False):
     state = page_state(s, 'bill ' + ('history' if history else 'query'), Contract(), ctx.on_behalf_of)
     if history:
         header = resolve(s, inp.bill)
+        deletion = _deletion(s, header, getattr(inp, 'include_deleted', False))
         query = sa.select(c.transaction_revisions).where(
             c.transaction_revisions.c.transaction_id == header['id']).order_by(
             c.transaction_revisions.c.revision_number)
@@ -746,6 +762,9 @@ def page(s, ctx, inp, *, history=False):
         query = (sa.select(t.c.id).select_from(
             t.join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id))
             .where(t.c.type == DOCUMENT_TYPE))
+        if not getattr(inp, 'include_deleted', False) and sa.inspect(s.company.conn).has_table('bill_deletions'):
+            query = query.where(~sa.exists(sa.select(c.bill_deletions.c.transaction_id).where(
+                c.bill_deletions.c.transaction_id == t.c.id)))
         if inp.vendor:
             query = query.where(p.c.vendor_id == resolve_party(s.company, 'vendor', inp.vendor)['id'])
         if inp.date_from:
@@ -773,8 +792,11 @@ def page(s, ctx, inp, *, history=False):
     shared = dict(count=len(found), has_more=more,
                   next_cursor=continuation(state, len(found), more), audit_watermark=state.sequence)
     if history:
+        current = {k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')}
+        if deletion:
+            current.update(status='deleted', deletion=deletion)
         return BillHistoryOutput(
-            **{k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
+            **current,
             items=[revision_output(s, header, revision, summary_only=True) for revision in found], **shared)
     identifiers = [row['id'] for row in found]
     headers = {row['id']: dict(row) for row in s.company.conn.execute(
@@ -803,8 +825,9 @@ def page(s, ctx, inp, *, history=False):
         settlement = settlement_output(header, revision, obligation,
                                        applied.get(obligation['id'], 0) if obligation else 0,
                                        composed.get(obligation['id']) if obligation else None)
-        items.append(BillSummaryOutput(**summary(header, revision, profiles[revision['id']], settlement,
-                                                 orders.get(header['id']))))
+        items.append(BillSummaryOutput(**_visible_summary(
+            s, header, summary(header, revision, profiles[revision['id']], settlement,
+                               orders.get(header['id'])), getattr(inp, 'include_deleted', False))))
     return BillPageOutput(items=items, **shared)
 
 
@@ -1095,6 +1118,10 @@ def _stock_entries(pending, profile):
 def prepare(s, ctx, inp, operation):
     source, entry = _from_order(s, inp, operation)
     old_header = resolve(s, inp.bill) if operation != 'post' else None
+    if old_header is not None:
+        # A deleted bill is retained history: its own owner refuses every further write.
+        from bookflow.company.bill_deletions import require_not_deleted
+        require_not_deleted(s, old_header['id'])
     old_revision = journals.revision(s, old_header) if old_header else None
     from bookflow.company import receipt_billing
     received, entry = receipt_billing.source(s, entry, operation, old_header, old_revision)
@@ -1347,13 +1374,16 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     return debits
 
 
-def apply(plan, ctx, s):
-    # Rebuilt inside the writer transaction: references, numbering and dates are only
-    # decisive here, and the preview may have been prepared against an older read.
-    fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
+def persist_prepared(fresh, ctx, s, *, command_name):
+    """Persist the validated owning bill, its receipt claims and its stock on the caller's writer.
+
+    The seam a command other than ``bill <verb>`` comes back through: deletion prepares this
+    same void aggregate under its own authority and then needs exactly these three writes, in
+    this order, inside the one company transaction.
+    """
     from bookflow.company.bill_validation import validate
     validate(fresh, s, ctx)
-    applied = effects.persist(fresh, ctx, s, command_name='bill ' + plan.data['operation'],
+    applied = effects.persist(fresh, ctx, s, command_name=command_name,
                               table_kinds=TABLE_KINDS, companion=fresh.data.get('consumption'))
     # The dated cost corrections this purchase owes earlier sales: their own documents, at
     # their own dates, in this same company transaction.
@@ -1364,7 +1394,13 @@ def apply(plan, ctx, s):
     if stock is None or not stock.moves_stock:
         return applied
     header = fresh.data['header']
-    return inventory_effects.settle(applied, stock, ctx, s,
-                                    command_name='bill ' + plan.data['operation'],
+    return inventory_effects.settle(applied, stock, ctx, s, command_name=command_name,
                                     summary=f"stock moved by bill {header['number']}",
                                     created_at=header['updated_at'])
+
+
+def apply(plan, ctx, s):
+    # Rebuilt inside the writer transaction: references, numbering and dates are only
+    # decisive here, and the preview may have been prepared against an older read.
+    fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
+    return persist_prepared(fresh, ctx, s, command_name='bill ' + plan.data['operation'])

@@ -78,19 +78,20 @@ def known_catalog(version):
     """Accepted explicit policy versions; never substitute the current build."""
     from . import permission_activation_catalog, permission_setup_catalog
     from . import permission_deletion_catalog, permission_sales_deletion_catalog
-    from . import permission_payment_deletion_catalog
+    from . import permission_payment_deletion_catalog, permission_bill_deletion_catalog
     return {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
         c.DELETE_POLICY_VERSION: permission_deletion_catalog,
         c.SALES_DELETE_POLICY_VERSION: permission_sales_deletion_catalog,
         c.PAYMENT_DELETE_POLICY_VERSION: permission_payment_deletion_catalog,
+        c.BILL_DELETE_POLICY_VERSION: permission_bill_deletion_catalog,
     }.get(version)
 
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.PAYMENT_DELETE_POLICY_VERSION)
+    return known_catalog(c.BILL_DELETE_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

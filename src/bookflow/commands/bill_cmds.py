@@ -77,12 +77,15 @@ DESCRIPTIONS = {
     'show': ('Show a bill: its current or a selected immutable revision, captured vendor, payable,'
              ' terms and custom facts, its expense lines and item lines, its posting batches, what'
              ' is still open on it, and any other bill from this vendor carrying the same supplier'
-             ' reference.'),
+             ' reference. A deleted bill is not returned unless `include_deleted` asks for it, and'
+             ' then it reads `deleted` and carries who deleted it, when and why.'),
     'query': ('Page bills in accounting-date and stable-id order, oldest first or newest first, with'
               ' exact vendor, bill-date, due-date, status, number and supplier-reference filters;'
-              ' restart on company audit changes.'),
+              ' restart on company audit changes. Deleted bills are omitted unless `include_deleted`'
+              ' asks for them.'),
     'history': ('Page immutable bill revisions in revision-number order with the current header and'
-                ' version and the correction and void batches; restart on company audit changes.'),
+                ' version and the correction and void batches; restart on company audit changes. A'
+                ' deleted bill is not returned unless `include_deleted` asks for it.'),
 }
 
 
@@ -117,6 +120,41 @@ def _read(verb, model, output_model):
     )(planner)
 
 
+def _delete():
+    from bookflow.company import bill_deletions as deletion
+    from bookflow.company.bill_deletion_models import BillDeleteInput, BillDeleteOutput
+    from bookflow.core.deletion_families import capability
+
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp)
+
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s)
+
+    cmd = command(
+        'bill delete', scope='company',
+        description='Delete this bill with a required reason and exact expected_version. Cancel its'
+                    ' expense, payable and stock effects at their original dates and release the'
+                    ' received lines it claimed; retain immutable history and its number. Requires'
+                    ' the explicit family Delete grant and ledger.read, independently of ledger.post.'
+                    ' A live bill payment or vendor credit refuses atomically and names the settlement'
+                    ' holding it; a closed period refuses. A purchase order this bill consumed stays'
+                    ' consumed, exactly as it does on void, and is named in the result.',
+        input_model=BillDeleteInput, output_model=BillDeleteOutput, writes={'company'},
+        required_role='standard', capability=capability('bill'), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=['bill'],
+        version_source=('bill show', 'bill', 'version'),
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
+                     'E_PERIOD_CLOSED', 'E_RECONCILIATION_DEPENDENCY', 'E_IDEMPOTENCY_MISMATCH',
+                     'E_HAS_APPLICATIONS'])(planner)
+    cmd.resource_requirements = (('ledger.read', 'member'),)
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+bill_delete = _delete()
 bill_post = _write('post', BillPostInput)
 bill_update = _write('update', BillUpdateInput)
 bill_void = _write('void', BillVoidInput)
@@ -124,4 +162,4 @@ bill_show = _read('show', BillShowInput, BillOutput)
 bill_query = _read('query', BillQueryInput, BillPageOutput)
 bill_history = _read('history', BillHistoryInput, BillHistoryOutput)
 
-BILL_COMMANDS = [bill_post, bill_show, bill_update, bill_void, bill_query, bill_history]
+BILL_COMMANDS = [bill_post, bill_show, bill_update, bill_void, bill_delete, bill_query, bill_history]

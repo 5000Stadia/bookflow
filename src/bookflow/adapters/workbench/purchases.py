@@ -98,7 +98,9 @@ def install_deletion(app, *, run, render, page_error):
     def routes(noun):
         selector=noun.replace('-','_')
         is_sale=noun in ('invoice','sales-receipt')
-        label='sale' if is_sale else 'purchase'
+        is_bill=noun=='bill'
+        label='sale' if is_sale else 'bill' if is_bill else 'purchase'
+        template='sales_delete.html' if is_sale else 'bill_delete.html' if is_bill else 'purchase_delete.html'
         def display(request,company_id,record_id,values=None,result=None,error=None):
             record=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
             if record.get('deletion') and error is None:
@@ -106,11 +108,15 @@ def install_deletion(app, *, run, render, page_error):
             if values is None and not delete_allowed(lambda *a,**kw:run(request,*a,**kw),company_id,noun,record):
                 raise BookflowError('E_PERMISSION')
             values=values if values is not None else dict(expected_version=record['version'],operation_key=new_id(),reason='')
-            from bookflow.adapters.workbench import sales as Sales
-            detail = Sales.detail_context(record,company_id) if is_sale else detail_context(record)
+            from bookflow.adapters.workbench import bills as Bills, sales as Sales
+            detail = Bills.detail_context(record,company_id) if is_bill else Sales.detail_context(record,company_id) if is_sale else detail_context(record)
             if is_sale: detail.update(print_url=None,credit_url=None,links=[])
-            return render('sales_delete.html' if is_sale else 'purchase_delete.html',request,company_id=company_id,noun=noun,record=record,
-                purchase=detail,sale=detail if is_sale else None,values=values,result=result,error=error,
+            # A confirmation page is one document at one version: revision arrows here
+            # would move the record out from under the version the form is holding.
+            if is_bill: detail.update(links=[])
+            return render(template,request,company_id=company_id,noun=noun,record=record,
+                purchase=None if is_bill else detail,sale=detail if is_sale else None,
+                bill=detail if is_bill else None,values=values,result=result,error=error,
                 status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
         def get(company_id:str,record_id:str,request:Request):
             try:return display(request,company_id,record_id)
@@ -143,4 +149,4 @@ def install_deletion(app, *, run, render, page_error):
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',get,methods=['GET'])
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',post,methods=['POST'])
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
-    for noun in ('check','card-charge','invoice','sales-receipt'):routes(noun)
+    for noun in ('check','card-charge','invoice','sales-receipt','bill'):routes(noun)

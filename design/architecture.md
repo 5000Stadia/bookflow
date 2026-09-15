@@ -2423,6 +2423,66 @@ under `ledger.post`, so a family Delete's roots are re-checked at the `ledger.re
 threshold it declares instead of demanding the posting capability it is defined to
 work without.
 
+### Vendor-bill deletion
+
+`bill delete` is the fourth activated deletion family. `company/bill_deletions.py`
+owns it, and it follows the sales and purchase shape rather than the payment one: it
+re-prepares the *public* void writer under its own authority. `bills.prepare(...,
+'void')` already reverses the current batch at its own date, reverses the stock an
+item row received, and releases every financial claim a linked bill holds on item
+receipts, so deletion inherits all three instead of restating them. `bills.apply` was
+split so the delete owner reaches the same three writes -- `document_effects.persist`,
+`receipt_billing.apply`, `inventory_effects.settle` -- through
+`bills.persist_prepared` rather than re-entering `prepare` twice. Nothing on that path
+requires `ledger.post`, which is what lets the family Delete grant stand alone.
+
+`bill_deletions.dependencies` runs *before* the inner void, because the writer's own
+`E_HAS_APPLICATIONS` names only the bill. The owner names the bill payments and vendor
+credits that still answer it, and their application ids, after authorizing the whole
+settlement closure through `reconciliation_adapters.authority` -- authorize, then
+disclose, the way a live credit return's ids are disclosed on the sales side. It also
+reads held statement keys, which for this family must always be empty: `bill` is
+absent from `reconciliation_models.PRODUCER_ROLES`, and the read is the proof of that
+rather than an assumption about it. A purchase order this bill consumed stays consumed,
+exactly as it does on void; the `purchase_order_conversions` row is retained and the
+order id is named in the result and on the confirmation page.
+
+`co0052` adds `bill_deletions` with the same shape as `co0051` -- immutable tombstone,
+no-update/no-delete triggers, transaction fence, `principal_id` on the receipt -- and an
+owner trigger that re-checks the whole graph: the voided header at the exact revision
+and version, a cancellation batch that really is this revision's reversal, no live
+`ap_applications` row on the obligation side, and no `receipt_bill_claims` row without
+its release. Deleting an already-voided bill adds one version and no second inverse:
+the inner void returns unchanged and the owner writes the header bump itself, retaining
+the prior void batch as the cancellation batch.
+
+Reads follow the sales overlay. The database keeps status `voided`; `deleted` is
+overlaid by `bill show`, `bill query` and `bill history` from the tombstone, and an
+ordinary read of a deleted bill is `E_RECORD_NOT_FOUND` until `include_deleted` asks
+for it. `bill query` excludes deleted rows the same way. `bills.prepare` refuses to
+update or void a deleted bill through `bill_deletions.require_not_deleted`. Payables
+reports need no filter: a deleted bill nets to nothing, which is why it leaves
+`report unpaid-bills` exactly as a voided one does.
+
+The visible half is derived, not hand-listed. `core.deletion_families` gains
+`BILL_FAMILIES` and a `TOMBSTONE_TABLE` entry, which is the whole of what
+`registry.EXPLICIT_GRANT_ONLY_CAPABILITIES`, the Users & permissions checkbox and the
+register/general-ledger hiding need. `Purchases.install_deletion` gains `bill` as a
+fifth noun with its own `bill_delete.html` confirmation, which states what is cancelled,
+what is released, and that the purchase order is not reopened. The bill record page
+routes through the same `purchase_record` block as invoices and checks, so Delete
+appears only when the real command admits it in a dry run, and posting verbs disappear
+when posting is denied. `list.html` now decides its deleted-record controls from
+`TOMBSTONE_TABLE` and the command's own `include_deleted` field instead of a hand-typed
+noun tuple, and its Include-deleted link spells the flag `true`: the list command reads
+that query parameter through `forms.query_value`, which coerced the previous `1` to
+False, so the control had never worked for any family.
+
+`permission_bill_deletion_catalog` follows the payment descriptor. It is the first delta
+with no frozen preparation to flip: the `transaction.bill.delete` capability spec, the
+`contract:delete:bill` company action and the `bill delete` command all arrive in it.
+`BILL_DELETE_POLICY_VERSION` is the current catalog, and `co0052` is the company head.
+
 ### Inert permission-administration storage (B1)
 
 Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membership

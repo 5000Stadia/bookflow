@@ -960,3 +960,7 @@ for _sales_noun in ('invoice', 'sales-receipt'):
 EXAMPLES['payment delete'] = Example(
     f'bookflow payment delete {ID} --expected-version 1 --operation-key payment-delete-example --reason "Remove duplicate receipt" --company "Demo Plumbing Co" --json',
     {'payment': ID, 'expected_version': 1, 'operation_key': 'payment-delete-example'})
+
+EXAMPLES['bill delete'] = Example(
+    f'bookflow bill delete {ID} --expected-version 1 --operation-key bill-delete-example --reason "Remove duplicate bill" --company "Demo Plumbing Co" --json',
+    {'bill': ID, 'expected_version': 1, 'operation_key': 'bill-delete-example'})

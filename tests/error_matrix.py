@@ -879,6 +879,18 @@ MATRIX["bill void"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+MATRIX["bill delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown bill",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "no --reason",
+    "E_VALIDATION": "--reason longer than 140 characters, or the bill is already deleted",
+    "E_PERIOD_CLOSED": "bill date on or before the closing date",
+    "E_HAS_APPLICATIONS": "a bill payment or vendor credit is still applied to this bill",
+    "E_RECONCILIATION_DEPENDENCY": "a reconciliation still holds an effect of this bill",
+    "E_IDEMPOTENCY_MISMATCH": "same operation_key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
 MATRIX["bill show"] = {"E_RECORD_NOT_FOUND": "unknown bill or revision number"}
 MATRIX["bill query"] = {"E_RECORD_NOT_FOUND": "unknown vendor filter", "E_QUERY_STALE": "company audit changed between bill pages"}
 MATRIX["bill history"] = {"E_RECORD_NOT_FOUND": "unknown bill", "E_QUERY_STALE": "company audit changed between history pages"}
