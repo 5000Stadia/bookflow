@@ -270,6 +270,8 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
         return Credits.editable_values(shown)
     if noun == 'customer-refund':
         return Credits.refund_editable_values(shown)
+    if noun == 'vendor-credit':
+        return Credits.vendor_credit_editable_values(shown)
     if noun == "journal":
         revision = shown.get("revision", {})
         return {
@@ -1571,11 +1573,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
         if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
             attempted['f:conversion_key'] = secrets.token_urlsafe(32)
-        if noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.NOUNS) and verb in ('history', 'billing') and record_id is not None:
-            originals[noun.replace('-', '_')] = record_id
+        if noun in ('invoice', 'sales-receipt', 'credit-memo', 'vendor-credit', *Work.NOUNS) and verb in ('history', 'billing') and record_id is not None:
+            # Most of these name their record after the noun; a vendor credit calls it
+            # `credit` on every one of its verbs, so the field comes from the command itself
+            # rather than from the spelling of the route.
+            record_field = noun.replace('-', '_')
+            if record_field not in cmd.input_model.model_fields:
+                record_field = (cmd.positional or [record_field])[0]
+            originals[record_field] = record_id
             if not attempted and result is None:
                 try:
-                    raw_history = {noun.replace('-', '_'): record_id,
+                    raw_history = {record_field: record_id,
                         'limit': int(request.query_params.get('limit', '50'))}
                     if request.query_params.get('cursor'):
                         raw_history['cursor'] = request.query_params['cursor']
@@ -1929,6 +1937,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       bill=Bills.detail_context(result, company_id, preview=preview) if result and noun == 'bill' and 'revision' in result else None,
                       credit=Credits.detail_context(noun, result, company_id, preview=preview) if result and noun in Credits.NOUNS and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt', 'credit-memo') and verb == 'history' else None,
+                      credit_history=Credits.history_context(result, company_id) if result and noun == 'vendor-credit' and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
@@ -2149,7 +2158,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
-        if noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.NOUNS) and verb in ('history', 'query', 'billing'):
+        if ((noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.NOUNS)
+             and verb in ('history', 'query', 'billing'))
+                # A vendor credit joins for its revisions only: its list page is the ordinary
+                # one, so nothing about `vendor-credit query` changes here.
+                or (noun == 'vendor-credit' and verb == 'history')):
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         if noun == "report" and not cmd.is_write:
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,

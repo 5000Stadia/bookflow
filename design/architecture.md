@@ -4022,6 +4022,41 @@ bytes. `tests/test_customer_refund_update_browser.py` walks the journey in real 
 390: refund a credit from the credit memo's page, correct the refund from the refund's page,
 preview, save, and read the revision it replaced.
 
+**Correcting a vendor credit in the browser.** The same shape, with the payables document's own
+hazards. `detail_context` puts a `Correct this vendor credit` link on a posted credit beside a
+sentence saying a wrong credit is corrected rather than voided, and `pages._editable_values`
+routes `vendor-credit` to `credits.vendor_credit_editable_values` -- the bill's projection with
+the bill's own columns removed, since a credit has no terms, no due date, no Items tab and no
+`billable` column. Without it the generic fallback hands the form the whole `vendor-credit show`
+output, whose `vendor_id`, `ap_account_id` and nested expense grid are not the fields the command
+takes, and the vendor, the payable, the class and every credited row render blank on a document
+that has all of them.
+
+Three things in that projection are load-bearing. A leaf equal to its baseline is never
+submitted, so every value must round-trip exactly or an untouched save becomes a real correction.
+The grid is compared whole -- the form submits every row the moment one cell differs -- so each
+row states its class the way the *input* states it, `class_mode` read back out of the captured
+origin through `bills._line_class`, or a row deliberately held out of a classified credit would
+reopen as `inherit` and take the credit's class on the next save. And `ap_account` is projected
+because a blank payable picker on a document that has one is the defect this exists for, while
+`resolve_header` deliberately leaves the captured `origins['ap_account']` alone on a correction:
+a credit that took the company's only active payable captured that as `default`, and a guard
+field restating it as `explicit` would turn a save nobody typed into a reversal batch and a
+replacement batch. `tests/test_vendor_credit_correction_form.py` submits the controls the page
+actually renders -- including the `<select>` values a browser sends, which the refund window has
+none of -- and holds the whole of this as raw database equality, an untouched save leaving
+`company.db` byte for byte what it was, with a changed field beside it that has to move the same
+bytes.
+
+`vendor-credit history` reaches a person through the revision arrows the credit already had:
+`_links` adds a History entry beside them, the generic history route in `pages.py` takes the
+record field from the command rather than from the spelling of the noun -- a vendor credit calls
+it `credit` on every verb -- and `form.html` renders the revisions with what a payables document
+actually has, credited rows and bills answered, rather than the sales history block's subtotal
+and tax. `tests/test_vendor_credit_update_browser.py` walks the journey in real Chrome at 1280
+and 390: enter the credit from the home board's tile, point it at a bill, correct it from its own
+page, and read both the revision it replaced and the bill, which still owes what it owed.
+
 **The three tiles are live.** Credit memo and Refund on the Customers panel, Vendor credit on the
 Vendors panel. `tests/test_credit_windows_browser.py` performs the availability contract rather
 than asserting it: it clicks each tile on the home board, enters a document through the page the
@@ -4033,7 +4068,10 @@ route and a page and can no longer stand for something that does not.
 **Still not in the browser.** `credit-memo void`, `customer-refund void` and `vendor-credit void`
 are reachable only as generated forms from their record pages; `vendor-credit apply` and
 `unapply` have no page of their own, so a vendor credit is pointed at a bill through the command
-surface; `customer-refund` and `vendor-credit` have no `history` command to page; and nothing
+surface; `customer-refund` has no `history` command to page, so its revisions are reached only
+by the arrows; the correction windows are the generated forms rather than each document's own
+window, and a correction's preview therefore shows the corrected document without the totals
+panel the posting window carries or the settlement panel the saved page carries; and nothing
 prints a credit memo.
 
 ## Sales tax liability, and the document that remits it
@@ -4142,11 +4180,63 @@ unchanged: before an application a credit is a negative AP row aged by its own d
 its row nets to zero and is omitted. `_UNPAID` already reads the real applied sum. `aging.py`
 stays one rule for both sides.
 
-**What this does not do.** There is no `vendor-credit update`, no `history` and no demo seed
-extension. A credit takes its own number series rather than sharing the bill series:
-the anchor product's shared-sequence behaviour is a receivables rule about invoices and credit
-memos, and the payables document it credits is numbered by the supplier's own reference. Purchase
-discounts, purchase tax and vendor refunds are their own documents and none of them exists.
+**Correcting one.** `vendor-credit update` writes another immutable revision under the contract
+`credit-memo update` and `customer-refund update` use: `expected_version`, a required reason, a
+reusable idempotency key, and every earlier revision left readable. `vendor_credits.resolve_header`
+and `_credited_grid` are the one reader both `post` and `update` go through -- what was supplied
+over what the revision captured, so an omitted field keeps its captured value and an omitted
+`expenses` keeps the whole grid down to the account name the credit was entered under. A supplied
+grid replaces it outright, each row keeping its `document_line_identities` row through its
+`line_id`, so the row a reader follows through the history is one row; a retired identity cannot
+return. `_compose` builds one graph for both verbs: the superseded batch reversed at its own date,
+a replacement posted at the corrected one -- both periods open -- and the settlements released and
+retaken below. `saved_semantic` against `resolved_semantic` decides whether anything moved at all:
+an empty patch, or one resolving to what is already stored, writes nothing and reports `changed`
+false without asking for a reason.
+
+**Why a correction has to touch the settlement edge.** An `ap_source_components` row belongs to one
+revision, and `ap_applications` names it by id. A correction retires the superseded revision's
+components, so left alone the standing edges would hold bills settled against capacity the current
+revision no longer has, while `bill_payments._free_capacity` -- which indexes components by the
+*current* revision's envelopes -- reported the corrected credit wholly free. The same credit,
+spendable twice, and a bill whose open balance depends on which reader you ask.
+`_retake_applications` therefore reverses every standing application cell for cell and settles the
+same bill again for the same amount on the same date out of the corrected revision's components,
+redrawing which credited line supplies which cent. What every bill owes is unchanged by a
+correction, which is why the settlement dates are not re-tested against the closing date the way
+`unapply` tests them: an unapply moves what the books said was open on that date and this does not
+move it by a cent. `bill_payment_validation.settlement_fence` and `source_capacity_fence` are run
+over the released and retaken edges together, the same two concurrency fences every other
+settlement write runs.
+
+**What a correction may never do.** The `ap_source_keys` row is minted once and permanently carries
+the `(vendor, payable account, currency)` triple every application is checked against, by
+`_compatible` and by `ap_applications_exact_party`. So `vendor` and `ap_account` are guards on the
+update rather than choices, and a correction naming either differently answers
+`E_APPLICATION_INCOMPATIBLE` with `reason: vendor_credit_ownership`; naming the ones it already has
+is accepted and, deliberately, does not restate the captured `origins['ap_account']` -- a credit
+that took the company's only active payable captured that as `default`, and flipping it to
+`explicit` would turn a save nobody typed into a reversal batch and a replacement batch. A voided
+credit answers `E_APPLICATION_INACTIVE`. A correction worth less than what the credit already
+answers answers `E_APPLICATION_CAPACITY` naming both figures, and one dated after a settlement the
+credit already made is refused by date. There is no reconciliation fence and none is possible: a
+vendor credit is not in `reconciliation_models.PRODUCER_ROLES`, and its legs are Accounts Payable
+and the expense-family accounts `bills.EXPENSE_ACCOUNTS` allows, never a `STATEMENT_ACCOUNTS` one,
+so no finished statement can be holding one. `tests/test_vendor_credit_update.py` holds that as a
+check rather than a comment.
+
+**Reading the revisions.** `vendor-credit show` already took `revision_number`;
+`vendor-credit history` pages every revision oldest first with the current header, through
+`revision_output(summary_only=True)` -- the header, the batches and the applications hung on that
+revision's own capacity, without the line grid. A superseded revision therefore reads as settling
+nothing, because the correction released every edge it held and the corrected revision took them
+again.
+
+**What this does not do.** There is no demo seed extension. A credit takes its own number series
+rather than sharing the bill series: the anchor product's shared-sequence behaviour is a
+receivables rule about invoices and credit memos, and the payables document it credits is numbered
+by the supplier's own reference. Purchase discounts, purchase tax and vendor refunds are their own
+documents and none of them exists.
 
 ## Statement charges, and the invoice line with no invoice around it
 

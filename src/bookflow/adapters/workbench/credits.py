@@ -23,12 +23,15 @@ sources. Both seed the *attempted* controls rather than the form's originals: an
 the baseline a correction is compared against, and a value equal to it is not submitted at
 all, which would silently drop every seeded row.
 
-*The correction baselines.* ``editable_values`` and ``refund_editable_values`` project a saved
-credit memo and a saved refund onto the exact fields their ``update`` commands declare. The
+*The correction baselines.* ``editable_values``, ``refund_editable_values`` and
+``vendor_credit_editable_values`` project a saved credit memo, a saved refund and a saved
+vendor credit onto the exact fields their ``update`` commands declare. The
 form submits only the leaves that differ from that baseline, so a field missing from it renders
 blank on a document that has one, and a value that does not round-trip exactly turns a save
-nobody typed into a real correction. Neither projection resolves anything: every figure in them
-was captured by the revision it is read from.
+nobody typed into a real correction. None of the three resolves anything: every figure in them
+was captured by the revision it is read from. The vendor credit's reads its line classes back
+through ``bills._line_class`` rather than restating that rule, because a row's ``class_mode`` is
+one question about what a person typed and two answers to it would drift.
 
 *The apply surface.* ``customer-credit apply`` needs the credit's own version and the version
 of every invoice it touches. A person cannot be asked to find six version numbers, so the page
@@ -100,7 +103,7 @@ def _links(company_id, noun, record, preview):
     if revision['id'] != record['current_revision_id']:
         links += [('Next revision', url + '?revision_number=' + str(number + 1)),
                   ('Current revision', url)]
-    if noun == 'credit-memo':
+    if noun in ('credit-memo', 'vendor-credit'):
         links.append(('History', url + '/history'))
     return links
 
@@ -162,11 +165,16 @@ def detail_context(noun, record, company_id, *, preview=False):
                     title='Customer refund')
     else:
         applications = [row for row in (record.get('applications') or []) if row.get('active')]
+        # A credit typed wrong is corrected, so the saved document carries the way in. A
+        # preview has nothing saved to correct, and a voided credit gave nothing back: the
+        # command refuses both, so neither is offered the link.
+        correctable = not preview and record['status'] == 'posted'
         view.update(settlement=record.get('settlement_current') or {},
                     applications=[{**row,
                                    'url': _url(company_id, 'bill', row['obligation_transaction_id'])}
                                   for row in applications],
                     vendor_url=None if preview else _url(company_id, 'vendor', record['vendor_id']),
+                    correct_url=_url(company_id, noun, record['id'], 'update') if correctable else None,
                     title='Vendor credit')
     return view
 
@@ -494,6 +502,55 @@ def refund_editable_values(record):
                 method=profile['payment_method']['id'],
                 class_id=entered['class_id'] if entered else None,
                 sources=sources)
+
+
+def vendor_credit_editable_values(record):
+    """Project the vendor credit correction controls from what its own revision captured.
+
+    The bill's projection with the bill's own columns removed: a credit has no terms, no due
+    date and no Items tab, and its rows carry no ``billable`` flag because a credit is not a
+    cost to pass on. Every value is read off the saved document in the exact shape
+    ``vendor-credit update`` declares, because the correction form submits only the leaves
+    that differ from these -- so a person who opens the correction and saves it without
+    typing anything writes nothing at all, and one who corrects a date does not lose the
+    payable, the reference or the credited grid along with it.
+
+    ``expenses`` is the part that has to be exact rather than merely present. Supplying the
+    grid replaces it outright, and the form submits the whole grid the moment one cell in it
+    differs, so a baseline that did not match what the page renders would re-resolve every row
+    against today's records on a correction that never touched them. Each row therefore states
+    the class the way the *input* states it: ``class_mode`` read back out of the captured
+    origin, because a row deliberately left unclassified on a classified credit would
+    otherwise reopen as ``inherit`` and be silently reclassified on the next save.
+
+    ``vendor`` and ``ap_account`` are here because the window shows who the credit is from and
+    which payable it is credited against, and a control missing from this baseline renders
+    blank on a document that has one. They stay the guards the command documents rather than
+    becoming choices: the settlement source carrying that pair is minted once, so a correction
+    that moved either is refused by name.
+    """
+    from bookflow.adapters.workbench import bills as Bills
+
+    revision = record['revision']
+    profile = revision['profile']
+    header_class = (profile.get('class_id') or {}).get('id')
+    values = {'date': revision['date'], 'number': revision['number'], 'memo': revision['memo'],
+              'vendor': profile['vendor']['id'], 'ap_account': profile['ap_account']['id'],
+              'supplier_reference': profile.get('supplier_reference'),
+              'class_id': header_class, 'expenses': []}
+    for line in revision['expenses']:
+        row = {'line_id': line['line_id'], 'account': line['account_id'],
+               'amount': line['amount']['amount'], 'memo': line['memo'],
+               'customer': line['customer_id']}
+        row.update(Bills._line_class(line, header_class))
+        values['expenses'].append(row)
+    return values
+
+
+def history_context(record, company_id):
+    """The revision list of one vendor credit, with a way into each revision it names."""
+    return dict(record=record, noun='vendor-credit',
+                url=_url(company_id, 'vendor-credit', record['id']))
 
 
 def preserve_line_origins(raw, originals):

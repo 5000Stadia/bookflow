@@ -978,6 +978,23 @@ MATRIX["vendor-credit post"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+MATRIX["vendor-credit update"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit, vendor, account, class or job",
+    "E_INACTIVE_REFERENCE": "a deactivated account, class or job on the corrected header or a line",
+    "E_VALIDATION": "an ineligible account on the header or a line, a retired or repeated line identity, a reason longer than 140 characters, a correction dated after a settlement the credit already made, or ambiguous current posting evidence",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "the superseded revision's date or the corrected one in a closed period",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by another vendor credit",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "no reason given for a correction",
+    "E_APPLICATION_INACTIVE": "a voided credit",
+    "E_APPLICATION_INCOMPATIBLE": "a correction naming another vendor or another payable account",
+    "E_APPLICATION_CAPACITY": "a correction worth less than what the credit already answers, including a concurrent write that took it first",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
 MATRIX["vendor-credit void"] = {
     "E_RECORD_NOT_FOUND": "unknown credit",
     "E_VERSION_CONFLICT": "stale expected_version",
@@ -1017,6 +1034,10 @@ MATRIX["vendor-credit show"] = {"E_RECORD_NOT_FOUND": "unknown credit or revisio
 MATRIX["vendor-credit query"] = {
     "E_RECORD_NOT_FOUND": "unknown vendor or bill filter",
     "E_QUERY_STALE": "company audit changed between credit pages",
+}
+MATRIX["vendor-credit history"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit",
+    "E_QUERY_STALE": "company audit changed between revision pages",
 }
 
 
