@@ -3894,6 +3894,32 @@ and every table becomes one block per row, asserted at 390px in
 `tests/test_credit_windows_browser.py` as each element's own `scrollWidth` against its own
 `clientWidth`.
 
+**Correcting a refund in the browser.** The saved refund carries its own way in: the page says a
+refund typed wrong is corrected rather than voided, and `detail_context` puts a `Correct this
+refund` link beside that sentence for a posted refund only -- a preview has nothing saved to
+correct and a voided refund paid nothing, both of which the command refuses. The form behind it
+is the generated one, and `pages._editable_values` routes `customer-refund` to
+`credits.refund_editable_values`: the projection of the saved document onto the exact fields
+`customer-refund update` declares. Without it the generic fallback handed the form the whole
+`customer-refund show` output, whose `funding_account_id`, `payment_method_id`, `customer_id` and
+nested sources are not what the command takes, so the bank account, the method, the customer, the
+class and the entire grid of credits rendered blank on a document that had all five.
+
+Two things in that projection are load-bearing. A leaf equal to its baseline is never submitted,
+so every value must round-trip exactly or an untouched save becomes a real correction: the amounts
+are the document's own minor units rendered through `Money`, and the receivable account and the
+currency are deliberately absent because a correction cannot change them. And a source amount is
+projected only when the document captured one. A refund posted without amounts pays out everything
+each credit is worth and captures `origins['amount']` as `default`; that origin is part of the
+profile `refunds.prepare_update` compares a correction against, so putting a figure in a defaulted
+cell would flip it to `explicit` and turn a save nobody typed into a reversal batch and a
+replacement batch. `tests/test_customer_refund_correction_form.py` submits the controls the page
+actually renders and holds the whole of this as raw database equality -- an untouched save leaves
+`company.db` byte for byte what it was -- with a changed field beside it that has to move the same
+bytes. `tests/test_customer_refund_update_browser.py` walks the journey in real Chrome at 1280 and
+390: refund a credit from the credit memo's page, correct the refund from the refund's page,
+preview, save, and read the revision it replaced.
+
 **The three tiles are live.** Credit memo and Refund on the Customers panel, Vendor credit on the
 Vendors panel. `tests/test_credit_windows_browser.py` performs the availability contract rather
 than asserting it: it clicks each tile on the home board, enters a document through the page the

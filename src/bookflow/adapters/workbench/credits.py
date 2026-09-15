@@ -23,6 +23,13 @@ sources. Both seed the *attempted* controls rather than the form's originals: an
 the baseline a correction is compared against, and a value equal to it is not submitted at
 all, which would silently drop every seeded row.
 
+*The correction baselines.* ``editable_values`` and ``refund_editable_values`` project a saved
+credit memo and a saved refund onto the exact fields their ``update`` commands declare. The
+form submits only the leaves that differ from that baseline, so a field missing from it renders
+blank on a document that has one, and a value that does not round-trip exactly turns a save
+nobody typed into a real correction. Neither projection resolves anything: every figure in them
+was captured by the revision it is read from.
+
 *The apply surface.* ``customer-credit apply`` needs the credit's own version and the version
 of every invoice it touches. A person cannot be asked to find six version numbers, so the page
 reads them and carries them in its own hidden fields -- and a stale one is answered by the
@@ -145,8 +152,13 @@ def detail_context(noun, record, company_id, *, preview=False):
             sources.append({**row, 'url': _url(company_id, 'credit-memo', row['credit_memo_id']),
                             'amount': _money(row['amount_minor_units'], currency),
                             'available_before': _money(row['available_minor_units'], currency)})
+        # A refund typed wrong is corrected, so the saved document carries the way in. A
+        # preview has nothing saved to correct, and a voided refund paid nothing: the
+        # command refuses both, so neither is offered the link.
+        correctable = not preview and record['status'] == 'posted'
         view.update(sources=sources, consumptions=record.get('consumptions') or [],
                     customer_url=None if preview else _url(company_id, 'customer', record['customer_id']),
+                    correct_url=_url(company_id, noun, record['id'], 'update') if correctable else None,
                     title='Customer refund')
     else:
         applications = [row for row in (record.get('applications') or []) if row.get('active')]
@@ -437,6 +449,51 @@ def editable_values(record):
             result['lines'].append({key: value for key, value in ordinary.items()
                                     if key in CreditLineInput.model_fields})
     return result
+
+
+def refund_editable_values(record):
+    """Project the refund correction controls from what its own revision captured.
+
+    Every value is read off the saved document in the exact shape ``customer-refund
+    update`` declares, because the correction form submits only the leaves that differ
+    from these: a person who opens the correction and saves it without typing anything
+    has to write nothing at all, and one who corrects a date must not lose the bank
+    account, the method or the credits the refund pays out along with it.
+
+    ``sources`` is the part that has to be exact rather than merely present. A refund
+    posted without amounts pays out everything each credit is still worth and captures
+    ``origins['amount']`` as ``default``; one posted with amounts captures ``explicit``.
+    That origin is part of the profile the command compares a correction against, so
+    putting an amount on a source the document defaulted would turn an untouched save
+    into a real correction -- a reversal batch and a replacement batch for an edit
+    nobody made. The grid therefore carries amounts exactly when the document captured
+    them, and an empty amount cell means what the field already says it means: pay out
+    the whole of that credit.
+
+    What is deliberately absent: the receivable account and the currency, which a
+    correction cannot change because they come from the credits themselves. ``customer``
+    is here because the window shows who was paid back, and it stays the guard the
+    command documents rather than becoming a choice.
+    """
+    revision = record['revision']
+    profile = revision['profile']
+    origin = (profile.get('origins') or {}).get('amount')
+    explicit = origin is None or origin['kind'] == 'explicit'
+    # One entered line carries the class; a refund is written with exactly the one.
+    entered = next((line for line in revision['lines'] if line['kind'] == 'refund'), None)
+    sources = []
+    for row in profile['sources']:
+        source = {'credit_memo': row['credit_memo_id']}
+        if explicit:
+            source['amount'] = _money(row['amount_minor_units'], record['currency'])['amount']
+        sources.append(source)
+    return dict(customer=record['customer_id'], date=revision['date'],
+                number=revision['number'], memo=revision['memo'],
+                reference=profile['reference'], check_number=profile['check_number'],
+                funding_account=profile['funding_account']['id'],
+                method=profile['payment_method']['id'],
+                class_id=entered['class_id'] if entered else None,
+                sources=sources)
 
 
 def preserve_line_origins(raw, originals):
