@@ -1260,7 +1260,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     else:
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
-        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt', 'bill') else None
+        # Every document with a Delete verb of its own: this is what gates the Delete
+        # link on an explicit grant rather than on the role alone, and what marks a
+        # retained deleted document as deleted wherever it is read back.
+        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt', 'bill', 'credit-memo') else None
         purchase_noun = command_noun if purchase_record else None
         if command_noun == 'journal' and company_id:
             try:

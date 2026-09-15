@@ -109,7 +109,7 @@ class CatalogManifest:
 ROLES = ('readonly', 'standard', 'admin', 'owner')
 THRESHOLDS = ('authenticated', 'member', 'standard', 'admin', 'owner', 'hub_admin')
 _SCOPE_KINDS = ('hub', 'organization', 'company', 'future_company')
-from bookflow.core.deletion_families import BILL_FAMILIES, PREPARED_FAMILIES, PURCHASE_FAMILIES, TOMBSTONE_TABLE, capability as deletion_capability
+from bookflow.core.deletion_families import BILL_FAMILIES, CREDIT_FAMILIES, PREPARED_FAMILIES, PURCHASE_FAMILIES, TOMBSTONE_TABLE, capability as deletion_capability
 DELETE_NAMES = tuple(map(deletion_capability, PREPARED_FAMILIES))
 # A prepared family may carry a registered Delete threshold only once its own
 # retained-deletion storage exists, so the one owner of that storage decides it.
@@ -120,15 +120,18 @@ DELETE_POLICY_VERSION = 'purchase-deletion-v1'
 SALES_DELETE_POLICY_VERSION = 'sales-deletion-v1'
 PAYMENT_DELETE_POLICY_VERSION = 'payment-deletion-v1'
 BILL_DELETE_POLICY_VERSION = 'bill-deletion-v1'
-SCOPED_POLICY_VERSIONS = (BILL_DELETE_POLICY_VERSION, PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
+CREDIT_DELETE_POLICY_VERSION = 'credit-memo-deletion-v1'
+SCOPED_POLICY_VERSIONS = (CREDIT_DELETE_POLICY_VERSION, BILL_DELETE_POLICY_VERSION, PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
 PURCHASE_DELETE_FAMILIES = PURCHASE_FAMILIES
 BILL_DELETE_FAMILIES = BILL_FAMILIES
+CREDIT_DELETE_FAMILIES = CREDIT_FAMILIES
 # Every family whose Delete capability the catalog may carry at all. The frozen
 # ancestors declare the prepared four; the purchase and bill families arrive with
 # their own delta, so this list is what keeps the company-only Delete requirement
 # bounded rather than open.
 SUPPORTED_DELETE_NAMES = (*DELETE_NAMES, *('transaction.'+family+'.delete'
-                                           for family in PURCHASE_DELETE_FAMILIES + BILL_DELETE_FAMILIES))
+                                           for family in PURCHASE_DELETE_FAMILIES + BILL_DELETE_FAMILIES
+                                           + CREDIT_DELETE_FAMILIES))
 
 
 class InputErrorCategory(str, Enum):

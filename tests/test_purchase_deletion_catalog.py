@@ -53,9 +53,12 @@ def test_current_conditional_resource_inventory_and_purchase_examples():
                     if isinstance(ancestor,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):names.append(ancestor.name)
                 owner='.'.join(path.relative_to(root/'src').with_suffix('').parts)+'.'+'.'.join(reversed(names))
                 actual.setdefault(owner,set()).add((str(path.relative_to(root)),node.lineno))
-    assert {x.owner:set(x.call_sites) for x in build.CATALOG.conditional_sources}==actual
+    # The inventory is a fact about the whole source tree, so it is compared against the
+    # catalog in force rather than against one named delta: every later delta inherits it.
+    from bookflow.hub import permission_runtime
+    assert {x.owner:set(x.call_sites) for x in permission_runtime.current_catalog().CATALOG.conditional_sources}==actual
     registry.load_all()
-    for noun in ('check','card-charge','invoice','sales-receipt','payment','bill'):
+    for noun in ('check','card-charge','invoice','sales-receipt','payment','bill','credit-memo'):
         cmd=registry.get(noun+' delete')
         assert cmd.explicit_grant_only and cmd.permanent_recovery
         assert cmd.input_model.model_validate(EXAMPLES[cmd.name].input).expected_version==1

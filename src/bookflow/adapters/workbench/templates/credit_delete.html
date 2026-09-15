@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Delete credit memo {{ credit.revision.number }}{% endblock %}{% block body %}<section id="credit-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<nav class="crumbs"><a href="/c/{{ company_id }}/credit-memo">Credit memos</a> / Delete</nav>
+<h1>Delete credit memo {{ credit.revision.number }}</h1>
+{% include "credit_memo_detail.html" %}
+<section class="workspace-card" aria-label="Deletion confirmation">
+<h2>Cancel this credit memo and retain its history</h2>
+{% if record.status == 'voided' %}<p>This credit memo is already voided. Deletion adds no further accounting reversal.</p>
+{% else %}<p>Deletion cancels this credit’s income, sales tax and receivable at their original dates, so the customer owes the full amount again.</p>{% endif %}
+<p>The credit memo will leave normal lists, credit selectors and registers. Its original details, revisions, number and audit history remain available. There is no restore action.</p>
+{% if result and result.released_source_claims %}<p class="warn" data-credit-delete-returns>{{ result.released_source_claims }} returned invoice quantity claim(s) go back to the invoice that issued them, so that quantity can be returned again:{% for id in result.source_invoice_ids %} <a href="/c/{{ company_id }}/invoice/{{ id }}">{{ id }}</a>{% endfor %}.</p>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% if error.details %}{% if error.details.next %}<p>{{ error.details.next }}</p>{% endif %}{% if error.details.invoice_ids %}<ul>{% for id in error.details.invoice_ids %}<li><a href="/c/{{ company_id }}/invoice/{{ id }}">Invoice still settled by this credit: {{ id }}</a></li>{% endfor %}</ul>{% endif %}{% if error.details.refund_ids %}<ul>{% for id in error.details.refund_ids %}<li><a href="/c/{{ company_id }}/customer-refund/{{ id }}">Refund paid out of this credit: {{ id }}</a></li>{% endfor %}</ul>{% endif %}{% endif %}</div>{% endif %}
+{% if result %}<div role="status" class="notice">Preview only — nothing saved. The credit memo will be marked deleted at version {{ result.version }}.</div>{% endif %}
+<form method="post" hx-post="/c/{{ company_id }}/credit-memo/{{ record.id }}/delete" hx-target="#credit-deletion" hx-select="#credit-deletion" hx-swap="outerHTML" data-credit-delete>
+<input type="hidden" name="expected_version" value="{{ values.expected_version }}">
+<input type="hidden" name="operation_key" value="{{ values.operation_key }}">
+<label for="delete-reason">Reason for deletion</label><textarea id="delete-reason" name="reason" required maxlength="140" rows="3">{{ values.reason }}</textarea>
+<label style="display:block;padding:1rem 0"><input type="checkbox" name="confirmed" value="yes" {% if values.get('confirmed') == 'yes' %}checked{% endif %}> I confirm cancellation of this credit memo.</label>
+<div class="actions"><button name="action" value="preview">Preview cancellation</button><button name="action" value="delete">Delete credit memo</button><a href="/c/{{ company_id }}/credit-memo/{{ record.id }}">Cancel</a></div>
+{% if error and error.code == 'E_VERSION_CONFLICT' %}<p>Your reason and retry key are retained. <button name="action" value="refresh" formnovalidate>Reload current credit memo</button> to review its new version before trying again.</p>{% endif %}
+</form></section>
+</section>{% endblock %}

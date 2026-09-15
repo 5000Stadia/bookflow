@@ -975,3 +975,6 @@ EXAMPLES['payment delete'] = Example(
 EXAMPLES['bill delete'] = Example(
     f'bookflow bill delete {ID} --expected-version 1 --operation-key bill-delete-example --reason "Remove duplicate bill" --company "Demo Plumbing Co" --json',
     {'bill': ID, 'expected_version': 1, 'operation_key': 'bill-delete-example'})
+EXAMPLES['credit-memo delete'] = Example(
+    f'bookflow credit-memo delete {ID} --expected-version 1 --operation-key credit-delete-example --reason "Credited the wrong customer" --company "Demo Plumbing Co" --json',
+    {'credit_memo': ID, 'expected_version': 1, 'operation_key': 'credit-delete-example'})

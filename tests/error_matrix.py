@@ -1161,6 +1161,19 @@ MATRIX["credit-memo void"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+MATRIX["credit-memo delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters, or the credit memo is already deleted",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_PERIOD_CLOSED": "the credit memo's own date is in a closed period",
+    "E_HAS_APPLICATIONS": "a live application; unapply it first, and the invoices are named",
+    "E_HAS_REFUND": "a live refund consumption; void the refund first, and the refunds are named",
+    "E_RECONCILIATION_DEPENDENCY": "a reconciliation still holds an effect of this credit memo",
+    "E_IDEMPOTENCY_MISMATCH": "same operation_key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
 MATRIX["credit-memo query"] = {
     "E_RECORD_NOT_FOUND": "unknown customer or receivable account filter",
     "E_QUERY_STALE": "company audit changed between credit pages",

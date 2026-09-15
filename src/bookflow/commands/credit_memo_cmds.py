@@ -129,8 +129,47 @@ credit_memo_history = command(
     required_role='member', capability='ledger.read', positional=['credit_memo'],
     error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])(_history)
 
+def _delete():
+    from bookflow.company import credit_deletions as deletion
+    from bookflow.company.credit_deletion_models import CreditMemoDeleteInput, CreditMemoDeleteOutput
+    from bookflow.core.deletion_families import capability
+
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp)
+
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s)
+
+    cmd = command(
+        'credit-memo delete', scope='company',
+        description='Delete this credit memo with a required reason and exact expected_version.'
+                    ' Cancel the income, the sales tax and the receivable it took back at their'
+                    ' original dates, and release every source invoice quantity it claimed so'
+                    ' that quantity can be returned again; retain immutable history and its'
+                    ' number. Requires the explicit family Delete grant and ledger.read,'
+                    ' independently of ledger.post. A credit still applied to an invoice refuses'
+                    ' atomically with `E_HAS_APPLICATIONS` naming those invoices, and one a'
+                    ' customer refund was paid out of with `E_HAS_REFUND` naming the refunds:'
+                    ' take the credit back off the invoice, or void the refund, first. A closed'
+                    ' period refuses.',
+        input_model=CreditMemoDeleteInput, output_model=CreditMemoDeleteOutput, writes={'company'},
+        required_role='standard', capability=capability('credit_memo'), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=['credit_memo'],
+        version_source=('credit-memo show', 'credit_memo', 'version'),
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
+                     'E_PERIOD_CLOSED', 'E_RECONCILIATION_DEPENDENCY', 'E_IDEMPOTENCY_MISMATCH',
+                     'E_HAS_APPLICATIONS', 'E_HAS_REFUND'])(planner)
+    cmd.resource_requirements = (('ledger.read', 'member'),)
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+credit_memo_delete = _delete()
+
 CREDIT_MEMO_COMMANDS = [credit_memo_post, credit_memo_show, credit_memo_query,
-                        credit_memo_history, credit_memo_void]
+                        credit_memo_history, credit_memo_void, credit_memo_delete]
 
 
 def _update(inp, ctx, s):
