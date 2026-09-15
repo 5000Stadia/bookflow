@@ -70,6 +70,20 @@ physical revision references. `payment_cancellation.py` unapplies exact current
 allocations and requires explicit unapply before receipt void. A new no-effect
 operation has its own audit receipt; exact permanent replay has no new writes.
 
+`sales.component_attribution` owns which two posting rows a settleable component is
+made of, and both `payments._target_components` and `payment_restatement.prepare`
+read it instead of deciding for themselves. A stock-carrying line posts four rows
+against one document line and a null tax component -- the customer's receivable and
+the income recognised, beside the cost debited to Cost of Goods Sold and credited
+out of Inventory Asset -- so debit/credit direction alone names no row, and the
+older rule that took "the one credit" refused every stocked invoice a customer
+tried to pay. Both sides are matched on the accounts the revision captured: the
+invoice profile's `control_account_id` for the receivable, and the line's captured
+`income_account` or the component's captured `liability_account_id` for the
+recognition, each row also carrying that component's own amount and currency. The
+cost pair is posted to neither account and is never a candidate; anything other
+than exactly one row on each side is still refused rather than guessed at.
+
 `payment_dependencies.py` signs bounded audit-baseline guards and reconstructs
 owned headers in batches. Comparisons resolve each event's owned commercial
 revisions to actual business fields, distinguish its actor from the latest writer,
