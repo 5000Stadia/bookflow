@@ -31,6 +31,8 @@
 </tbody></table></div>
 {% else %}<p class="muted">This credit answers no bill yet.</p>{% endif %}
 <p class="muted"><a href="/c/{{ company_id }}/bill?vendor={{ credit.record.vendor_id }}">Open bills from this vendor</a></p></section>{% endif %}
+<p class="muted">A credit typed wrong is corrected rather than voided, which keeps one document where one credit note arrived: the correction reverses this revision at its own date, posts the corrected one, and releases every bill this credit answers before settling each of them again for the same amount on the same day. The vendor and the payable account cannot change — a credit from somebody else is a different credit.</p>
+{% if credit.correct_url %}<p class="actions"><a class="primary-action" data-vendor-credit-correct href="{{ credit.correct_url }}">Correct this vendor credit</a></p>{% endif %}
 <details data-vendor-credit-origins><summary>Captured rules and input origins</summary>
 <dl>{% for field, origin in p.origins.items() %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ origin.kind }}{% if origin.source_id %} · source {{ origin.source_id }}{% endif %}</dd>{% endfor %}</dl>
 {% for line in r.expenses %}<h4>Line {{ line.position }} · {{ line.line_snapshot.account.full_name }}</h4><p>Account {{ line.line_snapshot.account.type.replace('_', ' ') }}{% if line.line_snapshot.account.number %} · number {{ line.line_snapshot.account.number }}{% endif %} · {{ line.line_snapshot.account.normal_balance }}-normal</p>{% endfor %}
