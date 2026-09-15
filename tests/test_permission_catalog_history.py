@@ -185,6 +185,20 @@ def test_every_selectable_version_is_pinned_and_the_last_line_is_the_tip():
     assert runtime.known_catalog('unrecognized-future') is None
 
 
+def test_the_product_pin_and_this_one_name_the_same_descriptors():
+    """Two pins, in two files, deliberately.
+
+    permission_runtime refuses to serve a version whose descriptor moved, so the
+    mistake stops the product rather than only a test; this file fails in CI with the
+    explanation of what was done and what to do instead. They are kept apart because a
+    builder who hit the import refusal and edited that one constant to get past it
+    would otherwise have silenced the whole check -- which is precisely how a digest
+    kept beside the descriptor it guards stops working.
+    """
+    assert runtime.ACCEPTED_DESCRIPTOR_SHA256 == {version: sha for version, (_, sha) in ACCEPTED.items()}
+    assert runtime.ACCEPTED_ANCESTOR_SHA256 == FROZEN_DESCRIPTOR[1]
+
+
 def test_frozen_ancestor_and_the_legacy_bridge_hold_still():
     bundle = runtime.catalog_bundle()
     manifest = c.catalog_manifest(bundle.descriptor, bundle.exclusions)

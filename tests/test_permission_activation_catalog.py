@@ -1,11 +1,21 @@
 """Current executable inventory, separate from the immutable legacy descriptor."""
 import ast
 from bookflow.core import registry
-from bookflow.hub import permission_catalog as c, permission_activation_catalog as build
+from bookflow.hub import permission_catalog as c, permission_activation_catalog as build, permission_runtime as runtime
 from tests.test_permission_catalog import ROOT, R, owner, RESOURCE_PAIRS, FROZEN_DESCRIPTOR_SHA256
 
 
 def test_complete_unfiltered_registry_descriptors_and_action_owners():
+    """Registry parity belongs to the tip; `build` here is a frozen historical delta.
+
+    permission_activation_catalog was accepted long ago and roots have stored its
+    descriptor, so it cannot grow to match today's registry and must never be made
+    to. This assertion used to name it, which meant a builder who added a command
+    and saw it fail was being told to edit an accepted delta -- as fatal as editing
+    the frozen ancestor, and not something the ancestor guard in permission_runtime
+    covers. tests/test_permission_catalog_history.py is what holds `build` still;
+    the delta this file actually owns is asserted below.
+    """
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     expected = []
@@ -23,9 +33,10 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
             actions[cmd.name] = (
                 {R(cmd.capability, cmd.required_role or 'authenticated'), *(R(*r) for r in cmd.resource_requirements)},
                 {x for x in (owner(cmd.plan), owner(cmd.authorize_input), owner(cmd.permanent_recovery), owner(cmd.transfer.prepare) if cmd.transfer else None) if x})
-    assert build.CATALOG.commands == tuple(sorted(expected, key=lambda d: d.name))
-    assert build.MANIFEST.standalone_names == tuple(sorted(cmd.name for cmd in commands if cmd.standalone))
-    actual = {a.key: a for a in build.CATALOG.company_actions if not a.key.startswith('contract:')}
+    tip = runtime.current_catalog()
+    assert tip.CATALOG.commands == tuple(sorted(expected, key=lambda d: d.name))
+    assert tip.MANIFEST.standalone_names == tuple(sorted(cmd.name for cmd in commands if cmd.standalone))
+    actual = {a.key: a for a in tip.CATALOG.company_actions if not a.key.startswith('contract:')}
     assert actual.keys() == actions.keys()
     for name, (requirements, owners) in actions.items():
         assert set(actual[name].requirements) == requirements
@@ -60,8 +71,11 @@ def test_every_resource_call_site_has_explicit_owner_disposition():
                 if len(node.args) >= 3 and all(isinstance(a, ast.Constant) for a in node.args[1:3]):
                     assert tuple(a.value for a in node.args[1:3]) in expected
     assert sites.keys() == {'bookflow.company.' + name for name in RESOURCE_PAIRS}
-    assert {s.owner: set(s.call_sites) for s in build.CURRENT_SOURCES} == sites
-    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in build.CURRENT_SOURCES} == RESOURCE_PAIRS
+    # The tip's inventory, for the same reason: build.CURRENT_SOURCES was frozen when
+    # this delta was accepted and cannot carry a site a later delta introduced.
+    inventory = runtime.current_catalog().CATALOG.conditional_sources
+    assert {s.owner: set(s.call_sites) for s in inventory} == sites
+    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in inventory} == RESOURCE_PAIRS
 
 
 def test_literal_delta_keeps_old_descriptors_and_unavailable_contracts():
