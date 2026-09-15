@@ -180,10 +180,11 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
             date_to=inp.date_to, basis=inp.basis, limit=inp.limit,
             cursor=previous.report_cursor if previous else None)
         hidden_balance = previous.hidden_balance if previous else 0
+        from bookflow.core.deletion_families import tombstone_tables
         while True:
             result = reports.general_ledger(report_input, s, principal_id=principal_id)
             deleted = set()
-            for table in (schema.purchase_deletions, schema.sales_deletions):
+            for table in (schema.metadata.tables[name] for name in tombstone_tables()):
                 if sa.inspect(db.conn).has_table(table.name):
                     deleted.update(db.conn.execute(sa.select(table.c.transaction_id).where(
                         table.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}))).scalars())

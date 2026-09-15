@@ -2366,6 +2366,32 @@ No financial Delete or operation-inspection command is registered by G0. The
 private frozen permission catalog, role defaults, schema, setup and full C
 publication policies remain separate prerequisites.
 
+### Customer-payment deletion
+
+`payment delete` is the third activated deletion family, after the purchase
+(`co0049`, `purchase_deletions`) and sales (`co0050`, `sales_deletions`) tombstones.
+`company/payment_deletions.py` owns it. Unlike those two, it does not re-prepare a
+public void: it drives the private kernel `transaction_deletion.prepare_delete`,
+whose authority is the exact family Delete grant plus `ledger.read`, never
+`ledger.post`, and whose evidence loader independently reloads and revalidates the
+whole retained graph through `transaction_deletion_validation.validate_delete`.
+The kernel returns `BlockedDelete` rather than cascading: a receipt with a live
+application refuses `E_HAS_APPLICATIONS` naming `application_ids`, and a receipt
+claimed by a deposit refuses `E_DEPOSIT_DEPENDENCY` naming source and deposit.
+A reconciled statement effect refuses `E_RECONCILIATION_DEPENDENCY`.
+
+`co0051` adds `payment_deletions` with the same shape as `co0050` -- immutable
+tombstone, no-update/no-delete triggers and a transaction fence -- and an owner
+trigger whose clause is the whole released graph: the voided header at exactly
+`result_version` with its own cancellation batch, and no live application, live
+allocation or deposit claim. `core.deletion_families.TOMBSTONE_TABLE` is the one
+owner of which families have retained-deletion storage; the register reader, the
+catalog's registered-threshold rule and the availability tests all derive from it.
+The database keeps status `voided`; `deleted` is overlaid by `payment show`,
+`payment query` and `payment history`, each of which hides the receipt unless the
+read passes `include_deleted`. Retries are answered from the tombstone's own
+request/result snapshots under current authority, so the same key never acts twice.
+
 ### Inert permission-administration storage (B1)
 
 Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membership

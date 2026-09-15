@@ -156,7 +156,10 @@ def application_history(s, inp):
 
 
 def payment_history(s, inp):
+    from bookflow.company.payment_deletions import deletion_info
     facts = query.payment_facts(s, inp.payment)
+    # Refuses a deleted receipt unless this read explicitly asked for its history.
+    deletion_info(s, facts['header'], getattr(inp, 'include_deleted', False))
     identifier = facts['header']['id']
     items = []
     revisions = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.transaction_id == identifier)

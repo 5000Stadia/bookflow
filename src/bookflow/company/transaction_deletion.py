@@ -73,8 +73,13 @@ def require_ready(result):
         facts.require(bool(result.facts.blockers))
         blocker=result.facts.blockers[0]
         if blocker.kind=='applications':
+            # The blocked caller is already authorized over the whole retained
+            # closure by facts.load, so the blocking identities are disclosable.
             raise BookflowError('E_HAS_APPLICATIONS',details={blocker.family+'_id':blocker.transaction_id,
-                'action':'unapply_first','next':'Inspect '+blocker.family+' settlement dependencies and unapply first.'})
+                'application_ids':list(blocker.application_ids),'action':'unapply_first',
+                'next':'Release these applications with payment unapply, then delete.'})
+        # Deliberately no next: a Delete-only actor cannot run the coordinated
+        # correction, and the claim is already named by source and deposit.
         raise BookflowError('E_DEPOSIT_DEPENDENCY',details={'source':blocker.source_id,'deposit':blocker.deposit_id,
             'reason':'A claimed source requires atomic source and deposit cancellation.'})
     return result

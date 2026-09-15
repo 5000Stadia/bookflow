@@ -84,8 +84,10 @@ def current_output(s, selector, *, complete_components=False):
 
 
 def show(s, inp):
+    from bookflow.company.payment_deletions import deletion_info
     facts = query.payment_facts(s, inp.payment)
     header, revision, profile = facts['header'], facts['revision'], facts['profile']
+    deletion = deletion_info(s, header, getattr(inp, 'include_deleted', False))
     if inp.revision is not None:
         rows = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.transaction_id == header['id'],
                             c.transaction_revisions.c.revision_number == inp.revision)
@@ -93,8 +95,8 @@ def show(s, inp):
             raise BookflowError('E_RECORD_NOT_FOUND')
         revision = rows[0]
         profile = effects.rows(s, c.payment_profiles, c.payment_profiles.c.revision_id == revision['id'])[0]
-    return PaymentOutput(**header, revision=revision_output(revision, profile),
-        current=current_output(s, header['id']))
+    return PaymentOutput(**dict(header, **({'status': 'deleted'} if deletion else {})), deletion=deletion,
+        revision=revision_output(revision, profile), current=current_output(s, header['id']))
 
 
 def revision_output(revision, profile):
@@ -234,6 +236,11 @@ def prepare(s, ctx, inp, operation):
         if recovered:
             return Plan(recovered.output, dict(recovered=True))
         raise BookflowError('E_PAYMENT_OPERATION_KEY_REUSED')
+    # A retained deleted receipt is history: no new effect may reach it. Replaying
+    # an earlier key still returns its own original result, above.
+    if operation != 'receive':
+        from bookflow.company.payment_deletions import require_not_deleted
+        require_not_deleted(s, sales.resolve(s, inp.payment, 'payment')['id'])
     if operation in ('unapply', 'void'):
         from bookflow.company.payment_cancellation import prepare as cancellation
         return cancellation(s, ctx, inp, operation)

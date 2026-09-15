@@ -165,6 +165,7 @@ class PaymentApplyInput(StrictModel):
 class PaymentShowInput(StrictModel):
     payment: Selector
     revision: _Version | None = None
+    include_deleted: bool = Field(default=False, description='Explicitly read retained deleted receipt facts')
 
 
 class UnapplyReference(StrictModel):
@@ -228,6 +229,7 @@ class PaymentQueryInput(Page):
     q: str | None = Field(default=None, max_length=200)
     sort: Literal['date', 'number', 'received', 'unapplied'] = 'date'
     direction: Literal['asc', 'desc'] = 'desc'
+    include_deleted: bool = Field(default=False, description='Explicitly read retained deleted receipt facts')
 
     @model_validator(mode='after')
     def filters(self):
@@ -255,6 +257,7 @@ class InvoiceSettlementInput(Page):
 
 class PaymentHistoryInput(Page):
     payment: Selector
+    include_deleted: bool = Field(default=False, description='Explicitly read retained deleted receipt facts')
 
 
 class ApplicationShowInput(StrictModel):

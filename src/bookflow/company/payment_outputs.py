@@ -10,6 +10,7 @@ from bookflow.commands.common import CommonOut
 from bookflow.company.sales_facts import Reference, Account
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.payment_models import PreviewRequest
+from bookflow.company.payment_deletion_models import PaymentDeletionInfo
 from bookflow.company.payment_models import InvoiceAmount
 
 
@@ -155,7 +156,8 @@ class PaymentOutput(CommonOut):
     settlement_guard: str | None = None
     type: Literal['payment'] = 'payment'
     number: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'deleted']
+    deletion: PaymentDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     current_revision_id: str
     revision: PaymentRevisionOutput
     current: PaymentCurrentOutput

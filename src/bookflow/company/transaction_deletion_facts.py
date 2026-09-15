@@ -247,6 +247,14 @@ def load(s, ctx, intent, binding):
         required_resources=tuple(required),blockers=tuple(blockers)), identity
 
 
+# A receipt supplies its own settlement capacity, so its writer omits the credit
+# source edge on both settlement tables and stores the column's NULL default. The
+# owned-row witness tolerates exactly that omission, never a snapshot that lost a
+# real edge, in the same spirit as the pre-co14/co20 posting-source contract.
+RECEIPT_OMITTED = {'applications': 'credit_source_key_id',
+                   'application_allocations': 'credit_source_component_id'}
+
+
 def audit_evidence(rows, owned, header, prior):
     from bookflow.core.audit import decode_snapshot
     entries=[r.values() for r in rows if r.table=='audit_entries']
@@ -277,6 +285,10 @@ def audit_evidence(rows, owned, header, prior):
         if r.table=='posting_line_sources':
             # Pre-co14/co20 snapshots intentionally lack nullable components.
             for key in ('payment_component_id','deposit_component_id'): captured.setdefault(key,None)
+        omitted=RECEIPT_OMITTED.get(r.table)
+        if omitted is not None and omitted not in captured:
+            require(value[omitted] is None)
+            captured[omitted]=None
         if r.table=='work_billing_allocations' and 'allocation_version' not in captured:
             # co0015 legacy allocations retain the pre-interval audit shape.
             require(value['allocation_version']==1)

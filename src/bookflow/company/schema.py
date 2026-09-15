@@ -1143,3 +1143,6 @@ globals().update(_define_purchase_deletions(metadata, _column, _table))
 
 from bookflow.company.sales_deletion_schema import define_tables as _define_sales_deletions
 globals().update(_define_sales_deletions(metadata, _column, _table))
+
+from bookflow.company.payment_deletion_schema import define_tables as _define_payment_deletions
+globals().update(_define_payment_deletions(metadata, _column, _table))

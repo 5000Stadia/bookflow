@@ -1,7 +1,9 @@
 # Transaction deletion
 
-Status: accepted product requirement; not implemented. Applies alongside the
-existing void action to invoices, checks and other applicable transaction types.
+Status: accepted product requirement. Implemented for checks, credit-card charges,
+invoices, sales receipts and customer payments; journal entries remain unimplemented.
+Applies alongside the existing void action to those and other applicable
+transaction types.
 
 ## User setup and authority
 

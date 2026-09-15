@@ -282,6 +282,9 @@ def payment_page(s, inp):
         protected = sa.exists(sa.select(a.c.id).join(c.work_billing_allocations,
             c.work_billing_allocations.c.transaction_id == a.c.paid_transaction_id).where(a.c.paying_transaction_id == t.c.id))
         statement = statement.where(~protected)
+    if not inp.include_deleted and sa.inspect(s.company.conn).has_table('payment_deletions'):
+        statement = statement.where(~sa.exists(sa.select(c.payment_deletions.c.transaction_id).where(
+            c.payment_deletions.c.transaction_id == t.c.id)))
     if customer:
         statement = statement.where(p.c.payer_id.in_(family))
     if component_customer:

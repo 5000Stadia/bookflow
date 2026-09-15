@@ -56,6 +56,33 @@ payment_void = _financial('void', PaymentVoidInput)
 payment_update = _financial('update', PaymentUpdateInput)
 
 
+def _delete():
+    from bookflow.company import payment_deletions as deletion
+    from bookflow.company.payment_deletion_models import PaymentDeleteInput, PaymentDeleteOutput
+    from bookflow.core.deletion_families import capability
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp)
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s)
+    cmd = command('payment delete', scope='company',
+        description='Delete this customer payment with a required reason and exact expected_version. Cancel its cash and receivable postings at their original dates; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. Applied, deposited, reconciled or closed effects refuse atomically and name what blocks them.',
+        input_model=PaymentDeleteInput, output_model=PaymentDeleteOutput, writes={'company'},
+        required_role='standard', capability=capability('payment'), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=['payment'],
+        version_source=('payment show', 'payment', 'version'),
+        error_codes=['E_RECORD_NOT_FOUND','E_VERSION_CONFLICT','E_VALIDATION','E_REASON_REQUIRED',
+                     'E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY',
+                     'E_IDEMPOTENCY_MISMATCH','E_HAS_APPLICATIONS','E_VALUE_RANGE'])(planner)
+    cmd.resource_requirements = (('ledger.read','member'),)
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+payment_delete = _delete()
+
+
 @command('payment show', scope='company', description='Show a receipt revision separately from current owned credit and application capacity.',
     input_model=PaymentShowInput, output_model=PaymentOutput, required_role='member', capability='ledger.read',
     positional=['payment'], error_codes=['E_RECORD_NOT_FOUND'])

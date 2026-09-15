@@ -1,7 +1,7 @@
 """Literal activated purchase delta and full executable parity, without a count pin."""
 from bookflow.core import registry
-from bookflow.core.deletion_families import FAMILIES, PURCHASE_FAMILIES, SALES_FAMILIES, capability
-from bookflow.hub import permission_catalog as c, permission_sales_deletion_catalog as build, permission_deletion_catalog as previous
+from bookflow.core.deletion_families import FAMILIES, TOMBSTONE_TABLE, capability
+from bookflow.hub import permission_catalog as c, permission_payment_deletion_catalog as build, permission_sales_deletion_catalog as previous
 from tests.test_permission_catalog import R, owner
 
 
@@ -23,12 +23,13 @@ def test_complete_purchase_delete_catalog_and_finite_family_availability():
     for name,(requirements,owners) in actions.items():
         assert set(actual[name].requirements)==requirements,name
         assert set(actual[name].remaining_graph_owners)==owners,name
-    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'invoice delete','sales-receipt delete'}
+    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'payment delete'}
     assert build.CATALOG.defaults==previous.CATALOG.defaults
     assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES==frozenset(map(capability,FAMILIES))
     contracts={x.key:x for x in build.CATALOG.company_actions if x.key.startswith('contract:')}
     for family in FAMILIES:
-        assert contracts['contract:delete:'+family].available == (family in PURCHASE_FAMILIES + SALES_FAMILIES)
+        # Deletable exactly where retained-deletion storage exists; journal entries have none.
+        assert contracts['contract:delete:'+family].available == (family in TOMBSTONE_TABLE)
         assert set(contracts['contract:delete:'+family].requirements)=={R(capability(family),'standard'),R('ledger.read','member')}
         assert all(x.requirement.capability!=capability(family) for x in build.CATALOG.defaults)
 
@@ -54,7 +55,7 @@ def test_current_conditional_resource_inventory_and_purchase_examples():
                 actual.setdefault(owner,set()).add((str(path.relative_to(root)),node.lineno))
     assert {x.owner:set(x.call_sites) for x in build.CATALOG.conditional_sources}==actual
     registry.load_all()
-    for noun in ('check','card-charge','invoice','sales-receipt'):
+    for noun in ('check','card-charge','invoice','sales-receipt','payment'):
         cmd=registry.get(noun+' delete')
         assert cmd.explicit_grant_only and cmd.permanent_recovery
         assert cmd.input_model.model_validate(EXAMPLES[cmd.name].input).expected_version==1
@@ -81,7 +82,9 @@ def test_manifest_and_native_shape_reuse_only_validated_immutable_descriptors():
 
 
 def test_historical_purchase_delta_remains_exact():
-    from bookflow.hub import permission_setup_catalog as setup
-    assert {x.name for x in previous.CATALOG.commands}-{x.name for x in setup.CATALOG.commands} == {'check delete','card-charge delete'}
-    assert previous.CATALOG.defaults == setup.CATALOG.defaults
-    assert {x.key for x in previous.CATALOG.company_actions if x.key.startswith('contract:') and x.available} == {'contract:delete:check','contract:delete:card_charge'}
+    from bookflow.hub import permission_setup_catalog as setup, permission_deletion_catalog as purchase
+    assert {x.name for x in purchase.CATALOG.commands}-{x.name for x in setup.CATALOG.commands} == {'check delete','card-charge delete'}
+    assert purchase.CATALOG.defaults == setup.CATALOG.defaults
+    assert {x.key for x in purchase.CATALOG.company_actions if x.key.startswith('contract:') and x.available} == {'contract:delete:check','contract:delete:card_charge'}
+    assert {x.name for x in previous.CATALOG.commands}-{x.name for x in purchase.CATALOG.commands} == {'invoice delete','sales-receipt delete'}
+    assert previous.CATALOG.defaults == purchase.CATALOG.defaults

@@ -109,13 +109,17 @@ class CatalogManifest:
 ROLES = ('readonly', 'standard', 'admin', 'owner')
 THRESHOLDS = ('authenticated', 'member', 'standard', 'admin', 'owner', 'hub_admin')
 _SCOPE_KINDS = ('hub', 'organization', 'company', 'future_company')
-from bookflow.core.deletion_families import PREPARED_FAMILIES, PURCHASE_FAMILIES, SALES_FAMILIES, capability as deletion_capability
+from bookflow.core.deletion_families import PREPARED_FAMILIES, PURCHASE_FAMILIES, TOMBSTONE_TABLE, capability as deletion_capability
 DELETE_NAMES = tuple(map(deletion_capability, PREPARED_FAMILIES))
+# A prepared family may carry a registered Delete threshold only once its own
+# retained-deletion storage exists, so the one owner of that storage decides it.
+STORED_DELETE_NAMES = tuple(map(deletion_capability, TOMBSTONE_TABLE))
 SCOPED_POLICY_VERSION = 'purchase-delete-activation-preparation-v1'
 SETUP_POLICY_VERSION = 'purchase-permission-setup-v1'
 DELETE_POLICY_VERSION = 'purchase-deletion-v1'
 SALES_DELETE_POLICY_VERSION = 'sales-deletion-v1'
-SCOPED_POLICY_VERSIONS = (SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
+PAYMENT_DELETE_POLICY_VERSION = 'payment-deletion-v1'
+SCOPED_POLICY_VERSIONS = (PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
 PURCHASE_DELETE_FAMILIES = PURCHASE_FAMILIES
 SUPPORTED_DELETE_NAMES = (*DELETE_NAMES, *('transaction.'+family+'.delete' for family in PURCHASE_DELETE_FAMILIES))
 
@@ -296,7 +300,7 @@ def _normal_catalog_uncached(catalog):
             _unique(ts, lambda x: x, 'thresholds')
         if spec.name in SUPPORTED_DELETE_NAMES and (spec.company_thresholds != ('standard',) or
                 spec.registered_thresholds not in ((), ('standard',)) or
-                (spec.name in DELETE_NAMES and spec.name not in tuple(map(deletion_capability, SALES_FAMILIES)) and spec.registered_thresholds)):
+                (spec.name in DELETE_NAMES and spec.name not in STORED_DELETE_NAMES and spec.registered_thresholds)):
             _fail('invalid_catalog', 'capabilities')
     company = set(_requirements(catalog, True))
     registered = set(_requirements(catalog))
