@@ -530,7 +530,7 @@ Example JSON output:
 
 ## `customer-refund show`
 
-Show a customer refund: who was paid back, out of which bank account, by what method and check number, which credit memos it paid out and how much of each, and its posting batches.
+Show a customer refund: who was paid back, out of which bank account, by what method and check number, which credit memos it paid out and how much of each, and its posting batches. Give `revision_number` to read a superseded revision rather than what the refund says now.
 
 | Contract | Value |
 |---|---|
@@ -551,6 +551,7 @@ Show a customer refund: who was paid back, out of which bank account, by what me
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `refund` | `REFUND` | string | yes | no | — | minimum length 1 |
+| `revision_number` | `--revision-number` | integer \| null | no | yes | null | Read a superseded revision of this refund instead of the current one; omit for what the refund says now. |
 
 ### Command and context options
 
@@ -874,9 +875,401 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `customer-refund update`
+
+Correct a customer refund with a required reason and another immutable revision. What you supply replaces what was captured and what you leave out stands, so a wrong date, memo, reference, check number, bank account or payment method is corrected on its own; supply `sources` to change which credit memos are paid out and how much of each, and the whole list is replaced. The superseded revision's accounting is reversed at its own date and a replacement is posted at the corrected date -- both periods must be open -- and every credit the old revision consumed is released and the corrected amounts taken again in the same write, so no credit is ever spent twice in between and what a credit is worth is never wrong. The number is kept unless you give a new one. A correction cannot change who is paid: the customer, receivable account and currency come from the credits and must stay what they were, and `customer` remains a guard rather than a choice. A voided refund cannot be corrected, and neither can one a finished bank reconciliation already holds -- undo that reconciliation first. An empty patch writes nothing and reports `changed` false. Pass `expected_version` to refuse a write over somebody else, and reuse one idempotency key to retry safely.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer-refund.update` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer-refund update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --check-number 1042 --company "Demo Plumbing Co" --reason "The first cheque was spoiled" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `refund` | `REFUND` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+| `date` | `--date` | string \| null | no | yes | null | — |
+| `sources[].credit_memo` | inside `--sources` JSON array | string | yes | no | — | minimum length 1 |
+| `sources[].amount` | inside `--sources` JSON array | string \| object \| null | no | yes | null | How much of this credit to pay out; omit to pay out everything it is still worth. |
+| `funding_account` | `--funding-account` | string \| null | no | yes | null | — |
+| `method` | `--method` | string \| null | no | yes | null | — |
+| `check_number` | `--check-number` | string \| null | no | yes | null | — |
+| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `customer` | `--customer` | string \| null | no | yes | null | Optional guard: the customer you expect these credits to belong to. The correction is refused when they belong to anyone else. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--clear FIELD` | Set a nullable field to null; repeatable. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer-refund.update`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `created_via` | string | yes | no | — | — |
+| `updated_at` | string | yes | no | — | — |
+| `updated_by` | string | yes | no | — | — |
+| `updated_via` | string | yes | no | — | — |
+| `type` | literal["customer_refund"] | yes | no | — | — |
+| `number` | string | yes | no | — | — |
+| `current_revision_id` | string | yes | no | — | — |
+| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `voided_at` | string \| null | yes | yes | — | — |
+| `voided_by` | string \| null | yes | yes | — | — |
+| `void_reason` | string \| null | yes | yes | — | — |
+| `void_posting_batch_id` | string \| null | yes | yes | — | — |
+| `date` | string | yes | no | — | — |
+| `customer_id` | string | yes | no | — | — |
+| `customer_name` | string | yes | no | — | — |
+| `ar_account_id` | string | yes | no | — | — |
+| `funding_account_id` | string | yes | no | — | — |
+| `payment_method_id` | string | yes | no | — | — |
+| `payment_method_name` | string | yes | no | — | — |
+| `check_number` | string \| null | yes | yes | — | — |
+| `reference` | string \| null | yes | yes | — | — |
+| `memo` | string \| null | yes | yes | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `total_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `revision` | object | yes | no | — | — |
+| `revision.id` | string | yes | no | — | — |
+| `revision.created_at` | string | yes | no | — | — |
+| `revision.created_by` | string | yes | no | — | — |
+| `revision.created_via` | string | yes | no | — | — |
+| `revision.transaction_id` | string | yes | no | — | — |
+| `revision.revision_number` | integer | yes | no | — | — |
+| `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `revision.date` | string | yes | no | — | — |
+| `revision.number` | string | yes | no | — | — |
+| `revision.name_type` | literal["customer"] | yes | no | — | — |
+| `revision.name_id` | string | yes | no | — | — |
+| `revision.memo` | string \| null | yes | yes | — | — |
+| `revision.total` | object | yes | no | — | — |
+| `revision.total.amount` | string | yes | no | — | — |
+| `revision.total.currency` | string | yes | no | — | — |
+| `revision.total.minor_units` | integer | yes | no | — | — |
+| `revision.total_minor_units` | integer | yes | no | — | — |
+| `revision.currency` | string | yes | no | — | — |
+| `revision.audit_event_id` | string | yes | no | — | — |
+| `revision.profile` | object | yes | no | — | — |
+| `revision.profile.customer` | object | yes | no | — | — |
+| `revision.profile.customer.id` | string | yes | no | — | — |
+| `revision.profile.customer.label` | string | yes | no | — | — |
+| `revision.profile.customer.version` | integer | yes | no | — | — |
+| `revision.profile.customer.company_name` | string \| null | no | yes | null | — |
+| `revision.profile.customer.email` | string \| null | no | yes | null | — |
+| `revision.profile.customer.phone` | string \| null | no | yes | null | — |
+| `revision.profile.customer.account_number` | string \| null | no | yes | null | — |
+| `revision.profile.ar_account` | object | yes | no | — | — |
+| `revision.profile.ar_account.id` | string | yes | no | — | — |
+| `revision.profile.ar_account.name` | string | yes | no | — | — |
+| `revision.profile.ar_account.full_name` | string | yes | no | — | — |
+| `revision.profile.ar_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.ar_account.type` | string | yes | no | — | — |
+| `revision.profile.ar_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.funding_account` | object | yes | no | — | — |
+| `revision.profile.funding_account.id` | string | yes | no | — | — |
+| `revision.profile.funding_account.name` | string | yes | no | — | — |
+| `revision.profile.funding_account.full_name` | string | yes | no | — | — |
+| `revision.profile.funding_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.funding_account.type` | string | yes | no | — | — |
+| `revision.profile.funding_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.payment_method` | object | yes | no | — | — |
+| `revision.profile.payment_method.id` | string | yes | no | — | — |
+| `revision.profile.payment_method.label` | string | yes | no | — | — |
+| `revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `revision.profile.payment_method.kind` | string | yes | no | — | — |
+| `revision.profile.check_number` | string \| null | no | yes | null | — |
+| `revision.profile.reference` | string \| null | no | yes | null | — |
+| `revision.profile.amount_minor_units` | integer | yes | no | — | — |
+| `revision.profile.currency` | string | yes | no | — | — |
+| `revision.profile.sources` | array[object] | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_id` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_number` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_date` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_source_key_id` | string | yes | no | — | — |
+| `revision.profile.sources[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.profile.sources[].available_minor_units` | integer | yes | no | — | — |
+| `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
+| `revision.lines` | array[object] | yes | no | — | — |
+| `revision.lines[].id` | string | yes | no | — | — |
+| `revision.lines[].created_at` | string | yes | no | — | — |
+| `revision.lines[].created_by` | string | yes | no | — | — |
+| `revision.lines[].created_via` | string | yes | no | — | — |
+| `revision.lines[].transaction_id` | string | yes | no | — | — |
+| `revision.lines[].revision_id` | string | yes | no | — | — |
+| `revision.lines[].line_id` | string | yes | no | — | — |
+| `revision.lines[].position` | integer | yes | no | — | — |
+| `revision.lines[].kind` | literal["refund"] | yes | no | — | — |
+| `revision.lines[].customer_id` | string | yes | no | — | — |
+| `revision.lines[].customer_name` | string | yes | no | — | — |
+| `revision.lines[].amount` | object | yes | no | — | — |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].currency` | string | yes | no | — | — |
+| `revision.lines[].class_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].class_name` | string \| null | yes | yes | — | — |
+| `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.batches` | array[object] | yes | no | — | — |
+| `revision.batches[].id` | string | yes | no | — | — |
+| `revision.batches[].created_at` | string | yes | no | — | — |
+| `revision.batches[].created_by` | string | yes | no | — | — |
+| `revision.batches[].created_via` | string | yes | no | — | — |
+| `revision.batches[].total` | object | yes | no | — | — |
+| `revision.batches[].total.amount` | string | yes | no | — | — |
+| `revision.batches[].total.currency` | string | yes | no | — | — |
+| `revision.batches[].total.minor_units` | integer | yes | no | — | — |
+| `revision.batches[].transaction_id` | string | yes | no | — | — |
+| `revision.batches[].revision_id` | string | yes | no | — | — |
+| `revision.batches[].kind` | literal["original", "replacement", "reversal"] | yes | no | — | — |
+| `revision.batches[].effective_date` | string | yes | no | — | — |
+| `revision.batches[].reverses_batch_id` | string \| null | yes | yes | — | — |
+| `revision.batches[].replaces_batch_id` | string \| null | yes | yes | — | — |
+| `revision.batches[].audit_event_id` | string | yes | no | — | — |
+| `revision.batches[].debit_total` | object | yes | no | — | — |
+| `revision.batches[].debit_total.amount` | string | yes | no | — | — |
+| `revision.batches[].debit_total.currency` | string | yes | no | — | — |
+| `revision.batches[].debit_total.minor_units` | integer | yes | no | — | — |
+| `revision.batches[].credit_total` | object | yes | no | — | — |
+| `revision.batches[].credit_total.amount` | string | yes | no | — | — |
+| `revision.batches[].credit_total.currency` | string | yes | no | — | — |
+| `revision.batches[].credit_total.minor_units` | integer | yes | no | — | — |
+| `revision.batches[].debit_minor_units` | integer | yes | no | — | — |
+| `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
+| `revision.batches[].currency` | string | yes | no | — | — |
+| `revision.batches[].line_count` | integer | yes | no | — | — |
+| `consumptions` | array[object] | yes | no | — | — |
+| `consumptions[].id` | string | yes | no | — | — |
+| `consumptions[].created_at` | string | yes | no | — | — |
+| `consumptions[].created_by` | string | yes | no | — | — |
+| `consumptions[].created_via` | string | yes | no | — | — |
+| `consumptions[].kind` | literal["consume", "release"] | yes | no | — | — |
+| `consumptions[].reverses_consumption_id` | string \| null | yes | yes | — | — |
+| `consumptions[].transaction_id` | string | yes | no | — | — |
+| `consumptions[].revision_id` | string | yes | no | — | — |
+| `consumptions[].credit_memo_id` | string | yes | no | — | — |
+| `consumptions[].credit_memo_number` | string | yes | no | — | — |
+| `consumptions[].credit_source_key_id` | string | yes | no | — | — |
+| `consumptions[].credit_source_component_id` | string | yes | no | — | — |
+| `consumptions[].amount` | object | yes | no | — | — |
+| `consumptions[].amount.amount` | string | yes | no | — | — |
+| `consumptions[].amount.currency` | string | yes | no | — | — |
+| `consumptions[].amount.minor_units` | integer | yes | no | — | — |
+| `consumptions[].amount_minor_units` | integer | yes | no | — | — |
+| `consumptions[].currency` | string | yes | no | — | — |
+| `consumptions[].effective_date` | string | yes | no | — | — |
+| `changed` | boolean | no | no | true | — |
+| `changed_fields` | array[string] | no | no | [] | — |
+
+Example JSON output:
+
+```json
+{
+  "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "changed": true,
+  "changed_fields": [],
+  "check_number": null,
+  "consumptions": [],
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "created_via": "cli",
+  "currency": "USD",
+  "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "customer_name": "value",
+  "date": "2026-01-01",
+  "dry_run": false,
+  "funding_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "memo": null,
+  "number": "value",
+  "payment_method_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "payment_method_name": "value",
+  "reference": null,
+  "revision": {
+    "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "batches": [],
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "currency": "USD",
+    "date": "2026-01-01",
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "issuer_snapshot": {},
+    "lines": [],
+    "memo": null,
+    "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "name_type": "customer",
+    "number": "value",
+    "profile": {
+      "amount_minor_units": 1,
+      "ar_account": {
+        "full_name": "value",
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "name": "value",
+        "normal_balance": "debit",
+        "number": null,
+        "type": "value"
+      },
+      "check_number": null,
+      "currency": "USD",
+      "customer": {
+        "account_number": null,
+        "company_name": null,
+        "email": null,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "label": "value",
+        "phone": null,
+        "version": 1
+      },
+      "funding_account": {
+        "full_name": "value",
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "name": "value",
+        "normal_balance": "debit",
+        "number": null,
+        "type": "value"
+      },
+      "origins": {},
+      "payment_method": {
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "kind": "human",
+        "label": "value",
+        "version": 1
+      },
+      "reference": null,
+      "sources": []
+    },
+    "revision_number": 1,
+    "supersedes_revision_id": null,
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "total_minor_units": 1,
+    "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "status": "posted",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "total_minor_units": 1,
+  "type": "customer_refund",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "updated_by": "value",
+  "updated_via": "cli",
+  "version": 1,
+  "void_posting_batch_id": null,
+  "void_reason": null,
+  "voided_at": null,
+  "voided_by": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_CREDIT_UNAVAILABLE` | That credit has already been applied or refunded; it is not worth what was asked for. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `customer-refund void`
 
-Void a customer refund with a required reason. Its accounting is reversed at its own date, every credit it paid out is worth again exactly what it was worth before, its number stays occupied and its history stays readable. There is no correction: a refund is one amount to one customer on one date out of one account, so a wrong one is voided and written again.
+Void a customer refund with a required reason. Its accounting is reversed at its own date, every credit it paid out is worth again exactly what it was worth before, its number stays occupied and its history stays readable. A refund that was merely typed wrong is corrected with `customer-refund update` instead, which keeps one document where one payment happened.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

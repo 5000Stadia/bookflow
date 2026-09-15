@@ -16,10 +16,16 @@ from the same capacity. This is the concrete double-spend the document exists to
 ``registers.REGISTER_TYPES`` already admits an Accounts Receivable register, so a check
 debiting AR for a customer posts the cash correctly and consumes nothing at all.
 
-**Immutable, void only.** There is no ``update``. A refund is one customer, one amount, one
-date and one account; changing any of them makes it a different refund. Voiding it reverses
-the accounting at the refund's own date and releases every consumption, so the credits it
-paid out are worth again exactly what they were worth before.
+**Corrected in place, or voided.** ``update`` writes another immutable revision: the effect of
+the revision before it is reversed at that revision's own date, a replacement is posted at the
+corrected one, every consumption it made is released and the corrected sources are taken again
+in the same write, and the document keeps its number and its whole readable history. What a
+correction may not change is who is paid -- the customer, the receivable account and the
+currency come from the credits and stay what they were, because paying somebody else back is a
+different refund -- and a refund a bank reconciliation already holds is refused rather than
+moved under the statement that cleared it. Voiding still exists and still reverses the
+accounting at the revision's own date and releases every consumption, so the credits it paid
+out are worth again exactly what they were worth before.
 """
 from __future__ import annotations
 
@@ -141,11 +147,11 @@ def _method(s, selector):
     return PaymentMethod(**_reference(row).model_dump(), kind=row['kind'])
 
 
-def _check_number(inp, method):
+def _check_number(value, method):
     """A check number belongs to a check. Nothing else has one to write on."""
-    if inp.check_number is None:
+    if value is None:
         return None
-    number = inp.check_number.strip()
+    number = value.strip()
     if not number:
         raise _invalid('check_number', 'must not be blank')
     if method.kind != 'check':
@@ -162,16 +168,24 @@ def _customer_facts(row):
 # ---------------------------------------------------------------- what may be refunded
 
 
-def _sources(s, inp, currency):
+def _sources(s, entries, currency, guard, released=None):
     """Resolve every named credit, check what it is still worth, and take exactly that much.
 
     The customer, receivable account and currency come from the credits rather than from the
     caller: a refund that named a different customer from the credit it spends would pay the
     wrong person, and `customer` is therefore a guard rather than a choice.
+
+    ``entries`` is one ``(credit memo selector, requested minor units or None)`` per credit;
+    None means the whole of what that credit is worth. ``released`` is the capacity this same
+    refund is handing back in this very write, by credit component: a correction releases what
+    it consumed before and takes the corrected amounts again, so what it may take is what the
+    books say is available plus what it is handing back. For a new refund it is empty and every
+    figure below is the stored one.
     """
+    released = released or {}
     resolved, seen, key = [], set(), None
-    for item in inp.sources:
-        facts = credits.facts(s, item.credit_memo, write=True)
+    for selector, requested in entries:
+        facts = credits.facts(s, selector, write=True)
         header = facts['header']
         if header['id'] in seen:
             raise _invalid('sources', 'name each credit memo once')
@@ -188,11 +202,11 @@ def _sources(s, inp, currency):
                 'credit_memo_id': header['id'],
                 'next': 'One refund pays back one customer on one receivable account in one '
                         'currency; write a second refund for the other customer.'})
-        available = facts['available']
-        if item.amount is None:
-            amount = available
-        else:
-            amount = parse_domestic_amount(item.amount, currency, 'sources.amount').minor_units
+        remaining = {row['id']: facts['remaining'][row['id']] + released.get(row['id'], 0)
+                     for row in facts['components']}
+        available = facts['available'] + sum(released.get(row['id'], 0)
+                                             for row in facts['components'])
+        amount = available if requested is None else requested
         if available <= 0 or amount > available:
             raise BookflowError('E_CREDIT_UNAVAILABLE', details={
                 'credit_memo_id': header['id'], 'credit_memo_number': header['number'],
@@ -202,17 +216,26 @@ def _sources(s, inp, currency):
                         'it is still worth.'})
         if amount <= 0:
             raise _invalid('sources.amount', 'refund a positive amount of each credit you name')
-        resolved.append(dict(facts=facts, amount=amount))
-    if inp.customer is not None:
-        expected = resolve_party(s.company, 'customer', inp.customer)
+        resolved.append(dict(facts=facts, amount=amount, available=available, remaining=remaining))
+    if guard is not None:
+        expected = resolve_party(s.company, 'customer', guard)
         if expected['id'] != key['party_id']:
             raise _invalid('customer', 'these credits belong to a different customer')
     return resolved, key
 
 
-def _draw(facts, wanted):
+def _entered(items, currency):
+    """What the caller asked for, as the pairs `_sources` reads."""
+    return [(item.credit_memo,
+             None if item.amount is None
+             else parse_domestic_amount(item.amount, currency, 'sources.amount').minor_units)
+            for item in items]
+
+
+def _draw(facts, wanted, remaining=None):
     """Take `wanted` from this credit's components in order; never more than one holds."""
-    taken, remaining = [], dict(facts['remaining'])
+    taken = []
+    remaining = dict(facts['remaining'] if remaining is None else remaining)
     for component in facts['components']:
         if wanted <= 0:
             break
@@ -310,7 +333,7 @@ def _output(s, header, revision, profile, pending=None, *, model=CustomerRefundO
 
 def show(s, inp):
     header = resolve(s, inp.refund)
-    revision = journals.revision(s, header)
+    revision = journals.revision(s, header, inp.revision_number)
     return _output(s, header, revision, profile_row(s, revision))
 
 
@@ -373,9 +396,9 @@ def page(s, ctx, inp):
 # ---------------------------------------------------------------- writing one refund
 
 
-def _number(s, explicit):
+def _number(s, explicit, own=None):
     if explicit is not None:
-        return effects.allocate(s, DOCUMENT_TYPE, explicit)[0], None
+        return effects.allocate(s, DOCUMENT_TYPE, explicit, own)[0], None
     saved = effects.rows(s, c.sequences, c.sequences.c.name == DOCUMENT_TYPE)
     next_number, prefix = (saved[0]['next_number'], saved[0]['prefix']) if saved else (1, '')
     occupied = set(s.company.conn.execute(sa.select(c.transactions.c.number).where(
@@ -389,80 +412,214 @@ def _number(s, explicit):
             return candidate, dict(name=DOCUMENT_TYPE, next_number=next_number, prefix=prefix)
 
 
-def prepare_post(s, ctx, inp):
+def captured_profile(profile):
+    return CustomerRefundProfile.model_validate_json(profile['profile_snapshot'])
+
+
+def entered_line(s, revision):
+    """The one entered line a refund revision carries; its identity outlives the revision."""
+    return effects.rows(s, c.document_lines, c.document_lines.c.revision_id == revision['id'],
+                        order=c.document_lines.c.position)[0]
+
+
+def _released(s, transaction_id):
+    """What this refund is about to hand back, per credit component, so it may retake it."""
+    given = {}
+    for row in credits.active_consumptions(s, refund_id=transaction_id):
+        identifier = row['credit_source_component_id']
+        given[identifier] = given.get(identifier, 0) + row['amount_minor_units']
+    return given
+
+
+def _reconciled(s, transaction_id):
+    """A cleared statement effect is moved by the reconciliation that owns it, never by a correction.
+
+    The same fence a payment deletion puts up, for the same reason: correcting a refund posts a
+    reversal and a replacement over the bank line a finished reconciliation has already cleared,
+    and a statement that no longer adds up is not something a later reader can repair.
+    """
+    keys, members = c.reconciliation_keys, c.reconciliation_current_members
+    held = s.company.conn.execute(sa.select(keys.c.id).join(
+        members, members.c.key_id == keys.c.id).where(
+        keys.c.transaction_id == transaction_id)).first()
+    if held is not None:
+        raise BookflowError('E_RECONCILIATION_DEPENDENCY', details={
+            'refund_id': transaction_id,
+            'next': 'Undo the bank reconciliation that holds this refund, then correct it.'})
+
+
+def _semantic(profile):
+    """What the profile says apart from the residue it happened to be written against."""
+    value = profile.model_dump(mode='json')
+    for source in value.get('sources', []):
+        source.pop('available_minor_units', None)
+    return value
+
+
+def _resolve(s, inp, *, previous=None):
+    """Everything the refund is made of: what was supplied, over what the revision captured.
+
+    One reader for both verbs. A new refund has nothing to fall back on and every field is the
+    caller's; a correction keeps the captured value of every field the caller left out, which
+    is how the date, the memo or the bank account alone is corrected.
+    """
     info = _info(s)
     currency = info['home_currency']
-    sources, key = _sources(s, inp, currency)
+    fields = inp.model_fields_set
+    if previous:
+        revision, stored = previous['revision'], previous['profile']
+        captured = captured_profile(stored)
+        released = _released(s, previous['header']['id'])
+        if inp.sources is not None:
+            entries = _entered(inp.sources, currency)
+            explicit = any(item.amount is not None for item in inp.sources)
+        else:
+            entries = [(row.credit_memo_id, row.amount_minor_units) for row in captured.sources]
+            origin = captured.origins.get('amount')
+            explicit = origin is None or origin.kind == 'explicit'
+        date = inp.date or revision['date']
+        memo = inp.memo if 'memo' in fields else revision['memo']
+        reference = inp.reference if 'reference' in fields else stored['reference']
+        check = inp.check_number if 'check_number' in fields else stored['check_number']
+        funding_selector = inp.funding_account or stored['funding_account_id']
+        method_selector = inp.method or stored['payment_method_id']
+        class_selector = (inp.class_id if 'class_id' in fields
+                          else entered_line(s, revision)['class_id'])
+        number_selector = inp.number if 'number' in fields else None
+        issuer = json.loads(revision['issuer_snapshot'])
+    else:
+        released, entries = {}, _entered(inp.sources, currency)
+        explicit = any(item.amount is not None for item in inp.sources)
+        date, memo, reference, check = inp.date, inp.memo, inp.reference, inp.check_number
+        funding_selector, method_selector = inp.funding_account, inp.method
+        class_selector, number_selector = inp.class_id, inp.number
+        issuer = {key: value for key, value in info.items()
+                  if key in ('id', 'legal_name', 'home_currency')
+                  or key.startswith(('address_', 'legal_address_'))}
+    sources, key = _sources(s, entries, currency, inp.customer, released)
     total = sum(row['amount'] for row in sources)
     if total <= 0 or total > INT64_MAX:
         raise BookflowError('E_VALUE_RANGE', details={'field': 'amount'})
+    if previous and (key['party_id'], key['ar_account_id'], key['currency']) != (
+            previous['profile']['party_id'], previous['profile']['ar_account_id'],
+            previous['profile']['currency']):
+        raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={
+            'reason': 'customer_refund_ownership', 'refund_id': previous['header']['id'],
+            'next': 'A correction keeps the customer, receivable account and currency of the '
+                    'refund it corrects; paying somebody else back is a different refund.'})
     party_row = resolve_party(s.company, 'customer', key['party_id'])
     customer = _customer_facts(party_row)
     receivable = _account_facts(_account_row(s, key['ar_account_id'], 'ar_account'))
-    funding = _funding(s, inp.funding_account, currency)
-    method = _method(s, inp.method)
-    check_number = _check_number(inp, method)
-    klass = (_reference(_list_row(s, 'class', c.classes, inp.class_id, 'class_id', 'class'))
-             if inp.class_id else None)
-    journals.open_dates(s, [inp.date])
+    funding = _funding(s, funding_selector, currency)
+    method = _method(s, method_selector)
+    check_number = _check_number(check, method)
+    klass = (_reference(_list_row(s, 'class', c.classes, class_selector, 'class_id', 'class'))
+             if class_selector else None)
+    # Both dates have to be open on a correction: the revision being reversed is undone where
+    # it happened, and the replacement is posted where the corrected document says.
+    journals.open_dates(s, [date] + ([previous['revision']['date']] if previous else []))
     for row in sources:
-        if inp.date < row['facts']['revision']['date']:
+        if date < row['facts']['revision']['date']:
             raise _invalid('date', 'a refund cannot be dated before the credit memo it pays out')
-    number, sequence = _number(s, inp.number)
-    at, event = clock.now_iso(), new_id()
-    issuer = {key_: value for key_, value in info.items()
-              if key_ in ('id', 'legal_name', 'home_currency')
-              or key_.startswith(('address_', 'legal_address_'))}
+    if previous and number_selector is None:
+        number, sequence = previous['revision']['number'], None
+    else:
+        number, sequence = _number(s, number_selector,
+                                   previous['header']['id'] if previous else None)
     profile = CustomerRefundProfile(
         customer=customer, ar_account=receivable, funding_account=funding, payment_method=method,
-        check_number=check_number, reference=inp.reference, amount_minor_units=total,
+        check_number=check_number, reference=reference, amount_minor_units=total,
         currency=currency,
         sources=[RefundSource(credit_memo_id=row['facts']['header']['id'],
                               credit_memo_number=row['facts']['header']['number'],
                               credit_memo_date=row['facts']['revision']['date'],
                               credit_source_key_id=row['facts']['key']['id'],
                               amount_minor_units=row['amount'],
-                              available_minor_units=row['facts']['available']) for row in sources],
+                              available_minor_units=row['available']) for row in sources],
         origins={'funding_account': Origin(kind='explicit'), 'method': Origin(kind='explicit'),
-                 'amount': Origin(kind='explicit' if any(item.amount is not None for item in inp.sources)
-                                  else 'default')})
+                 'amount': Origin(kind='explicit' if explicit else 'default')})
+    return dict(currency=currency, sources=sources, key=key, total=total, party_row=party_row,
+                customer=customer, receivable=receivable, funding=funding, method=method,
+                check_number=check_number, reference=reference, memo=memo, date=date,
+                number=number, sequence=sequence, klass=klass, issuer=issuer, profile=profile,
+                class_id=klass.id if klass else None)
+
+
+def _compose(s, ctx, inp, resolved, previous=None):
+    """Build the whole graph one write stores: the revision, its effect, and the capacity it spends."""
+    at, event = clock.now_iso(), new_id()
 
     def created():
         return dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
 
-    header = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type=DOCUMENT_TYPE,
-                  status='posted', voided_at=None, voided_by=None, void_reason=None,
-                  void_posting_batch_id=None)
+    currency, total, sources = resolved['currency'], resolved['total'], resolved['sources']
+    customer, receivable = resolved['customer'], resolved['receivable']
+    funding, method, klass = resolved['funding'], resolved['method'], resolved['klass']
     pending = {table: [] for table, _, _ in TABLE_KINDS}
-    revision = dict(**created(), transaction_id=header['id'], revision_number=1,
-                    supersedes_revision_id=None, date=inp.date, number=number, name_type='customer',
-                    name_id=customer.id, memo=inp.memo, total_minor_units=total, currency=currency,
-                    issuer_snapshot=json_text(issuer), custom_fields_snapshot=json_text({}),
-                    audit_event_id=event)
-    header.update(number=number, current_revision_id=revision['id'])
+    if previous:
+        old_header = previous['header']
+        header = dict(old_header, version=old_header['version'] + 1, updated_at=at,
+                      updated_by=s.actor.id, updated_via=ctx.interface.value)
+        if header['version'] > INT64_MAX:
+            raise BookflowError('E_VALUE_RANGE', details={'field': 'version'})
+    else:
+        header = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type=DOCUMENT_TYPE,
+                      status='posted', voided_at=None, voided_by=None, void_reason=None,
+                      void_posting_batch_id=None)
+    revision = dict(**created(), transaction_id=header['id'],
+                    revision_number=previous['revision']['revision_number'] + 1 if previous else 1,
+                    supersedes_revision_id=previous['revision']['id'] if previous else None,
+                    date=resolved['date'], number=resolved['number'], name_type='customer',
+                    name_id=customer.id, memo=resolved['memo'], total_minor_units=total,
+                    currency=currency, issuer_snapshot=json_text(resolved['issuer']),
+                    custom_fields_snapshot=json_text({}), audit_event_id=event)
+    header.update(number=revision['number'], current_revision_id=revision['id'])
     pending['transaction_revisions'].append(revision)
-    identity = dict(**created(), transaction_id=header['id'])
-    pending['document_line_identities'].append(identity)
+    if previous:
+        # The entered line keeps its identity across revisions, exactly as a credit memo line
+        # does: the row a reader follows through the history is the same row.
+        line_id = entered_line(s, previous['revision'])['line_id']
+    else:
+        identity = dict(**created(), transaction_id=header['id'])
+        pending['document_line_identities'].append(identity)
+        line_id = identity['id']
     description = 'Refund of ' + ', '.join(row['facts']['header']['number'] for row in sources)
     envelope = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
-                    line_id=identity['id'], position=1, kind='refund', account_id=None,
+                    line_id=line_id, position=1, kind='refund', account_id=None,
                     side=None, amount_minor_units=None, currency=currency, account_snapshot=None,
                     name_type='customer', name_id=customer.id, party_name=customer.label,
                     class_id=klass.id if klass else None, class_name=klass.label if klass else None,
                     description=description, **dict.fromkeys(journals.FACTS))
     pending['document_lines'].append(envelope)
+    old_batch = None
+    if previous:
+        batches = effects.rows(s, c.posting_batches,
+                               c.posting_batches.c.revision_id == previous['revision']['id'],
+                               c.posting_batches.c.kind != 'reversal')
+        if len(batches) != 1:
+            raise BookflowError('E_VALIDATION',
+                                message='Customer refund has ambiguous current posting evidence.')
+        old_batch = batches[0]
+        effects.reverse(s, header, previous['revision'], old_batch, event, created, pending)
+        # Every consumption the superseded revision made is released, exactly, before the
+        # corrected one takes what it needs: in between, no credit is spent twice.
+        for row in credits.active_consumptions(s, refund_id=header['id']):
+            pending['customer_refund_consumptions'].append(dict(
+                row, **created(), audit_event_id=event, kind='release',
+                reverses_consumption_id=row['id']))
     batch = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
-                 kind='original', effective_date=inp.date, reverses_batch_id=None,
-                 replaces_batch_id=None, audit_event_id=event)
+                 kind='replacement' if previous else 'original', effective_date=resolved['date'],
+                 reverses_batch_id=None,
+                 replaces_batch_id=old_batch['id'] if old_batch else None, audit_event_id=event)
     pending['posting_batches'].append(batch)
 
     def leg(account, amount, debit, line_no):
         value = dict(**created(), transaction_id=header['id'], batch_id=batch['id'], line_no=line_no,
                      account_id=account.id, account_snapshot=json_text(account.model_dump()),
                      currency=currency, name_type='customer', name_id=customer.id,
-                     party_name=party_row['full_name'],
+                     party_name=resolved['party_row']['full_name'],
                      class_id=klass.id if klass else None, class_name=klass.label if klass else None,
-                     description=inp.memo or description,
+                     description=resolved['memo'] or description,
                      debit_minor_units=amount if debit else 0,
                      credit_minor_units=0 if debit else amount,
                      reversed_line_id=None, **dict.fromkeys(journals.FACTS))
@@ -485,22 +642,85 @@ def prepare_post(s, ctx, inp):
         transaction_id=header['id'], revision_id=revision['id'], created_at=at,
         created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=event,
         type=DOCUMENT_TYPE, party_id=customer.id, ar_account_id=receivable.id,
-        funding_account_id=funding.id, payment_method_id=method.id, check_number=check_number,
-        reference=inp.reference, amount_minor_units=total, currency=currency,
-        ar_posting_source_id=ar_source['id'], profile_snapshot=json_text(profile.model_dump())))
+        funding_account_id=funding.id, payment_method_id=method.id,
+        check_number=resolved['check_number'], reference=resolved['reference'],
+        amount_minor_units=total, currency=currency, ar_posting_source_id=ar_source['id'],
+        profile_snapshot=json_text(resolved['profile'].model_dump())))
     for row in sources:
-        for component, share in _draw(row['facts'], row['amount']):
+        for component, share in _draw(row['facts'], row['amount'], row['remaining']):
             pending['customer_refund_consumptions'].append(dict(
                 **created(), audit_event_id=event, kind='consume', reverses_consumption_id=None,
                 transaction_id=header['id'], revision_id=revision['id'],
                 credit_source_key_id=row['facts']['key']['id'],
                 credit_source_component_id=component['id'], amount_minor_units=share,
-                currency=currency, effective_date=inp.date))
+                currency=currency, effective_date=resolved['date']))
+    operation = 'update' if previous else 'post'
+    changed_fields = _changed_fields(s, previous, header, revision,
+                                     pending['customer_refund_profiles'][0])
     preview = _output(s, header, revision, pending['customer_refund_profiles'][0], pending,
-                      model=CustomerRefundWriteOutput, changed_fields=[])
-    return Plan(preview, dict(input=inp, operation='post', header=header, before=None,
-                              revision=revision, pending=pending, event=event, at=at,
-                              sequence=sequence, currency=currency, changed=True, sources=sources))
+                      model=CustomerRefundWriteOutput, changed_fields=changed_fields)
+    return Plan(preview, dict(input=inp, operation=operation, header=header,
+                              before=previous['header'] if previous else None,
+                              previous=previous, revision=revision, pending=pending, event=event,
+                              at=at, sequence=resolved['sequence'], currency=currency,
+                              changed=True, sources=sources))
+
+
+# Everything a reader of the summary would see move; the rest is who wrote it and when.
+PROVENANCE = ('version', 'updated_at', 'updated_by', 'updated_via', 'created_at', 'created_by',
+              'created_via', 'current_revision_id', 'total')
+
+
+def _changed_fields(s, previous, header, revision, profile):
+    if not previous:
+        return []
+    before = summary(previous['header'], previous['revision'], previous['profile'])
+    after = summary(header, revision, profile)
+    return sorted(name for name in after
+                  if name not in PROVENANCE and before.get(name) != after[name])
+
+
+def _unchanged_plan(s, inp, previous):
+    """Nothing to correct: the saved refund, said back, with no revision written."""
+    header, revision, profile = previous['header'], previous['revision'], previous['profile']
+    return Plan(_output(s, header, revision, profile, model=CustomerRefundWriteOutput,
+                        changed=False, changed_fields=[]),
+                dict(input=inp, operation='update', changed=False))
+
+
+def prepare_post(s, ctx, inp):
+    return _compose(s, ctx, inp, _resolve(s, inp))
+
+
+def prepare_update(s, ctx, inp):
+    """Correct a posted refund with another revision, or say plainly why it cannot be corrected."""
+    header = resolve(s, inp.refund)
+    if inp.expected_version is not None:
+        journals.version_meta(s, header, inp.expected_version)
+    if header['status'] != 'posted':
+        raise BookflowError('E_APPLICATION_INACTIVE', details={
+            'refund_id': header['id'], 'status': header['status'],
+            'next': 'A voided refund paid nothing; write the corrected refund instead.'})
+    _reconciled(s, header['id'])
+    revision = journals.revision(s, header)
+    previous = dict(header=header, revision=revision, profile=profile_row(s, revision))
+    # An empty patch has no accounting effect and does not create another revision.
+    if not (inp.model_fields_set - {'refund', 'expected_version'}):
+        return _unchanged_plan(s, inp, previous)
+    resolved = _resolve(s, inp, previous=previous)
+    captured = captured_profile(previous['profile'])
+    if ((resolved['date'], resolved['number'], resolved['memo']) ==
+            (revision['date'], revision['number'], revision['memo'])
+            and _semantic(resolved['profile']) == _semantic(captured)
+            and resolved['class_id'] == entered_line(s, revision)['class_id']):
+        return _unchanged_plan(s, inp, previous)
+    # A correction always releases and retakes credit that other documents own, so it always
+    # says why, the way every other write that moves somebody else's residue does.
+    if not ctx.reason or not ctx.reason.strip():
+        raise BookflowError('E_REASON_REQUIRED')
+    if len(ctx.reason.strip()) > 140:
+        raise _invalid('reason', 'must be at most 140 characters')
+    return _compose(s, ctx, inp, resolved, previous)
 
 
 def prepare_void(s, ctx, inp):
@@ -547,7 +767,7 @@ def prepare_void(s, ctx, inp):
 
 
 def prepare(s, ctx, inp, operation):
-    return prepare_post(s, ctx, inp) if operation == 'post' else prepare_void(s, ctx, inp)
+    return {'post': prepare_post, 'void': prepare_void, 'update': prepare_update}[operation](s, ctx, inp)
 
 
 def apply(plan, ctx, s):
@@ -556,6 +776,8 @@ def apply(plan, ctx, s):
     # held the lock.
     operation = plan.data['operation']
     fresh = prepare(s, ctx, plan.data['input'], operation)
+    if not fresh.data['changed']:
+        return Applied(fresh.preview, [], 'no change')
     from bookflow.company.refund_validation import validate
     validate(fresh, s, ctx)
     data = fresh.data

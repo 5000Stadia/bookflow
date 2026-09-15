@@ -138,6 +138,7 @@ customer-type update
 customer-refund post
 customer-refund query
 customer-refund show
+customer-refund update
 customer-refund void
 demo reset
 deposit history

@@ -3802,15 +3802,37 @@ historical key joins in refund labels and receivable reports retain their histor
 Linked returns continue to enforce exact invoice source dimensions. Credit void still refuses
 active applications or refunds.
 
-`customer-refund` has no update either, and for
-the settled reason: a refund is one customer, one amount, one date and one account, so changing
-any of them makes it a different refund and the document carries one revision for life. A
-refund's source is a credit memo only; refunding unapplied payment overage needs
+`customer-refund update` corrects a refund the way `credit-memo update` corrects a credit.
+`refunds._resolve` merges what was supplied over what the revision captured — one reader for
+both `post` and `update`, so an omitted field keeps its captured value and nothing is resolved
+twice — and `refunds._compose` builds one graph: the superseded batch reversed at its own date,
+a replacement posted at the corrected one, an exact release for every consumption the old
+revision made, and the corrected consumptions taken in the same write, so `credits.facts` never
+sees a credit spent twice in between. `refunds._sources` takes the released capacity as a
+per-component credit back onto what the books report available, which is why a refund may be
+corrected upward to what its own credit still holds. Both dates must be open. Each revision
+carries its own `customer_refund_profiles` row, so `ar_posting_source_id` names that revision's
+own receivable attribution rather than one shared for the document's life, and
+`customer-refund show` takes `revision_number` to read a superseded one. The entered line keeps
+its `document_line_identities` row across revisions.
+
+What a correction cannot change is who is paid: the customer, the receivable account and the
+currency come from the credits and are compared against the stored profile, answering
+`E_APPLICATION_INCOMPATIBLE` with `reason: customer_refund_ownership`. A voided refund answers
+`E_APPLICATION_INACTIVE`; one a finished bank reconciliation holds answers
+`E_RECONCILIATION_DEPENDENCY`, through the same `reconciliation_keys` join
+`payment_deletions.dependencies` uses. Every correction carries a reason, because it always
+releases and retakes capacity other documents own. An empty patch, or one resolving to what is
+already stored, writes nothing and reports `changed` false. A correction does not advance the
+versions of the credit memos it releases and retakes, exactly as `customer-refund post` does not
+when it first consumes them. `customer-refund void` is unchanged and still carries no
+reconciliation fence of its own.
+
+A refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family. Price allowances against a source line,
-stocked returns and cost restoration, cross-party (parent↔job) credit, cash-basis treatment, the
-refund's reconciliation producer and print are outside the release entirely and are refused
-rather than approximated; the command help says so.
+family. Price allowances against a source line, stocked returns and cost restoration,
+cross-party (parent↔job) credit, cash-basis treatment, the refund's reconciliation producer and
+print are outside the release entirely.
 
 ## The three credit documents in the browser
 

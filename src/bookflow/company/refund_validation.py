@@ -59,7 +59,7 @@ def _validate(plan, s, ctx):
 
     data = plan.data
     operation = data['operation']
-    require(operation in ('post', 'void'), 'wrong operation')
+    require(operation in ('post', 'void', 'update'), 'wrong operation')
     currency = s.company.conn.execute(c.company_info.select()).mappings().one()['home_currency']
     header, revision, pending = data['header'], data['revision'], data['pending']
     old = data['before']
@@ -85,8 +85,16 @@ def _validate(plan, s, ctx):
         require(header['version'] == old['version'] + 1, 'wrong refund version')
         require(all(header[key] == old[key] for key in ('created_at', 'created_by', 'created_via')),
                 'changed creation provenance')
-        require(operation == 'void' and header['status'] == 'voided',
-                'a refund is corrected by voiding it')
+        require((operation == 'void' and header['status'] == 'voided')
+                or (operation == 'update' and header['status'] == 'posted'),
+                'a saved refund is corrected or voided, and nothing else')
+        if operation == 'update':
+            require(data['previous']['revision']['id'] == old['current_revision_id']
+                    and revision['supersedes_revision_id'] == old['current_revision_id']
+                    and revision['revision_number']
+                    == data['previous']['revision']['revision_number'] + 1,
+                    'a correction supersedes the revision it read')
+            require(header['current_revision_id'] == revision['id'], 'the correction is not current')
     else:
         require(operation == 'post' and header['version'] == 1 and header['status'] == 'posted',
                 'invalid new refund')
@@ -97,47 +105,76 @@ def _validate(plan, s, ctx):
                 'that refund number is already used')
 
     _batches(s, data, header, revision, pending, indexed, currency, operation)
+    if operation == 'void':
+        _releases(s, header, pending['customer_refund_consumptions'])
+        return
+    _profile(s, data, header, revision, pending, currency)
+    rows = pending['customer_refund_consumptions']
     if operation == 'post':
-        _profile(s, data, header, revision, pending, currency)
-        _consumptions(s, data, header, revision, pending, currency)
-    else:
-        _releases(s, data, header, revision, pending)
+        _consumptions(s, data, header, revision, rows, currency)
+        return
+    # A correction hands back everything the superseded revision spent and takes the corrected
+    # amounts again, so what it may take is what the books say plus exactly what it released.
+    releases = [row for row in rows if row['kind'] == 'release']
+    _releases(s, header, releases)
+    given = {}
+    for row in releases:
+        identifier = row['credit_source_component_id']
+        given[identifier] = given.get(identifier, 0) + row['amount_minor_units']
+    _consumptions(s, data, header, revision, [row for row in rows if row['kind'] != 'release'],
+                  currency, given=given)
 
 
 def _batches(s, data, header, revision, pending, indexed, currency, operation):
+    """Every effect this write posts, each balanced at the total of the revision it belongs to.
+
+    A new refund posts one original and a void posts one reversal, both at the current
+    revision's own date. A correction posts two: the reversal of the superseded revision, dated
+    where that revision was, and the replacement, dated where the corrected one is.
+    """
     batches, legs = pending['posting_batches'], pending['posting_lines']
     sources = pending['posting_line_sources']
-    require(len(batches) == 1, 'one accounting effect per write')
+    if operation == 'update':
+        superseded = data['previous']['revision']
+        expected = {'reversal': (superseded['date'], superseded['total_minor_units']),
+                    'replacement': (revision['date'], revision['total_minor_units'])}
+    else:
+        expected = {'original' if operation == 'post' else 'reversal':
+                    (revision['date'], revision['total_minor_units'])}
+    require(len(batches) == len(expected), 'one accounting effect per posted state')
     require(all(batch['audit_event_id'] == data['event'] for batch in batches), 'wrong posting event')
-    require(batches[0]['kind'] == ('original' if operation == 'post' else 'reversal'), 'wrong batch kind')
-    require(batches[0]['effective_date'] == revision['date'], 'an effect is dated away from its revision')
+    require({batch['kind'] for batch in batches} == set(expected), 'wrong batch kind')
     require(all(leg['batch_id'] in indexed['posting_batches'] for leg in legs), 'unowned posting line')
     require(all(source['posting_line_id'] in indexed['posting_lines'] for source in sources),
             'unowned attribution')
-    require(len(legs) == 2, 'a refund is one receivable debit and one funding credit')
-    debit = credit = 0
     chart = {row['id']: row for row in effects.rows(s, c.accounts, c.accounts.c.id.in_(
         [leg['account_id'] for leg in legs]))}
-    for leg in legs:
-        debit += amount(leg['debit_minor_units'])
-        credit += amount(leg['credit_minor_units'])
-        require(bool(leg['debit_minor_units']) != bool(leg['credit_minor_units']),
-                'a posting must have exactly one positive side')
-        require(leg['currency'] == currency, 'foreign posting in a domestic refund')
-        require(leg['name_type'] == 'customer' and leg['name_id'] == revision['name_id'],
-                'a refund posting names the customer it paid')
-        account = chart.get(leg['account_id'])
-        require(account is not None, 'a refund posts to an account this chart does not have')
-        # The whole point of the document, asserted rather than assumed: a refund never
-        # touches income or tax, because the credit memo already did.
-        require(account['type'] not in FORBIDDEN_TYPES,
-                'a refund posts no income, expense or tax leg; the credit memo already reversed the sale')
-        attributed = sum(amount(source['amount_minor_units'], positive=True)
-                         for source in sources if source['posting_line_id'] == leg['id'])
-        require(attributed == leg['debit_minor_units'] + leg['credit_minor_units'],
-                'a posting line is not fully attributed to its entered line')
-    require(debit == credit == revision['total_minor_units'], 'a refund does not balance at its own total')
-    require(sorted(leg['line_no'] for leg in legs) == [1, 2], 'non-contiguous batch lines')
+    for batch in batches:
+        date, total = expected[batch['kind']]
+        require(batch['effective_date'] == date, 'an effect is dated away from its revision')
+        own = [leg for leg in legs if leg['batch_id'] == batch['id']]
+        require(len(own) == 2, 'a refund is one receivable debit and one funding credit')
+        debit = credit = 0
+        for leg in own:
+            debit += amount(leg['debit_minor_units'])
+            credit += amount(leg['credit_minor_units'])
+            require(bool(leg['debit_minor_units']) != bool(leg['credit_minor_units']),
+                    'a posting must have exactly one positive side')
+            require(leg['currency'] == currency, 'foreign posting in a domestic refund')
+            require(leg['name_type'] == 'customer' and leg['name_id'] == revision['name_id'],
+                    'a refund posting names the customer it paid')
+            account = chart.get(leg['account_id'])
+            require(account is not None, 'a refund posts to an account this chart does not have')
+            # The whole point of the document, asserted rather than assumed: a refund never
+            # touches income or tax, because the credit memo already did.
+            require(account['type'] not in FORBIDDEN_TYPES,
+                    'a refund posts no income, expense or tax leg; the credit memo already reversed the sale')
+            attributed = sum(amount(source['amount_minor_units'], positive=True)
+                             for source in sources if source['posting_line_id'] == leg['id'])
+            require(attributed == leg['debit_minor_units'] + leg['credit_minor_units'],
+                    'a posting line is not fully attributed to its entered line')
+        require(debit == credit == total, 'a refund does not balance at its own total')
+        require(sorted(leg['line_no'] for leg in own) == [1, 2], 'non-contiguous batch lines')
 
 
 def _profile(s, data, header, revision, pending, currency):
@@ -147,10 +184,15 @@ def _profile(s, data, header, revision, pending, currency):
     captured = CustomerRefundProfile.model_validate_json(row['profile_snapshot'])
     require(captured.amount_minor_units == amount(row['amount_minor_units'], positive=True)
             == revision['total_minor_units'], 'captured amount differs from the posted total')
-    legs = {leg['id']: leg for leg in pending['posting_lines']}
+    own = {batch['id'] for batch in pending['posting_batches']
+           if batch['revision_id'] == revision['id']}
+    legs = {leg['id']: leg for leg in pending['posting_lines'] if leg['batch_id'] in own}
+    require(len(legs) == 2, "a revision's own effect is one debit and one credit")
     source = next((value for value in pending['posting_line_sources']
                    if value['id'] == row['ar_posting_source_id']), None)
     require(source is not None, 'the header names an attribution this write does not make')
+    require(source['posting_line_id'] in legs and source['revision_id'] == revision['id'],
+            "the header names an attribution outside its own revision's effect")
     leg = legs[source['posting_line_id']]
     receivable = effects.rows(s, c.accounts, c.accounts.c.id == row['ar_account_id'])
     require(len(receivable) == 1 and receivable[0]['type'] == 'accounts_receivable'
@@ -158,7 +200,7 @@ def _profile(s, data, header, revision, pending, currency):
     require(leg['account_id'] == row['ar_account_id'] == captured.ar_account.id
             and leg['debit_minor_units'] == revision['total_minor_units']
             and not leg['credit_minor_units'], 'the named attribution is not the receivable debit')
-    funding = next(other for other in pending['posting_lines'] if other['id'] != leg['id'])
+    funding = next(other for other in legs.values() if other['id'] != leg['id'])
     bank = effects.rows(s, c.accounts, c.accounts.c.id == row['funding_account_id'])
     require(len(bank) == 1 and bank[0]['type'] == 'bank' and bank[0]['active'],
             'a customer is refunded out of an active bank account')
@@ -171,15 +213,15 @@ def _profile(s, data, header, revision, pending, currency):
             'the captured customer is not the one the document names')
 
 
-def _consumptions(s, data, header, revision, pending, currency):
-    rows = pending['customer_refund_consumptions']
+def _consumptions(s, data, header, revision, rows, currency, given=None):
+    given = given or {}
     require(rows, 'a refund pays out named credit, so it consumes some')
-    profile = pending['customer_refund_profiles'][0]
+    profile = data['pending']['customer_refund_profiles'][0]
     captured = CustomerRefundProfile.model_validate_json(profile['profile_snapshot'])
     wanted = {}
     for row in rows:
         require(row['kind'] == 'consume' and row['reverses_consumption_id'] is None,
-                'a new refund releases nothing')
+                'capacity is spent by a consumption and given back by a release')
         require(row['revision_id'] == revision['id'] and row['currency'] == currency,
                 'a consumption belongs to the revision that made it')
         require(row['effective_date'] == revision['date'],
@@ -203,17 +245,20 @@ def _consumptions(s, data, header, revision, pending, currency):
                 and facts['key']['currency'] == currency,
                 'a refund pays back the customer whose credit it spends, on that receivable account')
         require(facts['header']['status'] == 'posted', 'a voided credit memo is worth nothing')
-        require(facts['available'] == source.available_minor_units,
+        handed_back = sum(given.get(component['id'], 0) for component in facts['components'])
+        available = facts['available'] + handed_back
+        require(available == source.available_minor_units,
                 'the captured available credit is not what the books say')
-        if wanted[source.credit_source_key_id] > facts['available']:
+        if wanted[source.credit_source_key_id] > available:
             raise BookflowError('E_CREDIT_UNAVAILABLE', details={
                 'credit_memo_id': source.credit_memo_id,
                 'credit_memo_number': source.credit_memo_number,
                 'requested': Money(wanted[source.credit_source_key_id], currency).to_dict(),
-                'available': Money(facts['available'], currency).to_dict(),
+                'available': Money(available, currency).to_dict(),
                 'next': 'Refund at most what the credit is still worth.'})
         for component in facts['components']:
-            per_component[component['id']] = facts['remaining'][component['id']]
+            per_component[component['id']] = (facts['remaining'][component['id']]
+                                              + given.get(component['id'], 0))
     for row in rows:
         identifier = row['credit_source_component_id']
         require(identifier in per_component, 'a consumption names a component of another credit')
@@ -222,15 +267,15 @@ def _consumptions(s, data, header, revision, pending, currency):
             'a consumption exceeds the capacity of the credited line it draws on')
 
 
-def _releases(s, data, header, revision, pending):
-    rows = pending['customer_refund_consumptions']
+def _releases(s, header, rows):
+    """Every consumption the refund currently holds, released exactly, and nothing else."""
     live = {row['id']: row for row in credits.active_consumptions(s, refund_id=header['id'])}
     require({row['reverses_consumption_id'] for row in rows} == set(live),
-            'voiding a refund releases every consumption it made, and only those')
+            'a void or a correction releases every consumption the refund made, and only those')
     provenance = {'id', 'created_at', 'created_by', 'created_via', 'audit_event_id', 'kind',
                   'reverses_consumption_id'}
     for row in rows:
-        require(row['kind'] == 'release', 'a void writes releases')
+        require(row['kind'] == 'release', 'a release is what gives capacity back')
         original = live[row['reverses_consumption_id']]
         require({k: v for k, v in row.items() if k not in provenance}
                 == {k: v for k, v in original.items() if k not in provenance},
