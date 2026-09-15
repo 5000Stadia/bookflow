@@ -3469,12 +3469,39 @@ and cleared when the request leaves. Finishing the publication permit is inside
 that window on both the successful and the failed path, because capture re-asks
 the company's own resource requirements and `identity_admin_binding.session_operation`
 admits them through this producer; cleared any earlier, every hosted read whose
-capture consults company permissions answers `E_IO {stage: publication, reason:
-receipt_certificate}` under an activated policy. The deposit commands pass it as
+capture consults company permissions fails inside that finish under an activated
+policy, and answers the refusal that finish raised. The deposit commands pass it as
 the binding, so `deposit_dependency_history.execution_binding` revalidates the
 actual bearer or session cookie instead of deriving an OS login the host does not
 have. A local session leaves it None and the private layer builds its `OSBinding`
 as before.
+
+`run_hosted.finish` is the publication boundary's error policy. A `BookflowError`
+raised by `PublicationPermit.finish` is answered as itself: it is already the public
+error contract -- a stable code with typed details, the same answer the command gives
+on every other surface -- and has no internals to fence off. Any other exception
+becomes `E_IO {stage: publication, outcome: unknown, reason: receipt_certificate}`,
+because an untyped failure can carry a path, a query or a stack across a boundary
+that must not describe what it could not certify; its exact cause and traceback go
+to the `bookflow.http` log, which the operator reads and the caller never sees. Both
+paths log the command name and request id. The undifferentiated catch that preceded
+this reported every publication failure as "A filesystem operation failed": a
+customer's payment for a statement charge failed over every published transport
+while working in process, and the person was told their disk had failed. The symptom
+named the wrong subsystem, which is why the defect was invisible until a journey
+suite ran the act end to end. `adapters/http/published_transfer` still carries the
+older undifferentiated catch on its own finish.
+
+Publication roots resolve the settlement contract, not one of its two types.
+`publication_payment.capture`'s `transaction()` resolves an `invoice` field against
+`ledger_schema.SETTLEABLE_RECEIVABLE_TYPES` -- the invoice and the statement charge
+-- exactly as `payment_queries`, `payment_selection` and `payment_dependencies` do,
+and then takes the root's kind from the resolved row's own `type` rather than from
+the field the selector arrived in. `invoice_settlement` is a disclosure graph, the
+document plus everything applied against it as the paid side, so both settleable
+types take it; a statement charge rooted as an invoice would be the same defect
+wearing a different mask. Resolving against both types also inherits `sales.resolve`'s
+refusal of a number that names one of each, which is already what execution answers.
 
 Correcting or voiding a deposit needs the authenticated `dependency_guard` its own
 dry run issues; committing without one is `E_PREVIEW_STALE`. Claiming a receipt

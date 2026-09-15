@@ -58,6 +58,7 @@ def captures(cmd):
 def capture(cmd, inp, s, result, *, dry_run=False):
     from bookflow.company import schema as c, sales, payment_operations, payment_dependencies
     from bookflow.company import sales_defaults
+    from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
     roots = set()
     # A root is a write root when the command writes under posting authority. A family
     # Delete writes under its own grant plus ledger.read and never under ledger.post, so
@@ -70,13 +71,24 @@ def capture(cmd, inp, s, result, *, dry_run=False):
             roots.add((kind, identifier, write))
 
     def transaction(selector, kind, *, invoice_correction=False):
+        # An `invoice` field names either settleable receivable -- an invoice, or a statement
+        # charge entered straight onto the account -- so it resolves against the contract the
+        # rest of the payment layer resolves against, never against one of the two types. The
+        # resolved document's own `type` then names the root, the way `payment_dependencies`
+        # takes an owner type from the row rather than from the field the selector arrived in:
+        # a statement charge rooted as an invoice would be a different defect of the same kind.
         if selector:
+            header = sales.resolve(s, selector, SETTLEABLE_RECEIVABLE_TYPES if kind == 'invoice' else kind)
+            document_type = header['type']
             root_kind = 'transaction'
-            if kind == 'invoice' and (invoice_correction or cmd.name in {'invoice settlement', 'invoice update', 'payment settlement changes'}):
+            # `invoice_settlement` is a disclosure graph -- the document plus everything applied
+            # against it as the paid side -- and not a claim about which receivable it is. Both
+            # settleable types are settled the same way, so both take that root.
+            if document_type in SETTLEABLE_RECEIVABLE_TYPES and (invoice_correction or cmd.name in {'invoice settlement', 'invoice update', 'payment settlement changes'}):
                 root_kind = 'invoice_settlement'
-            elif kind == 'payment' and cmd.name == 'payment history':
+            elif document_type == 'payment' and cmd.name == 'payment history':
                 root_kind = 'payment_history'
-            add(root_kind, sales.resolve(s, selector, kind)['id'])
+            add(root_kind, header['id'])
 
     def operation(key):
         if key:
