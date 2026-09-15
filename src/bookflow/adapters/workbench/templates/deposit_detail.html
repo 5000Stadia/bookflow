@@ -11,6 +11,8 @@
 </section>
 {% else %}
 <h1 class="deposit-heading">Deposit {{ detail.selected.number }}</h1>
+{% if detail.current.status == 'deleted' %}<p class="warn" data-deposit-deleted>This deposit was deleted. Its figures and revisions stay readable here; its bank effect was cancelled and every receipt it banked went back to Undeposited Funds. There is no restore action.</p>{% endif %}
+{% if delete_url %}<p class="deposit-actions"><a href="{{ delete_url }}">Delete deposit</a></p>{% endif %}
 <p class="deposit-lede"><span class="deposit-amount{% if detail.totals.bank_total.negative %} deposit-negative{% endif %}{% if detail.totals.bank_total.zero %} deposit-zero{% endif %}">{{ detail.totals.bank_total.label }}</span> into {{ detail.selected.deposit_to.display_label }} on {{ detail.selected.date }}</p>
 
 <section class="deposit-card" aria-label="Revision selection">

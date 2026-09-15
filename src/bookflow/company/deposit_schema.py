@@ -137,14 +137,14 @@ def define_tables(metadata, column, table, common):
         description='Single current bank-effect version per key; old versions remain immutable.')
     operations = T('deposit_operations', ident('id', 'Permanent deposit-family operation.', primary_key=True),
         text('operation_key', 'Company-wide key shared by every deposit financial verb.'),
-        text('command', 'Original private deposit post, update, void, or coordinate command.'), ident('transaction_id', 'Owning deposit.'),
+        text('command', 'Original private deposit post, update, void, delete, or coordinate command.'), ident('transaction_id', 'Owning deposit.'),
         text('request_hash', 'Canonical typed intent and context hash.'),
         text('request_snapshot', 'Complete immutable submitted request and omission provenance.'),
         text('effect_snapshot', 'Complete original ordinary v1 or coordinate v2 output; current facts are separately loaded.'),
         *created(), obj('request_snapshot'), obj('effect_snapshot'),
         sa.UniqueConstraint('operation_key', name='uq_deposit_operation_key'),
         sa.UniqueConstraint('id','transaction_id', name='uq_deposit_operation_owner'),
-        check("command IN ('deposit post','deposit update','deposit void','deposit coordinate')", 'operation_command'),
+        check("command IN ('deposit post','deposit update','deposit void','deposit coordinate','deposit delete')", 'operation_command'),
         check("length(operation_key) BETWEEN 1 AND 128 AND length(request_hash) = 64", 'operation_request'),
         fk(['transaction_id'], ['transactions.id'], 'operation_deposit'),
         description='Permanent exact request/effect receipts, including first successful no-effect operations.')

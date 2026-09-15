@@ -513,6 +513,19 @@ _DEPOSIT_WRITE_ERRORS = {
 }
 for _verb in ('post', 'update', 'void'):
     MATRIX[f'deposit {_verb}'] = dict(_DEPOSIT_WRITE_ERRORS)
+# Deleting takes the same document a void takes and writes no new revision, so the
+# refusals that belong to composing one -- an ineligible receipt, a duplicate number, an
+# amount, a draft -- cannot arise. What it adds is the reconciliation that will not let
+# the bank line go, and the retained history it refuses to edit a second time.
+MATRIX['deposit delete'] = {
+    **{code: text for code, text in _DEPOSIT_WRITE_ERRORS.items()
+       if code in ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PREVIEW_STALE', 'E_PERIOD_CLOSED',
+                   'E_VALUE_RANGE', 'E_REASON_REQUIRED', 'E_SCHEMA_BEHIND', 'E_DEPOSIT_SOURCE_INVALID',
+                   'E_DEPOSIT_OPERATION_KEY_REUSED', 'E_IDEMPOTENCY_MISMATCH',
+                   'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')},
+    'E_VALIDATION': 'a reason longer than 140 characters, or the deposit is already deleted',
+    'E_RECONCILIATION_DEPENDENCY': 'a bank reconciliation still holds this deposit',
+}
 MATRIX['deposit sources'] = {
     'E_RECORD_NOT_FOUND': 'for_deposit names no deposit in the selected company',
     'E_QUERY_STALE': 'candidate facts changed between bounded pages',

@@ -58,7 +58,7 @@ def test_current_conditional_resource_inventory_and_purchase_examples():
     from bookflow.hub import permission_runtime
     assert {x.owner:set(x.call_sites) for x in permission_runtime.current_catalog().CATALOG.conditional_sources}==actual
     registry.load_all()
-    for noun in ('check','card-charge','invoice','sales-receipt','payment','bill','credit-memo'):
+    for noun in ('check','card-charge','invoice','sales-receipt','payment','bill','credit-memo','deposit'):
         cmd=registry.get(noun+' delete')
         assert cmd.explicit_grant_only and cmd.permanent_recovery
         assert cmd.input_model.model_validate(EXAMPLES[cmd.name].input).expected_version==1

@@ -51,8 +51,9 @@ def test_public_query_totals_filters_sort_and_cursor_replay(books):
     assert exact['total_count']==1 and exact['items'][0]['received_from'][0]['label']=='Ada Waterworks'
     shown=client.run('deposit show',dict(deposit=a['deposit']['id']),company=COMPANY)
     assert shown['totals']==exact['items'][0]['totals']
-    with pytest.raises(BookflowError) as error:query(books,status='deleted')
-    assert error.value.code=='E_VALIDATION'
+    # Deletion exists now, so the deleted selection answers instead of refusing, and this
+    # company has never deleted a deposit.
+    assert query(books,status='deleted')['total_count']==0
     # A bank selector nobody here has is a filter mistake, and its refusal has to
     # stay a closed outcome: the list-selector's open suggestions cannot be
     # captured, and an uncaptured refusal reaches the reader as a permission denial.

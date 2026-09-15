@@ -61,19 +61,19 @@ def state(s, identity):
         active_source_ids=tuple(sorted(r['source_transaction_id'] for r in claims)))
 
 
-def recover(s, ctx, inp, verb, *, binding=None):
+def recover(s, ctx, inp, verb, *, binding=None, posting=True):
     """Read-only; no default resolution, maintenance, event, or principal upsert."""
     saved=find(s,inp.operation_key)
     if saved is None:
         return None
     targets=rows.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
     try:
-        dependencies.authorize(s,saved['transaction_id'],[r['transaction_id'] for r in targets],write=True)
+        dependencies.authorize(s,saved['transaction_id'],[r['transaction_id'] for r in targets],write=posting)
     except BookflowError as error:
         if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
         raise
     from bookflow.company import deposit_draft_consumption as consumption
-    current_draft=consumption.current(s,saved['id'],ctx=ctx,binding=binding,write=True)
+    current_draft=consumption.current(s,saved['id'],ctx=ctx,binding=binding,write=posting)
     if saved['command']!='deposit '+verb or saved['request_hash']!=q.digest(request(inp,ctx,s,verb)):
         return None
     output=LifecycleOutput.model_validate_json(saved['effect_snapshot'])

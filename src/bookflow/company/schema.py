@@ -1153,3 +1153,5 @@ globals().update(_define_bill_deletions(metadata, _column, _table))
 from bookflow.company.credit_deletion_schema import define_tables as _define_credit_deletions
 globals().update(_define_credit_deletions(metadata, _column, _table))
 
+from bookflow.company.deposit_deletion_schema import define_tables as _define_deposit_deletions
+globals().update(_define_deposit_deletions(metadata, _column, _table))
