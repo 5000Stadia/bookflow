@@ -26,6 +26,55 @@ CURRENT_CATALOG = replace(c.FROZEN_CATALOG, conditional_sources=CURRENT_SOURCES)
 CURRENT_MANIFEST = c.catalog_manifest(CURRENT_CATALOG, c.FROZEN_MANIFEST.standalone_names)
 
 
+# The frozen ancestor, as every version in known_catalog() below was built on it.
+# Each of those versions is replace(previous.CATALOG, ...) down a chain that ends at
+# permission_catalog.FROZEN_CATALOG, and an activation stores the exact descriptor it
+# accepted, so an edit to that ancestor rewrites descriptors installations already
+# stored and those installations can no longer load their own permission state --
+# every company-scoped command fails catalog_mismatch and `permission activate`
+# cannot repair it, because it performs the same read first.
+#
+# This value lives here, and not beside the literal it checks, deliberately.
+# permission_catalog.FROZEN_MANIFEST carries the same digest, but regenerating that
+# literal to match is the second half of the mistake: a copy kept in that file would
+# be regenerated along with it and would never fire. The sha compared below is
+# computed from the ancestor as it stands now, not read from any literal.
+ACCEPTED_ANCESTOR_SHA256 = 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e647284e2fef123'
+# CURRENT_CATALOG is the ancestor with CURRENT_SOURCES substituted, so while this
+# bridge holds no delta it *is* the ancestor and its manifest, computed just above,
+# is the ancestor's. Reuse it rather than hashing the same descriptor twice on every
+# import; the day the bridge does hold a delta, the `is` fails and we hash.
+_ANCESTOR_SHA256 = (CURRENT_MANIFEST.descriptor_sha256
+                    if CURRENT_SOURCES is c.CONDITIONAL_RESOURCE_SOURCES else
+                    c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names).descriptor_sha256)
+if _ANCESTOR_SHA256 != ACCEPTED_ANCESTOR_SHA256:
+    raise RuntimeError(
+        'The frozen permission catalog ancestor has been edited.\n'
+        '\n'
+        'permission_catalog.FROZEN_CATALOG now hashes to %s,\n'
+        'where every accepted catalog version was built on %s.\n'
+        '\n'
+        'If you have just added a command, a company action, a capability or a default\n'
+        'to FROZEN_COMMANDS or one of its neighbours in permission_catalog.py, that is\n'
+        'the edit, and it is why this refuses to start. That ancestor is shared by every\n'
+        'version in known_catalog() below, so adding to it rewrites descriptors that real\n'
+        'installations activated and stored -- and such an installation then fails\n'
+        'catalog_mismatch on every company-scoped command, with no in-product remedy,\n'
+        'because `permission activate` performs the same read before it can move the root\n'
+        'forward. Refusing to import is cheaper than shipping that.\n'
+        '\n'
+        'Put your commands in a new delta module instead: copy\n'
+        'permission_credit_correction_catalog.py, give it its own *_POLICY_VERSION, add\n'
+        'that constant to SCOPED_POLICY_VERSIONS, register the module in known_catalog()\n'
+        'below, point current_catalog() at it, and add one line for the new tip to\n'
+        'ACCEPTED in tests/test_permission_catalog_history.py.\n'
+        '\n'
+        '`git diff src/bookflow/hub/permission_catalog.py` shows exactly what moved. If\n'
+        'you are deliberately retiring the ancestor, this constant is what you change,\n'
+        'and every pinned version in that test moves with it.'
+        % (_ANCESTOR_SHA256, ACCEPTED_ANCESTOR_SHA256))
+
+
 def catalog_bundle() -> s.CatalogBundle:
     """Explicit executable-build bundle; no registry regeneration or root writes."""
     inventory = dict(manifest=asdict(CURRENT_MANIFEST),

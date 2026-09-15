@@ -369,6 +369,42 @@ def _catalog_manifest(c, standalone_names):
         tuple(x.key for x in c.company_actions), tuple(x.key for x in c.admin_actions), hashlib.sha256(raw).hexdigest())
 
 
+# =============================================================================
+# STOP -- do not add a command to this tuple.
+#
+# This is not the list of commands Bookflow has. It is the frozen ancestor of
+# the permission catalog. Every accepted catalog version is built as
+# replace(previous.CATALOG, ...) over this one object, in a chain that ends
+# here; permission_runtime.known_catalog() is the list of them. So a line added
+# here is added retroactively to versions that real installations activated and
+# stored a copy of, possibly months ago.
+#
+# What that does to such an installation: permission_snapshot._load_root
+# compares the descriptor the root stored against the one this code now
+# rebuilds, they no longer match, and it raises catalog_mismatch. Every
+# company-scoped command then stops -- invoice query, audit list, bill query,
+# all of them -- and `permission activate` cannot repair it, because it performs
+# the same read before it can move the root forward. There is no in-product
+# remedy. The books are unreachable until somebody ships new code.
+#
+# Three separate changes made this edit in a single day. One of them reached a
+# deployment rehearsal with a real company's books behind it.
+#
+# A new command goes in a NEW delta module instead. Copy
+# src/bookflow/hub/permission_credit_correction_catalog.py -- it is forty lines
+# and it is the entire pattern. Then:
+#   1. add a *_POLICY_VERSION constant near the top of this file, and add that
+#      constant to SCOPED_POLICY_VERSIONS;
+#   2. register the module in permission_runtime.known_catalog() and point
+#      current_catalog() at it;
+#   3. add one line for the new tip to ACCEPTED in
+#      tests/test_permission_catalog_history.py -- and change no line that is
+#      already there, because each one is a descriptor some root has stored.
+#
+# The same applies to FROZEN_CAPABILITIES, FROZEN_DEFAULTS,
+# FROZEN_COMPANY_ACTIONS and FROZEN_ADMIN_ACTIONS below. permission_runtime
+# refuses to import at all if this ancestor moves.
+# =============================================================================
 FROZEN_COMMANDS = (
     CommandDescriptor(name='account activate', routed_scope='company', capability='account', threshold='standard', resources=(), available=True, feature=None, local_only=False, bootstrap=False, authorization_text=None, conditional_owner=None, permanent_recovery_owner=None, transfer_owner=None),
     CommandDescriptor(name='account create', routed_scope='company', capability='account', threshold='standard', resources=(), available=True, feature=None, local_only=False, bootstrap=False, authorization_text=None, conditional_owner=None, permanent_recovery_owner=None, transfer_owner=None),
@@ -812,9 +848,15 @@ FROZEN_COMMANDS = (
     CommandDescriptor(name='work-order sales-receipt', routed_scope='company', capability='ledger.post', threshold='standard', resources=(Requirement(capability='customer-work', threshold='standard'),), available=True, feature=None, local_only=False, bootstrap=False, authorization_text='ledger.post and customer-work standard role', conditional_owner=None, permanent_recovery_owner=None, transfer_owner=None),
     CommandDescriptor(name='work-order show', routed_scope='company', capability='customer-work', threshold='member', resources=(), available=True, feature=None, local_only=False, bootstrap=False, authorization_text=None, conditional_owner=None, permanent_recovery_owner=None, transfer_owner=None),
     CommandDescriptor(name='work-order update', routed_scope='company', capability='customer-work', threshold='standard', resources=(), available=True, feature=None, local_only=False, bootstrap=False, authorization_text=None, conditional_owner=None, permanent_recovery_owner=None, transfer_owner=None),
+    # The end of this tuple is not a safe place to add a command either. See the note
+    # above FROZEN_COMMANDS -- new ones go in a new delta module.
 )
 
 
+# Frozen ancestor -- do not add a capability here. See the note above FROZEN_COMMANDS:
+# anything added to this tuple is added retroactively to catalog versions that
+# installations have already activated and stored, and they then cannot load
+# their own permission state. A new one goes in a new delta module.
 FROZEN_CAPABILITIES = (
     CapabilitySpec(name='account', company_thresholds=('member', 'standard'), registered_thresholds=('member', 'standard')),
     CapabilitySpec(name='activity', company_thresholds=('member',), registered_thresholds=('member',)),
@@ -863,9 +905,15 @@ FROZEN_CAPABILITIES = (
     CapabilitySpec(name='user', company_thresholds=(), registered_thresholds=('authenticated', 'hub_admin')),
     CapabilitySpec(name='vendor', company_thresholds=('member', 'standard'), registered_thresholds=('member', 'standard')),
     CapabilitySpec(name='vendor-type', company_thresholds=('member', 'standard'), registered_thresholds=('member', 'standard')),
+    # The end of this tuple is not a safe place to add a capability either. See the note
+    # above FROZEN_COMMANDS -- new ones go in a new delta module.
 )
 
 
+# Frozen ancestor -- do not add a default here. See the note above FROZEN_COMMANDS:
+# anything added to this tuple is added retroactively to catalog versions that
+# installations have already activated and stored, and they then cannot load
+# their own permission state. A new one goes in a new delta module.
 FROZEN_DEFAULTS = (
     DefaultEntry(role='readonly', requirement=Requirement(capability='account', threshold='member')),
     DefaultEntry(role='readonly', requirement=Requirement(capability='activity', threshold='member')),
@@ -1183,9 +1231,15 @@ FROZEN_DEFAULTS = (
     DefaultEntry(role='hub_admin', requirement=Requirement(capability='vendor', threshold='standard')),
     DefaultEntry(role='hub_admin', requirement=Requirement(capability='vendor-type', threshold='member')),
     DefaultEntry(role='hub_admin', requirement=Requirement(capability='vendor-type', threshold='standard')),
+    # The end of this tuple is not a safe place to add a default either. See the note
+    # above FROZEN_COMMANDS -- new ones go in a new delta module.
 )
 
 
+# Frozen ancestor -- do not add a company action here. See the note above FROZEN_COMMANDS:
+# anything added to this tuple is added retroactively to catalog versions that
+# installations have already activated and stored, and they then cannot load
+# their own permission state. A new one goes in a new delta module.
 FROZEN_COMPANY_ACTIONS = (
     CompanyAction(key='account activate', requirements=(Requirement(capability='account', threshold='standard'),), available=True, remaining_graph_owners=('bookflow.commands.account_cmds._plan_active.<locals>.planner|src/bookflow/commands/account_cmds.py',)),
     CompanyAction(key='account create', requirements=(Requirement(capability='account', threshold='standard'),), available=True, remaining_graph_owners=('bookflow.commands.account_cmds.plan_account_create|src/bookflow/commands/account_cmds.py',)),
@@ -1604,9 +1658,15 @@ FROZEN_COMPANY_ACTIONS = (
     CompanyAction(key='work-order sales-receipt', requirements=(Requirement(capability='customer-work', threshold='standard'), Requirement(capability='ledger.post', threshold='standard')), available=True, remaining_graph_owners=('bookflow.commands.billing_cmds.register.<locals>.planner|src/bookflow/commands/billing_cmds.py',)),
     CompanyAction(key='work-order show', requirements=(Requirement(capability='customer-work', threshold='member'),), available=True, remaining_graph_owners=('bookflow.commands.work_cmds._register.<locals>.planner|src/bookflow/commands/work_cmds.py',)),
     CompanyAction(key='work-order update', requirements=(Requirement(capability='customer-work', threshold='standard'),), available=True, remaining_graph_owners=('bookflow.commands.work_cmds._register.<locals>.planner|src/bookflow/commands/work_cmds.py',)),
+    # The end of this tuple is not a safe place to add a company action either. See the note
+    # above FROZEN_COMMANDS -- new ones go in a new delta module.
 )
 
 
+# Frozen ancestor -- do not add an admin action here. See the note above FROZEN_COMMANDS:
+# anything added to this tuple is added retroactively to catalog versions that
+# installations have already activated and stored, and they then cannot load
+# their own permission state. A new one goes in a new delta module.
 FROZEN_ADMIN_ACTIONS = (
     AdminAction(key='admin:agents', domain='hub', threshold='hub_admin', human_only=True, available=False),
     AdminAction(key='admin:company:attach', domain='hub', threshold='hub_admin', human_only=False, available=True),
@@ -1624,6 +1684,8 @@ FROZEN_ADMIN_ACTIONS = (
     AdminAction(key='admin:organization:new', domain='hub', threshold='hub_admin', human_only=False, available=True),
     AdminAction(key='admin:organization:rename', domain='hub', threshold='hub_admin', human_only=False, available=True),
     AdminAction(key='admin:users', domain='hub', threshold='hub_admin', human_only=True, available=True),
+    # The end of this tuple is not a safe place to add an admin action either. See the note
+    # above FROZEN_COMMANDS -- new ones go in a new delta module.
 )
 
 
