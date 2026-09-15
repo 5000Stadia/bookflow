@@ -86,6 +86,12 @@ PANELS: tuple[Panel, ...] = (
                 action=Action("Write an estimate", WRITE, ("estimate create",), "/estimate/create"),
             ),
             Step(
+                id="time-activity",
+                title="Time",
+                summary="Log the hours somebody worked on a job, billable or not; billable hours wait here to be invoiced.",
+                action=Action("Record time worked", WRITE, ("time-activity create",), "/time-activity/create"),
+            ),
+            Step(
                 id="invoice",
                 title="Invoice",
                 summary="Bill a customer for work delivered.",
