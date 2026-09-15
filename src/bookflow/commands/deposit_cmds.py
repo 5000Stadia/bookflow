@@ -9,7 +9,7 @@ from bookflow.core.registry import command, Plan, Applied
 from bookflow.company import deposit_lifecycle as lifecycle, deposit_persistence as persistence
 from bookflow.company import deposit_outputs as outputs, deposit_source_queries as source_queries
 from bookflow.company.deposit_draft_models import SourceQuery
-from bookflow.company.deposit_lifecycle_models import LifecycleOutput, PostInput, UpdateInput, VoidInput
+from bookflow.company.deposit_lifecycle_models import DeleteInput, LifecycleOutput, PostInput, UpdateInput, VoidInput
 from bookflow.company.deposit_outputs import DepositSourcesOutput, DepositWriteOutput
 
 
@@ -67,6 +67,47 @@ def _financial(verb, model):
 deposit_post = _financial('post', PostInput)
 deposit_update = _financial('update', UpdateInput)
 deposit_void = _financial('void', VoidInput)
+
+
+def _delete():
+    from bookflow.company import deposit_deletions as deletion
+    from bookflow.company.deposit_deletion_models import DepositDeleteOutput
+    from bookflow.core.deletion_families import capability
+
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp)
+
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s)
+
+    cmd = command(
+        'deposit delete', scope='company',
+        description='Delete this deposit with a required reason and exact expected_version.'
+                    ' Cancel its bank effect by exact reversal at the original date and return'
+                    ' every receipt it banked to Undeposited Funds, where each one stays posted'
+                    ' and can be deposited again; retain immutable history and its number.'
+                    ' Requires the explicit family Delete grant and ledger.read, independently'
+                    ' of ledger.post. A reconciled deposit refuses atomically and names the'
+                    ' reconciliation holding it; a closed period refuses. Preview first with'
+                    ' dry_run, then save with the `dependency_guard` the preview returned,'
+                    ' exactly as the other deposit verbs are confirmed.',
+        input_model=DeleteInput, output_model=DepositDeleteOutput, writes={'company'},
+        required_role='standard', capability=capability('deposit'), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=['deposit'],
+        version_source=('deposit show', 'deposit', 'version'),
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION',
+                     'E_REASON_REQUIRED', 'E_PERIOD_CLOSED', 'E_PREVIEW_STALE', 'E_VALUE_RANGE',
+                     'E_SCHEMA_BEHIND', 'E_DEPOSIT_SOURCE_INVALID',
+                     'E_DEPOSIT_OPERATION_KEY_REUSED', 'E_RECONCILIATION_DEPENDENCY',
+                     'E_IDEMPOTENCY_MISMATCH'])(planner)
+    cmd.resource_requirements = (('ledger.read', 'member'),)
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+deposit_delete = _delete()
 
 
 @command('deposit sources', scope='company',

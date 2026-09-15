@@ -28,7 +28,7 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
         require(plan.custom_plan is None or not plan.custom_plan.changed)
         return
     previous=Effect.model_validate_json(json.dumps(data['previous'])) if data['previous'] else None
-    if current_sources and plan.verb!='void':
+    if current_sources and plan.verb not in validation.CANCELLING:
         if data.get('draft') is None:
             validation.validate_current(financial,s,replacing_deposit=h['id'],previous=previous)
         else:
@@ -50,7 +50,7 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
         require(all(release[k]==v for k,v in claim.items() if k not in ('id','kind','reverses_membership_id','created_at','created_by','created_via','audit_event_id')))
     claims=[r for r in pending['deposit_memberships'] if r['kind']=='claim']
     require(claims==bundle['claims'])
-    expected={} if plan.verb=='void' else {r.source.transaction_id:r for r in financial.intent.sources}
+    expected={} if plan.verb in validation.CANCELLING else {r.source.transaction_id:r for r in financial.intent.sources}
     require(len(claims)==len(expected))
     # Aggregate equality is independent of individual claims; decoding the
     # complete effect once preserves the proof without quadratic work.
@@ -95,7 +95,7 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
             require(source['document_line_id']==component['document_line_id'] and source['revision_id']==component['revision_id'])
     require(set(attributed)==set(lines))
     require(all(attributed[key]==value['debit_minor_units']+value['credit_minor_units'] for key,value in lines.items()))
-    if plan.verb=='void':
+    if plan.verb in validation.CANCELLING:
         require(h['status']=='voided' and len(batches)==1 and all(r['kind']=='reversal' for r in batches.values()))
         require(not pending['transaction_revisions'] and not pending['deposit_components'])
     else:
@@ -117,7 +117,7 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
             # The full draft validator below proves immutable captured metadata
             # and exact current slot mutations independently.
             require(json.loads(revision['custom_fields_snapshot'])==plan.custom_plan.snapshot)
-    if plan.verb!='void':
+    if plan.verb not in validation.CANCELLING:
         expected_components={}
         for row in financial.intent.sources:
             orders={o.key:o.ordinal for o in row.occurrences if o.present}
@@ -158,7 +158,7 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
     keys={r['id']:r for r in rows.rows(s,c.bank_effect_keys,c.bank_effect_keys.c.transaction_id==h['id'])}
     keys.update({r['id']:r for r in pending['bank_effect_keys']})
     expected_bank={}
-    if plan.verb!='void':
+    if plan.verb not in validation.CANCELLING:
         candidates=[('main_bank',data['header_row'],financial.intent.bank,financial.bank_total)]
         if financial.intent.cash_back:
             candidates.append(('cash_back',data['header_row'],financial.intent.cash_back.account,financial.cash_back))
@@ -182,5 +182,5 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
         old_versions=rows.rows(s,c.bank_effect_versions,c.bank_effect_versions.c.key_id==version['key_id'])
         require(version['version']==max((r['version'] for r in old_versions),default=0)+1)
         require(version['active']==(version['signed_debit']!=0) and version['active']==(version['statement_amount']!=0))
-        if plan.verb=='void':require(not version['active'])
+        if plan.verb in validation.CANCELLING:require(not version['active'])
     require(not expected_bank)

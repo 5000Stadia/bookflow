@@ -59,9 +59,12 @@ def test_query_filters_counts_ties_and_freshness(client,cash,run_private):
                 assert result.total_count==(0 if status=='voided' else 1)
         assert q.query(s,m.QueryInput(number=posted.current.number,date_from='2026-06-03',date_to='2026-06-03'),binding=b).total_count==1
         assert q.query(s,m.QueryInput(number='absent'),binding=b).total_count==0
-        for payload in ({'status':'deleted'},{'include_deleted':True}):
-            with pytest.raises(BookflowError) as err:q.query(s,m.QueryInput(**payload),binding=b)
-            assert err.value.code=='E_VALIDATION' and err.value.details['reason']=='feature_unavailable'
+        # Deletion exists now, so the deleted selection answers instead of refusing. This
+        # company has never deleted a deposit: asking for only deleted ones is empty, and
+        # asking to include them returns exactly the ordinary page.
+        assert q.query(s,m.QueryInput(status='deleted'),binding=b).total_count==0
+        assert (q.query(s,m.QueryInput(include_deleted=True,status='posted'),binding=b).total_count
+                ==q.query(s,m.QueryInput(status='posted'),binding=b).total_count==1)
     run_private(read)
 
 

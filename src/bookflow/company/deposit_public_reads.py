@@ -493,6 +493,7 @@ def items(s, inp, *, audience, at=None):
             raise BookflowError('E_VALIDATION', details={'field': 'cursor'})
         number = position[0]
     # No page emits an annotation link, so no association is ever acquired here.
+    deleted = q.require_visible(s, inp.deposit, inp.include_deleted)
     data = facts.load_complete(s, [inp.deposit], binding=binding, annotations=())[0]
     selected = q.selected(data, number)
     effect = data.effects[selected.pin.revision_id]
@@ -507,7 +508,8 @@ def items(s, inp, *, audience, at=None):
     return w.DepositItemsPage(
         company_id=s.company_row['id'], deposit_id=data.header['id'], selected=_pin(selected.pin),
         kind=inp.kind, items=chunk, total_count=len(rows), totals=_totals(q.totals(effect)),
-        fingerprint=fingerprint, next_cursor=following, current=_current_state(q.current(data)),
+        fingerprint=fingerprint, next_cursor=following,
+        current=_current_state(q.current(data, deleted=deleted)),
         current_observed_at=at or q.now(),
         current_references=_current_references(data.references, _named_by_rows(chunk), audience))
 
@@ -534,6 +536,7 @@ def history(s, inp, *, audience, at=None):
     """
     inp = q.checked(inp, m.HistoryInput)
     binding, evidence = _admit(s, audience, inp.deposit)
+    q.require_visible(s, inp.deposit, inp.include_deleted)
     # No page emits an annotation link, so no association is ever acquired here.
     data = facts.load_complete(s, [inp.deposit], binding=binding, annotations=())[0]
     rows = tuple(_history_entry(entry) for entry in data.history)
@@ -584,8 +587,6 @@ def query(s, inp, *, audience, at=None):
     binding = audience.binding()
     audience.require(s.company_row['id'])
     authority.authenticate(s, binding)
-    if inp.status == 'deleted' or (inp.status is None and inp.include_deleted):
-        raise BookflowError('E_VALIDATION', details={'reason':'feature_unavailable','feature':'transaction_deleted'})
     bank = None
     if inp.deposit_to:
         # Optional bank disclosure does not govern the deposit's financial admission.
@@ -606,12 +607,17 @@ def query(s, inp, *, audience, at=None):
     identities = list(s.company.conn.execute(sa.select(c.transactions.c.id).where(
         c.transactions.c.type == 'deposit').order_by(c.transactions.c.id)).scalars())
     allowed = [identity for identity in identities if _query_admitted(s, identity, audience, binding)]
+    from bookflow.company import deposit_deletions
+    gone = deposit_deletions.deleted_ids(s, allowed)
+    if not inp.include_deleted and inp.status != 'deleted':
+        allowed = [identity for identity in allowed if identity not in gone]
     matches = []
     currency = s.company_info_row['home_currency']
     for data in facts.load_complete(s, allowed, binding=binding, annotations=()):
         selected = q.selected(data)
         effect = data.effects[selected.pin.revision_id]
-        private = m.DepositRow(selected=selected, current=q.current(data), totals=q.totals(effect), counts=q.counts(effect))
+        private = m.DepositRow(selected=selected, current=q.current(data, deleted=data.header['id'] in gone),
+                               totals=q.totals(effect), counts=q.counts(effect))
         row = w.DepositQueryRow(selected=_selected_header(selected, currency, audience),
             current=_current_state(private.current), totals=_totals(private.totals), counts=_counts(private.counts),
             received_from=_received_from(effect, audience))

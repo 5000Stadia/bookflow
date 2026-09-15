@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}Delete deposit {{ detail.selected.number }}{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
+<section id="deposit-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<nav class="crumbs deposit-crumbs"><a href="{{ list_url }}">Saved deposits</a> / <a href="{{ detail_url }}">Deposit {{ detail.selected.number }}</a> / Delete</nav>
+<h1 class="deposit-heading">Delete deposit {{ detail.selected.number }}</h1>
+<p class="deposit-lede"><span class="deposit-amount">{{ detail.totals.bank_total.label }}</span> into {{ detail.selected.deposit_to.display_label }} on {{ detail.selected.date }}</p>
+<section class="deposit-card" aria-label="Deletion confirmation">
+<h2>Cancel this deposit and retain its history</h2>
+{% if detail.current.status == 'voided' %}<p>This deposit is already voided. Deletion adds no further bank reversal and returns no further receipts.</p>
+{% else %}<p>Deletion reverses the bank movement at the deposit’s own date and returns every receipt it banked to Undeposited Funds. Each receipt stays posted, stays its own document, and can be deposited again.</p>{% endif %}
+<p>The deposit will leave normal lists, selectors and the bank register. Its original details, revisions, number and audit history remain available. There is no restore action.</p>
+{% if result %}<div role="status" class="notice">Preview only — nothing saved. {{ result.released_receipt_ids|length }} receipt(s) return to Undeposited Funds. The deposit will be marked deleted at version {{ result.version }}.</div>
+{% if result.released_receipt_ids %}<ul data-deposit-delete-returns>{% for id in result.released_receipt_ids %}<li>Receipt returned to Undeposited Funds: {{ id }}</li>{% endfor %}</ul>{% endif %}{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% if error.details %}{% if error.details.next %}<p>{{ error.details.next }}</p>{% endif %}{% if error.details.reconciliation_key_id %}<p>Reconciled bank line: {{ error.details.reconciliation_key_id }}</p>{% endif %}{% endif %}</div>{% endif %}
+<form method="post" hx-post="{{ delete_url }}" hx-target="#deposit-deletion" hx-select="#deposit-deletion" hx-swap="outerHTML" data-deposit-delete>
+<input type="hidden" name="expected_version" value="{{ values.expected_version }}">
+<input type="hidden" name="operation_key" value="{{ values.operation_key }}">
+<input type="hidden" name="dependency_guard" value="{{ values.dependency_guard }}">
+<label for="delete-reason">Reason for deletion</label><textarea id="delete-reason" name="reason" required maxlength="140" rows="3">{{ values.reason }}</textarea>
+<label style="display:block;padding:1rem 0"><input type="checkbox" name="confirmed" value="yes" {% if values.get('confirmed') == 'yes' %}checked{% endif %}> I confirm cancellation of this deposit.</label>
+<div class="deposit-actions"><button name="action" value="preview">Preview cancellation</button><button name="action" value="delete">Delete deposit</button><a href="{{ detail_url }}">Cancel</a></div>
+{% if not values.dependency_guard %}<p class="muted">Preview first. A deposit is saved against the receipts it was previewed with, so the confirmation carries the preview’s own dependency check.</p>{% endif %}
+{% if error and error.code in ('E_VERSION_CONFLICT', 'E_PREVIEW_STALE') %}<p>Your reason and retry key are retained. <button name="action" value="preview" formnovalidate>Preview again</button> to review the current deposit before trying again.</p>{% endif %}
+</form></section>
+</section>{% endblock %}

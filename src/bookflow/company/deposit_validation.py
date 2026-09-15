@@ -6,6 +6,14 @@ from bookflow.core.exact import INT64_MAX
 from bookflow.core.money import is_currency
 
 
+# The two verbs that cancel a deposit rather than restate it. They share every financial
+# step -- one reversing batch at the original date, every claimed receipt released back to
+# Undeposited Funds, no new revision -- and differ only in what is recorded afterwards. The
+# set lives here, at the bottom of the deposit stack, so the planner, the writer and this
+# independent validator all read one declaration rather than three that must agree.
+CANCELLING = ('void', 'delete')
+
+
 def require(ok):
     if not ok:
         raise BookflowError('E_VALIDATION')

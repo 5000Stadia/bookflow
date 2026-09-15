@@ -33,9 +33,9 @@ def selected(data,number=None):
     return data.selected[n]
 
 
-def current(data):
+def current(data,*,deleted=False):
     h=data.header;e=data.effects[h['current_revision_id']]
-    return DocumentState(id=h['id'],version=h['version'],revision_id=h['current_revision_id'],number=h['number'],status=h['status'],
+    return DocumentState(id=h['id'],version=h['version'],revision_id=h['current_revision_id'],number=h['number'],status='deleted' if deleted else h['status'],
         revision_date=e.intent.date,currency=e.intent.currency,revision_posting_total=e.posting_total,revision_subtotal=e.subtotal,revision_bank_total=e.bank_total,
         revision_cash_back=e.cash_back,effective_bank_total=e.bank_total if h['status']=='posted' else 0,
         active_source_ids=tuple(sorted(r['source_transaction_id'] for r in data.graph['deposit_current_memberships'])))
@@ -73,7 +73,19 @@ def immutable(values):
     return [v.model_dump(mode='json',exclude={'current'}) if isinstance(v,m.SourceItem) else v.model_dump(mode='json') for v in values]
 
 
+def require_visible(s,identity,include_deleted):
+    """A deleted deposit leaves ordinary reads and comes back only when asked for.
+
+    The refusal is `deposit_deletions`'s own, so every reader that resolves a deposit --
+    detail, composition, history, the public projections over all three -- hides the same
+    documents for the same reason rather than each keeping its own list.
+    """
+    from bookflow.company import deposit_deletions
+    return deposit_deletions.deletion_info(s,identity,include_deleted) is not None
+
+
 def _show(s,data,inp,binding,*,with_guard=True,at=None):
+    deleted=require_visible(s,data.header['id'],getattr(inp,'include_deleted',False))
     sel=selected(data,inp.revision_number);effect=data.effects[sel.pin.revision_id];at=at or now();dated=None
     groups=collections(data,sel.pin)
     fps={kind:pages.fingerprint(s,binding,'items',[sel.pin.model_dump(),kind,immutable(values)]) for kind,values in groups.items()}
@@ -89,7 +101,7 @@ def _show(s,data,inp,binding,*,with_guard=True,at=None):
     if with_guard:
         recipe,readset=history_owner.capture(s,InspectionRoot(kind='deposit',id=data.header['id']),binding)
         if not readset.unknown:guard=history_owner.issue(s,recipe,readset,binding);status='complete'
-    return m.DepositShow(company_id=s.company_row['id'],currency=effect.intent.currency,selected=sel,selected_is_current=sel.pin.revision_id==data.header['current_revision_id'],current=current(data),current_observed_at=at,
+    return m.DepositShow(company_id=s.company_row['id'],currency=effect.intent.currency,selected=sel,selected_is_current=sel.pin.revision_id==data.header['current_revision_id'],current=current(data,deleted=deleted),current_observed_at=at,
         totals=totals(effect),counts=counts(effect),fingerprints=fps,dated_state=dated,links=data.links,current_references=data.references,
         dependencies=m.DependencySummary(source_ids=tuple(sorted({r['source_transaction_id'] for r in data.graph['deposit_memberships']})),guard=guard,history=status))
 
@@ -102,6 +114,7 @@ def show(s,inp,*,binding):
 
 def items(s,inp,*,binding):
     inp=checked(inp,m.ItemsInput);authority.selected(s,inp.deposit,binding=binding)
+    deleted=require_visible(s,inp.deposit,inp.include_deleted)
     number=inp.revision_number
     if inp.page.cursor:
         token=pages.decode(s,binding,'items',inp.page.cursor);position=token['position']
@@ -110,7 +123,7 @@ def items(s,inp,*,binding):
     data=facts.load_complete(s,[inp.deposit],binding=binding)[0];sel=selected(data,number);values=collections(data,sel.pin)[inp.kind]
     content=[sel.pin.model_dump(),inp.kind,immutable(values)]
     rows,fp,next_,_=pages.page(s,binding,'items',values,content,inp.page.limit,inp.page.cursor,pin=sel.pin.revision_number)
-    return m.DepositItemPage(selected=sel.pin,kind=inp.kind,items=rows,total_count=len(values),totals=totals(data.effects[sel.pin.revision_id]),fingerprint=fp,next_cursor=next_,current=current(data),current_observed_at=now(),current_references=data.references)
+    return m.DepositItemPage(selected=sel.pin,kind=inp.kind,items=rows,total_count=len(values),totals=totals(data.effects[sel.pin.revision_id]),fingerprint=fp,next_cursor=next_,current=current(data,deleted=deleted),current_observed_at=now(),current_references=data.references)
 
 
 def query_totals(values, currency):
@@ -122,7 +135,6 @@ def query_totals(values, currency):
 
 def query(s,inp,*,binding):
     inp=checked(inp,m.QueryInput);authority.authenticate(s,binding)
-    if inp.status=='deleted' or (inp.status is None and inp.include_deleted):raise BookflowError('E_VALIDATION',details={'reason':'feature_unavailable','feature':'transaction_deleted'})
     bank=None
     if inp.deposit_to:
         from bookflow.company.accounts import resolve_account
@@ -135,17 +147,20 @@ def query(s,inp,*,binding):
             if e.code in ('E_PERMISSION','E_RECORD_NOT_FOUND','E_COMPANY_NOT_FOUND'):continue
             raise
         allowed.append(identity)
+    from bookflow.company import deposit_deletions
+    gone=deposit_deletions.deleted_ids(s,allowed)
+    if not inp.include_deleted and inp.status!='deleted':allowed=[x for x in allowed if x not in gone]
     values=[]
     for data in facts.load_complete(s,allowed,binding=binding):
-        sel=selected(data);effect=data.effects[sel.pin.revision_id]
+        sel=selected(data);effect=data.effects[sel.pin.revision_id];removed=data.header['id'] in gone
         text=' '.join([sel.number,sel.memo or '']+[(r.source.profile.payer if r.source.source_type=='payment' else r.source.profile.customer).label for r in effect.intent.sources]+[r.dimensions.party_name or '' for r in effect.intent.additional]).casefold()
         if bank and sel.deposit_to.id!=bank:continue
-        if inp.status and data.header['status']!=inp.status:continue
+        if inp.status and ('deleted' if removed else data.header['status'])!=inp.status:continue
         if inp.date_from and sel.date<inp.date_from:continue
         if inp.date_to and sel.date>inp.date_to:continue
         if inp.number is not None and sel.number!=inp.number:continue
         if inp.q and inp.q.casefold() not in text:continue
-        values.append(m.DepositRow(selected=sel,current=current(data),totals=totals(effect),counts=counts(effect)))
+        values.append(m.DepositRow(selected=sel,current=current(data,deleted=removed),totals=totals(effect),counts=counts(effect)))
     values.sort(key=lambda r:({'date':r.selected.date,'number':r.selected.number,'bank_total':r.totals.bank_total.minor_units}[inp.sort],r.current.id),reverse=inp.direction=='desc')
     currency=s.company_info_row['home_currency'];summed,effective=query_totals(values,currency)
     contract=inp.model_dump(mode='json',exclude={'page'},exclude_unset=True)
@@ -155,6 +170,7 @@ def query(s,inp,*,binding):
 
 def history(s,inp,*,binding):
     inp=checked(inp,m.HistoryInput);authority.selected(s,inp.deposit,binding=binding)
+    require_visible(s,inp.deposit,inp.include_deleted)
     data=facts.load_complete(s,[inp.deposit],binding=binding)[0];values=data.history
     rows,fp,next_,_=pages.page(s,binding,'history',values,[inp.deposit,[x.model_dump(mode='json') for x in values]],inp.page.limit,inp.page.cursor)
     return m.DepositHistoryPage(deposit=inp.deposit,items=rows,total_count=len(values),fingerprint=fp,next_cursor=next_)

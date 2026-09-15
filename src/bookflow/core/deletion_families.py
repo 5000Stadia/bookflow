@@ -4,14 +4,18 @@ SALES_FAMILIES = ('invoice', 'sales_receipt')
 PAYMENT_FAMILIES = ('payment',)
 PURCHASE_FAMILIES = ('check', 'card_charge')
 BILL_FAMILIES = ('bill',)
-FAMILIES = PREPARED_FAMILIES + PURCHASE_FAMILIES + BILL_FAMILIES
+CREDIT_FAMILIES = ('credit_memo',)
+DEPOSIT_FAMILIES = ('deposit',)
+FAMILIES = PREPARED_FAMILIES + PURCHASE_FAMILIES + BILL_FAMILIES + CREDIT_FAMILIES + DEPOSIT_FAMILIES
 # One owner for the retained-deletion tables, so a reader that must hide every
 # deleted document names none of them itself. A family with no shipped deletion
 # storage is absent here until its own migration lands.
 TOMBSTONE_TABLE = {'invoice': 'sales_deletions', 'sales_receipt': 'sales_deletions',
                    'payment': 'payment_deletions',
                    'check': 'purchase_deletions', 'card_charge': 'purchase_deletions',
-                   'bill': 'bill_deletions'}
+                   'bill': 'bill_deletions',
+                   'credit_memo': 'credit_deletions',
+                   'deposit': 'deposit_deletions'}
 
 
 def capability(family):

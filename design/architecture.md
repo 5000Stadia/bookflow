@@ -2507,9 +2507,25 @@ A new command therefore enters through a new delta module, registered in
 `known_catalog` — the single owner of version to module — with `current_catalog()` naming
 the tip. `permission_credit_correction_catalog` is that delta for `customer-refund update`,
 `vendor-credit update` and `vendor-credit history`, each with the company action its
-planner still owns, and `CREDIT_CORRECTION_POLICY_VERSION` is the current catalog.
+planner still owns. Above it the chain runs `credit-memo-deletion-v1` and then
+`deposit-deletion-v1`, which is the current catalog.
+
+Three things hold the chain still, in increasing order of how early they catch a mistake.
 `tests/test_permission_catalog_history.py` pins the command count and descriptor sha256 of
-every accepted version, so an ancestor edit fails there instead of on somebody's books.
+every accepted version and of the ancestor. `permission_runtime` refuses to import when the
+ancestor's sha moves, and `known_catalog()` refuses to serve a version whose own descriptor
+has moved, so the mistake stops the product on the first command somebody runs rather than
+only a test they might not have selected. Both product pins live in `permission_runtime`
+rather than beside the descriptors they guard, because a digest kept in the same file as its
+descriptor is regenerated along with it and never fires; the history test asserts the two
+sets of pins agree, so neither can be quietly updated alone. And the frozen literals carry
+the explanation at the lines where the edit would be made.
+
+An accepted delta is as frozen as the ancestor is. A delta written against a predecessor
+that has since moved — as the credit-memo and deposit deltas were, both written against
+`bill-deletion-v1` before the corrections were layered in — is re-pointed at its real
+predecessor and re-pinned, which is safe only because neither had been activated anywhere.
+Nothing already accepted may be re-pointed that way.
 
 ### Inert permission-administration storage (B1)
 

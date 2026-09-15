@@ -21,10 +21,12 @@ class ShowInput(ReadInput):
     deposit: ID
     revision_number: _Version | None = None
     as_of: _Date | None = None
+    include_deleted: bool = False
 
 class PrintDataInput(ReadInput):
     deposit: ID
     revision_number: _Version | None = None
+    include_deleted: bool = False
 
 class ItemsInput(PrintDataInput):
     kind: Literal['sources','additional','cash_allocations']
@@ -33,6 +35,7 @@ class ItemsInput(PrintDataInput):
 class HistoryInput(ReadInput):
     deposit: ID
     page: PageInput = Field(default_factory=PageInput)
+    include_deleted: bool = False
 
 class QueryInput(ReadInput):
     deposit_to: Selector | None = None
@@ -209,7 +212,7 @@ class DepositPage(Frozen):
 
 class HistoryEntry(Frozen):
     id: str
-    kind: Literal['revision_created','replaced','membership_claimed','membership_released','coordinated_source_change','void','no_effect_operation','draft_consumed']
+    kind: Literal['revision_created','replaced','membership_claimed','membership_released','coordinated_source_change','void','deleted','no_effect_operation','draft_consumed']
     event_id: ID
     at: str
     actor_id: ID

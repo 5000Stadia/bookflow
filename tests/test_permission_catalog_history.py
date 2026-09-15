@@ -33,6 +33,8 @@ ACCEPTED = {
     'payment-deletion-v1': (456, '676fb94480d9d413d0233e3f869a479020b1ee3ce20fc03feef02c96d33b4323'),
     'bill-deletion-v1': (457, '6e0a2035aee9edc6ba907f602d531334eadb81b0176a280d237ff840a0c9d487'),
     'credit-correction-v1': (460, '53d98dab0d040498fb0837c4de7cd60e30894436b44a2de25aa41a39c9d518d7'),
+    'credit-memo-deletion-v1': (461, 'b3818cc259b81e4f7ef277d386cfc703d1cab8bbffb499e3025afec51af9bf5b'),
+    'deposit-deletion-v1': (462, '449e98a8fa02bb9b5e3b805e70acbb70c0438df79b857a1e804526c2bf40c750'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -54,6 +56,8 @@ CHAIN_ADDITIONS = {
     'payment-deletion-v1': {'payment delete'},
     'bill-deletion-v1': {'bill delete'},
     'credit-correction-v1': {'customer-refund update', 'vendor-credit history', 'vendor-credit update'},
+    'credit-memo-deletion-v1': {'credit-memo delete'},
+    'deposit-deletion-v1': {'deposit delete'},
 }
 
 _ANCESTOR_EDIT = """

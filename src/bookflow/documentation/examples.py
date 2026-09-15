@@ -975,3 +975,11 @@ EXAMPLES['payment delete'] = Example(
 EXAMPLES['bill delete'] = Example(
     f'bookflow bill delete {ID} --expected-version 1 --operation-key bill-delete-example --reason "Remove duplicate bill" --company "Demo Plumbing Co" --json',
     {'bill': ID, 'expected_version': 1, 'operation_key': 'bill-delete-example'})
+EXAMPLES['credit-memo delete'] = Example(
+    f'bookflow credit-memo delete {ID} --expected-version 1 --operation-key credit-delete-example --reason "Credited the wrong customer" --company "Demo Plumbing Co" --json',
+    {'credit_memo': ID, 'expected_version': 1, 'operation_key': 'credit-delete-example'})
+# A deposit is confirmed against the dependency guard its own preview minted, so the
+# example shows the second call -- the one that actually saves.
+EXAMPLES['deposit delete'] = Example(
+    f'bookflow deposit delete {ID} --expected-version 1 --operation-key deposit-delete-example --dependency-guard GUARD --reason "Banked into the wrong account" --company "Demo Plumbing Co" --json',
+    {'deposit': ID, 'expected_version': 1, 'operation_key': 'deposit-delete-example'})

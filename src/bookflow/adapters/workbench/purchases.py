@@ -82,7 +82,7 @@ def delete_allowed(run, company_id, noun, record):
         return True
     except BookflowError as error:
         # Business refusals belong on confirmation; they do not remove authority.
-        return error.code in ('E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_VALIDATION','E_VERSION_CONFLICT','E_HAS_APPLICATIONS','E_SOURCE_CORRECTION_CONFLICT')
+        return error.code in ('E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_VALIDATION','E_VERSION_CONFLICT','E_HAS_APPLICATIONS','E_HAS_REFUND','E_SOURCE_CORRECTION_CONFLICT')
 
 
 def install_deletion(app, *, run, render, page_error):
@@ -99,8 +99,10 @@ def install_deletion(app, *, run, render, page_error):
         selector=noun.replace('-','_')
         is_sale=noun in ('invoice','sales-receipt')
         is_bill=noun=='bill'
-        label='sale' if is_sale else 'bill' if is_bill else 'purchase'
-        template='sales_delete.html' if is_sale else 'bill_delete.html' if is_bill else 'purchase_delete.html'
+        is_credit=noun=='credit-memo'
+        label='sale' if is_sale else 'bill' if is_bill else 'credit memo' if is_credit else 'purchase'
+        template=('sales_delete.html' if is_sale else 'bill_delete.html' if is_bill
+                  else 'credit_delete.html' if is_credit else 'purchase_delete.html')
         def display(request,company_id,record_id,values=None,result=None,error=None):
             record=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
             if record.get('deletion') and error is None:
@@ -109,14 +111,22 @@ def install_deletion(app, *, run, render, page_error):
                 raise BookflowError('E_PERMISSION')
             values=values if values is not None else dict(expected_version=record['version'],operation_key=new_id(),reason='')
             from bookflow.adapters.workbench import bills as Bills, sales as Sales
-            detail = Bills.detail_context(record,company_id) if is_bill else Sales.detail_context(record,company_id) if is_sale else detail_context(record)
+            from bookflow.adapters.workbench import credits as Credits
+            detail = (Bills.detail_context(record,company_id) if is_bill
+                      else Sales.detail_context(record,company_id) if is_sale
+                      else Credits.detail_context(noun,record,company_id) if is_credit
+                      else detail_context(record))
             if is_sale: detail.update(print_url=None,credit_url=None,links=[])
             # A confirmation page is one document at one version: revision arrows here
             # would move the record out from under the version the form is holding.
             if is_bill: detail.update(links=[])
+            # Same reason, plus: a confirmation page offers no way to spend or print the
+            # very document it is about to cancel.
+            if is_credit: detail.update(links=[],print_url=None,apply_url=None,refund_url=None,spendable=False)
             return render(template,request,company_id=company_id,noun=noun,record=record,
-                purchase=None if is_bill else detail,sale=detail if is_sale else None,
-                bill=detail if is_bill else None,values=values,result=result,error=error,
+                purchase=None if (is_bill or is_credit) else detail,sale=detail if is_sale else None,
+                bill=detail if is_bill else None,credit=detail if is_credit else None,
+                values=values,result=result,error=error,
                 status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
         def get(company_id:str,record_id:str,request:Request):
             try:return display(request,company_id,record_id)
@@ -148,5 +158,9 @@ def install_deletion(app, *, run, render, page_error):
             return RedirectResponse(f'/c/{company_id}/{noun}/{record_id}?include_deleted=1&history=1',status_code=303)
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',get,methods=['GET'])
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',post,methods=['POST'])
-        app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
-    for noun in ('check','card-charge','invoice','sales-receipt','bill'):routes(noun)
+        # These nouns show their revisions on the record page itself, so /history is a
+        # redirect into it. A credit memo already has its own history page and its own
+        # link into one; shadowing that with a redirect would take the page away.
+        if not is_credit:
+            app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
+    for noun in ('check','card-charge','invoice','sales-receipt','bill','credit-memo'):routes(noun)

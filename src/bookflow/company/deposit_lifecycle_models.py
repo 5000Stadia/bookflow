@@ -23,12 +23,24 @@ class VoidInput(StrictModel):
     expected_facts_fingerprint: Fingerprint | None = None
 
 
+class DeleteInput(VoidInput):
+    """Deletion takes exactly what a void takes: the same document at the same version.
+
+    It is a distinct verb rather than a flag on the void because the permanent operation
+    ledger records the command that ran, and a deletion recorded as a void would make that
+    ledger say something untrue about what a person did.
+    """
+
+
 class DocumentState(Frozen):
     id: ID
     version: Positive
     revision_id: ID
     number: str
-    status: Literal['posted','voided']
+    # `deleted` is the read overlay a retained deletion puts over a cancelled deposit.
+    # The stored header still says `voided`, because deletion is that cancellation plus
+    # a receipt, and one fact has one home.
+    status: Literal['posted','voided','deleted']
     revision_date: str
     currency: str
     revision_posting_total: int
@@ -87,7 +99,7 @@ class LifecycleEffect(Frozen):
         if self.consumed_draft is None:result.pop('consumed_draft',None)
         return result
 
-    action: Literal['post','update','void']
+    action: Literal['post','update','void','delete']
     before: DocumentState | None
     after: DocumentState
     financial: Effect
@@ -109,7 +121,7 @@ class LifecycleOutput(Frozen):
         return result
 
     schema_version: Literal[1] = 1
-    command: Literal['deposit post','deposit update','deposit void']
+    command: Literal['deposit post','deposit update','deposit void','deposit delete']
     operation_key: str
     operation_id: ID | None
     changed: bool

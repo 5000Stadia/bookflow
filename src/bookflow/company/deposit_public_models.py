@@ -181,7 +181,7 @@ class CurrentState(Public):
     version: int
     revision_id: str
     number: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'deleted']
     revision_date: str
     revision_posting_total: Money
     revision_subtotal: Money
@@ -410,7 +410,8 @@ class HistoryEntry(Public):
     """
 
     kind: Literal['revision_created', 'replaced', 'membership_claimed', 'membership_released',
-                  'coordinated_source_change', 'void', 'no_effect_operation', 'draft_consumed']
+                  'coordinated_source_change', 'void', 'deleted', 'no_effect_operation',
+                  'draft_consumed']
     audit_event_id: str
     at: str
     actor_id: str

@@ -21,16 +21,24 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
     before=database(path);observed=[];original=migrate.migrate_to_head
     def observing(db,chain,*args,**kwargs):
         result=original(db,chain,*args,**kwargs)
-        if chain=='company' and result==('co0049','co0052'):
+        if chain=='company' and result==('co0049','co0054'):
             for name,rows in before['tables'].items():
                 if name!='alembic_version':assert table(db.raw,name)==rows,name
-            assert set(before['ddl']) <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+            # co0054 rebuilds `deposit_operations` to admit `deposit delete` in its frozen
+            # command CHECK, so that one table's definition is deliberately not the old one.
+            # Its stored values are still compared above, which is the preservation claim;
+            # what is exempted here is the text of the definition, nothing else.
+            after=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+            rebuilt={row for row in before['ddl'] if row[0]=='table' and row[1]=='deposit_operations'}
+            assert len(rebuilt)==1
+            assert (set(before['ddl'])-rebuilt) <= after
+            assert not (rebuilt <= after)
             assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
             observed.append(result)
         return result
     monkeypatch.setattr(migrate,'migrate_to_head',observing)
     result=b['run']('invoice delete',dict(invoice=post['id'],expected_version=post['version'],operation_key='co49-first'),reason='First keyed sales deletion')
-    assert observed==[('co0049','co0052')]
+    assert observed==[('co0049','co0054')]
     assert result['status']=='deleted'
     with sqlite3.connect(path) as db:
         db.execute('PRAGMA foreign_keys=ON')
@@ -43,7 +51,7 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
 def test_purchase_policy_needs_explicit_sales_catalog_transition(books,monkeypatch):
     from pathlib import Path
     # The tip descriptor is the one an activation stores, whichever delta it is.
-    from bookflow.hub import permission_credit_correction_catalog as current, permission_deletion_catalog as previous
+    from bookflow.hub import permission_deposit_deletion_catalog as current, permission_deletion_catalog as previous
     _,post=sale(books);client=books['client'];company=books['company']
     with monkeypatch.context() as historical:
         historical.setattr(current,'CATALOG',previous.CATALOG)
@@ -92,7 +100,9 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
     from bookflow.hub import permission_deletion_catalog as purchase, permission_sales_deletion_catalog as sales
     from bookflow.hub import permission_payment_deletion_catalog as payment
     from bookflow.hub import permission_bill_deletion_catalog as bill
-    from bookflow.hub import permission_credit_correction_catalog as credit
+    from bookflow.hub import permission_credit_correction_catalog as correction
+    from bookflow.hub import permission_credit_deletion_catalog as credit
+    from bookflow.hub import permission_deposit_deletion_catalog as deposit
     with sqlite3.connect(':memory:') as db:
         db.execute('CREATE TABLE permission_state(id INTEGER,mode TEXT,catalog_version TEXT)')
         db.execute('INSERT INTO permission_state VALUES(1,?,?)',('legacy','sales-deletion-v1'))
@@ -105,10 +115,12 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
             ('sales-deletion-v1',sales),
             ('payment-deletion-v1',payment),
             ('bill-deletion-v1',bill),
-            ('credit-correction-v1',credit),
+            ('credit-correction-v1',correction),
+            ('credit-memo-deletion-v1',credit),
+            ('deposit-deletion-v1',deposit),
         ):
             db.execute("UPDATE permission_state SET mode='policy_v1',catalog_version=?",(version,))
             assert runtime.catalog_for_root(tx)==owner.catalog_bundle()
         db.execute("UPDATE permission_state SET catalog_version='unrecognized-future'")
         assert runtime.catalog_for_root(tx)==runtime.catalog_bundle()
-        assert runtime.current_catalog() is credit
+        assert runtime.current_catalog() is deposit

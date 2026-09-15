@@ -621,7 +621,7 @@ def _cell_taxable(cell):
     return cell['taxable_minor_units'] if cell['rule'] is not None else cell['captured']['taxable_minor_units']
 
 
-def prepare_void(s, ctx, inp):
+def prepare_void(s, ctx, inp, *, posting=True):
     """Reverse the credit at its own date and give every claimed source interval back.
 
     A credit that anything still stands on is refused rather than quietly released: an active
@@ -629,7 +629,7 @@ def prepare_void(s, ctx, inp):
     active refund would leave cash paid against capacity that is gone. Unapply or void those
     first, which is exactly what an invoice with applied payments asks for.
     """
-    source = facts(s, inp.credit_memo, write=True)
+    source = facts(s, inp.credit_memo, write=True, posting=posting)
     old_header, revision = source['header'], source['revision']
     if inp.expected_version is not None:
         journals.version_meta(s, old_header, inp.expected_version)
@@ -708,6 +708,20 @@ def apply(plan, ctx, s):
 
 
 # ------------------------------------------------------------------ reading it back
+
+
+def _deletion(s, header, include_deleted):
+    """Retained deletion facts for this credit memo, or nothing; hidden unless asked for."""
+    from bookflow.company.credit_deletions import deletion_info
+    return deletion_info(s, header, include_deleted)
+
+
+def _visible_summary(s, header, value, include_deleted):
+    """One place a deleted credit becomes visibly deleted, for every read that shows one."""
+    deletion = _deletion(s, header, include_deleted)
+    if deletion:
+        value.update(status='deleted', deletion=deletion)
+    return value
 
 
 def summary(header, revision, profile):
@@ -858,17 +872,29 @@ def current_key(s, components, pending=None):
     return (rows or effects.rows(s, c.credit_source_keys, c.credit_source_keys.c.id == identifier))[0]
 
 
-def facts(s, selector, *, write=False):
+def facts(s, selector, *, write=False, posting=True):
     """The one place a credit's remaining worth is computed, for every caller.
 
     Available is capacity less active applications less active refund consumptions. Both
     subtractions live here so that no reader can take one of them and miss the other, and
     ``remaining`` breaks the same arithmetic down per component so a later application knows
     which of the credit's lines it is actually drawing on.
+
+    ``posting`` is the admission this seam applies to a write, and it is true for every
+    ordinary writer, whose authority over a credit is ``ledger.post``. ``credit-memo
+    delete`` sets it false and authorizes the identical graph at read thresholds through
+    this same owner before it gets here, because the family Delete grant is deliberately
+    independent of ``ledger.post``: demanding posting authority at this seam would leave
+    a person who may delete but may not post unable to delete.
     """
     from bookflow.company.payment_authority import authorize
     header = resolve(s, selector) if isinstance(selector, str) else selector
-    authorize(s, [header['id']], write=write)
+    authorize(s, [header['id']], write=write and posting)
+    if write:
+        # A deleted credit is retained history: this is the one seam every writer that
+        # could change or spend it comes through -- void, correct, apply, unapply, refund.
+        from bookflow.company.credit_deletions import require_not_deleted
+        require_not_deleted(s, header['id'])
     revision = effects.rows(s, c.transaction_revisions,
                             c.transaction_revisions.c.id == header['current_revision_id'])[0]
     components = effects.rows(s, c.credit_components,
@@ -923,9 +949,11 @@ def _source_current(s, transaction_id, pending=None):
 def show(s, inp):
     header = resolve(s, inp.credit_memo)
     revision = journals.revision(s, header, inp.revision_number)
-    return CreditMemoOutput(**summary(header, revision, profile_row(s, revision)),
-                            revision=revision_output(s, revision),
-                            source_current=_source_current(s, header['id']))
+    return CreditMemoOutput(
+        **_visible_summary(s, header, summary(header, revision, profile_row(s, revision)),
+                           getattr(inp, 'include_deleted', False)),
+        revision=revision_output(s, revision),
+        source_current=_source_current(s, header['id']))
 
 
 def page(s, ctx, inp):
@@ -940,12 +968,16 @@ def page(s, ctx, inp):
 
     state = page_state(s, 'credit-memo history', Contract(), ctx.on_behalf_of)
     header = resolve(s, inp.credit_memo)
+    deletion = _deletion(s, header, getattr(inp, 'include_deleted', False))
     query = sa.select(c.transaction_revisions).where(
         c.transaction_revisions.c.transaction_id == header['id']).order_by(c.transaction_revisions.c.revision_number)
     found = [dict(row) for row in s.company.conn.execute(query.offset(state.offset).limit(inp.limit + 1)).mappings()]
     more, found = len(found) > inp.limit, found[:inp.limit]
+    current = {k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')}
+    if deletion:
+        current.update(status='deleted', deletion=deletion)
     return CreditMemoHistoryOutput(
-        **{k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
+        **current,
         items=[revision_output(s, revision, summary_only=True) for revision in found],
         count=len(found), has_more=more, next_cursor=continuation(state, len(found), more),
         audit_watermark=state.sequence)
@@ -1025,6 +1057,9 @@ def query_page(s, ctx, inp):
     query = (sa.select(t.c.id).select_from(
         t.join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id))
         .where(t.c.type == DOCUMENT_TYPE))
+    if not getattr(inp, 'include_deleted', False) and sa.inspect(s.company.conn).has_table('credit_deletions'):
+        query = query.where(~sa.exists(sa.select(c.credit_deletions.c.transaction_id).where(
+            c.credit_deletions.c.transaction_id == t.c.id)))
     if inp.customer:
         query = query.where(p.c.customer_id == resolve_party(s.company, 'customer', inp.customer)['id'])
     if inp.ar_account:
@@ -1076,8 +1111,9 @@ def query_page(s, ctx, inp):
             c.credit_profiles.c.revision_id.in_(revision_ids))).mappings()} if found else {}
     worth = _page_worth(s, ordered)
     items = [CreditMemoListOutput(
-        **summary(header, revisions[header['current_revision_id']],
-                  profiles[header['current_revision_id']]),
+        **_visible_summary(s, header, summary(header, revisions[header['current_revision_id']],
+                           profiles[header['current_revision_id']]),
+                           getattr(inp, 'include_deleted', False)),
         source_current=worth[header['id']]) for header in ordered]
     return CreditMemoPageOutput(items=items, count=len(found), has_more=more,
                                 next_cursor=continuation(state, len(found), more),

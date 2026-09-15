@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.commands.common import CommonOut
+from bookflow.company.credit_deletion_models import CreditMemoDeletionInfo
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.journal_models import _Date, _Number, _Version
@@ -159,12 +160,14 @@ class CreditMemoUpdateInput(_CreditMemoFields):
 class CreditMemoShowInput(StrictModel):
     credit_memo: Selector
     revision_number: _Version | None = None
+    include_deleted: bool = Field(default=False, description="Explicitly read a retained deleted credit memo and its deletion attribution; ordinary reads omit it.")
 
 
 class CreditMemoHistoryInput(StrictModel):
     credit_memo: Selector
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=8192)
+    include_deleted: bool = Field(default=False, description="Explicitly read a retained deleted credit memo and its deletion attribution; ordinary reads omit it.")
 
 
 class CreditTaxComponentOutput(CreatedOutput):
@@ -279,7 +282,8 @@ class CreditMemoSummaryOutput(CommonOut):
     type: Literal["credit_memo"]
     number: str
     current_revision_id: str
-    status: Literal["posted", "voided"]
+    status: Literal["posted", "voided", "deleted"]
+    deletion: CreditMemoDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     voided_at: str | None
     voided_by: str | None
     void_reason: str | None
@@ -323,6 +327,7 @@ class CreditMemoVoidInput(StrictModel):
 class CreditMemoQueryInput(StrictModel):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=8192)
+    include_deleted: bool = Field(default=False, description="Include retained deleted credit memos and their deletion attribution; ordinary pages omit them.")
     date_from: _Date | None = None
     date_to: _Date | None = None
     customer: Selector | None = None
@@ -368,7 +373,8 @@ class CreditMemoHistoryOutput(StrictModel):
     version: int
     current_revision_id: str
     number: str
-    status: Literal["posted", "voided"]
+    status: Literal["posted", "voided", "deleted"]
+    deletion: CreditMemoDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     items: list[CreditRevisionSummaryOutput]
     count: int
     has_more: bool

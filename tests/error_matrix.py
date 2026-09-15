@@ -513,6 +513,19 @@ _DEPOSIT_WRITE_ERRORS = {
 }
 for _verb in ('post', 'update', 'void'):
     MATRIX[f'deposit {_verb}'] = dict(_DEPOSIT_WRITE_ERRORS)
+# Deleting takes the same document a void takes and writes no new revision, so the
+# refusals that belong to composing one -- an ineligible receipt, a duplicate number, an
+# amount, a draft -- cannot arise. What it adds is the reconciliation that will not let
+# the bank line go, and the retained history it refuses to edit a second time.
+MATRIX['deposit delete'] = {
+    **{code: text for code, text in _DEPOSIT_WRITE_ERRORS.items()
+       if code in ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PREVIEW_STALE', 'E_PERIOD_CLOSED',
+                   'E_VALUE_RANGE', 'E_REASON_REQUIRED', 'E_SCHEMA_BEHIND', 'E_DEPOSIT_SOURCE_INVALID',
+                   'E_DEPOSIT_OPERATION_KEY_REUSED', 'E_IDEMPOTENCY_MISMATCH',
+                   'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')},
+    'E_VALIDATION': 'a reason longer than 140 characters, or the deposit is already deleted',
+    'E_RECONCILIATION_DEPENDENCY': 'a bank reconciliation still holds this deposit',
+}
 MATRIX['deposit sources'] = {
     'E_RECORD_NOT_FOUND': 'for_deposit names no deposit in the selected company',
     'E_QUERY_STALE': 'candidate facts changed between bounded pages',
@@ -1158,6 +1171,19 @@ MATRIX["credit-memo void"] = {
     "E_HAS_APPLICATIONS": "a live application; unapply it first",
     "E_HAS_REFUND": "a live refund consumption; void the refund first",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["credit-memo delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters, or the credit memo is already deleted",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_PERIOD_CLOSED": "the credit memo's own date is in a closed period",
+    "E_HAS_APPLICATIONS": "a live application; unapply it first, and the invoices are named",
+    "E_HAS_REFUND": "a live refund consumption; void the refund first, and the refunds are named",
+    "E_RECONCILIATION_DEPENDENCY": "a reconciliation still holds an effect of this credit memo",
+    "E_IDEMPOTENCY_MISMATCH": "same operation_key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }

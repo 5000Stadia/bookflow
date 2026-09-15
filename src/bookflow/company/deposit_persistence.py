@@ -47,7 +47,7 @@ def build(s,ctx,plan,*,source_overlay=None):
             batches=effects.rows(s,c.posting_batches,c.posting_batches.c.revision_id==prior['id'],c.posting_batches.c.kind!='reversal')
             if len(batches)!=1:raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
             inverse=effects.reverse(s,h,prior,batches[0],event,created,pending)
-        if plan.verb=='void':
+        if plan.verb in lifecycle.CANCELLING:
             h.update(status='voided',voided_at=at,voided_by=s.actor.id,void_reason=ctx.reason.strip(),void_posting_batch_id=inverse['id'])
         else:
             revision=dict(**created(),transaction_id=identity,revision_number=prior['revision_number']+1 if prior else 1,
@@ -66,7 +66,7 @@ def build(s,ctx,plan,*,source_overlay=None):
         for claim in data['claims']:
             release=dict(claim,**created(),audit_event_id=event,kind='release',reverses_membership_id=claim['id'])
             pending['deposit_memberships'].append(release)
-        if plan.verb!='void':
+        if plan.verb not in lifecycle.CANCELLING:
             for row in financial.intent.sources:
                 source=row.source
                 claim=dict(**created(),audit_event_id=event,kind='claim',transaction_id=identity,revision_id=revision['id'],batch_id=batch['id'],row_id=row.row_id,
@@ -77,7 +77,7 @@ def build(s,ctx,plan,*,source_overlay=None):
         for before in data['source_headers'].values():
             after=dict(before,version=before['version']+1,updated_at=at,updated_by=s.actor.id,updated_via=ctx.interface.value)
             headers.append((before,after))
-        _bank(s,financial,data,revision,batch or batches[0],pending,bank_current,created,audited,void=plan.verb=='void')
+        _bank(s,financial,data,revision,batch or batches[0],pending,bank_current,created,audited,void=plan.verb in lifecycle.CANCELLING)
     return dict(header=h,pending=pending,source_headers=headers,claims=claims,bank_current=bank_current,
         data=data,financial=financial,revision=revision)
 
@@ -274,13 +274,13 @@ def _execute(s,ctx,plan):
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
-    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding)
+    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding,posting=plan.posting)
     if recovered is not None:return recovered,None
     if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
     # Retain the authenticated preview producer, including bearer liveness.
     # Re-deriving OS identity here would change a hosted agent's admission.
-    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard)
+    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard,posting=plan.posting)
     if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
     composed=compose(s,ctx,fresh)
     bundle=composed['bundle'];output=composed['output'];touched=composed['touched']

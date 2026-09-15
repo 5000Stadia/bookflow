@@ -15,8 +15,10 @@ reader may not see.
 from urllib.parse import quote, urlencode, urlsplit
 
 from fastapi import Request
+from fastapi.responses import RedirectResponse, Response
 
 from bookflow.core.errors import BookflowError
+from bookflow.core.ids import new_id
 from bookflow.core import registry
 from bookflow.core.money import Money
 
@@ -26,7 +28,8 @@ KINDS = (("sources", "Contributing receipts"),
 KIND_LABELS = dict(KINDS)
 PAGE_LIMIT = 50
 LIST_LIMIT = 25
-FILTERS = ("deposit_to", "status", "date_from", "date_to", "number", "q", "sort", "direction")
+FILTERS = ("deposit_to", "status", "date_from", "date_to", "number", "q", "sort", "direction",
+           "include_deleted")
 TOTAL_LABELS = (("source_total", "Contributing receipts"), ("positive_additional_total", "Additional cash in"),
                 ("negative_additional_total", "Additional cash out"), ("subtotal", "Subtotal"),
                 ("cash_back", "Cash back"), ("posting_total", "Posting total"), ("bank_total", "Revision bank total"))
@@ -126,6 +129,8 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
         filters["sort"] = filters["sort"] or "date"
         filters["direction"] = filters["direction"] or "desc"
         raw = {key: value for key, value in filters.items() if value != ""}
+        if "include_deleted" in raw:
+            raw["include_deleted"] = raw["include_deleted"] in ("1", "true", "yes", "on")
         cursor = request.query_params.get("cursor")
         raw["page"] = dict(limit=LIST_LIMIT, **({"cursor": cursor} if cursor else {}))
         restart = _url(path, **filters)
@@ -189,9 +194,11 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             selection = _selection(request)
         except BookflowError as exc:
             return page_error(request, exc, company_id=company_id)
+        include_deleted = request.query_params.get("include_deleted") == "1"
         try:
             detail = _decorate(run(request, "deposit show",
-                                   dict(selection, deposit=deposit_id), company_id))
+                                   dict(selection, deposit=deposit_id,
+                                        include_deleted=include_deleted), company_id))
         except BookflowError as exc:
             if exc.code == "E_RECORD_NOT_FOUND":
                 return unavailable(request, company_id, deposit_id, selection)
@@ -205,9 +212,92 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
         account = detail["selected"]["deposit_to"]
         register = (f"/c/{quote(company_id, safe='')}/account/"
                     f"{quote(account['id'], safe='')}/register") if account.get("id") else None
+        # The Delete link is authority, not decoration: it appears only when the real
+        # command, dry-run under this reader's own grants, says it would run.
+        delete_url = (path + "/delete") if _delete_allowed(request, company_id, detail) else None
         return render("deposit_detail.html", request, detail=detail, unavailable=None,
-                      register_url=register, retry_url=None,
+                      register_url=register, retry_url=None, delete_url=delete_url,
                       **context(company_id, deposit_id, selection, return_to=_list_return(request, company_id)))
+
+    def _delete_allowed(request, company_id, detail):
+        """Ask the real command, including activation and any bound principal."""
+        if detail["current"]["status"] == "deleted":
+            return False
+        try:
+            run(request, "deposit delete",
+                dict(deposit=detail["current"]["deposit_id"],
+                     expected_version=detail["current"]["version"], operation_key=new_id()),
+                company_id, headers={"X-Bookflow-Reason": "Preview deposit deletion"}, dry_run=True)
+            return True
+        except BookflowError as error:
+            # Business refusals belong on the confirmation page; they do not remove authority.
+            return error.code in ("E_PERIOD_CLOSED", "E_RECONCILIATION_DEPENDENCY", "E_VALIDATION",
+                                  "E_VERSION_CONFLICT", "E_PREVIEW_STALE", "E_DEPOSIT_DEPENDENCY")
+
+    def _delete_page(request, company_id, deposit_id, values=None, result=None, error=None):
+        selection = {}
+        detail = _decorate(run(request, "deposit show",
+                               dict(deposit=deposit_id, include_deleted=True), company_id))
+        if detail["current"]["status"] == "deleted" and error is None:
+            return RedirectResponse(
+                f"/c/{quote(company_id, safe='')}/deposit/{quote(deposit_id, safe='')}?include_deleted=1",
+                status_code=303)
+        if values is None and not _delete_allowed(request, company_id, detail):
+            raise BookflowError("E_PERMISSION")
+        values = values if values is not None else dict(
+            expected_version=detail["current"]["version"], operation_key=new_id(),
+            reason="", dependency_guard="")
+        shared = context(company_id, deposit_id, selection, return_to=_list_return(request, company_id))
+        return render("deposit_delete.html", request, detail=detail, values=values, result=result,
+                      error=error, delete_url=shared["detail_url"].split("?")[0] + "/delete",
+                      status_code=409 if error and error["code"] == "E_VERSION_CONFLICT"
+                      else 400 if error else 200, **shared)
+
+    @app.get("/c/{company_id}/deposit/{deposit_id}/delete")
+    def deposit_delete_page(request: Request, company_id: str, deposit_id: str):
+        try:
+            return _delete_page(request, company_id, deposit_id)
+        except BookflowError as exc:
+            return page_error(request, exc, company_id=company_id)
+
+    @app.post("/c/{company_id}/deposit/{deposit_id}/delete")
+    async def deposit_delete_save(request: Request, company_id: str, deposit_id: str):
+        values = dict(await request.form())
+        try:
+            action = values.get("action")
+            if action not in ("preview", "delete"):
+                raise BookflowError("E_VALIDATION",
+                                    message="Choose Preview cancellation or Delete deposit.")
+            if action == "delete" and values.get("confirmed") != "yes":
+                raise BookflowError("E_VALIDATION",
+                                    message="Confirm cancellation before deleting this deposit.")
+            if action == "delete" and not values.get("dependency_guard"):
+                raise BookflowError("E_VALIDATION",
+                                    message="Preview this cancellation before saving it.")
+            try:
+                version = int(values.get("expected_version", ""))
+            except ValueError:
+                raise BookflowError("E_VALIDATION",
+                                    message="Reload the deposit to read its current version.") from None
+            raw = dict(deposit=deposit_id, expected_version=version,
+                       operation_key=values.get("operation_key") or new_id())
+            if values.get("dependency_guard"):
+                raw["dependency_guard"] = values["dependency_guard"]
+            result = run(request, "deposit delete", raw, company_id,
+                         headers={"X-Bookflow-Reason": values.get("reason", "")},
+                         dry_run=action == "preview")
+            if action == "delete":
+                location = f"/c/{quote(company_id, safe='')}/deposit?deleted={quote(deposit_id, safe='')}"
+                if request.headers.get("hx-request", "").lower() == "true":
+                    return Response(status_code=200, headers={"HX-Redirect": location})
+                return RedirectResponse(location, status_code=303)
+            values["dependency_guard"] = result["dependency_guard"]
+            return _delete_page(request, company_id, deposit_id, values, result=result)
+        except BookflowError as error:
+            try:
+                return _delete_page(request, company_id, deposit_id, values, error=error.to_dict())
+            except BookflowError as refused:
+                return page_error(request, refused, company_id=company_id)
 
     @app.get("/c/{company_id}/deposit/{deposit_id}/items")
     def deposit_items(request: Request, company_id: str, deposit_id: str):

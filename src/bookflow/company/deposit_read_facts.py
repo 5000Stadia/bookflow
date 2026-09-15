@@ -170,7 +170,7 @@ def _history(g,events,outputs):
         kw=dict(operation_id=r['id'],operation_key=r['operation_key'],revision_id=effect.after.revision_id,batch_ids=effect.batch_ids,bank_version_ids=tuple(b['id'] for b in g['bank_effect_versions'] if b['audit_event_id']==r['audit_event_id']))
         if output.command=='deposit coordinate':add('coordinated_source_change',r['id'],r['audit_event_id'],source_ids=tuple(x for x in output.effect.target_ids if x!=r['transaction_id']),**kw)
         if not output.changed:add('no_effect_operation',r['id'],r['audit_event_id'],**kw)
-        elif effect.action=='void':add('void',r['id'],r['audit_event_id'],**kw)
+        elif effect.action in ('void','delete'):add('deleted' if effect.action=='delete' else 'void',r['id'],r['audit_event_id'],**kw)
         if effect.consumed_draft:add('draft_consumed',r['id'],r['audit_event_id'],draft_id=effect.consumed_draft.draft_id,**kw)
     return tuple(r[2] for r in sorted(rows,key=lambda x:x[:2]))
 

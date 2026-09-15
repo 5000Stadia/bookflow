@@ -104,6 +104,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.PAYMENT_DELETE_POLICY_VERSION: '676fb94480d9d413d0233e3f869a479020b1ee3ce20fc03feef02c96d33b4323',
     c.BILL_DELETE_POLICY_VERSION: '6e0a2035aee9edc6ba907f602d531334eadb81b0176a280d237ff840a0c9d487',
     c.CREDIT_CORRECTION_POLICY_VERSION: '53d98dab0d040498fb0837c4de7cd60e30894436b44a2de25aa41a39c9d518d7',
+    c.CREDIT_DELETE_POLICY_VERSION: 'b3818cc259b81e4f7ef277d386cfc703d1cab8bbffb499e3025afec51af9bf5b',
+    c.DEPOSIT_DELETE_POLICY_VERSION: '449e98a8fa02bb9b5e3b805e70acbb70c0438df79b857a1e804526c2bf40c750',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -192,6 +194,7 @@ def known_catalog(version):
     from . import permission_deletion_catalog, permission_sales_deletion_catalog
     from . import permission_payment_deletion_catalog, permission_bill_deletion_catalog
     from . import permission_credit_correction_catalog
+    from . import permission_credit_deletion_catalog, permission_deposit_deletion_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -200,6 +203,8 @@ def known_catalog(version):
         c.PAYMENT_DELETE_POLICY_VERSION: permission_payment_deletion_catalog,
         c.BILL_DELETE_POLICY_VERSION: permission_bill_deletion_catalog,
         c.CREDIT_CORRECTION_POLICY_VERSION: permission_credit_correction_catalog,
+        c.CREDIT_DELETE_POLICY_VERSION: permission_credit_deletion_catalog,
+        c.DEPOSIT_DELETE_POLICY_VERSION: permission_deposit_deletion_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -210,7 +215,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.CREDIT_CORRECTION_POLICY_VERSION)
+    return known_catalog(c.DEPOSIT_DELETE_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

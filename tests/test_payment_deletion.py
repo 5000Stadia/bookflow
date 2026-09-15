@@ -191,7 +191,7 @@ def test_co51_declaration_is_exact_and_storage_is_immutable(books):
 
 
 def test_payment_delete_needs_its_own_explicit_catalog_transition(books, monkeypatch):
-    from bookflow.hub import permission_credit_correction_catalog as current, permission_sales_deletion_catalog as previous
+    from bookflow.hub import permission_deposit_deletion_catalog as current, permission_sales_deletion_catalog as previous
     post = receive(books)
     client = books['client']
     with monkeypatch.context() as historical:
