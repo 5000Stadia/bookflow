@@ -1,6 +1,7 @@
 """Delivered file/intent client. Models supply business inputs and permitted paths."""
 
 import hashlib
+import logging
 import io
 import json
 from contextlib import ExitStack
@@ -12,6 +13,8 @@ from .catalog import BRIDGE_VERSION
 from .envelopes import RunArguments, intent_reference
 from .framing import Decoder, invalid, json_chunks
 from .responses import annotate, observation
+
+log = logging.getLogger(__name__)
 
 
 class Client:
@@ -198,4 +201,15 @@ class Client:
                 raise
             raise annotate(exc, reference, submitted=submitted)
         except Exception:
+            # The generic certificate is the right thing to hand the caller: an untyped failure
+            # here can carry internals -- a path, a socket, a stack -- across a boundary that must
+            # not describe what it could not certify, and `outcome: unknown` is the honest answer
+            # when the request was submitted and the reply never arrived.
+            #
+            # Throwing the cause away with it is not. `from None` plus a broad catch means nobody
+            # can ever find out why a call failed, and `demo reset` over MCP reproducibly lands
+            # here with no evidence of what went wrong. The caller keeps the same certificate; the
+            # exact cause and its traceback go to the log, which an operator reads and the caller
+            # never sees.
+            log.exception('mcp client call failed: reference=%s submitted=%s', reference, submitted)
             raise annotate(invalid('transport_failure'), reference, submitted=submitted) from None
