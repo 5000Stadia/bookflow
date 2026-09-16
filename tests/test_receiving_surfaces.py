@@ -23,8 +23,7 @@ def test_receiving_and_linked_bill_cross_all_four_actual_transports(books,tmp_pa
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(tmp_path/'items',tmp_path/'surfaces',mcp_env={
-                'PYTHONPATH':str(Path(__file__).resolve().parents[1]/'src')})
+            await matrix.open(tmp_path/'items',tmp_path/'surfaces')
             for surface in matrix.documents:
                 async def call(name,raw,**ctx):
                     return await matrix.call(surface,name,raw,**ctx)

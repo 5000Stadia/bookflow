@@ -20,8 +20,7 @@ def test_permission_setup_crosses_all_four_actual_transports(root,client,tmp_pat
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(root,tmp_path/'surfaces',mcp_env={
-                'PYTHONPATH':str(Path(__file__).resolve().parents[1]/'src')})
+            await matrix.open(root,tmp_path/'surfaces')
             # Help also exercises the actual registered examples and schemas.
             for name in ('permission show','permission activate','membership effective'):
                 reply=await matrix.mcp.call_tool('bookflow_help',{'command':name})

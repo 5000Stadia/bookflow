@@ -25,8 +25,7 @@ def test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history(book
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(Path(books['client'].data_root),tmp_path/'surfaces',mcp_env={
-                'PYTHONPATH':str(Path(__file__).resolve().parents[1]/'src')})
+            await matrix.open(Path(books['client'].data_root),tmp_path/'surfaces')
             for surface in ('cli','http','mcp'):
                 async def call(name,raw,**ctx):return await matrix.call(surface,name,raw,**ctx)
                 state=await call('permission show',{})
