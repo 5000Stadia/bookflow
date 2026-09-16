@@ -188,14 +188,17 @@ def _output(journal_output, receipt):
 
 def prepare(s, ctx, inp, operation):
     journal, receipt = translate(inp, s, operation)
-    fresh = journals.prepare(s, ctx, journal, operation)
+    # Named, because the register is a door into a cheque, a card charge and a transfer
+    # rather than a stranger to them: it keeps each one's own shape, so the journal editor's
+    # refusal of those documents is not the register's.
+    fresh = journals.prepare(s, ctx, journal, operation, owner=journals.REGISTER)
     return Plan(_output(fresh.preview, receipt), {'input': inp, 'operation': operation})
 
 
 def apply(plan, ctx, s):
     inp, operation = plan.data['input'], plan.data['operation']
     journal, receipt = translate(inp, s, operation)
-    fresh = journals.prepare(s, ctx, journal, operation)
+    fresh = journals.prepare(s, ctx, journal, operation, owner=journals.REGISTER)
     applied = journals.persist_prepared(fresh, ctx, s, command_name='register ' + operation)
     applied.output = _output(applied.output, receipt)
     return applied

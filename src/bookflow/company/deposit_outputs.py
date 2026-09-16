@@ -92,8 +92,8 @@ class DepositState(StrictModel):
 
 class DepositWriteOutput(StrictModel):
     schema_version: Literal[1] = 1
-    command: Literal['deposit post', 'deposit update', 'deposit void']
-    action: Literal['post', 'update', 'void']
+    command: Literal['deposit post', 'deposit update', 'deposit void', 'deposit delete']
+    action: Literal['post', 'update', 'void', 'delete']
     operation_key: str
     operation_id: ID | None
     changed: bool

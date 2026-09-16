@@ -921,7 +921,7 @@ custom_field_scopes = _table(
     _column("definition_name_key", sa.String(400), "Synchronized normalized current definition-name key.", nullable=False),
     _column("definition_active", sa.Boolean, "Synchronized current definition active state.", nullable=False),
     sa.CheckConstraint(
-        "record_type IN ('customer','vendor','employee','other_name','item','journal_entry','invoice','sales_receipt','credit_memo','payment','deposit','bill','bill_payment','check','credit_card_charge','transfer','inventory_adjustment','vendor_credit','proposal','work_order','estimate','sales_order','purchase_order','item_receipt','statement','statement_charge')",
+        "record_type IN ('customer','vendor','employee','other_name','item','journal_entry','invoice','sales_receipt','credit_memo','payment','deposit','bill','bill_payment','check','credit_card_charge','transfer','inventory_adjustment','vendor_credit','proposal','work_order','estimate','time_activity','sales_order','purchase_order','item_receipt','statement','statement_charge')",
         name="ck_custom_field_scopes_record_type",
     ),
     sa.Index("ux_custom_field_scopes_record_name", "record_type", "definition_name_key", unique=True, sqlite_where=sa.text("active = 1 AND definition_active = 1")),
@@ -1149,3 +1149,12 @@ globals().update(_define_payment_deletions(metadata, _column, _table))
 
 from bookflow.company.bill_deletion_schema import define_tables as _define_bill_deletions
 globals().update(_define_bill_deletions(metadata, _column, _table))
+
+from bookflow.company.credit_deletion_schema import define_tables as _define_credit_deletions
+globals().update(_define_credit_deletions(metadata, _column, _table))
+
+from bookflow.company.deposit_deletion_schema import define_tables as _define_deposit_deletions
+globals().update(_define_deposit_deletions(metadata, _column, _table))
+
+from bookflow.company.journal_deletion_schema import define_tables as _define_journal_deletions
+globals().update(_define_journal_deletions(metadata, _column, _table))

@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 from bookflow.core import registry
 from bookflow.hub import permission_catalog as c, permission_setup_catalog as build
-from bookflow.hub import permission_activation_catalog as previous
+from bookflow.hub import permission_activation_catalog as previous, permission_runtime as runtime
 from tests.test_permission_catalog import owner, R
 from tests.test_permission_activation_catalog import test_every_resource_call_site_has_explicit_owner_disposition
 
@@ -18,7 +18,11 @@ def test_full_current_setup_descriptor_and_publication_inventory():
             tuple(sorted((R(*x) for x in cmd.resource_requirements),key=lambda x:(x.capability,c.THRESHOLDS.index(x.threshold)))),
             True,cmd.feature,cmd.local_only,cmd.bootstrap,cmd.authorization,owner(cmd.authorize_input),
             owner(cmd.permanent_recovery),owner(cmd.transfer.prepare) if cmd.transfer else None))
-    assert build.CATALOG.commands==tuple(sorted(expected,key=lambda x:x.name))
+    # Registry parity is the tip's. `build` is a frozen historical delta -- roots have
+    # stored its descriptor, so it cannot grow to match today's registry, and naming
+    # it here told a builder who added a command to edit an accepted delta. The
+    # assertion below is the one this file owns: what the setup delta itself adds.
+    assert runtime.current_catalog().CATALOG.commands==tuple(sorted(expected,key=lambda x:x.name))
     assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={
         'permission show','permission activate','membership effective'}
     assert set(build.CHANGED_AUTHORIZATION)=={'membership grant','membership revoke','membership list','user list'}

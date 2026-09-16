@@ -473,7 +473,7 @@ for _noun, _conversion in (('proposal', 'estimate'), ('estimate', 'work-order'),
 MATRIX['estimate void'] = dict(_WORK_WRITE_ERRORS,
     E_WORK_DEPENDENCY='the estimate already has its work order, or a sale consumes its billing roots')
 
-for _noun in ('estimate', 'work-order'):
+for _noun in ('estimate', 'work-order', 'time-activity'):
     for _verb in ('invoice', 'sales-receipt'):
         MATRIX[f'{_noun} {_verb}'] = {
             **_SALES_WRITE_ERRORS, **_WORK_WRITE_ERRORS,
@@ -484,6 +484,24 @@ for _noun in ('estimate', 'work-order'):
         'E_RECORD_NOT_FOUND': 'source absent from selected company',
         'E_QUERY_STALE': 'company audit changed between linked destination pages',
     }
+# Recorded time is a customer-work document with a much smaller input, so it refuses for the
+# work reasons and two of its own: a correction to somebody's hours always carries a reason,
+# and neither a correction nor a withdrawal may move hours a sale is already standing on.
+MATRIX['time-activity create'] = dict(_WORK_WRITE_ERRORS)
+MATRIX['time-activity update'] = dict(_WORK_WRITE_ERRORS,
+    E_REASON_REQUIRED='a correction that moves recorded time carries no reason',
+    E_WORK_DEPENDENCY='a sale already consumes these hours, so the entry is frozen at what it was billed as')
+MATRIX['time-activity void'] = dict(_WORK_WRITE_ERRORS,
+    E_REASON_REQUIRED='the withdrawal carries no reason',
+    E_WORK_DEPENDENCY='a sale consumes these hours; void the sale before withdrawing the time')
+MATRIX['time-activity show'] = {'E_RECORD_NOT_FOUND': 'recorded time or selected revision does not exist',
+    'E_QUERY_STALE': 'company audit changed between source-link pages'}
+for _verb in ('query', 'history'):
+    MATRIX[f'time-activity {_verb}'] = {
+        'E_RECORD_NOT_FOUND': 'recorded time or customer filter absent from selected company',
+        'E_QUERY_STALE': 'company audit changed between bounded pages',
+    }
+
 for _noun in ('invoice', 'sales-receipt'):
     for _verb in ('post', 'update', 'void'):
         MATRIX[f'{_noun} {_verb}']['E_WORK_DEPENDENCY'] = 'retained source-linked line or commercial scope changed'
@@ -513,6 +531,19 @@ _DEPOSIT_WRITE_ERRORS = {
 }
 for _verb in ('post', 'update', 'void'):
     MATRIX[f'deposit {_verb}'] = dict(_DEPOSIT_WRITE_ERRORS)
+# Deleting takes the same document a void takes and writes no new revision, so the
+# refusals that belong to composing one -- an ineligible receipt, a duplicate number, an
+# amount, a draft -- cannot arise. What it adds is the reconciliation that will not let
+# the bank line go, and the retained history it refuses to edit a second time.
+MATRIX['deposit delete'] = {
+    **{code: text for code, text in _DEPOSIT_WRITE_ERRORS.items()
+       if code in ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PREVIEW_STALE', 'E_PERIOD_CLOSED',
+                   'E_VALUE_RANGE', 'E_REASON_REQUIRED', 'E_SCHEMA_BEHIND', 'E_DEPOSIT_SOURCE_INVALID',
+                   'E_DEPOSIT_OPERATION_KEY_REUSED', 'E_IDEMPOTENCY_MISMATCH',
+                   'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')},
+    'E_VALIDATION': 'a reason longer than 140 characters, or the deposit is already deleted',
+    'E_RECONCILIATION_DEPENDENCY': 'a bank reconciliation still holds this deposit',
+}
 MATRIX['deposit sources'] = {
     'E_RECORD_NOT_FOUND': 'for_deposit names no deposit in the selected company',
     'E_QUERY_STALE': 'candidate facts changed between bounded pages',
@@ -1159,6 +1190,19 @@ MATRIX["credit-memo void"] = {
     "E_HAS_APPLICATIONS": "a live application; unapply it first",
     "E_HAS_REFUND": "a live refund consumption; void the refund first",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["credit-memo delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters, or the credit memo is already deleted",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_PERIOD_CLOSED": "the credit memo's own date is in a closed period",
+    "E_HAS_APPLICATIONS": "a live application; unapply it first, and the invoices are named",
+    "E_HAS_REFUND": "a live refund consumption; void the refund first, and the refunds are named",
+    "E_RECONCILIATION_DEPENDENCY": "a reconciliation still holds an effect of this credit memo",
+    "E_IDEMPOTENCY_MISMATCH": "same operation_key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }

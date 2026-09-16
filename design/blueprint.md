@@ -1228,7 +1228,38 @@ for job-level reports; each work order has its own scheduled and actual dates.
 
 ### 13.2 Time entries
 
-Table `time_entries`: `employee_id`, `customer_id`, `item_id` (service), `date`, `duration_minutes`, `billable`, `work_order_id`, `notes`. Billable time is pulled onto invoices. This is the table payroll will read for hourly employees.
+**Shipped, and not as sketched here.** This section proposed a `time_entries` table with
+`duration_minutes`. What shipped has no table of its own: a stretch of recorded time *is* a
+customer-work document of kind `time_activity` carrying exactly one line, alongside the
+proposal, the estimate and the work order, because it has the same shape a quoted line of work
+has — a person, a job, a service item, a quantity and a rate, billable or not.
+
+Two consequences follow, and both are the point of the shape:
+
+* **The duration is hours, exactly, in the line's `quantity_microunits`.** That is the quantity
+  convention the table already uses, and the charge is that quantity extended by a rate per
+  hour through the same exact arithmetic a quoted line uses. Minutes as integers would have
+  been a second quantity convention in a system that already has one, and would have turned an
+  hourly rate into a division. Twenty minutes is `0.333333` hours, entered and stored as such;
+  there is no `H:MM` entry, because it would have to round twenty minutes before handing the
+  quantity to an exact extension, and that is where cent errors start.
+* **Billing runs through `work_billing_allocations`**, the interval ledger that already records
+  which part of a line has been invoiced. That ledger, not a flag on the entry, is what makes a
+  stretch of time billable exactly once: an hour already carried onto an invoice is an occupied
+  span, and a second attempt finds no free span to take. `time-activity invoice` and
+  `time-activity sales-receipt` are the same billing commands an estimate and a work order have.
+
+The service item is required, not optional: it carries the rate, the income account the labour
+lands in and the tax code an invoice needs, and `work_lines.item_id` is NOT NULL. Time recorded
+without one would have nowhere to post.
+
+Recording time posts nothing to the ledger; billing it does, through the invoice path that
+already owns the accounting. Non-billable time is recorded against the job and never reaches an
+invoice. `report unbilled-costs` lists billable recorded time that has not been invoiced,
+because it lists every billable work line that is not finished.
+
+The link to a work order and the payroll reader that this section also proposed are not built.
+When payroll arrives it reads these work lines, filtered to kind `time_activity`.
 
 ### 13.3 Scheduler
 

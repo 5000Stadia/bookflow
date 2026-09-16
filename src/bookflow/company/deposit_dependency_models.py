@@ -4,7 +4,7 @@ import json
 from typing import Literal, Annotated
 from pydantic import ConfigDict, Field, model_validator
 from bookflow.company.sales_models import StrictModel
-from bookflow.company.deposit_lifecycle_models import PostInput, UpdateInput, VoidInput
+from bookflow.company.deposit_lifecycle_models import DeleteInput, PostInput, UpdateInput, VoidInput
 
 
 class Frozen(StrictModel):
@@ -34,6 +34,12 @@ class VoidRequest(Frozen):
     context: RequestContext = Field(default_factory=RequestContext)
 
 
+class DeleteRequest(Frozen):
+    command: Literal['deposit delete']
+    input: DeleteInput
+    context: RequestContext = Field(default_factory=RequestContext)
+
+
 from bookflow.company.deposit_coordinate_models import CoordinateInput
 
 
@@ -43,11 +49,11 @@ class CoordinateRequest(Frozen):
     context: RequestContext = Field(default_factory=RequestContext)
 
 
-DepositRequest = Annotated[PostRequest | UpdateRequest | VoidRequest | CoordinateRequest, Field(discriminator='command')]
+DepositRequest = Annotated[PostRequest | UpdateRequest | VoidRequest | DeleteRequest | CoordinateRequest, Field(discriminator='command')]
 
 
 def request_document(original):
-    if isinstance(original, (InspectionRoot, VoidRequest)):
+    if isinstance(original, (InspectionRoot, VoidRequest, DeleteRequest)):
         return None
     if isinstance(original, CoordinateRequest):
         return original.input.replacement.document if original.input.replacement.mode == 'document' else None

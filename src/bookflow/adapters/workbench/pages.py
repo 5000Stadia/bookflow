@@ -165,7 +165,7 @@ def runtime_custom_field_scope(noun, verb, cmd, definition):
     nouns - a hand-listed set silently omits the next document type, which is how
     `bill post` came to be asserted against a control it correctly does not render.
     """
-    if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
+    if noun in Work.DOCUMENTS and 'custom_fields' in cmd.input_model.model_fields:
         if Billing.is_conversion(noun, verb):
             return verb.replace('-', '_')
         return 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
@@ -1122,7 +1122,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         definition = meta.get("definition")
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
                    ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
-                   ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.NOUNS else
+                   ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
                    # A statement charge has no terms and no due date, so the column an invoice
                    # list spends on one is spent here on what the charge was for.
@@ -1152,12 +1152,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         # Which lists offer the deleted-record controls is derived from the one owner of
         # the deletion families, never hand-listed here: a family whose retained storage
         # ships gains them in the same change.
-        from bookflow.adapters.workbench.permissions import DELETABLE
+        from bookflow.adapters.workbench.permissions import NOUNS as DELETABLE_NOUNS
         return render(
             "list.html",
             request,
             has_show=registry.get(f"{noun} show") is not None,
-            deletable=noun.replace('-', '_') in DELETABLE
+            deletable=noun in DELETABLE_NOUNS
                       and 'include_deleted' in cmd.input_model.model_fields,
             deleted_label=Naming.subject(noun, meta),
             company_id=company_id,
@@ -1171,7 +1171,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             verbs=page_verbs,
             query=raw.get("query", ""),
             rate_filters=raw if noun == "rate" else None,
-            work_filters=raw if noun in Work.NOUNS else None,
+            work_filters=raw if noun in Work.DOCUMENTS else None,
+            work_statuses=Work.list_statuses(noun),
             sales_filters=raw if noun in ('invoice', 'sales-receipt') else None,
             bill_filters=raw if noun == 'bill' else None,
             filters=filters,
@@ -1210,7 +1211,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     raw["revision_number"] = int(request.query_params["revision_number"])
                 except ValueError:
                     raise BookflowError("E_VALIDATION", details={"fields": [{"field": "revision_number", "problem": "must be an integer"}]}) from None
-            if noun in Work.NOUNS and request.query_params.get('links_cursor') and 'links_cursor' in show.input_model.model_fields:
+            if noun in Work.DOCUMENTS and request.query_params.get('links_cursor') and 'links_cursor' in show.input_model.model_fields:
                 raw['links_cursor'] = request.query_params['links_cursor']
             out = run(request, show.name, raw, company_id if show.scope == "company" else None)
             cred = credential(request)
@@ -1223,7 +1224,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 rid = out.get("company_id", record_id) if noun == "company" else out.get("id", record_id)
                 audit = run(request, "audit list", {"record_type": meta["record_type"], "record_id": rid, "limit": 20}, company_id)["items"]
         except BookflowError as e:
-            if noun in Work.NOUNS and e.code == 'E_QUERY_STALE':
+            if noun in Work.DOCUMENTS and e.code == 'E_QUERY_STALE':
                 restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != 'links_cursor'])
                 return page_error(request, e, restart_url=restart)
             return page_error(request, e)
@@ -1261,7 +1262,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     else:
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
-        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt', 'bill') else None
+        # Every document with a Delete verb of its own: this is what gates the Delete
+        # link on an explicit grant rather than on the role alone, and what marks a
+        # retained deleted document as deleted wherever it is read back.
+        purchase_record = out if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt', 'bill', 'credit-memo') else None
         purchase_noun = command_noun if purchase_record else None
         if command_noun == 'journal' and company_id:
             try:
@@ -1270,13 +1274,45 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             except BookflowError as error:
                 return page_error(request, error)
             if owned:
+                # The entry is really a check, a card charge or a transfer. The journal
+                # editor refuses all three by name, so this page offers the document's own
+                # verbs rather than buttons the core declines.
                 purchase_noun, purchase_record = owned
-                verbs = [v for v in verbs if v.verb not in ('update', 'void')]
+                verbs = [v for v in verbs if v.verb not in ('update', 'void', 'delete')]
                 verbs += [registry.get(purchase_noun + ' ' + verb) for verb in ('update', 'void')
                     if _role_allows(registry.get(purchase_noun + ' ' + verb), role_view, hub_admin=cred.hub_admin)]
+            else:
+                # An ordinary journal entry, read exactly as a purchase's record page reads
+                # one: Delete is an explicit per-user grant, so the real command decides
+                # whether it is offered at all, and the writing verbs go when posting is
+                # denied or the entry is already deleted.
+                effective = run(request, 'membership effective', {'company': company_id}, None)
+                post_bits = [x for x in effective['permissions']
+                             if x['requirement'] == {'capability': 'ledger.post', 'threshold': 'standard'}]
+                may_post = effective['mode'] != 'policy_v1' or any(x['admitted'] for x in post_bits)
+                verbs = [v for v in verbs if v.verb != 'delete' and not (
+                    v.verb in ('post', 'update', 'void') and (out.get('deletion') or not may_post))]
+                if not out.get('deletion') and Purchases.delete_allowed(
+                        lambda *a, **kw: run(request, *a, **kw), company_id, 'journal', out):
+                    verbs.append(registry.get('journal delete'))
 
         purchase_history = None
         purchase_history_paging = None
+        if command_noun == 'journal' and company_id and purchase_record is None and request.query_params.get('history') == '1':
+            # A deleted entry is reached from its list by "View retained record and history",
+            # so the journal's own revisions answer that link the way a purchase's do.
+            try:
+                purchase_history = run(request, 'journal history', {'journal': record_id,
+                    'include_deleted': True,
+                    'limit': F.query_value(registry.get('journal history').input_model, 'limit',
+                                           request.query_params.get('limit', '50')),
+                    'cursor': request.query_params.get('cursor')}, company_id)
+            except BookflowError as error:
+                if error.code == 'E_QUERY_STALE':
+                    restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k not in Paging.CARRIED])
+                    return render('error.html', request, error=error.to_dict(), restart_url=restart)
+                return page_error(request, error)
+            purchase_history_paging = Paging.controls(request.url.path, request.query_params, purchase_history['next_cursor'])
         if purchase_record:
             if purchase_record.get('deletion'):
                 visible_record.update(status='deleted', deletion=purchase_record['deletion'])
@@ -1290,9 +1326,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 verbs.append(registry.get(purchase_noun+' delete'))
             if request.query_params.get('history')=='1':
                 try:
+                    history_model = registry.get(purchase_noun+' history').input_model
                     purchase_history = run(request,purchase_noun+' history',
-                        {purchase_noun.replace('-','_'):record_id,'include_deleted':True,
-                         'limit':F.query_value(registry.get(purchase_noun+' history').input_model,'limit',request.query_params.get('limit','50')),
+                        {purchase_noun.replace('-','_'):record_id,
+                         **({'include_deleted':True} if 'include_deleted' in history_model.model_fields else {}),
+                         'limit':F.query_value(history_model,'limit',request.query_params.get('limit','50')),
                          'cursor':request.query_params.get('cursor')},company_id)
                 except BookflowError as error:
                     if error.code == 'E_QUERY_STALE':
@@ -1311,7 +1349,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ),
             record_id,
         )
-        if command_noun in ("journal", *Document.NOUNS, *Work.NOUNS):
+        if command_noun in ("journal", *Document.NOUNS, *Work.DOCUMENTS):
             record_title = out["revision"]["number"]
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
@@ -1344,14 +1382,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "inheritance": [{"field": W.label(key.removesuffix("_source_id")), "id": value, "name": source_names[value]} for key, value in out.items() if key.endswith("_source_id") and value in source_names],
             }
         billing = None
-        if noun in ('estimate', 'work-order'):
+        if noun in Billing.NOUNS:
             try:
                 billing = Billing.context(run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id), company_id, source=out)
             except BookflowError as err:
                 return page_error(request, err)
             verbs = [v for v in verbs if v.verb not in ('invoice', 'sales-receipt')]
         annotation_context = annotations(company_id, noun, record_id, out, role_view, cred)
-        if noun in Work.NOUNS and request.query_params.get('annotation_line'):
+        if noun in Work.DOCUMENTS and request.query_params.get('annotation_line'):
             line_id = request.query_params['annotation_line']
             if line_id not in {line['line_id'] for line in out['revision']['lines']}:
                 return page_error(request, BookflowError('E_RECORD_NOT_FOUND'))
@@ -1371,7 +1409,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
-                      work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
+                      work=Work.detail_context(out, company_id) if noun in Work.DOCUMENTS else None,
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
                       sale=Sales.detail_context(out, company_id) if command_noun in Sales.nouns() else None,
                       bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
@@ -1583,11 +1621,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # field then stops the browser from ever sending the preview.
             if settlement['applied_minor_units']:
                 attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
-        if noun in Work.NOUNS and verb in ('copy', 'estimate', 'work-order', 'complete', 'invoice', 'sales-receipt'):
+        if noun in Work.DOCUMENTS and verb in ('copy', 'estimate', 'work-order', 'complete', 'invoice', 'sales-receipt'):
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
-        if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
+        if noun in Work.DOCUMENTS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
             attempted['f:conversion_key'] = secrets.token_urlsafe(32)
-        if noun in ('invoice', 'sales-receipt', 'credit-memo', 'vendor-credit', *Work.NOUNS) and verb in ('history', 'billing') and record_id is not None:
+        if noun in ('invoice', 'sales-receipt', 'credit-memo', 'vendor-credit', *Work.DOCUMENTS) and verb in ('history', 'billing') and record_id is not None:
             # Most of these name their record after the noun; a vendor credit calls it
             # `credit` on every one of its verbs, so the field comes from the command itself
             # rather than from the spelling of the route.
@@ -1611,7 +1649,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, disabled_error('estimates', [change for change in authorized_company['preference_changes']
                 if change['field'] == 'estimates_enabled']), company_id=company_id)
         billing = None
-        if noun in ('estimate', 'work-order') and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
+        if noun in Billing.NOUNS and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
             try:
                 state = result if verb == 'billing' and result else run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id)
                 source = shown or run(request, noun + ' show', {noun.replace('-', '_'): record_id}, company_id)
@@ -1721,7 +1759,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # choose "1" from a dropdown to describe their bank statement, and choosing it submits
             # the string where the model wants the number, so the only answer on offer is wrong.
             described = [leaf for leaf in described if not leaf['path'].endswith('.format')]
-        sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post')
+        sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.DOCUMENTS and cmd.is_write) or (noun == 'deposit' and verb == 'post')
         if noun in Work.NOUNS:
             described = Work.describe(described, noun)
             workflow_note = 'Non-posting customer work. Cost estimates and notes are internal. Completion does not mean billed or paid. Choose one selling-price input per line; use defaults → unit_price returns to catalog.'
@@ -1940,9 +1978,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       allocated_lines={line['line_id']: line for line in (shown or {}).get('revision', {}).get('lines', []) if line.get('pricing_basis') == 'allocated'},
                       billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), authorized_company or {}, hub_admin=cred.hub_admin)),
                       work_form=noun in Work.NOUNS,
-                      work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.NOUNS and not Billing.is_conversion(noun, verb) and "revision" in result else None,
-                      work_history=result if noun in Work.NOUNS and verb == "history" else None,
-                      work_results=result if noun in Work.NOUNS and verb == "query" else None,
+                      work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.DOCUMENTS and not Billing.is_conversion(noun, verb) and "revision" in result else None,
+                      work_history=result if noun in Work.DOCUMENTS and verb == "history" else None,
+                      work_results=result if noun in Work.DOCUMENTS and verb == "query" else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
                       deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
@@ -2138,7 +2176,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 raw = Credits.untouched_return_defaults(raw)
                 if preview:
                     raw.pop('expected_facts_fingerprint', None)
-            if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post'):
+            if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.DOCUMENTS and cmd.is_write) or (noun == 'deposit' and verb == 'post'):
                 if noun == 'invoice' and verb == 'update' and form.get('action') == 'review-settlement':
                     current = run(request, 'invoice settlement', {'invoice': record_id}, company_id)
                     form = dict(form, **{'f:settlement_guard': current['settlement_guard'],
@@ -2185,7 +2223,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
-        if ((noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.NOUNS)
+        if ((noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.DOCUMENTS)
              and verb in ('history', 'query', 'billing'))
                 # A vendor credit joins for its revisions only: its list page is the ordinary
                 # one, so nothing about `vendor-credit query` changes here.

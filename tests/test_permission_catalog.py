@@ -74,6 +74,17 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 FROZEN_DESCRIPTOR_SHA256 = 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e647284e2fef123'
 
 RESOURCE_PAIRS = {
+    # One per Delete delta. Each declares its own admit site in its own catalog
+    # module; none of them could be listed here while the assertion below named the
+    # frozen ancestor's inventory, which by construction cannot carry a site a later
+    # delta introduced. Four deltas in a row went undeclared for that reason.
+    'bill_deletions.admit': {('ledger.read', 'member')},
+    'credit_deletions.admit': {('ledger.read', 'member')},
+    'deposit_deletions.admit': {('ledger.read', 'member')},
+    'journal_deletions.admit': {('ledger.read', 'member')},
+    'payment_deletions.admit': {('ledger.read', 'member')},
+    'purchase_deletions.admit': {('ledger.read', 'member')},
+    'sales_deletions.admit': {('ledger.read', 'member')},
     # Mirrored from permission_runtime.CURRENT_SOURCES, which already declared every owner
     # with its call-site lines. The frozen catalog had absorbed only 16 of 22 and its
     # payment_authority line numbers had drifted, so this was one stale copy of a current
@@ -130,9 +141,16 @@ def test_every_resource_call_site_has_explicit_owner_disposition():
                 expected = RESOURCE_PAIRS[key.removeprefix('bookflow.company.')]
                 if len(node.args) >= 3 and all(isinstance(a, ast.Constant) for a in node.args[1:3]):
                     assert tuple(a.value for a in node.args[1:3]) in expected
+    # The tip, for the same reason the descriptor comparison above uses it: the tip is
+    # what an activation stores, so the tip is what the call sites as they stand now
+    # have to match. permission_catalog.CONDITIONAL_RESOURCE_SOURCES is the frozen
+    # ancestor's inventory and cannot grow a site a later delta declared -- naming it
+    # here asked a builder to add the site to the ancestor, which is the one edit that
+    # locks activated installations out of their own books.
+    inventory = runtime.current_catalog().CATALOG.conditional_sources
     assert sites.keys() == {'bookflow.company.' + name for name in RESOURCE_PAIRS}
-    assert {s.owner: set(s.call_sites) for s in c.CONDITIONAL_RESOURCE_SOURCES} == sites
-    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in c.CONDITIONAL_RESOURCE_SOURCES} == RESOURCE_PAIRS
+    assert {s.owner: set(s.call_sites) for s in inventory} == sites
+    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in inventory} == RESOURCE_PAIRS
 
 
 def test_exact_requirement_universes_and_effective_literal_migration_seeds():

@@ -279,8 +279,14 @@ def test_voiding_a_transfer_reverses_it_at_its_own_date_and_keeps_the_history(bo
     posted = books['run']('transfer post', _move(books), reason='Sweep to savings')
     before = _loss(books)
 
-    voided = books['run']('journal void',
-                          {'journal': posted['id'], 'expected_version': posted['version']},
+    # The journal editor does not void a transfer: `transfer void` owns it.
+    with pytest.raises(BookflowError) as refused:
+        books['run']('journal void',
+                     {'journal': posted['id'], 'expected_version': posted['version']},
+                     reason='Swept the wrong way')
+    assert refused.value.code == 'E_VALIDATION' and refused.value.details['next'] == 'transfer void'
+    voided = books['run']('transfer void',
+                          {'transfer': posted['id'], 'expected_version': posted['version']},
                           reason='Swept the wrong way')
     assert voided['status'] == 'voided'
     kinds = [(batch['kind'], batch['effective_date'], batch['total']['amount'])

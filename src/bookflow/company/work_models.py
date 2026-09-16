@@ -18,9 +18,14 @@ from bookflow.core.exact import (
     parse_percentage_millionths, parse_quantity_micro_units,
 )
 
-WorkKind = Literal['proposal', 'estimate', 'work_order']
+# The customer-work document kinds, declared once. The service, the default resolver, the
+# sales-profile reader, the outputs and the custom-field scopes all derive their copy from
+# this tuple, so a new kind arrives in one place rather than in seven that drift apart.
+WORK_KINDS = ('proposal', 'estimate', 'work_order', 'time_activity')
+
+WorkKind = Literal[WORK_KINDS]
 WorkStatus = Literal['draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled',
-                     'scheduled', 'in_progress', 'on_hold', 'complete']
+                     'scheduled', 'in_progress', 'on_hold', 'complete', 'recorded']
 DecisionStatus = Literal['draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled']
 OperationalStatus = Literal['draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled']
 Priority = Literal['low', 'normal', 'high', 'urgent']
@@ -395,3 +400,103 @@ class WorkOrderCompleteInput(StrictModel):
     expected_facts_fingerprint: Fingerprint | None = None
     actual_start: Timestamp | None = None
     actual_end: Timestamp | None = None
+
+
+def _duration(value):
+    """Worked time as a quantity of hours, in the millionths every quantity here uses.
+
+    Hours, not minutes: the stored value is a work line's ``quantity_microunits`` -- the
+    same field a quoted quantity uses -- multiplied by a rate per hour to reach the charge.
+    Minutes as integers would be a second quantity convention in a system that already has
+    one, and would turn an hourly rate into a division. Six decimal places is what that
+    field carries, so a duration is exact at the precision everything downstream is exact
+    at, and a decimal string is the only spelling: an ``H:MM`` entry would have to round
+    twenty minutes to 0.333333 hours and hand a rounded quantity to an exact extension.
+    """
+    units = parse_quantity_micro_units(value, field='duration')
+    if units <= 0:
+        raise ValueError('duration must be greater than zero')
+    if units > 24_000_000:
+        raise ValueError('duration cannot exceed 24 hours; record another day separately')
+    return format_quantity_micro_units(units)
+
+
+Duration = Annotated[str, BeforeValidator(_duration)]
+
+
+class TimeActivityFields(StrictModel):
+    """What a person records about time worked, and nothing a work order needs."""
+
+    employee: Selector = Field(description='Who did the work: an employee ID or name.')
+    customer: Selector = Field(description='The customer or job the time was worked for; a job is its own customer.')
+    date: _Date = Field(description='The day the work was done.')
+    duration: Duration = Field(description='How long, as decimal hours: 1.5 is an hour and a half, 0.25 is fifteen minutes, 0.333333 is twenty. Up to six decimal places, because the charge is this quantity multiplied by a rate per hour and the multiplication is exact.')
+    item: Selector = Field(description='Required. The service item this time is charged as: it carries the rate, the income account the labour lands in and the tax code the invoice needs. Time with no item has nowhere to post, so there is no default and no way to leave it out.')
+    note: Text | None = Field(default=None, description='What was done. It becomes the line description a customer reads on the invoice.')
+    billable: bool = Field(default=True, description='Whether this time can be carried into an invoice. Non-billable time is recorded against the job and never billed.')
+    rate: str | SalesMoneyInput | None = Field(default=None, description='Charge per hour, overriding the service item price.')
+    class_id: Selector | None = None
+    number: _Number | None = None
+    custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
+    custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
+    expected_facts_fingerprint: Fingerprint | None = None
+
+
+class TimeActivityCreateInput(TimeActivityFields):
+    pass
+
+
+class TimeActivityUpdateInput(TimeActivityFields):
+    time_activity: Selector
+    expected_version: _Version
+    employee: Selector | None = None
+    customer: Selector | None = None
+    date: _Date | None = None
+    duration: Duration | None = None
+    item: Selector | None = None
+    billable: bool | None = None
+
+    @model_validator(mode='after')
+    def required_values(self):
+        for field in ('employee', 'customer', 'date', 'duration', 'item', 'billable'):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null')
+        return self
+
+    @model_serializer(mode='wrap')
+    def only_supplied(self, handler):
+        # A field left out and a field set to null are different corrections, and the
+        # idempotency hash is taken from this dump: without this a retry under one key
+        # could replay the other.
+        values = handler(self)
+        for key in ('note', 'rate', 'class_id'):
+            if key not in self.model_fields_set:
+                values.pop(key, None)
+        return values
+
+
+class TimeActivityVoidInput(StrictModel):
+    """Withdraw a time entry. It posts nothing, so nothing is reversed; the reason is the record."""
+
+    time_activity: Selector
+    expected_version: _Version
+    expected_facts_fingerprint: Fingerprint | None = None
+
+
+class TimeActivityShowInput(WorkShowInput):
+    time_activity: Selector
+
+
+class TimeActivityHistoryInput(SalesPageInput):
+    time_activity: Selector
+
+
+class _TimeActivityWorkCreateInput(WorkCreateInput, OperationalFields):
+    """The customer-work input a recorded time entry is, built by the service from the small one."""
+
+    status: Literal['recorded'] = 'recorded'
+
+
+class _TimeActivityWorkUpdateInput(WorkUpdateInput, OperationalFields):
+    time_activity: Selector
+    status: Literal['recorded'] = 'recorded'

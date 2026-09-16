@@ -325,7 +325,10 @@ def _translate(s, inp, operation):
 
 def prepare(s, ctx, inp, operation='post'):
     journal, summary = _translate(s, inp, operation)
-    fresh = journals.prepare(s, ctx, journal, operation)
+    # A transfer is stored as a journal entry and is told apart only by its marker, which the
+    # journal editor now refuses to write through. Naming this module as the owner is what
+    # keeps that refusal off the transfer's own correcting and voiding verbs.
+    fresh = journals.prepare(s, ctx, journal, operation, owner=money_out.OWNER)
     return Plan(_output(fresh.preview, summary), {'input': inp, 'operation': operation})
 
 
@@ -334,7 +337,7 @@ def apply(plan, ctx, s):
     # dates, versions and numbering are only decisive here.
     inp, operation = plan.data['input'], plan.data['operation']
     journal, summary = _translate(s, inp, operation)
-    fresh = journals.prepare(s, ctx, journal, operation)
+    fresh = journals.prepare(s, ctx, journal, operation, owner=money_out.OWNER)
     extra = ()
     if operation == 'post' and fresh.data['changed']:
         header = fresh.data['header']

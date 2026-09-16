@@ -24,13 +24,18 @@ of job-date reports; work-order dates describe that work order only.
 
 ## Commands and authority
 
-The shared registry exposes these22 commands:
+The shared registry exposes these28 commands:
 
 | Noun | Commands |
 |---|---|
 | proposal | create, update, copy, show, query, history, estimate |
 | estimate | create, update, copy, show, query, history, work-order, void |
 | work-order | create, update, copy, show, query, history, complete |
+| time-activity | create, update, void, show, query, history |
+
+Recorded time is the fourth kind, and its command surface is deliberately much smaller than
+the other three: no copy, no conversion to another kind, and no lines. See
+[Recorded time](#recorded-time) below for why it is a work document at all.
 
 All are company scoped. Reads require membership; writes require the standard role,
 use company audit, and accept generic idempotency. The registry declares the
@@ -164,6 +169,63 @@ line quantities to ordered quantities in its preview and committed revision. Zer
 priced lines still require actual_start/end to complete the scope. Reopening retains
 completed quantities until explicitly revised. Copy/conversion resets them to0.
 Completion, billable eligibility and later billed consumption are independent.
+
+## Recorded time
+
+A stretch of time somebody worked on a job is stored as a customer-work document of kind
+`time_activity` carrying exactly one line, rather than as a second kind of record with a second
+way of being billed. It has the same shape a quoted line of work has: a person, a job, a
+service item, a quantity and a rate, billable or not.
+
+**What a person types is much smaller than a work order's input** — who, for whom, when, how
+long, as what, whether it can be billed, and optionally a rate and a note. The service layer
+translates that into the work document it is, so the small surface is the only thing the
+command contract has to keep small and every rule about versions, revisions, reasons and
+billing dependencies stays where the other kinds already obey it.
+
+**Duration is hours, exactly.** It is the line's `quantity_microunits` — the quantity
+convention already in the table — multiplied by a rate per hour to reach the charge. Entry is a
+decimal string of at most six fractional places: `1.5` is an hour and a half, `0.25` fifteen
+minutes, `0.333333` twenty. There is no `H:MM` entry, because it would have to round twenty
+minutes to `0.333333` before handing a rounded quantity to an exact extension, which is how cent
+errors start. A duration must be greater than zero and at most 24 hours; a longer stretch is
+another day, recorded separately.
+
+**The service item is required.** `work_lines.item_id` is NOT NULL, and a line with no item has
+no income account and no tax code, so there is no default and no way to leave it out. A rate is
+optional and overrides the item price for that entry only; clearing it charges the item's own
+rate again rather than leaving the line unpriced.
+
+**The headline is derived, not typed.** A time entry has no name of its own: the two things
+that identify one in a list are the person and the date, and the date is already a column, so
+the title is `Time — <employee>`.
+
+**Status.** Recorded time holds one live state, `recorded`, and the terminal `voided` every kind
+shares. There is no decision to move through and no schedule to run down: it either happened, or
+it was withdrawn. `time-activity void` writes the terminal state; the status cannot be driven
+directly, and there is no `status` input.
+
+**A correction always says why.** `time-activity update` requires a reason whenever the plan
+changes anything — stricter than `estimate update`, which takes a correction with no reason at
+all. The asymmetry is deliberate: a quote is a proposal being revised, recorded hours are a fact
+being restated after the fact, and hours already billed were billed on the old number. A patch
+that moves nothing is still a no-op rather than a demand for a reason to do nothing.
+
+**Billing, and billing once.** Recorded time reaches a sale through `time-activity invoice` and
+`time-activity sales-receipt`, the same conversion commands an estimate and a work order have,
+consuming the same `work_billing_allocations` interval ledger. That ledger, not a flag on the
+entry, is what makes a stretch of time billable exactly once: an hour already carried onto an
+invoice is an occupied span, and a second attempt finds no free span and is refused with
+`E_WORK_DEPENDENCY`, having written nothing. For the same reason a correction or a withdrawal
+that would move hours a sale is standing on is refused until that sale is voided, which releases
+them. Recording time posts nothing; billing it does, through the invoice path that already owns
+the accounting.
+
+Non-billable time is recorded against the job and never reaches an invoice.
+`report unbilled-costs` lists billable recorded time that has not been invoiced, because it
+lists every billable work line that is not finished, and billed labour reaches
+`report profit-and-loss-by-job` because the invoice it becomes carries the job on its revenue
+lines like any other sale.
 
 ## Line price and estimated cost
 

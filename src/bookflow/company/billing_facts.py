@@ -9,6 +9,17 @@ from bookflow.company.sales_models import StrictModel, Fingerprint
 from bookflow.company.work_models import CanonicalId
 from bookflow.core.exact import INT64_MAX, round_ratio_half_even
 
+
+# The work kinds a sale can be billed from. `billing_cmds` builds one command trio per
+# entry, and every reader of billing state derives the set from here rather than retyping
+# it, so a further kind arrives in one place. It lives in this leaf module because the
+# outputs need it too, and `billing_queries` cannot be imported from them.
+#
+# Recorded time is here for the same reason an estimate is: it is work a customer owes for,
+# recorded against a job, and it reaches an invoice through this one path -- with the same
+# allocation ledger deciding what is left, so a stretch of time cannot be billed twice.
+BILLING_KINDS = ('estimate', 'work_order', 'time_activity')
+
 UnsignedText = Annotated[str, Field(pattern=r'^(0|[1-9][0-9]*)$', max_length=100)]
 Coordinate = Annotated[str, Field(pattern=r'^(0|[1-9][0-9]*)$', max_length=49)]
 

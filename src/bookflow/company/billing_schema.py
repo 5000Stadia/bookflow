@@ -50,7 +50,11 @@ def define_tables(metadata, column, table):
               ['transactions.id', 'transactions.type'], 'conversion_type'),
         exact('source_version', True),
         check("destination_type IN ('invoice','sales_receipt')", 'destination_type'),
-        check("relation IN ('estimate_invoice','estimate_sales_receipt','work_order_invoice','work_order_sales_receipt')", 'relation'),
+        # One entry per billable work kind and financial destination. Spelled out rather than
+        # derived because this module is loaded while `schema` is still being built, and the
+        # module that declares the kinds cannot be reached from here without a cycle.
+        check("relation IN ('estimate_invoice','estimate_sales_receipt','work_order_invoice',"
+              "'work_order_sales_receipt','time_activity_invoice','time_activity_sales_receipt')", 'relation'),
         check('length(conversion_key_hash) = 64 AND length(request_hash) = 64', 'hashes'),
         description='Immutable financial conversion birth ancestry and permanent retry identity.')
 

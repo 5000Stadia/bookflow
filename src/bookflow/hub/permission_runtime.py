@@ -85,6 +85,73 @@ def catalog_bundle() -> s.CatalogBundle:
                           CURRENT_MANIFEST.standalone_names, digest)
 
 
+# Every accepted version's descriptor sha256, pinned here rather than in the module
+# that builds it, for the reason ACCEPTED_ANCESTOR_SHA256 is pinned here: a digest kept
+# beside the descriptor it guards gets regenerated along with the descriptor and never
+# fires. Each sha below is compared against the manifest that module computes from its
+# own CATALOG at import, so this cannot be satisfied by editing a literal.
+#
+# A root stores the exact descriptor it activated. An accepted delta is therefore as
+# frozen as the ancestor is: the ancestor guard above does not cover these, and until
+# this check existed only a test did. Verification runs inside known_catalog(), where
+# the chain is imported anyway -- at module scope it would force that import on every
+# command and cost roughly half a second, against nothing here.
+ACCEPTED_DESCRIPTOR_SHA256 = {
+    c.SCOPED_POLICY_VERSION: 'a0823e6d9ae98e96c98e2b6e4e73042ecc8ecb7cf0e7d4d9b50e8febc7ed6979',
+    c.SETUP_POLICY_VERSION: '5d71ff2a0970f85e12b6fca0f84ff2736176565db44064b0668f84a3c132e2f2',
+    c.DELETE_POLICY_VERSION: 'bdcd036b653a165a65279386fc91a6ac8ead2dc45fa49e7791e943067c989f9e',
+    c.SALES_DELETE_POLICY_VERSION: 'cedd4c0ae270c83bcbaf2756124adf8d866694c00a8e05c06733282fcc844943',
+    c.PAYMENT_DELETE_POLICY_VERSION: '676fb94480d9d413d0233e3f869a479020b1ee3ce20fc03feef02c96d33b4323',
+    c.BILL_DELETE_POLICY_VERSION: '6e0a2035aee9edc6ba907f602d531334eadb81b0176a280d237ff840a0c9d487',
+    c.CREDIT_CORRECTION_POLICY_VERSION: '53d98dab0d040498fb0837c4de7cd60e30894436b44a2de25aa41a39c9d518d7',
+    c.CREDIT_DELETE_POLICY_VERSION: 'b3818cc259b81e4f7ef277d386cfc703d1cab8bbffb499e3025afec51af9bf5b',
+    c.DEPOSIT_DELETE_POLICY_VERSION: '449e98a8fa02bb9b5e3b805e70acbb70c0438df79b857a1e804526c2bf40c750',
+    c.JOB_TIME_POLICY_VERSION: '0072e030fb0f0b63b11f41c99facfa400a127148080e1fa3a60cbeffa53d0d07',
+    c.JOURNAL_DELETE_POLICY_VERSION: '8bb60e36da0155cf3551b01e83e7ded46ee06fce8c2962876a69da66636c0b95',
+}
+_VERIFIED_ACCEPTED = False
+
+
+def _verify_accepted(known):
+    """Refuse to serve any version whose stored descriptor this build no longer makes."""
+    global _VERIFIED_ACCEPTED
+    if _VERIFIED_ACCEPTED:
+        return
+    moved = sorted(version for version, module in known.items()
+                   if version in ACCEPTED_DESCRIPTOR_SHA256
+                   and module.MANIFEST.descriptor_sha256 != ACCEPTED_DESCRIPTOR_SHA256[version])
+    unpinned = sorted(set(known) - set(ACCEPTED_DESCRIPTOR_SHA256))
+    if moved:
+        raise RuntimeError(
+            'An accepted permission catalog version has been edited: %s.\n'
+            '\n'
+            'A root stores the exact descriptor it activated, and every later read rebuilds\n'
+            'that descriptor from the module named here for the stored version. Changing an\n'
+            'accepted delta therefore locks out every installation that activated it: each\n'
+            'one fails catalog_mismatch on permission_snapshot._load_root, every\n'
+            'company-scoped command stops, and `permission activate` cannot repair it\n'
+            'because it performs the same read before it can move the root forward. An\n'
+            'accepted delta is as frozen as permission_catalog.FROZEN_CATALOG is.\n'
+            '\n'
+            'If you are adding commands, they belong in a NEW delta on top -- copy\n'
+            'permission_credit_correction_catalog.py, give it its own *_POLICY_VERSION, add\n'
+            'that constant to SCOPED_POLICY_VERSIONS, register it in known_catalog() below,\n'
+            'point current_catalog() at it, and pin it in ACCEPTED_DESCRIPTOR_SHA256 above\n'
+            'and in ACCEPTED in tests/test_permission_catalog_history.py. Revert whatever\n'
+            'changed in the module(s) named above.'
+            % ', '.join(moved))
+    if unpinned:
+        raise RuntimeError(
+            'Catalog version %s is selectable but has no pinned descriptor.\n'
+            '\n'
+            'Every version known_catalog() can hand back is a descriptor some root may have\n'
+            'stored, so each one needs its sha256 in ACCEPTED_DESCRIPTOR_SHA256 above and a\n'
+            'line in ACCEPTED in tests/test_permission_catalog_history.py. Add both; do not\n'
+            'change a line that is already in either.'
+            % ', '.join(unpinned))
+    _VERIFIED_ACCEPTED = True
+
+
 class _MembershipVisibility:
     def facts(self, root, union_scopes, union_subjects):
         # Reuse snapshot's exact raw/logical classifier (including both native
@@ -129,7 +196,10 @@ def known_catalog(version):
     from . import permission_deletion_catalog, permission_sales_deletion_catalog
     from . import permission_payment_deletion_catalog, permission_bill_deletion_catalog
     from . import permission_credit_correction_catalog
-    return {
+    from . import permission_credit_deletion_catalog, permission_deposit_deletion_catalog
+    from . import permission_job_time_catalog
+    from . import permission_journal_deletion_catalog
+    known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
         c.DELETE_POLICY_VERSION: permission_deletion_catalog,
@@ -137,12 +207,21 @@ def known_catalog(version):
         c.PAYMENT_DELETE_POLICY_VERSION: permission_payment_deletion_catalog,
         c.BILL_DELETE_POLICY_VERSION: permission_bill_deletion_catalog,
         c.CREDIT_CORRECTION_POLICY_VERSION: permission_credit_correction_catalog,
-    }.get(version)
+        c.CREDIT_DELETE_POLICY_VERSION: permission_credit_deletion_catalog,
+        c.DEPOSIT_DELETE_POLICY_VERSION: permission_deposit_deletion_catalog,
+        c.JOB_TIME_POLICY_VERSION: permission_job_time_catalog,
+        c.JOURNAL_DELETE_POLICY_VERSION: permission_journal_deletion_catalog,
+    }
+    # Each module hashed its own descriptor when it was imported just above, so this is
+    # a handful of string comparisons, once per process, and no descriptor is hashed for
+    # it. See ACCEPTED_DESCRIPTOR_SHA256 for why it is not done at module scope.
+    _verify_accepted(known)
+    return known.get(version)
 
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.CREDIT_CORRECTION_POLICY_VERSION)
+    return known_catalog(c.JOURNAL_DELETE_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

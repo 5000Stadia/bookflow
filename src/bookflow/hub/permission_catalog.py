@@ -109,7 +109,7 @@ class CatalogManifest:
 ROLES = ('readonly', 'standard', 'admin', 'owner')
 THRESHOLDS = ('authenticated', 'member', 'standard', 'admin', 'owner', 'hub_admin')
 _SCOPE_KINDS = ('hub', 'organization', 'company', 'future_company')
-from bookflow.core.deletion_families import BILL_FAMILIES, PREPARED_FAMILIES, PURCHASE_FAMILIES, TOMBSTONE_TABLE, capability as deletion_capability
+from bookflow.core.deletion_families import BILL_FAMILIES, CREDIT_FAMILIES, DEPOSIT_FAMILIES, PREPARED_FAMILIES, PURCHASE_FAMILIES, TOMBSTONE_TABLE, capability as deletion_capability
 DELETE_NAMES = tuple(map(deletion_capability, PREPARED_FAMILIES))
 # A prepared family may carry a registered Delete threshold only once its own
 # retained-deletion storage exists, so the one owner of that storage decides it.
@@ -125,15 +125,30 @@ BILL_DELETE_POLICY_VERSION = 'bill-deletion-v1'
 # other addition: the frozen ancestor is shared by every version in the chain and
 # an edit to it rewrites descriptors that roots already activated and stored.
 CREDIT_CORRECTION_POLICY_VERSION = 'credit-correction-v1'
-SCOPED_POLICY_VERSIONS = (CREDIT_CORRECTION_POLICY_VERSION, BILL_DELETE_POLICY_VERSION, PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
+CREDIT_DELETE_POLICY_VERSION = 'credit-memo-deletion-v1'
+DEPOSIT_DELETE_POLICY_VERSION = 'deposit-deletion-v1'
+# Recorded time. Its nine commands arrived after every version below was accepted,
+# and so did the source edits that moved five conditional-source call sites, which
+# the ancestor records by line number. Both belong to this delta: the ancestor's
+# line numbers are as frozen as its commands are.
+JOB_TIME_POLICY_VERSION = 'job-time-v1'
+JOURNAL_DELETE_POLICY_VERSION = 'journal-deletion-v1'
+# Newest first, and the order here is the chain order: deposit sits on credit-memo,
+# which sits on the credit corrections, which sit on bill. Nothing reads the order --
+# it is a membership tuple -- but a reader deriving the chain from it should get the
+# real one.
+SCOPED_POLICY_VERSIONS = (JOURNAL_DELETE_POLICY_VERSION, JOB_TIME_POLICY_VERSION, DEPOSIT_DELETE_POLICY_VERSION, CREDIT_DELETE_POLICY_VERSION, CREDIT_CORRECTION_POLICY_VERSION, BILL_DELETE_POLICY_VERSION, PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
 PURCHASE_DELETE_FAMILIES = PURCHASE_FAMILIES
 BILL_DELETE_FAMILIES = BILL_FAMILIES
+CREDIT_DELETE_FAMILIES = CREDIT_FAMILIES
+DEPOSIT_DELETE_FAMILIES = DEPOSIT_FAMILIES
 # Every family whose Delete capability the catalog may carry at all. The frozen
 # ancestors declare the prepared four; the purchase and bill families arrive with
 # their own delta, so this list is what keeps the company-only Delete requirement
 # bounded rather than open.
 SUPPORTED_DELETE_NAMES = (*DELETE_NAMES, *('transaction.'+family+'.delete'
-                                           for family in PURCHASE_DELETE_FAMILIES + BILL_DELETE_FAMILIES))
+                                           for family in PURCHASE_DELETE_FAMILIES + BILL_DELETE_FAMILIES
+                                           + CREDIT_DELETE_FAMILIES + DEPOSIT_DELETE_FAMILIES))
 
 
 class InputErrorCategory(str, Enum):

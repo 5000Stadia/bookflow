@@ -2,16 +2,27 @@
 from copy import deepcopy
 from bookflow.core.money import Money
 from bookflow.core.errors import BookflowError
+from bookflow.company.billing_facts import BILLING_KINDS
+
+# The nouns a sale can be billed from, spelled as the URL segments they are reached by. Derived
+# from the one place the billable work kinds are declared, so a kind that gains billing gains
+# its billing page, its conversion forms and its remaining-work panel in the same change.
+NOUNS = tuple(kind.replace('_', '-') for kind in BILLING_KINDS)
 
 
 def is_conversion(noun, verb):
-    return noun in ('estimate', 'work-order') and verb in ('invoice', 'sales-receipt')
+    return noun in NOUNS and verb in ('invoice', 'sales-receipt')
 
 
 def context(result, company_id, source=None):
+    from bookflow.adapters.workbench.work import KIND_TITLES
     out = deepcopy(result)
     out['source_url'] = f"/c/{company_id}/{out['source_kind'].replace('_', '-')}/{out['source_id']}"
     out['owner_url'] = f"/c/{company_id}/{out['owner_kind'].replace('_', '-')}/{out['owner_id']}"
+    # What the owning document is called where a person reads it, rather than the stored kind:
+    # "Time activity" is the table's spelling, and no bookkeeper calls it that.
+    out['owner_label'] = KIND_TITLES.get(out['owner_kind'],
+                                         out['owner_kind'].replace('_', ' ').capitalize())
     quoted = {line['line_id']: line for line in (source or {}).get('revision', {}).get('lines', [])}
     for line in out['lines']:
         line['quoted_rate'] = (quoted.get(line['line_id'], {}).get('unit_price') or {}).get('amount')

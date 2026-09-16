@@ -18,7 +18,7 @@ from bookflow.company import document_effects as effects, journals, sales, sales
 from bookflow.company import journal_custom_fields as custom, payment_queries as q
 from bookflow.company.deposit_models import (ReplacementDocument, InlineDocument, Account,
     SourceRow, Additional, CashBack, Dimensions, Intent, Effect, amount)
-from bookflow.company.deposit_lifecycle_models import PostInput, UpdateInput, VoidInput
+from bookflow.company.deposit_lifecycle_models import DeleteInput, PostInput, UpdateInput, VoidInput
 from bookflow.company.deposit_resolution import resolve_account, resolve_additional
 from bookflow.core import clock
 from bookflow.core.errors import BookflowError
@@ -35,9 +35,17 @@ class Prepared:
     data_json: str
     custom_plan: custom.JournalCustomFieldPlan | None
     binding: OSBinding | Credential
+    # The admission this plan was prepared under, carried so the save re-resolves with the
+    # same one. `deposit delete` prepares without posting authority -- its authority is the
+    # family Delete grant -- and a save that silently demanded `ledger.post` again would
+    # make the whole command unreachable for exactly the person it exists for.
+    posting: bool = True
 
 
-INPUTS={'post':PostInput,'update':UpdateInput,'void':VoidInput}
+INPUTS={'post':PostInput,'update':UpdateInput,'void':VoidInput,'delete':DeleteInput}
+# One declaration, at the bottom of the deposit stack, for every layer that has to agree
+# about which verbs cancel rather than restate.
+CANCELLING=deposit_validation.CANCELLING
 
 
 
@@ -60,24 +68,24 @@ def _logical(value, mapping):
 
 
 
-def recover(s,ctx,inp,verb,binding):
+def recover(s,ctx,inp,verb,binding,*,posting=True):
     """Exact business replay skips its old guard, never current admission."""
     from bookflow.company import deposit_dependency_history as history
-    history._authorize_binding_graph(s,binding,(),write=True)
+    history._authorize_binding_graph(s,binding,(),write=posting)
     if ctx.on_behalf_of != binding.on_behalf_of:
         raise BookflowError('E_UNAUTHENTICATED')
     saved=operations.find(s,inp.operation_key)
     if saved is not None:
         targets=effects.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
         try:
-            history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=True)
+            history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=posting)
         except BookflowError as error:
             if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
             raise
-    return operations.recover(s,ctx,inp,verb,binding=binding)
+    return operations.recover(s,ctx,inp,verb,binding=binding,posting=posting)
 
 
-def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
+def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True):
     """Complete snapshot resolution without DML; prospective IDs remain private."""
     if verb not in INPUTS:raise ValueError('unsupported private deposit action')
     inp=INPUTS[verb].model_validate_json(inp.model_dump_json(by_alias=True,exclude_unset=True))
@@ -85,7 +93,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
     from bookflow.core.publication import OSBinding
     if binding is None:
         binding = OSBinding.from_session(s, ctx.on_behalf_of)
-    recovered=recover(s,ctx,inp,verb,binding)
+    recovered=recover(s,ctx,inp,verb,binding,posting=posting)
     if recovered is not None:return recovered
     original_request = history.request(dict(command='deposit '+verb,
         input=inp.model_dump(mode='json', by_alias=True, exclude_unset=True),
@@ -109,12 +117,15 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         found=effects.rows(s,c.transactions,c.transactions.c.id==inp.deposit,c.transactions.c.type=='deposit')
         if len(found)!=1:raise BookflowError('E_RECORD_NOT_FOUND')
         old=found[0]
+        # A deleted deposit is retained history: its own owner refuses every further write.
+        from bookflow.company.deposit_deletions import require_not_deleted
+        require_not_deleted(s,old['id'])
     from bookflow.company import deposit_draft_provider as provider
-    document=None if verb=='void' else provider.load(s,ctx,inp.document,binding,
+    document=None if verb in CANCELLING else provider.load(s,ctx,inp.document,binding,
         target=old['id'] if old else None,expected_target_version=inp.expected_version if old else None)
     requested=[] if document is None else [r.source for r in document.sources]
-    targets=dependencies.authorize(s,old['id'] if old else None,requested,write=True)
-    history._authorize_binding_graph(s,binding,targets,write=True)
+    targets=dependencies.authorize(s,old['id'] if old else None,requested,write=posting)
+    history._authorize_binding_graph(s,binding,targets,write=posting)
     if verb!='post' and (not ctx.reason or not ctx.reason.strip() or len(ctx.reason)>140):
         raise BookflowError('E_REASON_REQUIRED')
     if operations.find(s, inp.operation_key) is not None:
@@ -134,7 +145,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
     mapping={} if old else {identity:'new-deposit'}
     if not headers:mapping[header_row]='new-header'
     sequence=None;custom_plan=None
-    if verb=='void':
+    if verb in CANCELLING:
         resolved=previous;number=old['number'];memo=prior['memo'];changed=old['status']=='posted'
     else:
         resolved,number,memo,custom_plan,changed,sequence,maximum=resolve_replacement(
@@ -142,7 +153,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
             keys=keys,maximum=maximum,mapping=mapping,binding=binding)
     if changed:
         journals.open_dates(s,[resolved.intent.date]+([prior['date']] if prior else []))
-        if verb!='void':
+        if verb not in CANCELLING:
             if document.pin is None:
                 deposit_validation.validate_current(resolved,s,replacing_deposit=identity,previous=previous)
             else:
@@ -187,7 +198,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         mapping=mapping,at=clock.now_iso(),event=new_id(),operation_id=new_id(),
         issuer=json.loads(prior['issuer_snapshot']) if prior else {**{k:v for k,v in s.company_info_row.items() if k in ('id','legal_name','home_currency') or k.startswith(('address_','legal_address_','ship_address_'))}, 'display_name':readset.issuer.display_name})
     if document is not None and document.pin is not None:data['draft']=document.pin.model_dump(mode='json')
-    return Prepared(verb,inp.model_dump_json(by_alias=True,exclude_unset=True),fingerprint,guard,q.canonical(data),custom_plan,binding)
+    return Prepared(verb,inp.model_dump_json(by_alias=True,exclude_unset=True),fingerprint,guard,q.canonical(data),custom_plan,binding,posting)
 
 
 def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, maximum, mapping, binding, overlay=None):

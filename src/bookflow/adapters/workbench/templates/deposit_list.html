@@ -7,11 +7,13 @@
 {% for key,label in [('deposit_to','Bank name or ID'),('date_from','Date from'),('date_to','Date to'),('number','Exact deposit number'),('q','Search number, memo or received from')] %}
 <label>{{ label }}<input name="{{ key }}" value="{{ filters[key] }}" type="{{ 'date' if key in ['date_from','date_to'] else 'text' }}"></label>
 {% endfor %}
-{% for key,label,options in [('status','Status',[('','All posted and voided'),('posted','Posted'),('voided','Voided')]),('sort','Sort by',[('date','Date'),('number','Number'),('bank_total','Revision bank total')]),('direction','Direction',[('desc','Descending'),('asc','Ascending')])] %}
+{% for key,label,options in [('status','Status',[('','All posted and voided'),('posted','Posted'),('voided','Voided'),('deleted','Deleted')]),('sort','Sort by',[('date','Date'),('number','Number'),('bank_total','Revision bank total')]),('direction','Direction',[('desc','Descending'),('asc','Ascending')])] %}
 <label>{{ label }}<select name="{{ key }}">{% if filters[key] and filters[key] not in options|map(attribute=0)|list %}<option selected value="{{ filters[key] }}">{{ filters[key] }}</option>{% endif %}{% for value,title in options %}<option value="{{ value }}"{% if filters[key]==value %} selected{% endif %}>{{ title }}</option>{% endfor %}</select></label>
 {% endfor %}
+<label><input type="checkbox" name="include_deleted" value="1"{% if filters['include_deleted'] %} checked{% endif %}> Include deleted deposits</label>
 <button type="submit">Find deposits</button><a href="{{ list_url }}">Clear filters</a>
 </form>
+{% if request.query_params.get('deleted') %}<p role="status">Deposit deleted. <a href="{{ list_url }}/{{ request.query_params.get('deleted') }}?include_deleted=1">View retained record and history</a></p>{% endif %}
 {% if error_code %}<section class="deposit-unavailable" role="status"><p>{{ message }}</p><p>{{ error_code }}</p><a id="deposit-restart" href="{{ restart_url }}">Restart with these filters</a></section>{% else %}
 <section class="deposit-card" aria-label="All matching deposits totals">
 <h2>Totals for all {{ page.total_count }} matching deposits</h2>

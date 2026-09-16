@@ -10,7 +10,7 @@ from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTa
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.tax_attribution import TaxDetails
 from bookflow.company.tax_forecasts import WorkTaxForecast
-from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof, ExactFraction
+from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof, ExactFraction, BILLING_KINDS
 from bookflow.core.models import WriteOutput
 from bookflow.company.payment_outputs import InvoiceSettlementOutput, InvoiceCorrectionOutput
 
@@ -201,7 +201,7 @@ class BillingProgressLine(StrictModel):
 
 class WorkBillingSourceEffect(StrictModel):
     source_id: str
-    source_kind: Literal['estimate', 'work_order']
+    source_kind: Literal[BILLING_KINDS]
     version_before: int
     version_after: int
     active_before: bool
