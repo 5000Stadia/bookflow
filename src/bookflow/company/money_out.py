@@ -39,6 +39,71 @@ KIND = {'check': 'check', 'card-charge': 'card_charge', 'transfer': 'transfer'}
 # What each document is called in a sentence a person reads.
 LABEL = {'check': 'check', 'card-charge': 'credit card charge', 'transfer': 'transfer'}
 
+# ``KIND`` read the other way, so the two spellings of one document stay one fact.
+NOUN = {kind: noun for noun, kind in KIND.items()}
+
+# What the stored kind is called in a sentence, keyed the way the marker stores it.
+KIND_LABEL = {kind: LABEL[noun] for noun, kind in KIND.items()}
+
+# This module's name where a writer declares to ``journals.prepare`` which document it is
+# posting through it. A transfer corrects and voids itself through the journal writer, so it
+# names itself there exactly as inventory names ``inventory.OWNER``; without that the guard
+# below would refuse a transfer the right to change its own accounting.
+OWNER = 'money_out'
+
+# The command that owns cancelling each document. A check and a card charge have a Delete of
+# their own; a transfer has no deletion family -- it is absent from ``core.deletion_families``
+# -- so what genuinely owns cancelling one is ``transfer void``, which reverses it exactly at
+# its own date and leaves its history readable.
+CANCELLING_COMMAND = {'check': 'check delete', 'card_charge': 'card-charge delete',
+                      'transfer': 'transfer void'}
+
+
+def _documents(*columns, kind=None):
+    """Transactions carrying a money-out marker, joined once for every reader here.
+
+    One join, because the marker and the transaction are read together everywhere in this
+    module and a second copy of it is a second thing to keep true.
+    """
+    t, m = c.transactions, c.money_out_documents
+    query = sa.select(*(columns or (t,))).join(m, m.c.transaction_id == t.c.id)
+    return query if kind is None else query.where(m.c.kind == kind)
+
+
+def owning_document_kind(s, transaction_id):
+    """Which of the three documents this journal-stored transaction really is, or None.
+
+    A check, a card charge and a transfer are all stored as ``transactions.type =
+    'journal_entry'``, and ``money_out_documents`` is the only place the difference is kept.
+    So this is what the journal editor has to ask before it touches a transaction, and
+    nothing else answers it: the item-line guard finds no rows on a cheque entered with no
+    item grid, and the inventory guard finds no inventory document on one either.
+    """
+    if not sa.inspect(s.company.conn).has_table('money_out_documents'):
+        return None
+    return s.company.conn.execute(_documents(c.money_out_documents.c.kind).where(
+        c.transactions.c.id == transaction_id)).scalar_one_or_none()
+
+
+def owned_elsewhere(kind, transaction_id, *, verb, field='journal'):
+    """The refusal a journal-editor write gets when the entry is really one of the three.
+
+    Named by what the document actually is and pointed at the command that owns it, rather
+    than accepted and rewritten as a plain journal -- which would leave the document's own
+    footer describing a posting nobody entered, or, on a delete, write a second tombstone on
+    a transaction that already carries one from its own family.
+    """
+    noun, label = NOUN[kind], KIND_LABEL[kind]
+    owning = CANCELLING_COMMAND[kind] if verb == 'delete' else noun + ' ' + verb
+    tail = (f'A transfer has no deletion of its own; use `{owning}` to reverse it exactly at '
+            'its own date and keep its history.') if verb == 'delete' and kind == 'transfer' else (
+            f'Use `{owning}` so the document and its money change together.')
+    return BookflowError('E_VALIDATION',
+        message=f'This entry is a {label}, not a plain journal entry. ' + tail,
+        details={'fields': [{'field': field,
+                             'problem': f'a {label} is not {verb}d as a journal entry'}],
+                 'money_out_document': kind, 'transaction_id': transaction_id, 'next': owning})
+
 
 def resolve(s, selector, noun):
     """The document this selector names, by stable id or by the number a person reads off it.
@@ -64,7 +129,7 @@ def resolve(s, selector, noun):
     """
     t, m = c.transactions, c.money_out_documents
     key = selector.upper() if is_ulid(selector) else selector
-    base = sa.select(t).join(m, m.c.transaction_id == t.c.id).where(m.c.kind == KIND[noun])
+    base = _documents(kind=KIND[noun])
     found = [dict(r) for r in s.company.conn.execute(base.where(t.c.id == key)).mappings()]
     if not found and noun == 'check':
         from bookflow.company import check_numbers

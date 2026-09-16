@@ -3,8 +3,13 @@ import json
 from functools import lru_cache
 from fastapi import Request
 from fastapi.responses import HTMLResponse
+from bookflow.adapters.workbench.transaction_detail import IRREGULAR as _IRREGULAR
 from bookflow.core.deletion_families import FAMILIES, TOMBSTONE_TABLE, capability
 from bookflow.core.errors import BookflowError
+
+
+def _detail_noun(family):
+    return _IRREGULAR.get(family, family.replace('_', '-'))
 
 
 # core.deletion_families owns which families exist and which of them have shipped
@@ -13,6 +18,10 @@ from bookflow.core.errors import BookflowError
 DELETABLE = tuple(family for family in FAMILIES if family in TOMBSTONE_TABLE)
 CAPS = tuple(capability(family) for family in DELETABLE)
 FIELDS = tuple(family + '_delete' for family in DELETABLE)
+# The page each deletable family is read on. `transaction_detail` already owns which stored
+# document types are not named after their own page -- a journal entry is read at `journal`
+# -- so that one mapping answers here too rather than being written out a second time.
+NOUNS = tuple(_detail_noun(family) for family in DELETABLE)
 
 
 @lru_cache(maxsize=1)
@@ -21,8 +30,7 @@ def grant_controls():
     from bookflow.adapters.workbench import naming
     from bookflow.core import registry
     labels = []
-    for family in DELETABLE:
-        noun = family.replace('_', '-')
+    for noun in NOUNS:
         labels.append(naming.subject(noun, registry.noun_meta(noun)))
     return tuple(zip(FIELDS, labels))
 

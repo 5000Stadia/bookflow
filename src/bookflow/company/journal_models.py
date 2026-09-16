@@ -218,6 +218,7 @@ class JournalVoidInput(_Input):
 class JournalShowInput(_Input):
     journal: _Selector
     revision_number: _Version | None = None
+    include_deleted: bool = Field(default=False, description='Include retained deleted journal entries and their deletion attribution; ordinary reads omit them.')
 
 
 class _PageInput(_Input):
@@ -230,6 +231,7 @@ class JournalQueryInput(_PageInput):
     date_to: _Date | None = None
     status: Literal["posted", "voided"] | None = None
     query: str | None = Field(default=None, max_length=2000)
+    include_deleted: bool = Field(default=False, description='Include retained deleted journal entries and their deletion attribution; ordinary reads omit them.')
 
     @model_validator(mode="after")
     def ordered_dates(self) -> Self:
@@ -240,3 +242,4 @@ class JournalQueryInput(_PageInput):
 
 class JournalHistoryInput(_PageInput):
     journal: _Selector
+    include_deleted: bool = Field(default=False, description='Include retained deleted journal entries and their deletion attribution; ordinary reads omit them.')

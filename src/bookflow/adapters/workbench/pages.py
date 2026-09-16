@@ -1152,12 +1152,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         # Which lists offer the deleted-record controls is derived from the one owner of
         # the deletion families, never hand-listed here: a family whose retained storage
         # ships gains them in the same change.
-        from bookflow.adapters.workbench.permissions import DELETABLE
+        from bookflow.adapters.workbench.permissions import NOUNS as DELETABLE_NOUNS
         return render(
             "list.html",
             request,
             has_show=registry.get(f"{noun} show") is not None,
-            deletable=noun.replace('-', '_') in DELETABLE
+            deletable=noun in DELETABLE_NOUNS
                       and 'include_deleted' in cmd.input_model.model_fields,
             deleted_label=Naming.subject(noun, meta),
             company_id=company_id,
@@ -1270,13 +1270,45 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             except BookflowError as error:
                 return page_error(request, error)
             if owned:
+                # The entry is really a check, a card charge or a transfer. The journal
+                # editor refuses all three by name, so this page offers the document's own
+                # verbs rather than buttons the core declines.
                 purchase_noun, purchase_record = owned
-                verbs = [v for v in verbs if v.verb not in ('update', 'void')]
+                verbs = [v for v in verbs if v.verb not in ('update', 'void', 'delete')]
                 verbs += [registry.get(purchase_noun + ' ' + verb) for verb in ('update', 'void')
                     if _role_allows(registry.get(purchase_noun + ' ' + verb), role_view, hub_admin=cred.hub_admin)]
+            else:
+                # An ordinary journal entry, read exactly as a purchase's record page reads
+                # one: Delete is an explicit per-user grant, so the real command decides
+                # whether it is offered at all, and the writing verbs go when posting is
+                # denied or the entry is already deleted.
+                effective = run(request, 'membership effective', {'company': company_id}, None)
+                post_bits = [x for x in effective['permissions']
+                             if x['requirement'] == {'capability': 'ledger.post', 'threshold': 'standard'}]
+                may_post = effective['mode'] != 'policy_v1' or any(x['admitted'] for x in post_bits)
+                verbs = [v for v in verbs if v.verb != 'delete' and not (
+                    v.verb in ('post', 'update', 'void') and (out.get('deletion') or not may_post))]
+                if not out.get('deletion') and Purchases.delete_allowed(
+                        lambda *a, **kw: run(request, *a, **kw), company_id, 'journal', out):
+                    verbs.append(registry.get('journal delete'))
 
         purchase_history = None
         purchase_history_paging = None
+        if command_noun == 'journal' and company_id and purchase_record is None and request.query_params.get('history') == '1':
+            # A deleted entry is reached from its list by "View retained record and history",
+            # so the journal's own revisions answer that link the way a purchase's do.
+            try:
+                purchase_history = run(request, 'journal history', {'journal': record_id,
+                    'include_deleted': True,
+                    'limit': F.query_value(registry.get('journal history').input_model, 'limit',
+                                           request.query_params.get('limit', '50')),
+                    'cursor': request.query_params.get('cursor')}, company_id)
+            except BookflowError as error:
+                if error.code == 'E_QUERY_STALE':
+                    restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k not in Paging.CARRIED])
+                    return render('error.html', request, error=error.to_dict(), restart_url=restart)
+                return page_error(request, error)
+            purchase_history_paging = Paging.controls(request.url.path, request.query_params, purchase_history['next_cursor'])
         if purchase_record:
             if purchase_record.get('deletion'):
                 visible_record.update(status='deleted', deletion=purchase_record['deletion'])
@@ -1290,9 +1322,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 verbs.append(registry.get(purchase_noun+' delete'))
             if request.query_params.get('history')=='1':
                 try:
+                    history_model = registry.get(purchase_noun+' history').input_model
                     purchase_history = run(request,purchase_noun+' history',
-                        {purchase_noun.replace('-','_'):record_id,'include_deleted':True,
-                         'limit':F.query_value(registry.get(purchase_noun+' history').input_model,'limit',request.query_params.get('limit','50')),
+                        {purchase_noun.replace('-','_'):record_id,
+                         **({'include_deleted':True} if 'include_deleted' in history_model.model_fields else {}),
+                         'limit':F.query_value(history_model,'limit',request.query_params.get('limit','50')),
                          'cursor':request.query_params.get('cursor')},company_id)
                 except BookflowError as error:
                     if error.code == 'E_QUERY_STALE':
