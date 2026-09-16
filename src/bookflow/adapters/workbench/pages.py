@@ -1572,6 +1572,24 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 attempted.update(Credits.refund_rows(found))
                 attempted['f:customer'] = str(found[0]['customer_id'])
                 workflow_note = Credits.refund_note(found)
+        if company_id and noun == 'customer-refund' and verb == 'post' and not attempted:
+            # The other way in: a receipt whose cash was more than the invoices it settled.
+            # This is where a person stands when they look at a cheque that was too large and
+            # decide to send the difference back, so the window opens from the payment itself.
+            receipts: list[dict[str, Any]] = []
+            try:
+                for payment_id in request.query_params.getlist('payment')[:20]:
+                    receipts.append(run(request, 'payment show', {'payment': payment_id}, company_id))
+            except BookflowError as err:
+                return page_error(request, err)
+            receipts = [row for row in receipts
+                        if row['status'] == 'posted' and Credits.overage(row) is not None]
+            if receipts:
+                attempted.update(Credits.overpayment_rows(receipts))
+                # Whose money it is comes off the receipt's own component, which may be a job
+                # rather than the payer: the refund pays back the party the capacity belongs to.
+                attempted['f:customer'] = str(Credits.overage(receipts[0])['party_id'])
+                workflow_note = Credits.overpayment_note(receipts)
         if noun == 'invoice' and verb == 'update' and shown and not attempted:
             settlement = run(request, 'invoice settlement', {'invoice': shown['id']}, company_id)
             attempted['f:settlement_guard'] = settlement['settlement_guard']

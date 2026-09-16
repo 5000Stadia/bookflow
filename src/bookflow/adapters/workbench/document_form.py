@@ -161,10 +161,12 @@ REFUND_PRIMARY = ('customer', 'date', 'number', 'class_id')
 REFUND_TERMS = ('funding_account', 'method', 'check_number', 'reference')
 REFUND_FOOTER = ('memo',)
 
-# The refund's grid is not a sale and not an expense: it is the credits being spent. Each row
-# names one credit memo and how much of it is being paid out, and the document's total is what
-# those rows add up to.
-REFUND_GRID = (('credit_memo', 'Credit memo'), ('amount', 'Amount'))
+# The refund's grid is not a sale and not an expense: it is the money the customer already has
+# standing, being handed back. Each row names one credit memo or one payment they overpaid on,
+# and how much of it is being paid out; the document's total is what those rows add up to. Both
+# columns are on the row because a row is one or the other, never both, and a person reading
+# the grid has to be able to see which.
+REFUND_GRID = (('credit_memo', 'Credit memo'), ('payment', 'Payment'), ('amount', 'Amount'))
 
 # The vendor credit's header: the bill's, one field shorter -- a credit has no terms and no
 # due date, so the vendor's own credit-note number takes the place of the bill's reference.
@@ -220,6 +222,7 @@ COLUMN_HINTS = {
     'source_invoice': 'The posted invoice these units came back from',
     'source_line': 'Which line of that invoice came back',
     'credit_memo': 'The credit being paid back',
+    'payment': 'The payment whose extra cash is being paid back',
 }
 
 # The pricing selector, in the row's own panel rather than in the columns.
@@ -240,7 +243,8 @@ WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5f
           'memo': ('minmax(9rem, 1.6fr)', 9), 'customer': ('minmax(8rem, 1.1fr)', 8),
           'billable': ('4.5rem', 4.5), 'source_invoice': ('minmax(8rem, 1.1fr)', 8),
           'source_line': ('minmax(8rem, 1.1fr)', 8),
-          'credit_memo': ('minmax(11rem, 2fr)', 11)}
+          'credit_memo': ('minmax(11rem, 2fr)', 11),
+          'payment': ('minmax(11rem, 2fr)', 11)}
 ACTIONS_WIDTH = ('4.5rem', 4.5)
 
 # Per-line controls that belong to pricing machinery rather than the document grid.
@@ -284,6 +288,7 @@ LINE_LABELS = {
     'customer': 'Customer:Job',
     'source_invoice': 'Returned from', 'source_line': 'Returned line',
     'credit_memo': 'Credit memo',
+    'payment': 'Payment being refunded',
     'class_mode': 'How this line is classed',
     'party': 'Customer, job or other name this line is for',
 }
@@ -342,10 +347,13 @@ HELP = {
                    'available until you put it against an invoice or refund it. Every line either '
                    'names an item or returns a line of one posted invoice; one credit memo cannot '
                    'hold both.',
-    'customer-refund': 'A refund pays a customer back what a credit memo says they are owed. It '
-                       'debits Accounts Receivable and credits the account the money left, and posts '
-                       'nothing else -- the credit already took the income and the tax back down. '
-                       'Every refunded cent comes from a credit named below.',
+    'customer-refund': 'A refund pays a customer back money they already have standing: a credit '
+                       'memo you issued them, or the extra cash on a payment that was more than '
+                       'the invoices it settled. It debits Accounts Receivable and credits the '
+                       'account the money left, and posts nothing else -- a credit already took '
+                       'the income and the tax back down, and an overpayment never recognised any. '
+                       'Every row below names one credit memo or one payment, and what it pays '
+                       'back stops being available the moment this is saved.',
     'vendor-credit': 'A vendor credit records money a vendor owes you back. Accounts Payable is '
                      'debited the total and each line credits the account the original cost went to, '
                      'so what the vendor is owed falls by exactly that. It is never due and appears '
@@ -417,8 +425,8 @@ NOUN_DESCRIPTIONS = {
                     'number': 'Credit memos share the invoice number series, so invoices and '
                               'credits read as one run of numbers to a customer. Leave it empty '
                               'to take the next one.'},
-    'customer-refund': {'customer': 'Optional guard: the customer you expect these credits to '
-                                    'belong to. The refund is refused if they belong to anyone '
+    'customer-refund': {'customer': 'Optional guard: the customer you expect this money to '
+                                    'belong to. The refund is refused if it belongs to anyone '
                                     'else.',
                         'funding_account': 'The bank or card account the money leaves.',
                         'method': 'How the customer was paid back.',
@@ -588,7 +596,7 @@ def layout(noun, leaves):
     # the page rather than rendering an empty one. A bill has two of them -- the accounts a
     # person types and the things they buy -- and they are one band with a tab apiece rather
     # than two bands, because a line belongs to one grid or the other and never to both.
-    lines_title = ('Credits paid back' if refund else
+    lines_title = ('Paid back' if refund else
                    'Expenses' if money_out or bill or vendor_credit else 'Lines')
     primary_path = ('sources' if refund else
                     'expenses' if money_out or bill or vendor_credit else 'lines')
@@ -756,11 +764,11 @@ def refund_totals(result):
     currency = result['currency']
     figure = f"{result['total']['amount']} {currency}"
     funding = (((result.get('revision') or {}).get('profile') or {}).get('funding_account') or {})
-    rows = [_row('Credits paid out', figure),
+    rows = [_row('Paid back', figure),
             _row('Out of ' + (funding.get('full_name') or 'the funding account'), figure, True)]
-    return (rows, 'Accounts Receivable is debited and that account is credited. The credits '
-            'named above are worth exactly this much less and cannot be applied to an invoice '
-            'as well.', True)
+    return (rows, 'Accounts Receivable is debited and that account is credited. The credits and '
+            'payments named above are worth exactly this much less and cannot be applied to an '
+            'invoice as well.', True)
 
 
 def vendor_credit_totals(result):

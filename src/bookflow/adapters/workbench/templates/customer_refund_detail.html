@@ -3,7 +3,7 @@
 <section class="workspace-card document-detail sales-document" aria-label="Customer refund">
 <h2>Customer refund {{ r.number }}</h2>
 <p><strong>{{ 'Preview — nothing written' if credit.preview else credit.record.status|capitalize }}</strong> · {{ r.date }} · {{ r.currency }}</p>
-{% if credit.record.void_reason %}<p class="warn">Voided: {{ credit.record.void_reason }}. Historical amounts remain visible; every credit this refund paid out is worth again exactly what it was worth before.</p>{% endif %}
+{% if credit.record.void_reason %}<p class="warn">Voided: {{ credit.record.void_reason }}. Historical amounts remain visible; every credit memo and every payment this refund paid out is worth again exactly what it was worth before.</p>{% endif %}
 <div class="sales-parties">
 <div><h3>Paid back to</h3><p>{% if credit.preview %}{{ p.customer.label }}{% else %}<a href="{{ credit.customer_url }}">{{ p.customer.label }}</a>{% endif %}</p>{% if p.customer.company_name %}<p>{{ p.customer.company_name }}</p>{% endif %}</div>
 <div><h3>Paid by</h3><p>{{ credit.issuer.legal_name or credit.issuer.display_name }}</p>{% for part in credit.issuer_address %}<div>{{ part }}</div>{% endfor %}</div>
@@ -15,16 +15,16 @@
 <dt>Reference</dt><dd>{{ p.reference or '—' }}</dd>
 <dt>A/R account</dt><dd>{{ p.ar_account.full_name }}</dd>
 </dl>
-<div class="table-wrap"><table class="ledger-table document-lines refund-sources"><thead><tr><th>Credit memo</th><th>Credit date</th><th>Paid out</th><th>Was worth</th></tr></thead><tbody>
+<div class="table-wrap"><table class="ledger-table document-lines refund-sources"><thead><tr><th>Paid out of</th><th>Its date</th><th>Paid out</th><th>Was worth</th></tr></thead><tbody>
 {% for row in credit.sources %}<tr>
-<td data-label="Credit memo" class="document-wide"><span class="document-cell-label" aria-hidden="true">Credit memo</span>{% if credit.preview %}{{ row.credit_memo_number }}{% else %}<a href="{{ row.url }}">{{ row.credit_memo_number }}</a>{% endif %}</td>
-<td data-label="Credit date"><span class="document-cell-label" aria-hidden="true">Credit date</span>{{ row.credit_memo_date }}</td>
+<td data-label="Paid out of" class="document-wide"><span class="document-cell-label" aria-hidden="true">Paid out of</span>{{ row.kind }} {% if credit.preview %}{{ row.label }}{% else %}<a href="{{ row.url }}">{{ row.label }}</a>{% endif %}</td>
+<td data-label="Its date"><span class="document-cell-label" aria-hidden="true">Its date</span>{{ row.source_date }}</td>
 <td data-label="Paid out" class="document-total"><span class="document-cell-label" aria-hidden="true">Paid out</span>{{ row.amount.amount }}</td>
 <td data-label="Was worth"><span class="document-cell-label" aria-hidden="true">Was worth</span>{{ row.available_before.amount }}</td>
 </tr>{% endfor %}
 </tbody><tfoot><tr><th colspan="3" class="document-wide">Total ({{ r.currency }})</th><th data-label="Total" class="document-total"><span class="document-cell-label">Total</span>{{ r.total.amount }}</th></tr></tfoot></table></div>
 {% if r.memo is not none %}<p>Memo: {{ r.memo }}</p>{% endif %}
-<p class="muted">A refund debits Accounts Receivable and credits the account the money left, and posts nothing else: the credit memos above already took the income and the sales tax back down. A refund typed wrong is corrected rather than voided, which keeps one document where one payment happened: the correction reverses this revision at its own date, posts the corrected one, and gives every credit back exactly what it was worth before taking the corrected amounts again.</p>
+<p class="muted">A refund debits Accounts Receivable and credits the account the money left, and posts nothing else: a credit memo above already took the income and the sales tax back down, and a payment above never recognised any — its cash simply exceeded the invoices it settled. A refund typed wrong is corrected rather than voided, which keeps one document where one payment happened: the correction reverses this revision at its own date, posts the corrected one, and gives every source back exactly what it was worth before taking the corrected amounts again.</p>
 {% if credit.correct_url %}<p class="actions"><a class="primary-action" data-refund-correct href="{{ credit.correct_url }}">Correct this refund</a></p>{% endif %}
 {% if credit.links %}<nav class="actions" aria-label="Customer refund revisions">{% for label, href in credit.links %}<a href="{{ href }}">{{ label }}</a>{% endfor %}</nav>{% endif %}
 </section>

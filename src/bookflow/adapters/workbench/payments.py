@@ -62,7 +62,15 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             if request.query_params.get('available'):
                 raw['has_available_credit'] = True
             result = run(request, 'payment query', dict(raw, limit=25), company_id)
+            # A posted receipt still holding cash no invoice took is an overpayment, and its
+            # row carries the way to send it back. The figure is the server's own unapplied
+            # total; whether that money can actually be refunded is the refund command's
+            # answer, not this page's, so the link opens the window rather than promising it.
+            may_refund = role_allows(registry.get('customer-refund post'), company,
+                                     hub_admin=credential(request).hub_admin)
             for row in result['items']:
+                row['refundable'] = (may_refund and row['status'] == 'posted'
+                                     and row['unapplied_minor_units'] > 0)
                 for field in ('received', 'applied', 'unapplied'):
                     row[field] = Money(row[field + '_minor_units'], row['currency']).to_dict()['amount']
             methods = run(request, 'payment-method list', {'include_inactive': True}, company_id)['items']
