@@ -277,17 +277,20 @@ def _refuse_stocked_document(lines):
         _refuse_stocked(line['profile'], field, line['source'])
 
 
-def _stock_entries(s, lines):
+def _stock_entries(s, lines, *, date):
     """The credited lines that bring stock back, in the shape the inventory ledger takes them.
 
-    A returned line is the inverse of the issue its source invoice line made. The quantity is
-    that line's *base* quantity, because stock is held in the item's base unit and something
-    sold by the case comes back to the shelf in eaches. The cost is the share of that issue's
-    own posted cost the returned interval owns, under the same endpoint rule in
-    ``credit_returns`` that decides the line's net and every tax cent -- so a line returned in
-    pieces gives back exactly what it took, and a later price or average cannot move a cent of
-    an issued credit. Both accounts come off the captured facts, never the item master, so
-    what a stored revision returns cannot change when the item is repointed.
+    A returned line is the inverse of the issue its source invoice line made, so it names that
+    issue and lets the stock ledger say what the share is worth. The quantity is the line's
+    *base* quantity, because stock is held in the item's base unit and something sold by the
+    case comes back to the shelf in eaches. Both accounts come off the captured facts, never
+    the item master, so what a stored revision returns cannot change when the item is
+    repointed.
+
+    Naming the issue rather than carrying a cost is the whole of it: a figure worked out here
+    would be frozen at what the average said on the day the credit was written, and a purchase
+    entered behind that sale afterwards would leave it stranded there while the sale itself was
+    recosted. The ledger recosts both together instead.
     """
     from bookflow.company import inventory, inventory_effects
     entries = []
@@ -298,17 +301,22 @@ def _stock_entries(s, lines):
         source = line['source']
         if source is None:      # refused by `_refuse_stocked` before any of this is reached
             raise BookflowError('E_INTERNAL', message='A standalone credit line carries stock.')
-        issued = inventory_effects.issued_cost(s, source['transaction_id'], source['document_line_id'])
-        quantity = int(source['base_quantity_microunits'])
-        if issued is None or issued['quantity_microunits'] != quantity:
+        issue = inventory_effects.live_issue(s, source['transaction_id'], source['document_line_id'])
+        if issue is None or -int(issue['quantity_microunits']) != int(source['base_quantity_microunits']):
             raise BookflowError('E_INTERNAL', message=(
                 'The invoice line being returned issued no stock, or issued a quantity its '
                 'own capture does not name.'))
+        # The ledger values a return out of the issue it gives back, and it reads its rows in
+        # date order, so a return dated before that sale has no cost to take a share of. It is
+        # refused here rather than valued at whatever the average happened to be, because
+        # goods cannot come back before they went out.
+        if date < issue['effective_date']:
+            raise _invalid('date', 'a return cannot be dated before the sale it returns; '
+                                   f"this line was sold on {issue['effective_date']}")
         entries.append(inventory_effects.return_entry(
             facts, key=line['envelope']['id'],
             quantity_microunits=line['base_quantity_microunits'],
-            amount=returns.share(issued['cost_minor_units'], quantity, line['intervals']),
-            class_id=line['envelope']['class_id']))
+            issue_id=issue['id'], class_id=line['envelope']['class_id']))
     return entries
 
 
@@ -561,7 +569,7 @@ def prepare(s, ctx, inp, *, previous=None):
     # behind, because nothing has been written.
     from bookflow.company import inventory_effects
     stock = inventory_effects.plan(
-        s, entries=_stock_entries(s, resolved['lines']),
+        s, entries=_stock_entries(s, resolved['lines'], date=resolved['date']),
         reversing=inventory_effects.own_movements(s, header['id']) if previous else (),
         date=resolved['date'], currency=currency)
     inventory_effects.open_dates(s, stock)

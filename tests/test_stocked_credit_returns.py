@@ -122,7 +122,7 @@ def _legacy_return(books, monkeypatch, invoice, reason):
     """
     from bookflow.company import credit_validation
     entries, check = credits._stock_entries, credit_validation._movements
-    monkeypatch.setattr(credits, '_stock_entries', lambda s, lines: [])
+    monkeypatch.setattr(credits, '_stock_entries', lambda s, lines, *, date: [])
     monkeypatch.setattr(credit_validation, '_movements', lambda s, data: None)
     stored = _return(books, invoice, reason=reason)
     monkeypatch.setattr(credits, '_stock_entries', entries)
@@ -294,6 +294,167 @@ def test_two_units_returned_on_one_line_come_back_together(books):
     assert credit['total']['minor_units'] == 2 * SALE
     assert _net(books) == {asset: STOCK, books['payable']: -STOCK}
     assert _stock(books, item, '2017-01-03') == ('2', STOCK)
+
+
+def test_everything_sold_and_everything_returned_leaves_no_cost_and_what_was_paid(books):
+    """Sell the lot, take it all back, with a backdated purchase landing in the middle.
+
+    Every unit that left came back, so cost of goods sold must end at nothing and the shelf
+    must be worth exactly what the two bills paid for it -- 2 at 8.00 and 2 at 4.00 is 2400
+    minor units over 4 units, and the supplier is owed that same 2400. No other answer is
+    defensible: a company that sold everything and got everything back cannot be holding
+    stock worth more than it paid, and cannot be carrying a negative cost of goods sold.
+    """
+    run = books['run']
+    item = _inventory_part(books)
+    asset = _inventory_asset(books)
+    run('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='2', unit_cost='8')]), reason='Receive stock')
+    invoice = run('invoice post', dict(customer=books['customer'], date='2017-01-02',
+        lines=[dict(item=item, quantity='2', unit_price=SOLD)]), reason='Sell both')
+    _return(books, invoice, date='2017-01-03', reason='One back')
+    # Backdated behind the sale and behind the return already taken, which is what makes the
+    # weighted average of that sale -- and so the cost the first return gave back -- move.
+    run('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='2', unit_cost='4')]), reason='A late bill for the first')
+    _return(books, invoice, date='2017-01-04', reason='The other one back')
+
+    assert _stock(books, item, '2017-01-04') == ('4', 2400)
+    assert _net(books) == {asset: 2400, books['payable']: -2400}
+
+
+def test_a_backdated_purchase_recosts_the_returns_it_displaced(books):
+    """The recost reaches the return, dated where the return is, not only the sale.
+
+    Same shape as the whole-lot case, read at the ledger instead of the totals: the sale is
+    corrected by +400 at its own date and the return already taken is corrected by -200 at
+    its own date, because a return is worth a share of what the sale is worth and the sale
+    just changed. Without the second row the first return keeps 8.00-era value for ever and
+    the difference is stranded in the inventory asset with nobody's name on it.
+    """
+    run = books['run']
+    item = _inventory_part(books)
+    run('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='2', unit_cost='8')]), reason='Receive stock')
+    invoice = run('invoice post', dict(customer=books['customer'], date='2017-01-02',
+        lines=[dict(item=item, quantity='2', unit_price=SOLD)]), reason='Sell both')
+    _return(books, invoice, date='2017-01-03', reason='One back')
+    run('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='2', unit_cost='4')]), reason='A late bill for the first')
+
+    rows = _movements(books, item)
+    issue = next(row for row in rows if row['kind'] == 'issue')
+    giveback = next(row for row in rows if row['returns_movement_id'] is not None)
+    # The return names the issue it gives back; that link is what carries the recost across.
+    assert giveback['returns_movement_id'] == issue['id']
+    recosts = {row['corrects_movement_id']: (row['effective_date'], row['value_minor_units'])
+               for row in rows if row['kind'] == 'recost'}
+    # 4 units cost 1600 + 800 = 2400, so the sale of 2 should have cost 2400*2/4 = 1200, not
+    # the 1600 it posted: +400 at the sale. The return of 1 owns 1200*1/2 = 600 of that, not
+    # the 800 it posted: -200 at the return.
+    assert recosts == {issue['id']: ('2017-01-02', 400), giveback['id']: ('2017-01-03', -200)}
+
+
+def test_partial_returns_telescope_across_a_backdated_purchase(books):
+    """What the old limit said could not be done, done: the shares still add to the whole.
+
+    Three units bought at 3.00 are sold together for 900, and one comes back. Then three more
+    at 1.00 land on the first, so six units cost 1200 and that sale should have cost
+    1200*3/6 = 600. The return already taken owns 600*1/3 = 200 of it and the two that come
+    back afterwards own 600*3/3 - 600*1/3 = 400. 200 + 400 is exactly the 600 the sale took,
+    so cost of goods sold ends at nothing and the shelf holds the 1200 that was paid.
+    """
+    run = books['run']
+    item = _inventory_part(books)
+    asset = _inventory_asset(books)
+    run('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='3', unit_cost='3')]), reason='Receive stock')
+    invoice = run('invoice post', dict(customer=books['customer'], date='2017-01-02',
+        lines=[dict(item=item, quantity='3', unit_price=SOLD)]), reason='Sell all three')
+    _return(books, invoice, date='2017-01-03', reason='One back')
+    assert _stock(books, item, '2017-01-03') == ('1', 300)
+
+    run('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='3', unit_cost='1')]), reason='A late bill for the first')
+    # The return already taken is recosted with the sale: 900 + 300 bought, 600 gone out on
+    # the sale and 200 -- not the 300 it posted -- back on the shelf, which is 800 over 4.
+    assert _stock(books, item, '2017-01-03') == ('4', 800)
+
+    _return(books, invoice, quantity='2', date='2017-01-04', reason='The other two back')
+
+    assert _stock(books, item, '2017-01-04') == ('6', 1200)
+    assert _net(books) == {asset: 1200, books['payable']: -1200}
+    # And the invariant underneath it, stated directly: what the returns are standing at now
+    # -- each one's posted value plus every correction against it -- is exactly what the sale
+    # is standing at now. That is the thing that was false before, and no total can hide it.
+    rows = _movements(books, item)
+    against = {}
+    for row in rows:
+        if row['kind'] == 'recost':
+            against[row['corrects_movement_id']] = (
+                against.get(row['corrects_movement_id'], 0) + row['value_minor_units'])
+    standing = lambda row: row['value_minor_units'] + against.get(row['id'], 0)
+    issue = next(row for row in rows if row['kind'] == 'issue')
+    givebacks = [row for row in rows if row['returns_movement_id'] is not None]
+    assert [row['value_minor_units'] for row in givebacks] == [300, 400]   # as each was posted
+    assert sum(standing(row) for row in givebacks) == -standing(issue) == 600
+    assert _stock(books, item, '2017-01-02') == ('3', 600)
+
+
+def test_a_return_dated_before_the_sale_it_returns_is_refused_and_writes_nothing(books):
+    """There is no cost to take a share of yet, and goods cannot come back before they go out."""
+    run = books['run']
+    item = _inventory_part(books)
+    invoice = _stocked_invoice(books, item)
+
+    before = database(_path(books))
+    with pytest.raises(BookflowError) as caught:
+        _return(books, invoice, date='2017-01-01', reason='Back before it was sold')
+
+    assert caught.value.code == 'E_VALIDATION'
+    assert caught.value.details['fields'] == [
+        {'field': 'date', 'problem': 'a return cannot be dated before the sale it returns; '
+                                     'this line was sold on 2017-01-02'}]
+    assert database(_path(books)) == before
+    assert _stock(books, item, '2017-01-03') == ('1', HELD)
+
+
+def test_the_migration_links_returns_a_shipped_company_already_holds(books):
+    """A company carrying the defect is repaired, not left wrong for ever.
+
+    Its stored return receipts carry no link, so nothing can recost them. The migration pairs
+    each one with the live issue of the invoice line its own commercial row names, which is the
+    same pairing the writer makes, and from then on the ledger corrects them like any other.
+    Run here against rows the product actually wrote, with the link cleared to stand in for
+    what a shipped company holds, so the statement is measured rather than read.
+    """
+    import importlib
+    item = _inventory_part(books)
+    invoice = _stocked_invoice(books, item, quantity='2')
+    _return(books, invoice, date='2017-01-03', reason='One back')
+    _return(books, invoice, date='2017-01-04', reason='The other back')
+
+    linked = {row['id']: row['returns_movement_id'] for row in _movements(books, item)
+              if row['returns_movement_id'] is not None}
+    assert len(linked) == 2
+
+    migration = importlib.import_module(
+        'bookflow.storage.company_migrations.versions.0053_return_recosting')
+    import sqlite3
+    with sqlite3.connect(_path(books)) as db:
+        # The ledger is immutable once its guards are up, which is exactly why the migration
+        # links its rows while they are down. Standing where the migration stands.
+        db.execute('DROP TRIGGER inventory_movements_immutable_update')
+        db.execute('UPDATE inventory_movements SET returns_movement_id = NULL')
+        assert not db.execute('SELECT 1 FROM inventory_movements '
+                              'WHERE returns_movement_id IS NOT NULL').fetchall()
+        db.execute(migration.BACKFILL)
+        restored = {row[0]: row[1] for row in db.execute(
+            'SELECT id, returns_movement_id FROM inventory_movements '
+            'WHERE returns_movement_id IS NOT NULL')}
+    assert restored == linked
+    # And nothing else was swept up: the two purchase receipts stay unlinked.
+    assert len(restored) == 2
 
 
 # ------------------------------------------------------------------ voiding and correcting

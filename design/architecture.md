@@ -3794,18 +3794,31 @@ Cost of Goods Sold — and writes one `receipt` movement against the debit, thro
 still credited the gross once and the batch still balances at it; what a thing sold for and what
 it cost stay two independent facts, and a return gives both back.
 
-**The cost that comes back is the cost that went out.** `inventory_effects.issued_cost` reads
-the source invoice line's live issue and returns what `inventory_costing`'s contract calls its
-`posted_effective` value — the issue's own value plus every active `recost` against it, which is
-what Cost of Goods Sold actually holds. A partial return owns a share of that figure by
-`credit_returns.share`, the same endpoint rule that partitions the line's net and each tax cell,
-so cost, net and tax telescope together and a line returned in pieces gives back exactly what it
-took. Never today's average and never the price on the credit: the value is *stated* on the
-receipt, exactly as every other receipt in this ledger states its value, because the average
-decides only what leaves. A zero-cost line returns a zero-value receipt with no monetary leg,
-which is what `ck_inventory_movement_value_link` requires and what the zero-value work
-established. A return landing behind a later sale owes that sale its own dated `recost`
-document, written by `inventory_effects.write_corrections` like any other.
+**The cost that comes back is the cost that went out, and it keeps up.** The receipt *names*
+the issue it gives back — `inventory_movements.returns_movement_id`, taken by
+`inventory_effects.live_issue` — and states no cost of its own. What it is worth is replay's
+answer, computed the same way an issue's own value is: the returns of one issue take contiguous
+spans of its issued quantity in walk order and divide its consumed value by
+`core.exact.endpoint_share`, which is the identical function `credit_returns.owned` divides the
+line's net and each tax cell by. So cost, net and tax telescope together and a line returned in
+pieces gives back exactly what it took. Never today's average and never the price on the credit.
+
+Naming rather than stating is the whole of it. A cost worked out beside the ledger is frozen at
+what the average said the day the credit was written, so a purchase entered behind that sale
+afterwards recosted the sale and left the returns already taken standing at a cost that no
+longer existed — value the company never paid for, stranded in the inventory asset under
+nobody's name, with the books still balancing. Because the value is replay's, a backdated
+purchase now owes a dated `recost` against each displaced *return* exactly as it owes one
+against the issue, and `inventory_effects.write_corrections` posts them together. A line wholly
+sold and wholly returned therefore ends at zero cost of goods sold and a shelf worth exactly
+what was paid for it.
+
+A zero-cost line returns a zero-value receipt with no monetary leg, which is what
+`ck_inventory_movement_value_link` requires and what the zero-value work established. A return
+dated before the sale it returns is refused: replay reads its rows in date order, so there is no
+cost to take a share of yet, and goods cannot come back before they went out. A return whose
+issue a later invoice correction has retired keeps its stated value and is owed no correction —
+strictly what it did before any of this, never worse.
 
 A correction retires the receipts the previous revision took and takes the new grid's at what it
 then says; a void reverses them exactly, one `reversal` movement per receipt bound to the leg
@@ -3861,13 +3874,15 @@ taking it from the preparer. `validate_update` holds `_movements` back from the
 replacement-batch pass and runs it over the whole write, because a correction's reversal
 movements hang off legs the replacement batch does not hold.
 
-**Known limit, recorded deliberately.** A return's receipt states its value once and is never
-recosted, so a `recost` landing on the source issue *after* a partial return has been taken
-leaves the remaining shares priced against the new figure and the taken share against the old.
-Total asset value and total cost still reconcile — the ledger's own invariant is untouched — but
-a line returned in pieces across such a correction will not telescope to a single number. Making
-it telescope needs the cost a return claimed to be stored per interval, the way the intervals
-themselves are, which is a table this release does not have.
+**What the ledger guarantees, and what balancing does not.** An earlier revision of this
+section recorded a "known limit" saying that a recost between two partial returns left the
+shares out of step but that asset value and cost still reconciled. The first half was true and
+the second half was worth nothing: a ledger in which every entry has a matching side can still
+say a company that sold everything and got everything back holds stock worth more than it ever
+paid. Balancing is not correctness. The invariant that is actually load-bearing, and the one the
+propagation above establishes, is that the returns against an issue are standing at exactly what
+that issue is standing at — `sum(posted_effective(R)) == -posted_effective(M)` — so the two
+cancel and nothing is stranded.
 
 **The endpoint rule** (`credit_returns.py`) decides every cent a return carries. A captured
 source line of base quantity `Q` and net `N` gives a returned half-open interval `[a,b)`

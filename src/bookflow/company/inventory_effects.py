@@ -21,10 +21,12 @@ thing sold for and what it cost are two independent facts and this changes only 
 
 A **return** is that sale's issue read backwards. A credit memo line that gives back a stocked
 invoice line adds the same two legs the other way round -- debit Inventory Asset, credit Cost
-of Goods Sold -- and writes one ``receipt`` movement against the debit, for the share of that
-issue's own posted cost the returned quantity owns. The cost is *stated*, exactly as a bill
-line's is, and ``issued_cost`` is where it is read from: the average decides what leaves, and
-what leaves is what comes back. The money side of the credit is untouched by this, for the
+of Goods Sold -- and writes one ``receipt`` movement against the debit. That movement *names*
+the issue it gives back, in ``returns_movement_id``, and states no cost of its own: what it is
+worth is the share of that issue's value replay computes, exactly as an issue's own value is.
+Naming rather than stating is what makes a purchase entered behind the sale reach the returns
+as well -- they are recosted with the issue instead of being stranded at what the average said
+on the day the credit was written. The money side of the credit is untouched by this, for the
 same reason a sale's revenue is.
 
 A **correction or a void** reverses those legs exactly, the way it reverses every other leg,
@@ -102,7 +104,8 @@ class Entry:
     asset_account_id: str
     offset_account_id: str
     class_id: str | None = None
-    value_minor_units: int | None = None   # a receipt states it; an issue asks the average
+    value_minor_units: int | None = None   # a bought receipt states it; the rest ask costing
+    returns_movement_id: str | None = None # the issue this receipt gives back, on a return
 
 
 def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
@@ -115,33 +118,33 @@ def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
                  class_id=class_id, value_minor_units=amount)
 
 
-def return_entry(facts, *, key, quantity_microunits, amount, class_id):
-    """Declare one receipt for stock a customer has brought back, at its own captured cost.
+def return_entry(facts, *, key, quantity_microunits, issue_id, class_id):
+    """Declare one receipt for stock a customer has brought back, naming the issue it undoes.
 
     The inverse of the issue ``sales._stock_entries`` made, declared here beside it: the same
     two accounts the sale captured, used the other way round, so the quantity goes back on the
-    shelf and ``amount`` comes out of cost of goods sold and back into the inventory asset.
-    Like every other receipt in this ledger the value is stated, never derived -- the caller
-    reads it off the issue being undone with ``issued_cost``.
+    shelf and its cost comes out of cost of goods sold and back into the inventory asset.
+
+    What it is worth is *not* stated. Unlike a bought receipt, whose value somebody knew and
+    paid, a return is worth a share of what the issue it names is worth -- so the value is
+    read off the replay, the way an issue's is, and a later backdated purchase that recosts
+    that issue recosts this return with it.
     """
     if facts.item_type not in inventory.TRACKED_TYPES:
         return None
     return Entry(key=key, item_id=facts.item.id, item_name=facts.item.label,
                  kind='receipt', quantity_microunits=quantity_microunits,
                  asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
-                 class_id=class_id, value_minor_units=amount)
+                 class_id=class_id, returns_movement_id=issue_id)
 
 
-def issued_cost(s, transaction_id, document_line_id):
-    """What one entered line's issue is actually standing in cost of goods sold, right now.
+def live_issue(s, transaction_id, document_line_id):
+    """The stock issue one entered line of a sale is currently standing behind, or ``None``.
 
-    ``inventory_costing``'s contract names this figure: ``posted_effective(M)`` is the issue's
-    own value plus every active correction written against it, and it is what the accounts
-    hold, which a re-derived average is not. A return of that line is the inverse of that
-    issue, so this is what it takes back out.
-
-    ``None`` when the line issued no stock. Zero is a different answer and comes back as zero:
-    a zero-value quantity went out with no monetary leg and comes back the same way.
+    A return names this movement and takes back a share of it. What that share is worth is
+    replay's answer and is never computed here, because a figure worked out beside the ledger
+    is a figure that goes stale the moment the ledger is recalculated -- which is exactly the
+    defect that made a backdated purchase strand an earlier return at the cost it used to be.
     """
     issues = [row for row in own_movements(s, transaction_id)
               if row['kind'] == 'issue' and row['document_line_id'] == document_line_id]
@@ -150,15 +153,7 @@ def issued_cost(s, transaction_id, document_line_id):
     if len(issues) > 1:
         raise BookflowError('E_INTERNAL', message=(
             'One entered line stands behind more than one live stock issue.'))
-    issue = issues[0]
-    rows = inventory.movements(s, item_id=issue['item_id'])
-    retired = {row['reverses_movement_id'] for row in rows if row['kind'] == 'reversal'}
-    posted = int(issue['value_minor_units']) + sum(
-        int(row['value_minor_units']) for row in rows
-        if row['kind'] == CORRECTION_KIND and row['corrects_movement_id'] == issue['id']
-        and row['id'] not in retired)
-    return dict(movement=issue, cost_minor_units=-posted,
-                quantity_microunits=-int(issue['quantity_microunits']))
+    return issues[0]
 
 
 @dataclass
@@ -246,7 +241,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             effective_date=row['effective_date'], sequence=sequence,
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
-            corrects_movement_id=None, reverses_movement_id=row['id'],
+            corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
             transaction_id=row['transaction_id'], revision_id=row['revision_id'], document_line_id=row['document_line_id'],
             posting_line_id=None, posting_batch_id=None)
         rows(row['item_id']).append(values)
@@ -261,17 +256,26 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
         values = dict(
             id=identity, item_id=entry.item_id, kind=entry.kind,
             quantity_microunits=signed,
-            value_minor_units=entry.value_minor_units if entry.kind == 'receipt' else -1,
+            value_minor_units=(entry.value_minor_units
+                               if entry.kind == 'receipt' and entry.returns_movement_id is None
+                               else -1),
             effective_date=date, sequence=sequence, currency=currency,
             asset_account_id=entry.asset_account_id, offset_account_id=entry.offset_account_id,
-            class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None)
-        if entry.kind == 'issue':
-            # What it is worth is the average's answer, not the caller's, so the value is read
-            # off a first replay and written back before the corrections are worked out.
+            class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None,
+            returns_movement_id=entry.returns_movement_id)
+        if entry.kind == 'issue' or entry.returns_movement_id is not None:
+            # What it is worth is costing's answer, not the caller's, so the value is read off
+            # a first replay and written back before the corrections are worked out. An issue
+            # asks what the running average consumes; a return asks for its share of the issue
+            # it gives back. Neither is a number this module is entitled to invent.
             try:
-                values['value_minor_units'] = replay(history + [values]).targets[identity]
+                computed = replay(history + [values]).targets.get(identity)
             except StockRefusal as refusal:
                 raise refuse(refusal, entry.item_id, entry.item_name) from None
+            if computed is None:
+                raise BookflowError('E_INTERNAL', message=(
+                    'A stock return names an issue this ledger cannot value it against.'))
+            values['value_minor_units'] = computed
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']
@@ -290,7 +294,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             quantity_microunits=0, value_minor_units=delta, effective_date=target['effective_date'],
             sequence=sequence, currency=currency, asset_account_id=target['asset_account_id'],
             offset_account_id=target['offset_account_id'], class_id=target['class_id'],
-            corrects_movement_id=target['id'], reverses_movement_id=None)
+            corrects_movement_id=target['id'], reverses_movement_id=None, returns_movement_id=None)
         rows(target['item_id']).append(values)
         change.corrections.append(Correction(target['effective_date'], 'Receipt purchase-price correction',
             lines, [Movement(values, line_index=1)]))
@@ -324,7 +328,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 effective_date=affected, sequence=sequence, currency=currency,
                 asset_account_id=target['asset_account_id'],
                 offset_account_id=target['offset_account_id'], class_id=target['class_id'],
-                corrects_movement_id=target['id'], reverses_movement_id=None),
+                corrects_movement_id=target['id'], reverses_movement_id=None,
+                returns_movement_id=None),
                 line_index=len(movements) * 2 + 1))
             sequence += 1
         change.corrections.append(Correction(

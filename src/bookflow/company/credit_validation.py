@@ -431,6 +431,7 @@ def _movements(s, data):
     through -- never taken from the preparer.
     """
     from bookflow.company import document_effects as effects, inventory, inventory_effects
+    from bookflow.company.inventory_costing import replay
     from bookflow.company.sales_facts import SalesLineProfile
 
     change = data.get('stock')
@@ -490,18 +491,30 @@ def _movements(s, data):
                  and facts.cogs_account.id == row['offset_account_id'],
                  'a stock receipt was written for a line that carries no stock')
         own = claims.get(row['document_line_id'], [])
-        issued = inventory_effects.issued_cost(
+        issue = inventory_effects.live_issue(
             s, line['source_transaction_id'], line['source_document_line_id'])
-        _require(bool(own) and issued is not None
-                 and issued['quantity_microunits'] == own[0]['source_base_quantity_microunits'],
+        _require(bool(own) and issue is not None
+                 and -int(issue['quantity_microunits']) == own[0]['source_base_quantity_microunits'],
                  'the returned invoice line issued no stock, or not the quantity it captured')
-        _require(row['value_minor_units'] == returns.share(
-            issued['cost_minor_units'], issued['quantity_microunits'],
-            [(claim['start_microunits'], claim['end_microunits']) for claim in own]),
-            'a returned line does not bring back the cost its source line issued')
+        _require(row['returns_movement_id'] == issue['id'],
+                 'a returned line does not name the issue it gives back')
+        _require(row['effective_date'] >= issue['effective_date'],
+                 'a return is dated before the sale it returns')
     for envelope_id, line in lines.items():
         facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
         if facts.item_type in inventory.TRACKED_TYPES:
             _require(any(row['document_line_id'] == envelope_id and row['kind'] == 'receipt'
                          for row in movements),
                      'an entered line returned stock that no movement received')
+
+    # What each return is worth is not taken from the preparer at all: the item's whole stored
+    # history is replayed together with what this write adds, and every movement this document
+    # writes must come out of that replay owing no correction. A return posted at anything but
+    # its share of the issue it names owes one, so this is what makes the cost independent.
+    own_ids = {row['id'] for row in movements}
+    for item_id in {row['item_id'] for row in movements}:
+        stored = inventory.movements(s, item_id=item_id)
+        state = replay(stored + [row for row in movements if row['item_id'] == item_id])
+        _require(not any(correction.target_movement['id'] in own_ids
+                         for correction in state.corrections),
+                 'a stock movement is posted at a cost the ledger does not agree with')

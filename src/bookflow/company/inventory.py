@@ -266,7 +266,8 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
     proposed = dict(id=identity, kind=kind, quantity_microunits=quantity,
                     value_minor_units=stated if stated is not None else -1,
                     effective_date=inp.date, sequence=sequence,
-                    corrects_movement_id=None, reverses_movement_id=None)
+                    corrects_movement_id=None, reverses_movement_id=None,
+                    returns_movement_id=None)
     if kind == 'issue':
         # What it is worth is the average's answer, not the caller's, so the value is read off
         # a first replay and written back before the corrections are worked out.
@@ -319,7 +320,7 @@ def _void_change(s, inp, currency, sequence):
             effective_date=row['effective_date'], sequence=sequence,
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
-            corrects_movement_id=None, reverses_movement_id=row['id'],
+            corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
             revision_id=revision['id'], document_line_id=row['document_line_id']),
             line_index=0, reverses_line_id=row['posting_line_id']))
         sequence += 1
@@ -356,7 +357,8 @@ def _correction_documents(s, change, sequence):
                 effective_date=date, sequence=sequence, currency=change.currency,
                 asset_account_id=target['asset_account_id'],
                 offset_account_id=target['offset_account_id'], class_id=target['class_id'],
-                corrects_movement_id=target['id'], reverses_movement_id=None),
+                corrects_movement_id=target['id'], reverses_movement_id=None,
+                returns_movement_id=None),
                 line_index=len(pending) * 2 + 1))
             sequence += 1
         change.documents.append(_Document(JournalPostInput(
