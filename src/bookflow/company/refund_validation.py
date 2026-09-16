@@ -2,20 +2,22 @@
 
 The writer builds the aggregate; this checks it against the books' own rules without reusing
 the writer's arithmetic -- the balance is recomputed from the posting rows themselves, the
-accounts are read again from the chart, and what each credit is still worth is read again from
-``credits.facts`` rather than taken from the plan. It runs inside the writing transaction, over
+accounts are read again from the chart, and what each source is still worth is read again from
+``credits.facts`` or ``payment_queries.payment_facts`` rather than taken from the plan. It runs
+inside the writing transaction, over
 a graph the writer rebuilt there, so what it checks is what is about to be stored rather than
 what a preview once said. Anything it refuses is ``E_INTERNAL``: a caller cannot cause these.
 
 The two refusals that are not internal are over-refund and a closed period. Two people
-refunding the same credit at the same moment each see it available, and the second write has
-to lose; that check is made here, in the writer's own transaction, against what storage says at
-that instant, and it refuses with ``E_CREDIT_UNAVAILABLE``.
+refunding the same credit or the same overpayment at the same moment each see it available,
+and the second write has to lose; that check is made here, in the writer's own transaction,
+against what storage says at that instant, and it refuses with ``E_CREDIT_UNAVAILABLE``.
 
 The check this file exists for is the one about legs: a refund has exactly two, a receivable
-debit and a funding credit, and **no income leg and no tax leg**. The credit memo already
-reversed the sale; a refund that touched income or sales tax again would reverse the same
-revenue twice, and that is not something a later reader could ever spot from the totals.
+debit and a funding credit, and **no income leg and no tax leg**. A credit memo already
+reversed the sale and an overpayment never recognised one; a refund that touched income or
+sales tax would move revenue that no refund is entitled to move, and that is not something a
+later reader could ever spot from the totals.
 """
 from __future__ import annotations
 
@@ -29,9 +31,9 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX
 from bookflow.core.money import Money
 
-# What a refund may never post to. Income and sales tax were already reversed by the credit
-# memo, and an asset or liability that is neither the receivable nor the bank is a different
-# document altogether.
+# What a refund may never post to. Income and sales tax were reversed by the credit memo or
+# never recognised at all, and an asset or liability that is neither the receivable nor the
+# bank is a different document altogether.
 FORBIDDEN_TYPES = ('income', 'other_income', 'expense', 'other_expense', 'cost_of_goods_sold')
 
 
@@ -119,8 +121,8 @@ def _validate(plan, s, ctx):
     _releases(s, header, releases)
     given = {}
     for row in releases:
-        identifier = row['credit_source_component_id']
-        given[identifier] = given.get(identifier, 0) + row['amount_minor_units']
+        handle = refunds.released_key(row)
+        given[handle] = given.get(handle, 0) + row['amount_minor_units']
     _consumptions(s, data, header, revision, [row for row in rows if row['kind'] != 'release'],
                   currency, given=given)
 
@@ -166,9 +168,10 @@ def _batches(s, data, header, revision, pending, indexed, currency, operation):
             account = chart.get(leg['account_id'])
             require(account is not None, 'a refund posts to an account this chart does not have')
             # The whole point of the document, asserted rather than assumed: a refund never
-            # touches income or tax, because the credit memo already did.
+            # touches income or tax: a credit memo already did, and an overpayment never
+            # recognised any.
             require(account['type'] not in FORBIDDEN_TYPES,
-                    'a refund posts no income, expense or tax leg; the credit memo already reversed the sale')
+                    'a refund posts no income, expense or tax leg; no refund moves revenue')
             attributed = sum(amount(source['amount_minor_units'], positive=True)
                              for source in sources if source['posting_line_id'] == leg['id'])
             require(attributed == leg['debit_minor_units'] + leg['credit_minor_units'],
@@ -213,9 +216,39 @@ def _profile(s, data, header, revision, pending, currency):
             'the captured customer is not the one the document names')
 
 
+def _source_worth(s, source, given):
+    """Read what one captured source is worth again, from storage, in this transaction.
+
+    Both kinds answer the same four things: the permanent key that says whose money it is, the
+    state of the document that created it, what the whole source is still worth once this
+    write's own releases are handed back, and what each of its components has left. Nothing
+    here is taken from the plan.
+    """
+    from bookflow.company import payment_queries as query
+
+    if source.credit_memo_id is not None:
+        facts = credits.facts(s, effects.rows(
+            s, c.transactions, c.transactions.c.id == source.credit_memo_id)[0], write=True)
+        require(facts['key']['id'] == source.credit_source_key_id,
+                'a captured source names another credit')
+        components = facts['components']
+        back = {row['id']: given.get(('credit', row['id']), 0) for row in components}
+        remaining = {row['id']: facts['remaining'][row['id']] + back[row['id']] for row in components}
+        return (facts['key'], facts['header']['status'], facts['available'] + sum(back.values()),
+                remaining)
+    facts = query.payment_facts(s, source.payment_id, write=True)
+    key = facts['keys'].get(source.payment_source_key_id)
+    require(key is not None, 'a captured source names another payment')
+    components = [row for row in facts['components'] if row['component_key_id'] == key['id']]
+    require(len(components) == 1,
+            'a payment source names capacity its current revision does not carry')
+    available = facts['available'][key['id']] + given.get(('payment', key['id']), 0)
+    return key, facts['header']['status'], available, {components[0]['id']: available}
+
+
 def _consumptions(s, data, header, revision, rows, currency, given=None):
     given = given or {}
-    require(rows, 'a refund pays out named credit, so it consumes some')
+    require(rows, 'a refund pays out named capacity, so it consumes some')
     profile = data['pending']['customer_refund_profiles'][0]
     captured = CustomerRefundProfile.model_validate_json(profile['profile_snapshot'])
     wanted = {}
@@ -226,45 +259,46 @@ def _consumptions(s, data, header, revision, rows, currency, given=None):
                 'a consumption belongs to the revision that made it')
         require(row['effective_date'] == revision['date'],
                 'a consumption is dated where the refund is')
-        wanted[row['credit_source_key_id']] = wanted.get(row['credit_source_key_id'], 0) + amount(
+        require((row['credit_source_key_id'] is None) != (row['payment_source_key_id'] is None),
+                'a consumption spends one source, not two and not none')
+        require((row['credit_source_key_id'] is None) == (row['credit_source_component_id'] is None)
+                and (row['payment_source_key_id'] is None) == (row['payment_source_component_id'] is None),
+                'a consumption names a whole source or none of it')
+        identifier = row['credit_source_key_id'] or row['payment_source_key_id']
+        wanted[identifier] = wanted.get(identifier, 0) + amount(
             row['amount_minor_units'], positive=True)
     require(sum(wanted.values()) == revision['total_minor_units'],
-            'the credit consumed differs from the money paid out')
-    require({source.credit_source_key_id: source.amount_minor_units for source in captured.sources}
+            'the capacity consumed differs from the money paid out')
+    require({source.source_key_id: source.amount_minor_units for source in captured.sources}
             == wanted, 'the captured sources differ from the consumptions written')
-    # Read what each credit is worth again, here, in the writer's transaction: the preview's
-    # figure is not evidence that it is still true, and two refunds racing one credit must not
-    # both post.
+    # Read what each source is worth again, here, in the writer's transaction: the preview's
+    # figure is not evidence that it is still true, and two refunds racing one overpayment must
+    # not both post.
     per_component = {}
     for source in captured.sources:
-        facts = credits.facts(s, effects.rows(
-            s, c.transactions, c.transactions.c.id == source.credit_memo_id)[0], write=True)
-        require(facts['key']['id'] == source.credit_source_key_id, 'a captured source names another credit')
-        require(facts['key']['party_id'] == profile['party_id']
-                and facts['key']['ar_account_id'] == profile['ar_account_id']
-                and facts['key']['currency'] == currency,
-                'a refund pays back the customer whose credit it spends, on that receivable account')
-        require(facts['header']['status'] == 'posted', 'a voided credit memo is worth nothing')
-        handed_back = sum(given.get(component['id'], 0) for component in facts['components'])
-        available = facts['available'] + handed_back
+        key, status, available, remaining = _source_worth(s, source, given)
+        require(key['party_id'] == profile['party_id']
+                and key['ar_account_id'] == profile['ar_account_id']
+                and key['currency'] == currency,
+                'a refund pays back the customer whose money it spends, on that receivable account')
+        require(status == 'posted', 'a voided source is worth nothing')
         require(available == source.available_minor_units,
-                'the captured available credit is not what the books say')
-        if wanted[source.credit_source_key_id] > available:
+                'the captured available capacity is not what the books say')
+        if wanted[source.source_key_id] > available:
             raise BookflowError('E_CREDIT_UNAVAILABLE', details={
-                'credit_memo_id': source.credit_memo_id,
-                'credit_memo_number': source.credit_memo_number,
-                'requested': Money(wanted[source.credit_source_key_id], currency).to_dict(),
+                ('credit_memo_id' if source.credit_memo_id else 'payment_id'): source.document_id,
+                ('credit_memo_number' if source.credit_memo_id else 'payment_number'):
+                    source.document_number,
+                'requested': Money(wanted[source.source_key_id], currency).to_dict(),
                 'available': Money(available, currency).to_dict(),
-                'next': 'Refund at most what the credit is still worth.'})
-        for component in facts['components']:
-            per_component[component['id']] = (facts['remaining'][component['id']]
-                                              + given.get(component['id'], 0))
+                'next': 'Refund at most what this source is still worth.'})
+        per_component.update(remaining)
     for row in rows:
-        identifier = row['credit_source_component_id']
-        require(identifier in per_component, 'a consumption names a component of another credit')
+        identifier = row['credit_source_component_id'] or row['payment_source_component_id']
+        require(identifier in per_component, 'a consumption names a component of another source')
         per_component[identifier] -= row['amount_minor_units']
     require(all(value >= 0 for value in per_component.values()),
-            'a consumption exceeds the capacity of the credited line it draws on')
+            'a consumption exceeds the capacity of the line it draws on')
 
 
 def _releases(s, header, rows):

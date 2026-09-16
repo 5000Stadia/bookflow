@@ -648,6 +648,7 @@ MATRIX['payment unapply'].update({
 })
 MATRIX['payment void'].update({
     'E_HAS_APPLICATIONS': 'the receipt still carries active applications; unapply them before voiding',
+    'E_HAS_REFUND': 'a live refund paid this receipt\'s overpayment back; void the refund before voiding the receipt',
     'E_REASON_REQUIRED': 'the void has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
     'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
@@ -657,6 +658,24 @@ MATRIX['payment void'].update({
     'E_DUPLICATE_NUMBER': _UNREACHED_HERE,
     'E_AMOUNT_PRECISION': _UNREACHED_HERE,
 })
+# Delete is its own grant and its own owner, so its reasons are not the posting verbs'. Two of
+# them are the things that still stand on a receipt and are cancelled by whoever owns them: the
+# applications it settled, and a refund that paid its overpayment back.
+MATRIX['payment delete'] = {
+    'E_RECORD_NOT_FOUND': 'unknown receipt, or one already deleted and not asked for by include_deleted',
+    'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
+    'E_VALIDATION': 'a reason outside 1 to 140 characters, or incomplete cancellation evidence',
+    'E_REASON_REQUIRED': 'no reason given',
+    'E_PERIOD_CLOSED': "the receipt's own posting dates are on or before the closing date",
+    'E_RECONCILIATION_DEPENDENCY': 'a finished bank reconciliation holds this receipt; undo it first',
+    'E_DEPOSIT_DEPENDENCY': 'a deposit claims this receipt; cancel source and deposit in one coordinated write',
+    'E_HAS_APPLICATIONS': 'active applications settle invoices from this receipt; unapply them first',
+    'E_HAS_REFUND': "a live refund paid this receipt's overpayment back; void the refund first",
+    'E_VALUE_RANGE': 'the resulting version exceeds signed 64-bit range',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
 MATRIX['payment update'].update({
     'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',

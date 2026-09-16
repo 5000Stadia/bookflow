@@ -37,7 +37,19 @@ only after confirmed success, retaining customer/date/method/destination.
 Open a saved payment to **Apply available credit**, **Correct receipt**, **Unapply
 recorded applications**, or **Void unapplied receipt**. Unapply reverses whole
 recorded applications at their original dates; it does not post cash again. Void
-requires applications to be unapplied first. Receipt correction preserves job
+requires applications to be unapplied first, and refuses with `E_HAS_REFUND` while a
+refund still stands on the receipt's unapplied cash.
+
+**Sending an overpayment back.** A cheque larger than the invoices it settles leaves
+cash standing on the receipt. The **Customer payments** list shows that figure and the
+row carries **Refund**, which opens `customer-refund post` with that receipt and that
+exact amount already named. The refund debits Accounts Receivable and credits the
+funding account and posts nothing else, and it consumes the overage: the receipt stops
+offering that money to any later invoice, and a second refund of it is refused with
+`E_CREDIT_UNAVAILABLE`. Correcting or voiding the refund releases the overage exactly,
+so it is available again. Writing a cheque against Accounts Receivable instead posts
+the same two legs and consumes nothing, so the overage would keep reporting as
+available for ever; that is not a refund. Receipt correction preserves job
 ownership and changes only the payer's residual capacity when its amount changes.
 Applied invoices remain editable subject to current versions, due capacity and
 complete settlement restatement. The ordinary invoice editor previews these
@@ -101,7 +113,7 @@ Required follow-ups remain required under the active project goal.
 | CP10 | Independent automatic-application preference plus explicit matching/oldest suggestions; draft preparation precedes preview/save. |
 | CP11 | Explicit partial per-invoice amounts; unapplied remainder is permitted. |
 | CP12 | Remaining invoice due stays open. Typed write-offs remain required follow-up work. |
-| CP13 | Unapplied cash remains payer-owned credit. Refund is a separate required document. |
+| CP13 | Unapplied cash remains payer-owned credit, and `customer-refund post` sends it back: name the receipt as a `payment` source and the refund debits Accounts Receivable, credits the funding account, and consumes that overage so it stops reporting as available. |
 | CP14 | Explicit immutable unapply and same-party reapply; no mutation of old applications. |
 | CP15–CP16 | Available payment credit can partially settle exact-party invoices. Unified credit-source selection and credit memos remain required follow-ups. |
 | CP17 | Credit memo document, corrections and application are a required sales-credit increment. |

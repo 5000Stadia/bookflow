@@ -101,9 +101,13 @@ def prepare_effect(s, ctx, inp, provenance):
     payer_key = next((key for key, row in funding['keys'].items() if row['party_id'] == saved['payer_id']), None)
     delta = amount - prior['total_minor_units']
     payer_capacity = capacities.get(payer_key, 0) + delta
-    payer_applied = sum(app['amount_minor_units'] for app in funding['applications'] if app['source_component_key_id'] == payer_key)
-    if payer_capacity < payer_applied or payer_capacity < 0:
-        raise BookflowError('E_APPLIED_EXCEEDS_TOTAL', details={'party_id': saved['payer_id'], 'minimum_minor_units': payer_applied})
+    # Cash already handed back to this payer is spent exactly as cash applied to an invoice is:
+    # a correction that dropped the capacity below it would leave a live refund drawing on
+    # money the receipt no longer carries.
+    payer_spent = sum(app['amount_minor_units'] for app in funding['applications'] if app['source_component_key_id'] == payer_key)
+    payer_spent += sum(row['amount_minor_units'] for row in funding['consumptions'] if row['payment_source_key_id'] == payer_key)
+    if payer_capacity < payer_spent or payer_capacity < 0:
+        raise BookflowError('E_APPLIED_EXCEEDS_TOTAL', details={'party_id': saved['payer_id'], 'minimum_minor_units': payer_spent})
     at, event, operation_id = provenance.at, provenance.event_id, provenance.operation_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     pending = {table: [] for table, _, _ in payments.TABLE_KINDS}
@@ -190,20 +194,31 @@ def prepare_effect(s, ctx, inp, provenance):
             changed_headers.append((before, dict(before, version=before['version'] + 1, updated_at=at,
                 updated_by=s.actor.id, updated_via=ctx.interface.value)))
         components = []
+        # A correction does not touch a refund that already drew on this receipt, so the
+        # capacity it previews carries the same three terms `payment_facts` does: what the
+        # cash created, what settled invoices, and what was handed back in cash.
+        paid_back = {key_id: 0 for key_id in keys}
+        for row in funding['consumptions']:
+            paid_back[row['payment_source_key_id']] += row['amount_minor_units']
         for key_id, key in sorted(keys.items(), key=lambda pair: (pair[1]['party_id'], pair[0])):
             capacity = capacities.get(key_id, 0)
             applied = sum(app['amount_minor_units'] for app in funding['applications'] if app['source_component_key_id'] == key_id)
             party = defaults._row(s.company, 'customer', key['party_id'], active=False)
             components.append(dict(component_key_id=key_id, component_id=new_components[key_id]['id'] if key_id in new_components else None,
                 party_id=key['party_id'], party_name=party['full_name'], ar_account_id=key['ar_account_id'], currency=key['currency'],
-                received_minor_units=capacity, applied_minor_units=applied, available_minor_units=capacity-applied))
+                received_minor_units=capacity, applied_minor_units=applied,
+                available_minor_units=capacity-applied-paid_back[key_id]))
         current.update(version=header['version'], revision_id=revision['id'], received_minor_units=amount,
-            effective_received_minor_units=amount, available_minor_units=amount-current['applied_minor_units'],
+            effective_received_minor_units=amount,
+            available_minor_units=amount-current['applied_minor_units']-sum(paid_back.values()),
             components=components, component_count=len(components))
     if any(after['version'] > 9223372036854775807 for after in [header, *(new for before, new in changed_headers)]):
         raise BookflowError('E_VALUE_RANGE')
+    # A refund landing between the preview and the save moves this receipt's capacity exactly
+    # as an application does, so it is part of what the guard is taken over.
     fp = query.digest([operations.request(inp, ctx, s, 'payment update'), semantic, old,
-        funding['applications'], old_allocations, [facts['header'] for facts in targets.values()],
+        funding['applications'], funding['consumptions'], old_allocations,
+        [facts['header'] for facts in targets.values()],
         defaults._info(s.company)['closing_date']])
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fp:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'payment_facts'})

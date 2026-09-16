@@ -31,6 +31,23 @@ def dated_applications(s, *, invoice=None, payment=None, as_of=None):
     return [row for row in rows if row['kind'] == 'apply' and row['id'] not in reversed_ids]
 
 
+def dated_consumptions(s, *, keys, as_of=None):
+    """Every refund consumption of these receipt keys that no release had taken back by `as_of`.
+
+    The refund twin of `dated_applications`, on the same dating rule: a consumption counts from
+    its own effective date, and a release from its own, so an as-of projection says what the
+    books said on that day rather than what they say now.
+    """
+    table = c.customer_refund_consumptions
+    conditions = [table.c.payment_source_key_id.in_(list(keys))]
+    if as_of:
+        conditions.append(table.c.effective_date <= as_of)
+    rows = [dict(row) for row in s.company.conn.execute(
+        sa.select(table).where(*conditions).order_by(table.c.effective_date, table.c.id)).mappings()]
+    released = {row['reverses_consumption_id'] for row in rows if row['kind'] == 'release'}
+    return [row for row in rows if row['kind'] == 'consume' and row['id'] not in released]
+
+
 def invoice(s, inp):
     facts = query.invoice_facts(s, inp.invoice)
     current = query.invoice_current(s, inp.invoice)
@@ -93,15 +110,23 @@ def payment(s, inp):
         app_outputs.append(dict(application_id=app['id'], invoice_id=app['paid_transaction_id'], invoice_version=invoice_facts['header']['version'],
             source_component_key_id=app['source_component_key_id'], party_id=facts['keys'][app['source_component_key_id']]['party_id'],
             amount=Money(app['amount_minor_units'], app['currency']).to_dict(), effective_date=app['effective_date']))
+    # Cash sent back to the customer is spent as surely as cash applied to an invoice, so the
+    # settlement projection subtracts it from the same capacity -- otherwise this report would
+    # go on calling a refunded overpayment unapplied while the receipt itself says nothing is.
+    refunded = {key: 0 for key in capacities}
+    for row in dated_consumptions(s, keys=facts['keys'], as_of=inp.as_of):
+        refunded[row['payment_source_key_id']] += row['amount_minor_units']
     components = [dict(row, received_minor_units=capacities[row['component_key_id']],
-        applied_minor_units=applied[row['component_key_id']], available_minor_units=capacities[row['component_key_id']]-applied[row['component_key_id']]) for row in current['components']]
+        applied_minor_units=applied[row['component_key_id']],
+        available_minor_units=capacities[row['component_key_id']]-applied[row['component_key_id']]-refunded[row['component_key_id']]) for row in current['components']]
     rendered = components if inp.kind == 'components' else app_outputs
     mark = watermark(s)
     page = query.page(s, 'payment settlement', inp, rendered, facts=[mark, current, rendered])
     current['components'] = current['components'][:50]
     return dict(page, **projection_metadata(inp.as_of), committed=True, kind=inp.kind, as_of=inp.as_of,
         audit_watermark=mark, received_minor_units=sum(capacities.values()), applied_minor_units=sum(applied.values()),
-        unapplied_minor_units=sum(capacities.values())-sum(applied.values()), all_committed_current=current)
+        unapplied_minor_units=sum(capacities.values())-sum(applied.values())-sum(refunded.values()),
+        all_committed_current=current)
 
 
 def application(s, selector):

@@ -19,7 +19,10 @@ already exists, so both windows can be opened from it. ``/credit-memo/post?invoi
 opens the credit memo with one returned row per line of that invoice, already naming the
 source invoice and the source line, so the only thing left to type is how much came back.
 ``/customer-refund/post?credit_memo=<id>`` opens the refund with that credit already in its
-sources. Both seed the *attempted* controls rather than the form's originals: an original is
+sources, and ``/customer-refund/post?payment=<id>`` opens it with that receipt's unapplied
+overage already in them -- the way in from the payment list, where a person looking at a
+cheque that was too large is standing when they decide to send the difference back. All seed
+the *attempted* controls rather than the form's originals: an original is
 the baseline a correction is compared against, and a value equal to it is not submitted at
 all, which would silently drop every seeded row.
 
@@ -152,9 +155,19 @@ def detail_context(noun, record, company_id, *, preview=False):
         currency = record['currency']
         sources = []
         for row in revision['profile']['sources']:
-            sources.append({**row, 'url': _url(company_id, 'credit-memo', row['credit_memo_id']),
-                            'amount': _money(row['amount_minor_units'], currency),
-                            'available_before': _money(row['available_minor_units'], currency)})
+            # One row shape over both kinds of source: what the document was called, when it
+            # was written, and where it lives. A credit memo row and a payment row read the
+            # same way down the column because a reader asks the same question of both.
+            credit = row.get('credit_memo_id')
+            sources.append({
+                **row,
+                'kind': 'Credit memo' if credit else 'Payment',
+                'label': row['credit_memo_number'] if credit else row['payment_number'],
+                'source_date': row['credit_memo_date'] if credit else row['payment_date'],
+                'url': (_url(company_id, 'credit-memo', credit) if credit else
+                        _url(company_id, 'receive-payments', payment=row['payment_id'])),
+                'amount': _money(row['amount_minor_units'], currency),
+                'available_before': _money(row['available_minor_units'], currency)})
         # A refund typed wrong is corrected, so the saved document carries the way in. A
         # preview has nothing saved to correct, and a voided refund paid nothing: the
         # command refuses both, so neither is offered the link.
@@ -241,6 +254,50 @@ def refund_note(credits):
     return ('Paying back ' + ('this credit: ' if len(parts) == 1 else 'these credits: ')
             + '; '.join(parts) + '. Lower an amount to pay back only part of one, or remove '
             'its row to leave it for an invoice.')
+
+
+def overage(payment):
+    """The one part of this receipt with money standing, or None when it is not one part.
+
+    A receipt holds capacity per customer or job, and one refund pays back one of them. When
+    two of them still have money on this receipt the command refuses and says so, so the
+    window opens unseeded rather than guessing which one the person meant.
+    """
+    spare = [row for row in (payment.get('current') or {}).get('components') or []
+             if row['available_minor_units'] > 0]
+    return spare[0] if len(spare) == 1 else None
+
+
+def overpayment_rows(payments):
+    """Attempted controls that open a refund paying back the overage on these receipts.
+
+    The receipt's twin of ``refund_rows``. The amount seeded is what the server says is still
+    unapplied on that receipt -- never a figure computed here -- so a person opening the window
+    from a payment finds the exact overpayment already typed and has only to save it.
+    """
+    attempted = {'collection:sources': '1'}
+    for index, payment in enumerate(payments):
+        attempted[f'c:sources:{index}:payment'] = str(payment['id'])
+        spare = overage(payment)
+        attempted[f'c:sources:{index}:amount'] = _money(
+            spare['available_minor_units'], spare['currency'])['amount']
+    return attempted
+
+
+def overpayment_note(payments):
+    """What the seeded receipt rows are, in words; the rows themselves carry only ids."""
+    if not payments:
+        return None
+    parts = []
+    for payment in payments:
+        spare = overage(payment)
+        figure = _money(spare['available_minor_units'], spare['currency'])
+        parts.append('{} \u00b7 {} \u00b7 {} {} not applied to any invoice'.format(
+            payment['number'], payment['revision']['date'], figure['amount'], figure['currency']))
+    return ('Paying back the extra cash on '
+            + ('this payment: ' if len(parts) == 1 else 'these payments: ') + '; '.join(parts)
+            + '. Lower an amount to send back only part of it, or remove its row to leave it '
+            'standing for a future invoice.')
 
 
 # ---------------------------------------------------------------- applying and unapplying
@@ -466,20 +523,20 @@ def refund_editable_values(record):
     update`` declares, because the correction form submits only the leaves that differ
     from these: a person who opens the correction and saves it without typing anything
     has to write nothing at all, and one who corrects a date must not lose the bank
-    account, the method or the credits the refund pays out along with it.
+    account, the method or the sources the refund pays out along with it.
 
     ``sources`` is the part that has to be exact rather than merely present. A refund
-    posted without amounts pays out everything each credit is still worth and captures
+    posted without amounts pays out everything each source is still worth and captures
     ``origins['amount']`` as ``default``; one posted with amounts captures ``explicit``.
     That origin is part of the profile the command compares a correction against, so
     putting an amount on a source the document defaulted would turn an untouched save
     into a real correction -- a reversal batch and a replacement batch for an edit
     nobody made. The grid therefore carries amounts exactly when the document captured
     them, and an empty amount cell means what the field already says it means: pay out
-    the whole of that credit.
+    the whole of that source.
 
     What is deliberately absent: the receivable account and the currency, which a
-    correction cannot change because they come from the credits themselves. ``customer``
+    correction cannot change because they come from the sources themselves. ``customer``
     is here because the window shows who was paid back, and it stays the guard the
     command documents rather than becoming a choice.
     """
@@ -491,7 +548,11 @@ def refund_editable_values(record):
     entered = next((line for line in revision['lines'] if line['kind'] == 'refund'), None)
     sources = []
     for row in profile['sources']:
-        source = {'credit_memo': row['credit_memo_id']}
+        # The half the document filled, and only that half: putting an empty `payment` on a
+        # credit row would be a second source the command refuses, and putting an empty
+        # `credit_memo` on a payment row the same.
+        source = ({'credit_memo': row['credit_memo_id']} if row.get('credit_memo_id')
+                  else {'payment': row['payment_id']})
         if explicit:
             source['amount'] = _money(row['amount_minor_units'], record['currency'])['amount']
         sources.append(source)

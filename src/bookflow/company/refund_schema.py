@@ -1,4 +1,4 @@
-"""Paying a customer back: the document's header, and the credit capacity it uses up.
+"""Paying a customer back: the document's header, and the capacity it uses up.
 
 Two tables, and the seam between them is the whole point.
 
@@ -11,17 +11,28 @@ revenue down twice. ``ar_posting_source_id`` names the exact attribution row tha
 receivable, the same outward-pointing attribution ``credit_components`` and
 ``sales_tax_payment_profiles`` use.
 
-**The capacity.** ``customer_refund_consumptions`` is what stops the same credit being both
-refunded and applied. A credit memo creates capacity; an application spends it against an
-invoice, and a consumption spends it as cash. Available credit is therefore capacity less
-active applications less active consumptions -- one subtraction per kind of spending, and a
-consumption is not an ``applications`` row because an application settles an obligation and
-a refund has no obligation on the other side of it: nothing to allocate against, no sales
-profile for the receivable reports to join to, and no due to fall.
+**The capacity.** ``customer_refund_consumptions`` is what stops the same capacity being both
+refunded and applied. Two documents leave a customer holding money: a credit memo, and a
+payment whose cash was more than the invoices it settled. Either creates capacity; an
+application spends it against an invoice, and a consumption spends it as cash. Available
+capacity is therefore capacity less active applications less active consumptions -- one
+subtraction per kind of spending, and a consumption is not an ``applications`` row because an
+application settles an obligation and a refund has no obligation on the other side of it:
+nothing to allocate against, no sales profile for the receivable reports to join to, and no
+due to fall.
+
+**One table, two kinds of source.** A consumption names either a credit memo's
+``credit_source_keys`` row and the ``credit_components`` capacity under it, or a payment's
+``payment_component_keys`` row and the ``payment_components`` capacity under it -- exactly one
+pair, which ``ck_customer_refund_consumption_one_source`` asserts. This is the shape
+``applications`` and ``application_allocations`` already take for the same reason: the kind of
+source is derived from which column is present rather than stored, so the release rule, the
+immutability triggers and the "what is this still worth" arithmetic are written once and no
+reader can subtract one kind and forget the other.
 
 A consumption is immutable and a void writes its exact release, the same shape
 ``credit_source_claims`` uses for a returned interval: the residue that answers "what is this
-credit still worth" is then a function of rows that are only ever added.
+still worth" is then a function of rows that are only ever added.
 """
 
 import sqlalchemy as sa
@@ -84,8 +95,17 @@ def define_tables(metadata, column, table):
                    'customer_refund_consumptions.id', nullable=True),
         identifier('transaction_id', 'Refund document spending this capacity.'),
         identifier('revision_id', 'Exact refund revision spending this capacity.'),
-        identifier('credit_source_key_id', 'Permanent credit source spent.', 'credit_source_keys.id'),
-        identifier('credit_source_component_id', 'Exact revision-local credit capacity spent.', 'credit_components.id'),
+        identifier('credit_source_key_id', 'Permanent credit source spent; null when a payment overage supplied the capacity.',
+                   'credit_source_keys.id', nullable=True),
+        identifier('credit_source_component_id', 'Exact revision-local credit capacity spent; null when a payment overage supplied it.',
+                   'credit_components.id', nullable=True),
+        # The payment twin of the two columns above. NULL is the true value of both for every
+        # consumption written before unapplied receipts could be refunded, so nothing is
+        # backfilled and the kind of source is read off which pair is present.
+        identifier('payment_source_key_id', 'Permanent payment source spent; null when a credit memo supplied the capacity.',
+                   'payment_component_keys.id', nullable=True),
+        identifier('payment_source_component_id', 'Exact revision-local payment capacity spent; null when a credit memo supplied it.',
+                   'payment_components.id', nullable=True),
         C('amount_minor_units', sa.BigInteger, 'Positive home-currency capacity spent by this row.', nullable=False),
         C('currency', sa.String(3), 'Home currency of the spent capacity.', nullable=False),
         C('effective_date', sa.String(10), 'Accounting date of the refund that spent it.', nullable=False),
@@ -99,9 +119,19 @@ def define_tables(metadata, column, table):
                            " AND reverses_consumption_id <> id)", name='ck_customer_refund_consumption_kind'),
         sa.CheckConstraint("typeof(amount_minor_units) = 'integer' AND amount_minor_units > 0",
                            name='ck_customer_refund_consumption_positive'),
+        # Exactly one source, and both halves of whichever one it is. Without this a row could
+        # name a credit key and a payment component, and "what is this still worth" would have
+        # two answers.
+        sa.CheckConstraint(
+            '(credit_source_key_id IS NOT NULL) + (payment_source_key_id IS NOT NULL) = 1'
+            ' AND (credit_source_key_id IS NULL) = (credit_source_component_id IS NULL)'
+            ' AND (payment_source_key_id IS NULL) = (payment_source_component_id IS NULL)',
+            name='ck_customer_refund_consumption_one_source'),
         sa.Index('ix_customer_refund_consumptions_source', 'credit_source_key_id', 'id'),
         sa.Index('ix_customer_refund_consumptions_component', 'credit_source_component_id', 'id'),
-        description='Immutable positive credit capacity spent as cash, and the exact releases that give it back.')
+        sa.Index('ix_customer_refund_consumptions_payment_source', 'payment_source_key_id', 'id'),
+        sa.Index('ix_customer_refund_consumptions_payment_component', 'payment_source_component_id', 'id'),
+        description='Immutable positive customer capacity spent as cash, and the exact releases that give it back.')
 
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}
 
@@ -109,9 +139,12 @@ def define_tables(metadata, column, table):
 IMMUTABLE = ('customer_refund_profiles', 'customer_refund_consumptions')
 
 # The exact-inverse fence: a release must undo a real consumption, cell for cell, or
-# "what is this credit still worth" stops meaning anything.
+# "what is this still worth" stops meaning anything. Both source pairs are compared, so a
+# release cannot quietly hand a credit back capacity a payment supplied.
 _RELEASE_FIELDS = ('transaction_id', 'revision_id', 'credit_source_key_id',
-                   'credit_source_component_id', 'amount_minor_units', 'currency', 'effective_date')
+                   'credit_source_component_id', 'payment_source_key_id',
+                   'payment_source_component_id', 'amount_minor_units', 'currency',
+                   'effective_date')
 
 
 def guard_statements():
@@ -131,9 +164,10 @@ def guard_statements():
            "BEGIN SELECT RAISE(ABORT, 'release must exactly undo an original consumption'); END")
     # Exact party, exact receivable, exact currency, and a component that really belongs to
     # the named source. This is `applications_exact_party` restated for the cash disposition:
-    # without it a refund could spend one customer's credit and pay another customer.
+    # without it a refund could spend one customer's credit and pay another customer. One arm
+    # per kind of source, each guarded by the column that says which kind this row is.
     yield ('CREATE TRIGGER customer_refund_consumptions_exact_party BEFORE INSERT ON customer_refund_consumptions\n'
-           'WHEN NOT EXISTS (SELECT 1 FROM customer_refund_profiles p\n'
+           'WHEN NEW.credit_source_key_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_refund_profiles p\n'
            'JOIN credit_source_keys k ON k.id = NEW.credit_source_key_id\n'
            'JOIN credit_components c ON c.id = NEW.credit_source_component_id\n'
            'WHERE p.transaction_id = NEW.transaction_id AND p.revision_id = NEW.revision_id\n'
@@ -141,6 +175,15 @@ def guard_statements():
            'AND c.currency = NEW.currency AND k.currency = NEW.currency AND p.currency = NEW.currency\n'
            'AND p.party_id = k.party_id AND p.ar_account_id = k.ar_account_id)\n'
            "BEGIN SELECT RAISE(ABORT, 'refund and credit source ownership differ'); END")
+    yield ('CREATE TRIGGER customer_refund_consumptions_exact_payment_party BEFORE INSERT ON customer_refund_consumptions\n'
+           'WHEN NEW.payment_source_key_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_refund_profiles p\n'
+           'JOIN payment_component_keys k ON k.id = NEW.payment_source_key_id\n'
+           'JOIN payment_components pc ON pc.id = NEW.payment_source_component_id\n'
+           'WHERE p.transaction_id = NEW.transaction_id AND p.revision_id = NEW.revision_id\n'
+           'AND pc.component_key_id = k.id AND pc.transaction_id = k.transaction_id\n'
+           'AND pc.currency = NEW.currency AND k.currency = NEW.currency AND p.currency = NEW.currency\n'
+           'AND p.party_id = k.party_id AND p.ar_account_id = k.ar_account_id)\n'
+           "BEGIN SELECT RAISE(ABORT, 'refund and payment source ownership differ'); END")
     # The refund's own receivable attribution has to be a debit to that customer on that
     # account: the leg the refund posts and the capacity it spends are the same money.
     yield ('CREATE TRIGGER customer_refund_profiles_owned_attribution BEFORE INSERT ON customer_refund_profiles\n'

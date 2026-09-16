@@ -67,6 +67,15 @@ def _prepare_effect(s, ctx, inp, operation, provenance):
     if operation == 'void':
         if facts['applications']:
             raise BookflowError('E_HAS_APPLICATIONS', details={'payment_id': old['id'], 'action': 'unapply_first'})
+        # The refund twin of the line above, for the same reason: voiding this receipt takes
+        # the cash off the books while a refund still stands on the part of it that settled no
+        # invoice, and the customer's balance would be wrong by that amount for ever.
+        if facts['consumptions']:
+            raise BookflowError('E_HAS_REFUND', details={
+                'payment_id': old['id'],
+                'refund_ids': sorted({row['transaction_id'] for row in facts['consumptions']}),
+                'action': 'void_the_refund_first',
+                'next': 'Void the refund that paid this overpayment back, then void the payment.'})
         if changed:
             journals.open_dates(s, [revision['date']])
             batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],

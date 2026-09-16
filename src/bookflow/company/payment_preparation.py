@@ -270,7 +270,17 @@ def payment_page(s, inp):
         a.c.paying_transaction_id == t.c.id, a.c.kind == 'apply',
         ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).correlate(t).scalar_subquery(), 0)
-    available = sa.case((t.c.status == 'posted', r.c.total_minor_units-used), else_=0)
+    # Cash handed back is spent as surely as cash applied. `payment_facts` subtracts both for
+    # the single-receipt reads; this is the same arithmetic in SQL so the list filter, the
+    # `unapplied` sort and the page's own figure cannot disagree with what a receipt says.
+    spend, release = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('refund_release')
+    owner = c.payment_component_keys
+    refunded = sa.func.coalesce(sa.select(sa.func.sum(spend.c.amount_minor_units)).select_from(
+        spend.join(owner, owner.c.id == spend.c.payment_source_key_id)).where(
+        owner.c.transaction_id == t.c.id, spend.c.kind == 'consume',
+        ~sa.exists(sa.select(sa.literal_column("1")).where(release.c.reverses_consumption_id == spend.c.id))
+    ).correlate(t).scalar_subquery(), 0)
+    available = sa.case((t.c.status == 'posted', r.c.total_minor_units-used-refunded), else_=0)
     statement = sa.select(t.c.id, t.c.version, t.c.number, r.c.date, t.c.status, p.c.payer_id.label('customer_id'),
         p.c.payment_method_id, r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(query.cross_join(query.cross_join(p, r,
         r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)).where(t.c.type == 'payment')
@@ -337,7 +347,15 @@ def payment_page(s, inp):
         a.c.paying_transaction_id.in_(ids), a.c.kind == 'apply',
         ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).group_by(a.c.paying_transaction_id)).all()) if ids else {}
+    # The page's own figure carries the same third term the filter above does: a receipt whose
+    # overpayment has been sent back is not offering that money to anybody.
+    paid_back = dict(s.company.conn.execute(sa.select(owner.c.transaction_id, sa.func.sum(spend.c.amount_minor_units)).select_from(
+        spend.join(owner, owner.c.id == spend.c.payment_source_key_id)).where(
+        owner.c.transaction_id.in_(ids), spend.c.kind == 'consume',
+        ~sa.exists(sa.select(sa.literal_column("1")).where(release.c.reverses_consumption_id == spend.c.id))
+    ).group_by(owner.c.transaction_id)).all()) if ids else {}
     for row in out['items']:
         row['applied_minor_units'] = amounts.get(row['id'], 0)
-        row['unapplied_minor_units'] = row['received_minor_units'] - row['applied_minor_units'] if row['status'] == 'posted' else 0
+        row['unapplied_minor_units'] = (row['received_minor_units'] - row['applied_minor_units']
+                                        - paid_back.get(row['id'], 0)) if row['status'] == 'posted' else 0
     return out

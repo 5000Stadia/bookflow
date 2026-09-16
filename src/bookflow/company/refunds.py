@@ -1,30 +1,39 @@
-"""Paying a customer back: money out of a bank account, and the credit it uses up.
+"""Paying a customer back: money out of a bank account, and the capacity it uses up.
+
+**Two ways a customer ends up owed money.** A credit memo issued to them, and a payment whose
+cash was more than the invoices it settled -- a cheque for 150.00 against a 100.00 invoice
+leaves 50.00 standing. Both are refunded by this one document, because both are the same thing
+to the books: a customer holding money on the receivable, and a business handing it back.
 
 **The money.** One debit to the customer's Accounts Receivable and one credit to the bank
 account the money left. That is the whole ledger effect, and it is posted once, at the
 refund's date.
 
-**No income leg and no tax leg, deliberately.** The credit memo being refunded already took
-the income down and already took the sales tax liability down; a refund that touched either
-again would reverse the same sale twice. What a refund does is settle the negative receivable
-the credit left standing: the customer stops being owed money because they have been paid.
+**No income leg and no tax leg, deliberately.** A credit memo being refunded already took the
+income down and already took the sales tax liability down; a refund that touched either again
+would reverse the same sale twice. An overpayment never recognised any income to begin with --
+the cash landed against the receivable. Either way what a refund does is settle the negative
+receivable the source left standing: the customer stops being owed money because they have
+been paid.
 
-**Consumed once.** Every refunded cent names a credit memo and writes a
-``customer_refund_consumptions`` row against it, so the same credit cannot be refunded and
-then also applied to an invoice -- ``credits.facts`` subtracts consumptions and applications
-from the same capacity. This is the concrete double-spend the document exists to close:
+**Consumed once.** Every refunded cent names its source and writes a
+``customer_refund_consumptions`` row against that source's capacity, so the same money cannot
+be refunded and then also applied to an invoice -- ``credits.facts`` and
+``payment_queries.payment_facts`` each subtract consumptions and applications from the same
+capacity. This is the concrete double-spend the document exists to close:
 ``registers.REGISTER_TYPES`` already admits an Accounts Receivable register, so a check
-debiting AR for a customer posts the cash correctly and consumes nothing at all.
+debiting AR for a customer posts the cash correctly and consumes nothing at all, and the
+overpayment it was written for goes on offering itself to the next invoice for ever.
 
 **Corrected in place, or voided.** ``update`` writes another immutable revision: the effect of
 the revision before it is reversed at that revision's own date, a replacement is posted at the
 corrected one, every consumption it made is released and the corrected sources are taken again
 in the same write, and the document keeps its number and its whole readable history. What a
 correction may not change is who is paid -- the customer, the receivable account and the
-currency come from the credits and stay what they were, because paying somebody else back is a
+currency come from the sources and stay what they were, because paying somebody else back is a
 different refund -- and a refund a bank reconciliation already holds is refused rather than
 moved under the statement that cleared it. Voiding still exists and still reverses the
-accounting at the revision's own date and releases every consumption, so the credits it paid
+accounting at the revision's own date and releases every consumption, so the sources it paid
 out are worth again exactly what they were worth before.
 """
 from __future__ import annotations
@@ -35,6 +44,7 @@ import sqlalchemy as sa
 
 from bookflow.company import accounts, credits, journals, list_service, schema as c
 from bookflow.company import document_effects as effects
+from bookflow.company import payment_queries as query
 from bookflow.company.journal_models import parse_domestic_amount
 from bookflow.company.lists import get_list_definition
 from bookflow.company.parties import resolve_party
@@ -168,72 +178,158 @@ def _customer_facts(row):
 # ---------------------------------------------------------------- what may be refunded
 
 
-def _sources(s, entries, currency, guard, released=None):
-    """Resolve every named credit, check what it is still worth, and take exactly that much.
+# What each kind of source is called where a refusal has to name it, so an error says
+# "credit_memo_id" about a credit and "payment_id" about a receipt rather than one word for
+# both. The kind itself is never stored: it is read off which half of the source is filled.
+_SOURCE_FIELD = {'credit': 'credit_memo_id', 'payment': 'payment_id'}
+_NUMBER_FIELD = {'credit': 'credit_memo_number', 'payment': 'payment_number'}
+_SOURCE_NOUN = {'credit': 'credit memo', 'payment': 'payment'}
 
-    The customer, receivable account and currency come from the credits rather than from the
-    caller: a refund that named a different customer from the credit it spends would pay the
+
+def _credit_source(s, selector, released):
+    """One credit memo, as the uniform source shape both kinds resolve to."""
+    facts = credits.facts(s, selector, write=True)
+    header = facts['header']
+    if header['status'] != 'posted':
+        raise BookflowError('E_APPLICATION_INACTIVE', details={
+            'credit_memo_id': header['id'], 'status': header['status'],
+            'next': 'A voided credit memo is worth nothing and can refund nothing.'})
+    handed_back = {row['id']: released.get(('credit', row['id']), 0) for row in facts['components']}
+    remaining = {row['id']: facts['remaining'][row['id']] + handed_back[row['id']]
+                 for row in facts['components']}
+    available = facts['available'] + sum(handed_back.values())
+    return dict(kind='credit', header=header, revision=facts['revision'], key=facts['key'],
+                components=facts['components'], remaining=remaining, available=available)
+
+
+def _payment_source(s, selector, released):
+    """One payment's unapplied overage, as the same uniform source shape.
+
+    ``payment_facts`` already answers what each of the receipt's exact-party component keys is
+    still worth, with applications and earlier refund consumptions both subtracted, so what is
+    left here is choosing which key this refund draws on. A receipt holds at most one key per
+    (customer, receivable account, currency) triple, so more than one key with money left on it
+    means more than one customer is owed -- and one refund pays back one of them.
+    """
+    facts = query.payment_facts(s, selector, write=True)
+    header, profile = facts['header'], facts['profile']
+    if header['status'] != 'posted':
+        raise BookflowError('E_APPLICATION_INACTIVE', details={
+            'payment_id': header['id'], 'status': header['status'],
+            'next': 'A voided payment holds no money to pay back.'})
+    by_key = {row['component_key_id']: row for row in facts['components']}
+    worth = {key_id: facts['available'][key_id] + released.get(('payment', key_id), 0)
+             for key_id in by_key}
+    spendable = sorted(key_id for key_id, value in worth.items() if value > 0)
+    if len(spendable) > 1:
+        raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={
+            'payment_id': header['id'],
+            'next': 'This payment still holds money for more than one customer or job; refund '
+                    'each of them with its own refund.'})
+    # With nothing spendable the refund is about to be refused anyway, but the refusal still
+    # has to say whose money it was: the payer's own key is the one a reader expects named.
+    key_id = spendable[0] if spendable else next(
+        (identifier for identifier in sorted(by_key)
+         if facts['keys'][identifier]['party_id'] == profile['payer_id']),
+        next(iter(sorted(by_key)), None))
+    if key_id is None:
+        raise BookflowError('E_CREDIT_UNAVAILABLE', details={
+            'payment_id': header['id'], 'payment_number': header['number'],
+            'next': 'This payment carries no capacity at all; there is nothing to pay back.'})
+    component = by_key[key_id]
+    return dict(kind='payment', header=header, revision=facts['revision'],
+                key=facts['keys'][key_id], components=[component],
+                remaining={component['id']: worth[key_id]}, available=worth[key_id])
+
+
+def _sources(s, entries, currency, guard, released=None):
+    """Resolve every named source, check what it is still worth, and take exactly that much.
+
+    The customer, receivable account and currency come from the sources rather than from the
+    caller: a refund that named a different customer from the capacity it spends would pay the
     wrong person, and `customer` is therefore a guard rather than a choice.
 
-    ``entries`` is one ``(credit memo selector, requested minor units or None)`` per credit;
-    None means the whole of what that credit is worth. ``released`` is the capacity this same
-    refund is handing back in this very write, by credit component: a correction releases what
-    it consumed before and takes the corrected amounts again, so what it may take is what the
-    books say is available plus what it is handing back. For a new refund it is empty and every
-    figure below is the stored one.
+    ``entries`` is one ``(kind, selector, requested minor units or None)`` per source, where
+    kind is ``credit`` or ``payment``; None means the whole of what that source is worth.
+    ``released`` is the capacity this same refund is handing back in this very write, keyed by
+    the handle ``released_key`` gives each kind: a correction releases what it consumed before
+    and takes the corrected amounts again, so what it may take is what the books say is
+    available plus what it is handing back. For a new refund it is empty and every figure below
+    is the stored one.
     """
     released = released or {}
     resolved, seen, key = [], set(), None
-    for selector, requested in entries:
-        facts = credits.facts(s, selector, write=True)
+    for kind, selector, requested in entries:
+        facts = (_credit_source if kind == 'credit' else _payment_source)(s, selector, released)
         header = facts['header']
         if header['id'] in seen:
-            raise _invalid('sources', 'name each credit memo once')
+            raise _invalid('sources', 'name each credit memo or payment once')
         seen.add(header['id'])
-        if header['status'] != 'posted':
-            raise BookflowError('E_APPLICATION_INACTIVE', details={
-                'credit_memo_id': header['id'], 'status': header['status'],
-                'next': 'A voided credit memo is worth nothing and can refund nothing.'})
         if key is None:
             key = facts['key']
         elif (facts['key']['party_id'], facts['key']['ar_account_id'], facts['key']['currency']) != (
                 key['party_id'], key['ar_account_id'], key['currency']):
             raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={
-                'credit_memo_id': header['id'],
+                _SOURCE_FIELD[kind]: header['id'],
                 'next': 'One refund pays back one customer on one receivable account in one '
                         'currency; write a second refund for the other customer.'})
-        remaining = {row['id']: facts['remaining'][row['id']] + released.get(row['id'], 0)
-                     for row in facts['components']}
-        available = facts['available'] + sum(released.get(row['id'], 0)
-                                             for row in facts['components'])
+        available = facts['available']
         amount = available if requested is None else requested
         if available <= 0 or amount > available:
             raise BookflowError('E_CREDIT_UNAVAILABLE', details={
-                'credit_memo_id': header['id'], 'credit_memo_number': header['number'],
+                _SOURCE_FIELD[kind]: header['id'], _NUMBER_FIELD[kind]: header['number'],
                 'requested': Money(max(amount, 0), currency).to_dict(),
                 'available': Money(available, currency).to_dict(),
-                'next': 'This credit has already been applied or refunded; refund at most what '
-                        'it is still worth.'})
+                'next': ('This credit has already been applied or refunded; refund at most what '
+                         'it is still worth.') if kind == 'credit' else
+                        ('This payment has already been applied or refunded; refund at most the '
+                         'cash on it that settled no invoice.')})
         if amount <= 0:
-            raise _invalid('sources.amount', 'refund a positive amount of each credit you name')
-        resolved.append(dict(facts=facts, amount=amount, available=available, remaining=remaining))
+            raise _invalid('sources.amount', 'refund a positive amount of each source you name')
+        resolved.append(dict(facts=facts, amount=amount, available=available,
+                             remaining=facts['remaining']))
     if guard is not None:
         expected = resolve_party(s.company, 'customer', guard)
         if expected['id'] != key['party_id']:
-            raise _invalid('customer', 'these credits belong to a different customer')
+            raise _invalid('customer', 'these sources belong to a different customer')
     return resolved, key
 
 
 def _entered(items, currency):
-    """What the caller asked for, as the pairs `_sources` reads."""
-    return [(item.credit_memo,
+    """What the caller asked for, as the triples `_sources` reads."""
+    return [('credit' if item.credit_memo is not None else 'payment',
+             item.credit_memo if item.credit_memo is not None else item.payment,
              None if item.amount is None
              else parse_domestic_amount(item.amount, currency, 'sources.amount').minor_units)
             for item in items]
 
 
+def _captured(row):
+    """One resolved source as the profile stores it: the half its kind fills, and the figures."""
+    facts = row['facts']
+    header, date = facts['header'], facts['revision']['date']
+    named = (dict(credit_memo_id=header['id'], credit_memo_number=header['number'],
+                  credit_memo_date=date, credit_source_key_id=facts['key']['id'])
+             if facts['kind'] == 'credit' else
+             dict(payment_id=header['id'], payment_number=header['number'], payment_date=date,
+                  payment_source_key_id=facts['key']['id']))
+    return RefundSource(**named, amount_minor_units=row['amount'],
+                        available_minor_units=row['available'])
+
+
+def _source_columns(facts, component):
+    """The two halves of a consumption row, one filled and one empty, by kind of source."""
+    if facts['kind'] == 'credit':
+        return dict(credit_source_key_id=facts['key']['id'],
+                    credit_source_component_id=component['id'],
+                    payment_source_key_id=None, payment_source_component_id=None)
+    return dict(credit_source_key_id=None, credit_source_component_id=None,
+                payment_source_key_id=facts['key']['id'],
+                payment_source_component_id=component['id'])
+
+
 def _draw(facts, wanted, remaining=None):
-    """Take `wanted` from this credit's components in order; never more than one holds."""
+    """Take `wanted` from this source's components in order; never more than one holds."""
     taken = []
     remaining = dict(facts['remaining'] if remaining is None else remaining)
     for component in facts['components']:
@@ -245,7 +341,7 @@ def _draw(facts, wanted, remaining=None):
         taken.append((component, share))
         wanted -= share
     if wanted > 0:  # pragma: no cover - the availability check runs first
-        raise BookflowError('E_INTERNAL', message='Credit capacity is not attributable.')
+        raise BookflowError('E_INTERNAL', message='Refunded capacity is not attributable.')
     return taken
 
 
@@ -270,25 +366,40 @@ def _consumption_output(s, rows, numbers):
     values = []
     for row in rows:
         currency = row['currency']
+        credit, payment = row['credit_source_key_id'], row['payment_source_key_id']
+        named = (dict(credit_memo_id=numbers[credit][0], credit_memo_number=numbers[credit][1],
+                      payment_id=None, payment_number=None) if credit else
+                 dict(credit_memo_id=None, credit_memo_number=None,
+                      payment_id=numbers[payment][0], payment_number=numbers[payment][1]))
         values.append(CustomerRefundConsumptionOutput(
             **{key: row[key] for key in ('id', 'created_at', 'created_by', 'created_via', 'kind',
                                          'reverses_consumption_id', 'transaction_id', 'revision_id',
                                          'credit_source_key_id', 'credit_source_component_id',
+                                         'payment_source_key_id', 'payment_source_component_id',
                                          'amount_minor_units', 'currency', 'effective_date')},
-            credit_memo_id=numbers[row['credit_source_key_id']][0],
-            credit_memo_number=numbers[row['credit_source_key_id']][1],
-            amount=Money(row['amount_minor_units'], currency).to_dict()))
+            **named, amount=Money(row['amount_minor_units'], currency).to_dict()))
     return values
 
 
-def _credit_labels(s, rows):
-    identifiers = {row['credit_source_key_id'] for row in rows}
-    if not identifiers:
-        return {}
-    keys = effects.rows(s, c.credit_source_keys, c.credit_source_keys.c.id.in_(identifiers))
-    headers = {row['id']: row for row in effects.rows(
-        s, c.transactions, c.transactions.c.id.in_([key['transaction_id'] for key in keys]))}
-    return {key['id']: (key['transaction_id'], headers[key['transaction_id']]['number']) for key in keys}
+def _source_labels(s, rows):
+    """The document each consumed source key belongs to, and the number on its face.
+
+    One dictionary over both kinds, keyed by source key id: a credit memo's key and a
+    payment's component key are different tables but answer the same question, and a reader
+    of one refund's consumptions should not have to know which table a row came from.
+    """
+    labels = {}
+    for table, column in ((c.credit_source_keys, 'credit_source_key_id'),
+                          (c.payment_component_keys, 'payment_source_key_id')):
+        identifiers = {row[column] for row in rows if row[column]}
+        if not identifiers:
+            continue
+        keys = effects.rows(s, table, table.c.id.in_(identifiers))
+        headers = {row['id']: row for row in effects.rows(
+            s, c.transactions, c.transactions.c.id.in_([key['transaction_id'] for key in keys]))}
+        labels.update({key['id']: (key['transaction_id'],
+                                   headers[key['transaction_id']]['number']) for key in keys})
+    return labels
 
 
 def revision_output(s, header, revision, profile, pending=None):
@@ -324,7 +435,7 @@ def _output(s, header, revision, profile, pending=None, *, model=CustomerRefundO
     rows += effects.rows(s, c.customer_refund_consumptions,
                          c.customer_refund_consumptions.c.transaction_id == header['id'],
                          order=c.customer_refund_consumptions.c.id)
-    labels = _credit_labels(s, rows)
+    labels = _source_labels(s, rows)
     return model(**summary(header, revision, profile),
                  revision=revision_output(s, header, revision, profile, pending),
                  consumptions=_consumption_output(s, sorted(rows, key=lambda row: row['id']), labels),
@@ -422,12 +533,27 @@ def entered_line(s, revision):
                         order=c.document_lines.c.position)[0]
 
 
+def released_key(row):
+    """What a consumption hands capacity back to, and the one thing both kinds key on.
+
+    A credit's capacity is per component, and a credit-memo correction restates its live
+    consumptions onto the new revision's components, so a component id is a durable handle
+    there. A receipt's capacity is per *component key*: correcting a payment mints fresh
+    ``payment_components`` while the permanent key stays, so a consumption written before that
+    correction names a component that is no longer current. Keying the payment side on the key
+    is what lets a refund correction still find what it is handing back.
+    """
+    if row['credit_source_key_id']:
+        return ('credit', row['credit_source_component_id'])
+    return ('payment', row['payment_source_key_id'])
+
+
 def _released(s, transaction_id):
-    """What this refund is about to hand back, per credit component, so it may retake it."""
+    """What this refund is about to hand back, per source handle, so it may retake it."""
     given = {}
     for row in credits.active_consumptions(s, refund_id=transaction_id):
-        identifier = row['credit_source_component_id']
-        given[identifier] = given.get(identifier, 0) + row['amount_minor_units']
+        handle = released_key(row)
+        given[handle] = given.get(handle, 0) + row['amount_minor_units']
     return given
 
 
@@ -474,7 +600,8 @@ def _resolve(s, inp, *, previous=None):
             entries = _entered(inp.sources, currency)
             explicit = any(item.amount is not None for item in inp.sources)
         else:
-            entries = [(row.credit_memo_id, row.amount_minor_units) for row in captured.sources]
+            entries = [('credit' if row.credit_memo_id else 'payment', row.document_id,
+                        row.amount_minor_units) for row in captured.sources]
             origin = captured.origins.get('amount')
             explicit = origin is None or origin.kind == 'explicit'
         date = inp.date or revision['date']
@@ -520,7 +647,8 @@ def _resolve(s, inp, *, previous=None):
     journals.open_dates(s, [date] + ([previous['revision']['date']] if previous else []))
     for row in sources:
         if date < row['facts']['revision']['date']:
-            raise _invalid('date', 'a refund cannot be dated before the credit memo it pays out')
+            raise _invalid('date', 'a refund cannot be dated before the '
+                           + _SOURCE_NOUN[row['facts']['kind']] + ' it pays out')
     if previous and number_selector is None:
         number, sequence = previous['revision']['number'], None
     else:
@@ -530,12 +658,7 @@ def _resolve(s, inp, *, previous=None):
         customer=customer, ar_account=receivable, funding_account=funding, payment_method=method,
         check_number=check_number, reference=reference, amount_minor_units=total,
         currency=currency,
-        sources=[RefundSource(credit_memo_id=row['facts']['header']['id'],
-                              credit_memo_number=row['facts']['header']['number'],
-                              credit_memo_date=row['facts']['revision']['date'],
-                              credit_source_key_id=row['facts']['key']['id'],
-                              amount_minor_units=row['amount'],
-                              available_minor_units=row['available']) for row in sources],
+        sources=[_captured(row) for row in sources],
         origins={'funding_account': Origin(kind='explicit'), 'method': Origin(kind='explicit'),
                  'amount': Origin(kind='explicit' if explicit else 'default')})
     return dict(currency=currency, sources=sources, key=key, total=total, party_row=party_row,
@@ -602,7 +725,7 @@ def _compose(s, ctx, inp, resolved, previous=None):
         old_batch = batches[0]
         effects.reverse(s, header, previous['revision'], old_batch, event, created, pending)
         # Every consumption the superseded revision made is released, exactly, before the
-        # corrected one takes what it needs: in between, no credit is spent twice.
+        # corrected one takes what it needs: in between, nothing is spent twice.
         for row in credits.active_consumptions(s, refund_id=header['id']):
             pending['customer_refund_consumptions'].append(dict(
                 row, **created(), audit_event_id=event, kind='release',
@@ -634,8 +757,9 @@ def _compose(s, ctx, inp, resolved, previous=None):
         pending['posting_line_sources'].append(source)
         return source
 
-    # Dr the receivable, Cr the bank. No income leg and no tax leg: the credit memo already
-    # reversed the sale, and doing it again here would take the revenue down twice.
+    # Dr the receivable, Cr the bank. No income leg and no tax leg: a credit memo already
+    # reversed the sale and an overpayment never recognised one, so touching either here would
+    # move revenue no refund is entitled to move.
     ar_source = attribute(leg(receivable, total, True, 1), total)
     attribute(leg(funding, total, False, 2), total)
     pending['customer_refund_profiles'].append(dict(
@@ -651,8 +775,7 @@ def _compose(s, ctx, inp, resolved, previous=None):
             pending['customer_refund_consumptions'].append(dict(
                 **created(), audit_event_id=event, kind='consume', reverses_consumption_id=None,
                 transaction_id=header['id'], revision_id=revision['id'],
-                credit_source_key_id=row['facts']['key']['id'],
-                credit_source_component_id=component['id'], amount_minor_units=share,
+                **_source_columns(row['facts'], component), amount_minor_units=share,
                 currency=currency, effective_date=resolved['date']))
     operation = 'update' if previous else 'post'
     changed_fields = _changed_fields(s, previous, header, revision,
@@ -747,7 +870,7 @@ def prepare_void(s, ctx, inp):
                                  c.posting_batches.c.revision_id == revision['id'],
                                  c.posting_batches.c.kind != 'reversal')[0]
     inverse = effects.reverse(s, header, revision, current_batch, event, created, pending)
-    # Every consumption this refund made is released, exactly, so the credits it paid out are
+    # Every consumption this refund made is released, exactly, so the sources it paid out are
     # worth again what they were worth before it was written.
     for row in credits.active_consumptions(s, refund_id=header['id']):
         pending['customer_refund_consumptions'].append(dict(

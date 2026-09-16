@@ -4050,29 +4050,65 @@ tables carry the same `(transaction_id, id, party_id)` triple deliberately, so t
 projection and the two branches cannot drift.
 
 **What a refund is.** `customer-refund post` debits the customer's receivable and credits the
-bank account the money left, and posts nothing else. No income leg and no tax leg: the credit
-memo already reversed the sale, and touching either again would take the same revenue down
-twice. `refund_validation.py` asserts that by account *type*, because a second reversal is
-invisible in a total that still balances. `registers.REGISTER_TYPES` already admits a
-receivable register, so a check debiting A/R for a customer posts the cash correctly and
-consumes nothing at all — that double-spend is what the typed document closes.
+bank account the money left, and posts nothing else. No income leg and no tax leg: a credit
+memo already reversed the sale and an overpayment never recognised one, so touching either
+would move revenue no refund is entitled to move. `refund_validation.py` asserts that by
+account *type*, because a second reversal is invisible in a total that still balances.
+`registers.REGISTER_TYPES` already admits a receivable register, so a check debiting A/R for a
+customer posts the cash correctly and consumes nothing at all — that double-spend is what the
+typed document closes.
 
-**Consumed once.** `customer_refund_consumptions` is an immutable positive row naming one credit
-source key and one credit component, with a unique inverse column mirroring `uq_payment_unapply`.
+**Two kinds of source, one refund.** A customer ends up holding money in two ways: a credit
+memo issued to them, and a payment whose cash exceeded the invoices it settled. Both are the
+same thing to the books — a negative receivable standing in that customer's name — so both are
+refunded by the one document. `refunds._credit_source` and `refunds._payment_source` resolve
+each kind into the one shape everything downstream reads: a permanent key carrying
+`(party_id, ar_account_id, currency)`, the components the capacity sits in, what the whole
+source is still worth, and what each component has left. `credit_source_keys` and
+`payment_component_keys` already carry that triple under the same column names, which is why
+one shape covers both. A payment source draws on exactly one of the receipt's component keys;
+a receipt holding money for more than one customer or job answers
+`E_APPLICATION_INCOMPATIBLE`, because one refund pays back one of them.
+
+**Consumed once.** `customer_refund_consumptions` is an immutable positive row naming one
+source key and one source component, with a unique inverse column mirroring
+`uq_payment_unapply`. It carries two nullable source pairs — the credit pair and the payment
+pair — and `ck_customer_refund_consumption_one_source` asserts exactly one is present, the
+shape `applications` and `application_allocations` took in co0028 for the same reason: the kind
+of source is derived from which pair is filled rather than stored, so the release rule, the
+immutability triggers and the release-and-retake arithmetic are written once. Two exact-party
+triggers guard the two arms. `credits.active_consumptions` is the one reader, and it is
+subtracted in two places and only two: `credits.facts` for a credit memo's worth, and
+`payment_queries.payment_facts` for a receipt's per-key availability — which is the dictionary
+the apply path, the shared draft, the correction, the recovery and every payment read all
+reach availability through, so a refunded overage stops offering itself everywhere at once.
+
 A refund is not an `applications` row and the rule that keeps the two apart is stated once:
 **`applications` edges settle obligations; refunds consume sources.** A settlement row targeting
 a refund would be dropped by `_EFFECTS`'s `settled_party` inner join to `sales_profiles`, which a
 refund has none of — the right total by accident. A refund is also not an obligation: it has no
 line components for an allocation to attribute to, and nothing about it is due.
 
+**What stands on a receipt.** `payment void` and `payment delete` refuse with `E_HAS_REFUND`
+while a live consumption draws on the receipt, naming the refund ids — the twin of the
+`E_HAS_APPLICATIONS` fence beside them, and for the same reason: cancelling the cash under a
+refund that still debits the receivable leaves the customer's balance wrong by that amount.
+`reconciliation_adapters.SETTLEMENT_EDGES` carries `customer_refund_consumptions` twice, once
+through each source key table, because a payment-sourced row has a null credit key and the
+credit join would drop it out of the authority closure silently.
+
 **The three dispositions, and their exclusivity.** Retain, apply elsewhere, refund — the three
-the anchor product's own Available Credit dialog offers. They are mutually exclusive by one
-subtraction: after a refund the credit cannot also be applied, and after an application it
-cannot be refunded beyond what is left. Both answer `E_CREDIT_UNAVAILABLE` and write nothing.
+the anchor product's own Available Credit dialog offers, and they are the same three for a
+credit memo and for a payment's overage. They are mutually exclusive by one subtraction: after
+a refund the money cannot also be applied, and after an application it cannot be refunded
+beyond what is left. Both answer `E_CREDIT_UNAVAILABLE` and write nothing. In the browser the
+third disposition is reached from the Customer payments list, whose row shows the unapplied
+figure and carries a Refund link opening `customer-refund post` seeded with that receipt and
+that amount (`workbench/credits.overpayment_rows`).
 
 **Void.** `customer-refund void` reverses the accounting at the refund's own date and writes an
-exact release for every consumption it made, so the credits it paid out are worth again exactly
-what they were worth before. `credit-memo void` reverses the credit at its own date, releases
+exact release for every consumption it made, so the credit memos and payment overages it paid
+out are worth again exactly what they were worth before. `credit-memo void` reverses the credit at its own date, releases
 every source interval it claimed — re-returning a released unit yields the identical cents, by
 the endpoint rule — leaves the number occupied and every revision readable. A credit something
 still stands on is refused rather than quietly released: `E_HAS_APPLICATIONS` for a live

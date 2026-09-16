@@ -968,13 +968,27 @@ def active_applications(s, transaction_id):
                         order=app.c.id)
 
 
-def active_consumptions(s, *, key_id=None, refund_id=None):
-    """Every refund consumption of credit capacity that no release has given back."""
+def active_consumptions(s, *, key_id=None, payment_key_id=None, refund_id=None):
+    """Every refund consumption that no release has given back.
+
+    The one reader of ``customer_refund_consumptions``, for both kinds of capacity: ``key_id``
+    narrows to one credit memo's source key, ``payment_key_id`` to one payment's component
+    key, and ``refund_id`` to everything one refund document currently holds. It lives beside
+    the credit machinery because that is the layer both the refund and the receipt read
+    through, and one home is what stops a caller subtracting consumptions of one kind and
+    missing the other.
+    """
     table, inverse = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('release')
     where = [table.c.kind == 'consume',
              ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_consumption_id == table.c.id))]
     if key_id is not None:
         where.append(table.c.credit_source_key_id == key_id)
+    if payment_key_id is not None:
+        # A receipt holds one component key per party, so the caller with a whole receipt in
+        # hand passes them all at once rather than paging one indexed read per job.
+        where.append(table.c.payment_source_key_id.in_(payment_key_id)
+                     if isinstance(payment_key_id, (list, tuple, set, frozenset))
+                     else table.c.payment_source_key_id == payment_key_id)
     if refund_id is not None:
         where.append(table.c.transaction_id == refund_id)
     return effects.rows(s, table, *where, order=table.c.id)

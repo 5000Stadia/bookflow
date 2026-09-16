@@ -2,19 +2,21 @@
 
 # `company.customer_refund_consumptions`
 
-Immutable positive credit capacity spent as cash, and the exact releases that give it back.
+Immutable positive customer capacity spent as cash, and the exact releases that give it back.
 
 Database: `company`.
 
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
-| `id` | VARCHAR(26) | no | — | primary key 1 | ix_customer_refund_consumptions_component, ix_customer_refund_consumptions_source | — | Immutable consumption or release identity. |
+| `id` | VARCHAR(26) | no | — | primary key 1 | ix_customer_refund_consumptions_component, ix_customer_refund_consumptions_payment_component, ix_customer_refund_consumptions_payment_source, ix_customer_refund_consumptions_source | — | Immutable consumption or release identity. |
 | `kind` | VARCHAR(16) | no | — | — | — | — | consume or release. |
 | `reverses_consumption_id` | VARCHAR(26) | yes | — | unique | — | customer_refund_consumptions.id | Exact consumption released; null on a consumption. |
 | `transaction_id` | VARCHAR(26) | no | — | — | — | customer_refund_profiles.transaction_id | Refund document spending this capacity. |
 | `revision_id` | VARCHAR(26) | no | — | — | — | customer_refund_profiles.revision_id | Exact refund revision spending this capacity. |
-| `credit_source_key_id` | VARCHAR(26) | no | — | — | ix_customer_refund_consumptions_source | credit_source_keys.id | Permanent credit source spent. |
-| `credit_source_component_id` | VARCHAR(26) | no | — | — | ix_customer_refund_consumptions_component | credit_components.id | Exact revision-local credit capacity spent. |
+| `credit_source_key_id` | VARCHAR(26) | yes | — | — | ix_customer_refund_consumptions_source | credit_source_keys.id | Permanent credit source spent; null when a payment overage supplied the capacity. |
+| `credit_source_component_id` | VARCHAR(26) | yes | — | — | ix_customer_refund_consumptions_component | credit_components.id | Exact revision-local credit capacity spent; null when a payment overage supplied it. |
+| `payment_source_key_id` | VARCHAR(26) | yes | — | — | ix_customer_refund_consumptions_payment_source | payment_component_keys.id | Permanent payment source spent; null when a credit memo supplied the capacity. |
+| `payment_source_component_id` | VARCHAR(26) | yes | — | — | ix_customer_refund_consumptions_payment_component | payment_components.id | Exact revision-local payment capacity spent; null when a credit memo supplied it. |
 | `amount_minor_units` | BIGINT | no | — | — | — | — | Positive home-currency capacity spent by this row. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of the spent capacity. |
 | `effective_date` | VARCHAR(10) | no | — | — | — | — | Accounting date of the refund that spent it. |

@@ -88,13 +88,23 @@ def recover(inp, ctx, s):
 
 
 def dependencies(s, identity):
-    """A reconciled statement effect is cancelled by its own owner, never by delete."""
+    """What still stands on this receipt and is cancelled by its own owner, never by delete."""
     keys, members = c.reconciliation_keys, c.reconciliation_current_members
     held = s.company.conn.execute(sa.select(keys.c.id).join(members, members.c.key_id == keys.c.id).where(
         keys.c.transaction_id == identity)).first()
     if held is not None:
         raise BookflowError('E_RECONCILIATION_DEPENDENCY', details={'payment_id': identity,
             'next': 'Undo the bank reconciliation that holds this receipt before deleting it.'})
+    # A refund that paid this receipt's overpayment back holds capacity it took from here.
+    # Deleting the receipt under it would leave the refund debiting a receivable the cash no
+    # longer credits, so the refund goes first -- the same order `payment void` requires.
+    from bookflow.company.payment_queries import payment_facts
+    live = payment_facts(s, identity)['consumptions']
+    if live:
+        raise BookflowError('E_HAS_REFUND', details={'payment_id': identity,
+            'refund_ids': sorted({row['transaction_id'] for row in live}),
+            'action': 'void_the_refund_first',
+            'next': 'Void the refund that paid this overpayment back before deleting the receipt.'})
 
 
 def prepare(s, ctx, inp):

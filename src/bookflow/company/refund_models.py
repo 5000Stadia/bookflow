@@ -1,9 +1,11 @@
 """What paying a customer back takes and what it gives back.
 
-``customer-refund post`` names the customer, the credits it pays out and the bank account the
-money leaves, and writes one document. It settles nothing: there is no invoice on the other
-side of a refund, only credit capacity, so what stops the same credit being spent twice is a
-consumption row rather than a settlement edge.
+``customer-refund post`` names the customer, the capacity it pays out and the bank account the
+money leaves, and writes one document. Two documents leave a customer holding money -- a
+credit memo, and a payment whose cash was more than the invoices it settled -- and a refund
+draws on either. It settles nothing: there is no invoice on the other side of a refund, only
+standing capacity, so what stops that same money being spent twice is a consumption row
+rather than a settlement edge.
 
 ``customer-refund update`` corrects a saved refund with another immutable revision, the way
 every other posted document is corrected: what is supplied replaces what was captured, the
@@ -12,7 +14,7 @@ and the consumptions the old revision made are released and retaken in the same 
 revision carries its own header row, so ``ar_posting_source_id`` names that revision's own
 receivable attribution rather than one shared across the document's life. What no correction
 changes is who is paid: the customer, the receivable account and the currency come from the
-credits being paid out.
+sources being paid out.
 """
 from __future__ import annotations
 
@@ -33,23 +35,40 @@ CheckNumber = Annotated[str, Field(min_length=1, max_length=64)]
 
 
 class RefundSourceInput(_Input):
-    """One credit memo to pay out, and how much of it."""
+    """One document to pay out, and how much of it.
 
-    credit_memo: _Selector
+    Name a ``credit_memo`` or a ``payment``, never both: a payment source pays back the part
+    of that receipt which settled no invoice, which is what a customer who overpaid is owed.
+    """
+
+    credit_memo: _Selector | None = Field(
+        default=None,
+        description='A credit memo to pay out. Give this or `payment`, not both.')
+    payment: _Selector | None = Field(
+        default=None,
+        description='A customer payment to pay back out of, for the cash on it that settled '
+                    'no invoice. Give this or `credit_memo`, not both.')
     amount: str | MoneyInput | None = Field(
         default=None,
-        description='How much of this credit to pay out; omit to pay out everything it is '
+        description='How much of this source to pay out; omit to pay out everything it is '
                     'still worth.')
+
+    @model_validator(mode='after')
+    def one_source(self) -> Self:
+        if (self.credit_memo is None) == (self.payment is None):
+            raise ValueError('name either credit_memo or payment on each source, not both')
+        return self
 
 
 class CustomerRefundPostInput(_Input):
-    """Pay a customer back what a credit memo says they are owed.
+    """Pay a customer back what they are owed: an issued credit, or money they overpaid.
 
-    Every refunded cent has to come from a named credit: ``sources`` is not a convenience,
-    it is what makes the refund legitimate and what stops the credit also being applied to an
-    invoice afterwards. ``customer``, the receivable account and the currency are taken from
-    those credits, because a refund that named a different customer from the credit it spends
-    would pay the wrong person.
+    Every refunded cent has to come from a named source: ``sources`` is not a convenience,
+    it is what makes the refund legitimate and what stops that money also being applied to an
+    invoice afterwards. Each source is a credit memo or a payment carrying unapplied cash.
+    ``customer``, the receivable account and the currency are taken from those sources,
+    because a refund that named a different customer from the capacity it spends would pay
+    the wrong person.
     """
 
     date: _Date
@@ -83,10 +102,10 @@ class CustomerRefundVoidInput(_Input):
 class CustomerRefundUpdateInput(_Input):
     """A correction of a saved customer refund: what changes is what is supplied.
 
-    ``sources`` replaces the whole list of credits the refund pays out, each with how much of
+    ``sources`` replaces the whole list of documents the refund pays out, each with how much of
     it goes; leave it out and the captured sources stand exactly as they were, which is how the
     date, the memo, the bank account or the check number alone is corrected. ``customer`` stays
-    what it always was -- an optional guard on the credits, never a choice -- because a refund
+    what it always was -- an optional guard on the sources, never a choice -- because a refund
     that paid somebody else is a different refund and not a correction of this one.
     """
 
@@ -138,16 +157,25 @@ class CustomerRefundQueryInput(_Input):
 
 
 class CustomerRefundConsumptionOutput(CreatedOutput):
-    """One credit this refund spent, or the exact release that gave it back."""
+    """One capacity this refund spent, or the exact release that gave it back.
+
+    Exactly one of the two source halves is filled: the credit memo it drew on, or the payment
+    whose unapplied cash it paid back. Both are optional on the wire because neither is present
+    on every row, the same way an ``applications`` row names one source of two.
+    """
 
     kind: Literal['consume', 'release']
     reverses_consumption_id: str | None
     transaction_id: str
     revision_id: str
-    credit_memo_id: str
-    credit_memo_number: str
-    credit_source_key_id: str
-    credit_source_component_id: str
+    credit_memo_id: str | None
+    credit_memo_number: str | None
+    credit_source_key_id: str | None
+    credit_source_component_id: str | None
+    payment_id: str | None
+    payment_number: str | None
+    payment_source_key_id: str | None
+    payment_source_component_id: str | None
     amount: MoneyOutput
     amount_minor_units: int
     currency: str
