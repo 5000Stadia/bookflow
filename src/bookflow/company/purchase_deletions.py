@@ -6,7 +6,7 @@ from bookflow.company import schema as c, checks, journals, check_items, invento
 from bookflow.company import money_out, reconciliation_adapters as reconciliation
 from bookflow.company.purchase_deletion_models import PurchaseDeleteOutput
 from bookflow.core import audit, clock
-from bookflow.core.deletion_families import capability
+from bookflow.core.deletion_families import capability, deleted_record_refusal
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
@@ -17,11 +17,11 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'))
 
 
-def require_not_deleted(s, identity):
+def require_not_deleted(s, identity, *, deleting=False):
     # Historical migrations may call an older coordinator before co0049 exists.
     if sa.inspect(s.company.conn).has_table('purchase_deletions') and s.company.conn.execute(
             sa.select(c.purchase_deletions.c.transaction_id).where(c.purchase_deletions.c.transaction_id == identity)).first():
-        raise journals.invalid('transaction', 'This purchase was deleted; its retained history cannot be edited or voided.')
+        raise journals.invalid('transaction', deleted_record_refusal('purchase', deleting=deleting))
 
 
 def admit(s, noun):
@@ -92,6 +92,11 @@ def prepare(s, ctx, inp, noun):
     if found is not None:
         return Plan(found.output, dict(recovered=True, input=inp, noun=noun))
     journal, summary, old, instrument, items, funding = checks._translate(s, ctx, inp, noun, 'void')
+    # Ahead of the version guard: a second delete is told the purchase is already deleted,
+    # which ends the attempt, rather than that its version is stale, which invites another.
+    # `journals.prepare` asks the same question further down for an update or a void; this is
+    # the delete's own ask, and it is the earliest point at which the record is identified.
+    require_not_deleted(s, old['id'], deleting=True)
     if inp.expected_version != old['version']:
         raise BookflowError('E_VERSION_CONFLICT', details={'expected_version': inp.expected_version, 'current_version': old['version']})
     inner = journals.prepare(s, ctx, journal, 'void', owner='inventory', purchase_items=items)

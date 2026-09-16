@@ -27,12 +27,17 @@ def test_competing_deletes_have_one_exact_inverse_and_immutable_receipt(books):
         futures=[pool.submit(attempt,key) for key in ('race-a','race-b')]
         results=[f.result() for f in futures]
     assert sum(isinstance(r,dict) for r in results)==1,results
-    assert [r for r in results if isinstance(r,str)][0] in ('E_DB_BUSY','E_VERSION_CONFLICT'),results
+    # The loser may not get in at all, or may arrive after the winner committed and be told
+    # the purchase is already deleted. Both are correct, and neither writes anything.
+    assert [r for r in results if isinstance(r,str)][0] in ('E_DB_BUSY','E_VERSION_CONFLICT','E_VALIDATION'),results
     after=database(path)
     loser=('race-a','race-b')[next(i for i,r in enumerate(results) if isinstance(r,str))]
     with pytest.raises(BookflowError) as stale:
         books['run']('check delete',dict(check=post['id'],expected_version=1,operation_key=loser),reason='Concurrent deletion')
-    assert stale.value.code=='E_VERSION_CONFLICT' and database(path)==after
+    # The loser's key wrote no receipt, so this is a new operation against a record that is
+    # already gone: it is told the delete happened, not that its version is stale.
+    assert stale.value.code=='E_VALIDATION' and database(path)==after
+    assert 'already deleted and cannot be deleted again' in stale.value.details['fields'][0]['problem']
     with sqlite3.connect(path) as db:
         db.row_factory=sqlite3.Row
         original=[dict(x) for x in db.execute('SELECT * FROM posting_lines WHERE reversed_line_id IS NULL')]
