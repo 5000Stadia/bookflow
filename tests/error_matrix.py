@@ -473,7 +473,7 @@ for _noun, _conversion in (('proposal', 'estimate'), ('estimate', 'work-order'),
 MATRIX['estimate void'] = dict(_WORK_WRITE_ERRORS,
     E_WORK_DEPENDENCY='the estimate already has its work order, or a sale consumes its billing roots')
 
-for _noun in ('estimate', 'work-order'):
+for _noun in ('estimate', 'work-order', 'time-activity'):
     for _verb in ('invoice', 'sales-receipt'):
         MATRIX[f'{_noun} {_verb}'] = {
             **_SALES_WRITE_ERRORS, **_WORK_WRITE_ERRORS,
@@ -484,6 +484,24 @@ for _noun in ('estimate', 'work-order'):
         'E_RECORD_NOT_FOUND': 'source absent from selected company',
         'E_QUERY_STALE': 'company audit changed between linked destination pages',
     }
+# Recorded time is a customer-work document with a much smaller input, so it refuses for the
+# work reasons and two of its own: a correction to somebody's hours always carries a reason,
+# and neither a correction nor a withdrawal may move hours a sale is already standing on.
+MATRIX['time-activity create'] = dict(_WORK_WRITE_ERRORS)
+MATRIX['time-activity update'] = dict(_WORK_WRITE_ERRORS,
+    E_REASON_REQUIRED='a correction that moves recorded time carries no reason',
+    E_WORK_DEPENDENCY='a sale already consumes these hours, so the entry is frozen at what it was billed as')
+MATRIX['time-activity void'] = dict(_WORK_WRITE_ERRORS,
+    E_REASON_REQUIRED='the withdrawal carries no reason',
+    E_WORK_DEPENDENCY='a sale consumes these hours; void the sale before withdrawing the time')
+MATRIX['time-activity show'] = {'E_RECORD_NOT_FOUND': 'recorded time or selected revision does not exist',
+    'E_QUERY_STALE': 'company audit changed between source-link pages'}
+for _verb in ('query', 'history'):
+    MATRIX[f'time-activity {_verb}'] = {
+        'E_RECORD_NOT_FOUND': 'recorded time or customer filter absent from selected company',
+        'E_QUERY_STALE': 'company audit changed between bounded pages',
+    }
+
 for _noun in ('invoice', 'sales-receipt'):
     for _verb in ('post', 'update', 'void'):
         MATRIX[f'{_noun} {_verb}']['E_WORK_DEPENDENCY'] = 'retained source-linked line or commercial scope changed'

@@ -8,20 +8,55 @@ from bookflow.company.lists import ReferenceDefinition
 from bookflow.adapters.workbench.sales import _id, preserve_line_origins
 from bookflow.adapters.workbench.document_print import document_url
 
+# The nouns whose *write* surface is the quoting form: a customer, a scope, many priced lines,
+# a schedule. Recorded time is deliberately not one of them -- a person records who, for whom,
+# when, how long and as what, and the translation into a work document happens behind the
+# command -- so it keeps the small form its own input model describes.
 NOUNS = ('proposal', 'estimate', 'work-order')
+# The nouns whose *records* are customer-work documents. Recorded time is one: same table, same
+# immutable revisions, same billing, so every read projection below covers it and a reader gets
+# the document view, the revision history and the remaining-work panel rather than a field dump.
+DOCUMENTS = NOUNS + ('time-activity',)
+# What a kind is called where a person reads it. Only the ones whose noun does not already say
+# it: "Time activity" is the table's spelling of the kind, not anything a bookkeeper would type.
+LABELS = {'time-activity': ('Time entry', 'Time entries')}
+KIND_TITLES = {'time_activity': 'Time entry'}
+# The statuses a kind's list offers as a filter. The three quoting kinds have always shared one
+# dropdown carrying the union of their states; recorded time holds neither set, so it gets its
+# own rather than being offered ten statuses its own query would refuse by name.
+QUOTE_AND_WORK_STATUSES = ('draft', 'open', 'accepted', 'declined', 'superseded',
+                           'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled')
+LIST_STATUSES = {'time-activity': ('recorded', 'voided')}
+
+
+def list_statuses(noun):
+    return LIST_STATUSES.get(noun, QUOTE_AND_WORK_STATUSES)
+
 FORM = SalesFormDefinition(tuple(r for r in FORM_DEFINITIONS['invoice'].references
     if r.field != 'ar_account') + (ReferenceDefinition('assignees', 'employee'),
         ReferenceDefinition('ar_account', 'account'), ReferenceDefinition('deposit_to', 'account'),
         ReferenceDefinition('payment_method', 'payment-method')))
+# Recorded time names four records and no lines, so its form is these and nothing else: who did
+# it, who it was for, what it is charged as, and which class it belongs to. The last three
+# entries are the accounts and method the billing conversions ask for, which are rendered from
+# this same definition because they are reached from this noun.
+TIME_FORM = SalesFormDefinition((
+    ReferenceDefinition('employee', 'employee'), ReferenceDefinition('customer', 'customer'),
+    ReferenceDefinition('item', 'item'), ReferenceDefinition('class_id', 'class'),
+    ReferenceDefinition('ar_account', 'account'), ReferenceDefinition('deposit_to', 'account'),
+    ReferenceDefinition('payment_method', 'payment-method')))
 
 
 def meta(noun, original):
-    if noun not in NOUNS:
+    if noun not in DOCUMENTS:
         return original
-    return dict(original, record_type='work_document', identifier=noun.replace('-', '_'),
+    spelled = noun.replace('-', ' ').capitalize()
+    singular, plural = LABELS.get(noun, (spelled, spelled + 's'))
+    projected = dict(original, record_type='work_document', identifier=noun.replace('-', '_'),
         output_identifier='id', ui_group='Customer work', display_field='number',
-        singular_label=noun.replace('-', ' ').capitalize(),
-        plural_label=noun.replace('-', ' ').capitalize() + 's', form_definition=FORM)
+        singular_label=singular, plural_label=plural)
+    projected['form_definition'] = FORM if noun in NOUNS else TIME_FORM
+    return projected
 
 
 def editable_values(record):
@@ -81,14 +116,15 @@ def detail_context(record, company_id, *, preview=False):
         related.append(dict(label=('Source ' if source else 'Destination ') + link[side + '_number'],
             url=url, revision_url=url + '?revision_number=' + str(link['source_version'] if source else 1),
             status=link[side + '_status'], relation=link['relation'].replace('_', ' ')))
-    # An estimate is a document a customer receives, so it prints; a work order and a
-    # proposal are internal and have no customer-facing form to hand over.
+    # An estimate is a document a customer receives, so it prints; a work order, a proposal and
+    # a recorded stretch of time are internal and have no customer-facing form to hand over --
+    # what a customer sees of somebody's hours is the invoice they become.
     print_url = (document_url(company_id, 'estimate', record['id'])
                  if record['kind'] == 'estimate' and not preview else None)
     return dict(record=record, revision=r, facts=r['facts'], profile=r['facts']['profile'],
         preview=preview, base=base, related=related, print_url=print_url,
         tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
-        title=record['kind'].replace('_', ' ').capitalize())
+        title=KIND_TITLES.get(record['kind'], record['kind'].replace('_', ' ').capitalize()))
 
 
 def describe(leaves, noun):

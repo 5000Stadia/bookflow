@@ -24,6 +24,13 @@ def protect_work(s, header, before, after):
         dependency('billed work agreement cannot be changed while a sale consumes its roots', source_id=header['id'])
     if header['kind'] == 'estimate' and after['status'] != 'accepted':
         dependency('billed estimate acceptance cannot be revoked', source_id=header['id'])
+    if header['kind'] == 'time_activity' and after['status'] != 'recorded':
+        # The same refusal one kind over: a source a sale is standing on cannot be moved into a
+        # state it could not be billed from. For recorded time that state is `voided`, and the
+        # way out is the same -- void the invoice, which releases the hour, and the withdrawal
+        # is then a withdrawal of time nobody has charged for.
+        dependency('billed time cannot be withdrawn while a sale consumes it; void the sale first',
+                   source_id=header['id'])
     old = {entry['line_id']: entry['facts'] for entry in before['lines']}
     new = {entry['line_id']: entry['facts'] for entry in after['lines']}
     economic = work_tax.economics

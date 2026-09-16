@@ -6,6 +6,7 @@ from tests.test_bill_item_lines import books
 from tests.test_sales_deletion import sale
 from tests.test_purchase_deletion import location, enable
 from tests.payment_raw_evidence import database, table
+from tests.test_bill_payment_migration import _rebuilt_since
 
 
 def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monkeypatch):
@@ -21,24 +22,24 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
     before=database(path);observed=[];original=migrate.migrate_to_head
     def observing(db,chain,*args,**kwargs):
         result=original(db,chain,*args,**kwargs)
-        if chain=='company' and result==('co0049','co0054'):
+        # The destination is whatever the chain's head is today, not a literal: naming one
+        # is a pin that the next migration silently falsifies, and this observer would then
+        # simply never fire while the assertion below still read as a passing check.
+        if chain=='company' and result==('co0049',migrate.HEADS['company']):
             for name,rows in before['tables'].items():
                 if name!='alembic_version':assert table(db.raw,name)==rows,name
-            # co0054 rebuilds `deposit_operations` to admit `deposit delete` in its frozen
-            # command CHECK, so that one table's definition is deliberately not the old one.
-            # Its stored values are still compared above, which is the preservation claim;
-            # what is exempted here is the text of the definition, nothing else.
-            after=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
-            rebuilt={row for row in before['ddl'] if row[0]=='table' and row[1]=='deposit_operations'}
-            assert len(rebuilt)==1
-            assert (set(before['ddl'])-rebuilt) <= after
-            assert not (rebuilt <= after)
+            # Every co49 object survives except the ones a later revision deliberately
+            # rebuilds -- co0055 respells three CHECKs and the two guards that mirror them.
+            # Which those are is derived from the migrations themselves, never listed here.
+            rebuilt=_rebuilt_since('co0049')
+            kept={row for row in before['ddl'] if row[1] not in rebuilt}
+            assert kept <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
             assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
             observed.append(result)
         return result
     monkeypatch.setattr(migrate,'migrate_to_head',observing)
     result=b['run']('invoice delete',dict(invoice=post['id'],expected_version=post['version'],operation_key='co49-first'),reason='First keyed sales deletion')
-    assert observed==[('co0049','co0054')]
+    assert observed==[('co0049',migrate.HEADS['company'])]
     assert result['status']=='deleted'
     with sqlite3.connect(path) as db:
         db.execute('PRAGMA foreign_keys=ON')
@@ -51,7 +52,7 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
 def test_purchase_policy_needs_explicit_sales_catalog_transition(books,monkeypatch):
     from pathlib import Path
     # The tip descriptor is the one an activation stores, whichever delta it is.
-    from bookflow.hub import permission_deposit_deletion_catalog as current, permission_deletion_catalog as previous
+    from bookflow.hub import permission_job_time_catalog as current, permission_deletion_catalog as previous
     _,post=sale(books);client=books['client'];company=books['company']
     with monkeypatch.context() as historical:
         historical.setattr(current,'CATALOG',previous.CATALOG)
@@ -103,6 +104,7 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
     from bookflow.hub import permission_credit_correction_catalog as correction
     from bookflow.hub import permission_credit_deletion_catalog as credit
     from bookflow.hub import permission_deposit_deletion_catalog as deposit
+    from bookflow.hub import permission_job_time_catalog as jobtime
     with sqlite3.connect(':memory:') as db:
         db.execute('CREATE TABLE permission_state(id INTEGER,mode TEXT,catalog_version TEXT)')
         db.execute('INSERT INTO permission_state VALUES(1,?,?)',('legacy','sales-deletion-v1'))
@@ -118,9 +120,10 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
             ('credit-correction-v1',correction),
             ('credit-memo-deletion-v1',credit),
             ('deposit-deletion-v1',deposit),
+            ('job-time-v1',jobtime),
         ):
             db.execute("UPDATE permission_state SET mode='policy_v1',catalog_version=?",(version,))
             assert runtime.catalog_for_root(tx)==owner.catalog_bundle()
         db.execute("UPDATE permission_state SET catalog_version='unrecognized-future'")
         assert runtime.catalog_for_root(tx)==runtime.catalog_bundle()
-        assert runtime.current_catalog() is deposit
+        assert runtime.current_catalog() is jobtime

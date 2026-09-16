@@ -323,7 +323,7 @@ def test_co54_rebuild_preserves_every_stored_operation_value(tmp_path, monkeypat
 
     def observing(db, chain, *args, **kwargs):
         result = original(db, chain, *args, **kwargs)
-        if chain == 'company' and result == ('co0053', 'co0054'):
+        if chain == 'company' and result == ('co0053', migrate.HEADS['company']):
             for name, rows in before['tables'].items():
                 if name != 'alembic_version':
                     assert table(db.raw, name) == rows, name
@@ -335,7 +335,7 @@ def test_co54_rebuild_preserves_every_stored_operation_value(tmp_path, monkeypat
     # `deposit delete` refuses `E_SCHEMA_BEHIND` until its own storage exists. So an
     # ordinary write opens the door, and the preservation is asserted as it goes through.
     b['client'].customer.create(name='Post-upgrade customer', company=COMPANY)
-    assert observed == [('co0053', 'co0054')]
+    assert observed == [('co0053', migrate.HEADS['company'])]
     raw = dict(deposit=identity, expected_version=current, operation_key='co53-first')
     preview = b['client'].run('deposit delete', raw, company=COMPANY,
                               reason='First keyed deposit deletion', dry_run=True)

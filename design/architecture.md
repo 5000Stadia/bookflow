@@ -2507,8 +2507,8 @@ A new command therefore enters through a new delta module, registered in
 `known_catalog` — the single owner of version to module — with `current_catalog()` naming
 the tip. `permission_credit_correction_catalog` is that delta for `customer-refund update`,
 `vendor-credit update` and `vendor-credit history`, each with the company action its
-planner still owns. Above it the chain runs `credit-memo-deletion-v1` and then
-`deposit-deletion-v1`, which is the current catalog.
+planner still owns. Above it the chain runs `credit-memo-deletion-v1`,
+`deposit-deletion-v1` and then `job-time-v1`, which is the current catalog.
 
 Three things hold the chain still, in increasing order of how early they catch a mistake.
 `tests/test_permission_catalog_history.py` pins the command count and descriptor sha256 of
@@ -2522,10 +2522,19 @@ sets of pins agree, so neither can be quietly updated alone. And the frozen lite
 the explanation at the lines where the edit would be made.
 
 An accepted delta is as frozen as the ancestor is. A delta written against a predecessor
-that has since moved — as the credit-memo and deposit deltas were, both written against
-`bill-deletion-v1` before the corrections were layered in — is re-pointed at its real
-predecessor and re-pinned, which is safe only because neither had been activated anywhere.
+that has since moved — as the credit-memo, deposit and job-time deltas were, all three
+written against a tip that had since gained a version — is re-pointed at its real
+predecessor and re-pinned, which is safe only because none had been activated anywhere.
 Nothing already accepted may be re-pointed that way.
+
+One thing the ancestor records is not a command: each conditional resource source carries
+the file and line number of its `require_resource` call. Editing `billing_edits.py` or
+`billing_queries.py` at all therefore moves the ancestor's descriptor, with no catalog
+change intended and nothing on screen to suggest one — the same fatal edit, reached by
+refactoring rather than by adding. Job time hit exactly this, and the correction belongs
+in the delta with its commands: `permission_job_time_catalog` overrides the five moved
+call sites, so the current source tree is what a new root accepts while every older
+version keeps the numbers it stored.
 
 ### Inert permission-administration storage (B1)
 

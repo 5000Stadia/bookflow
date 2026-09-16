@@ -42,7 +42,7 @@ def source_selection(s, inp, kind):
         dependency('bill the work order associated with this estimate', destination_id=owner['id'])
     if kind == 'estimate' and header['status'] != 'accepted':
         dependency('accept the estimate before billing', source_id=header['id'])
-    if kind == 'work_order' and header['status'] == 'cancelled':
+    if kind != 'estimate' and header['status'] == 'cancelled':
         dependency('cancelled work cannot be billed', source_id=header['id'])
     rev = work.revision(s, header)
     lines = work.saved_lines(s, rev)

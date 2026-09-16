@@ -14,6 +14,7 @@ from bookflow.company import work_defaults
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
 from bookflow.company import work_tax
 from bookflow.company.work_tax_facts import read_facts, read_line
+from bookflow.company import work_models
 from bookflow.company.work_models import WorkLineInput
 from bookflow.company.work_outputs import (
     WorkOutput, WorkWriteOutput, WorkSummaryOutput, WorkRevisionOutput,
@@ -30,11 +31,18 @@ from bookflow.core.registry import Plan, Applied, Touched
 from bookflow.hub.users import common
 
 LINK_PAGE_SIZE = 200
-KINDS = ('proposal', 'estimate', 'work_order')
-# `voided` is terminal and reachable only through `estimate void`: it is not a decision the
-# quote is still in, it is the quote withdrawn. Nothing transitions out of it.
+KINDS = work_models.WORK_KINDS
+# `voided` is terminal and reachable only through `estimate void` or `time-activity void`: it is
+# not a decision the document is still in, it is the document withdrawn. Nothing transitions out.
 QUOTE_STATES = ('draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled', 'voided')
 WORK_STATES = ('draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled')
+# Recorded time is not a decision anyone is still making and not work anyone is scheduling: it
+# either happened, or it was withdrawn. One live state, and the terminal one every kind shares.
+TIME_STATES = ('recorded', 'voided')
+# The states each kind can hold, in one place, so a reader that needs them for a kind asks
+# rather than re-deciding which enumeration applies.
+STATES = dict(proposal=QUOTE_STATES, estimate=QUOTE_STATES, work_order=WORK_STATES,
+              time_activity=TIME_STATES)
 TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'work_line'),
                ('work_lines', 'work_revision_line'), ('work_links', 'work_link'),
                ('work_tax_line_keys','work_tax_line_key'), ('work_tax_attributions','work_tax_attribution'),
@@ -214,7 +222,7 @@ def page(s, ctx, inp, kind, *, history=False):
         if inp.date_to:
             query = query.where(r.c.date <= inp.date_to)
         if inp.status:
-            if inp.status not in (WORK_STATES if kind == 'work_order' else QUOTE_STATES):
+            if inp.status not in STATES[kind]:
                 raise _invalid('status', 'select a status applicable to this document kind')
             query = query.where(t.c.status == inp.status)
         if inp.active is not None:
@@ -315,8 +323,15 @@ def _agreed(value):
 
 def _lifecycle(kind, old, value, inp, ctx):
     status = value['status']
-    if status not in (WORK_STATES if kind == 'work_order' else QUOTE_STATES):
+    if status not in STATES[kind]:
         raise _invalid('status', 'status does not apply to this document kind')
+    if kind == 'time_activity':
+        # Time that was worked has no decision to move through and no schedule to run down.
+        # `recorded` is the only state this path writes; `time-activity void` writes the other
+        # one without coming here, exactly as `estimate void` does.
+        if status != 'recorded':
+            raise _invalid('status', 'recorded time is withdrawn by voiding it, not by changing its status')
+        return
     if old is None:
         if status != 'draft':
             raise _invalid('status', 'new work documents begin as draft')
@@ -364,6 +379,15 @@ def _state_invariants(kind, value):
     f, status = value['facts'], value['status']
     if f['expires_on'] and f['expires_on'] < value['date']:
         raise _invalid('expires_on', 'must not precede the document date')
+    if kind == 'time_activity':
+        # A time entry is one person's one stretch of work: the two facts that make it that
+        # rather than a work order are checked here, where every path reaches them, so the
+        # command surface is the only thing that has to stay small on purpose.
+        if len(f['assignees']) != 1:
+            raise _invalid('employee', 'recorded time names exactly one person who did it')
+        if len(value['lines']) != 1:
+            raise _invalid('duration', 'a time entry is one stretch of time, so it carries one line')
+        return
     if kind != 'work_order':
         return
     if status in ('in_progress', 'complete') and not f['actual_start']:

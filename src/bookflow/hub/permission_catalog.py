@@ -127,11 +127,16 @@ BILL_DELETE_POLICY_VERSION = 'bill-deletion-v1'
 CREDIT_CORRECTION_POLICY_VERSION = 'credit-correction-v1'
 CREDIT_DELETE_POLICY_VERSION = 'credit-memo-deletion-v1'
 DEPOSIT_DELETE_POLICY_VERSION = 'deposit-deletion-v1'
+# Recorded time. Its nine commands arrived after every version below was accepted,
+# and so did the source edits that moved five conditional-source call sites, which
+# the ancestor records by line number. Both belong to this delta: the ancestor's
+# line numbers are as frozen as its commands are.
+JOB_TIME_POLICY_VERSION = 'job-time-v1'
 # Newest first, and the order here is the chain order: deposit sits on credit-memo,
 # which sits on the credit corrections, which sit on bill. Nothing reads the order --
 # it is a membership tuple -- but a reader deriving the chain from it should get the
 # real one.
-SCOPED_POLICY_VERSIONS = (DEPOSIT_DELETE_POLICY_VERSION, CREDIT_DELETE_POLICY_VERSION, CREDIT_CORRECTION_POLICY_VERSION, BILL_DELETE_POLICY_VERSION, PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
+SCOPED_POLICY_VERSIONS = (JOB_TIME_POLICY_VERSION, DEPOSIT_DELETE_POLICY_VERSION, CREDIT_DELETE_POLICY_VERSION, CREDIT_CORRECTION_POLICY_VERSION, BILL_DELETE_POLICY_VERSION, PAYMENT_DELETE_POLICY_VERSION, SALES_DELETE_POLICY_VERSION, SCOPED_POLICY_VERSION, SETUP_POLICY_VERSION, DELETE_POLICY_VERSION)
 PURCHASE_DELETE_FAMILIES = PURCHASE_FAMILIES
 BILL_DELETE_FAMILIES = BILL_FAMILIES
 CREDIT_DELETE_FAMILIES = CREDIT_FAMILIES

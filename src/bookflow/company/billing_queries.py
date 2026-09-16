@@ -6,14 +6,9 @@ import sqlalchemy as sa
 from bookflow.company import schema as c, work, sales
 from bookflow.company.billing_outputs import BillingOutput
 from bookflow.core.errors import BookflowError
+from bookflow.company.billing_facts import BILLING_KINDS
 from bookflow.core.exact import format_quantity_micro_units as quantity
 from bookflow.hub.access import require_resource
-
-
-# The two work kinds a sale can be billed from. `billing_cmds` builds one command
-# pair per entry, and every reader of billing state derives the set from here
-# rather than retyping it, so a third kind arrives in one place.
-BILLING_KINDS = ('estimate', 'work_order')
 
 
 def billable_source(owner):
@@ -21,7 +16,8 @@ def billable_source(owner):
 
     One expression, read by `billing` for its own `can_invoice` and by the
     unbilled-cost report for which sources it lists: an estimate is billable only
-    once accepted, other work until it is cancelled, and neither while inactive.
+    once accepted, other work and recorded time until it is cancelled, and none of
+    them while inactive -- which is what voiding any of them leaves behind.
     """
     return bool(owner['active'] and (owner['status'] == 'accepted' if owner['kind'] == 'estimate'
                                      else owner['status'] != 'cancelled'))

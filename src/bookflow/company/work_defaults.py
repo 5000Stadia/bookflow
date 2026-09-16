@@ -8,16 +8,14 @@ from bookflow.company.sales_calculations import adjusted_price, extension, selec
 from bookflow.company.sales_facts import Origin
 from bookflow.company.sales_models import SalesLineInput, _invalid, money
 from bookflow.company.work_facts import WorkLineFacts, WorkProfile
+from bookflow.company.work_models import WORK_KINDS
 from bookflow.core.exact import parse_percentage_millionths, parse_quantity_micro_units
-
-
-WORK_KINDS = ('proposal', 'estimate', 'work_order')
 
 
 def resolve_header(s, inp, kind, previous=None, old_date=None):
     """Capture commercial defaults without financial controls or term due dates."""
     if kind not in WORK_KINDS:
-        raise _invalid('kind', 'expected proposal, estimate or work_order')
+        raise _invalid('kind', 'expected one of ' + ', '.join(WORK_KINDS))
     profile, warnings = sales_defaults.resolve_header(s, inp, kind, previous=previous, old_date=old_date)
     return WorkProfile.model_validate(profile.model_dump()), warnings
 
@@ -74,7 +72,7 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
                  previous_header=None, refresh=False, kind='estimate', document_tax=False):
     """Resolve one line; the service owns identities, ordering and aggregate totals."""
     if kind not in WORK_KINDS:
-        raise _invalid('kind', 'expected proposal, estimate or work_order')
+        raise _invalid('kind', 'expected one of ' + ', '.join(WORK_KINDS))
     if kind != 'work_order' and 'completed_quantity' in inp.model_fields_set:
         raise _invalid('completed_quantity', 'only work orders support completed quantity')
     currency = sales_defaults._info(s.company)['home_currency']

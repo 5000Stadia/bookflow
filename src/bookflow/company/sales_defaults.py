@@ -18,6 +18,7 @@ from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.lists import get_list_definition
 from bookflow.company.list_service import normalize_lookup_key
 from bookflow.company.parties import project_party_record
+from bookflow.company.work_models import WORK_KINDS
 from bookflow.company.profiles import TermInput, compute_term_dates
 from bookflow.company.sales_calculations import (
     adjusted_price, base_quantity, extension, nonnegative, selected_price, tax, total,
@@ -190,7 +191,7 @@ RECEIVABLE_TYPES = ('invoice', 'credit_memo', 'statement_charge')
 def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                    old_date: str | None = None) -> tuple[SalesProfile, list[str]]:
     """Resolve a header without identities, audit, or database mutations."""
-    nonposting = doc_type in ('proposal', 'estimate', 'work_order')
+    nonposting = doc_type in WORK_KINDS
     if doc_type not in ('invoice', 'sales_receipt', 'credit_memo', 'statement_charge') and not nonposting:
         raise _invalid('type', 'expected invoice, sales_receipt, credit_memo or statement_charge')
     db = s.company
