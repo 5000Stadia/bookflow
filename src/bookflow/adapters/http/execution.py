@@ -141,15 +141,39 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
             except BookflowError as denied:
                 # The caller is told only stage and outcome, deliberately: a denial must not
                 # describe what it could not verify. But the causal chain is then lost to us too,
-                # and a public-deposit execution that fails before its proof exists takes the
-                # generic membership comparison against a permit built with an empty frozenset --
-                # an unfinished certificate, not a proven revocation. Record the categories and
-                # nothing else: no credential, no input, no company data, and never the protected
-                # error's own details.
+                # so record the categories and nothing else: no credential, no input, no company
+                # data, and never the protected error's own details. `publication_reason` is the
+                # permit's own category -- `authority_changed` for a proven revocation,
+                # `unfinished_certificate` when the release check could not be completed at all,
+                # which is what a public-deposit execution that failed before its proof existed
+                # leaves behind.
                 log.info("publication denied after failed execution: original=%s publication=%s "
-                         "proof=%s request=%s", exc.code, denied.code,
+                         "publication_reason=%s proof=%s request=%s", exc.code, denied.code,
+                         (denied.details or {}).get("reason"),
                          "present" if permit.deposit_proof is not None else "absent",
                          getattr(ctx, "request_id", None))
+                # One code crosses this boundary as itself: E_UNAUTHENTICATED. It is proven about
+                # the CALLER'S OWN CREDENTIAL, it describes no company fact and no other
+                # principal's authority, the caller already knows their credential state, and it
+                # is the only answer they can act on -- reissue and retry. Everything else keeps
+                # the generic denial, because the boundary may not describe what it could not
+                # verify: an E_INTERNAL carrying a field name stays behind it, and so does a
+                # not-found that would confirm a record in a company this caller may have lost.
+                # Reporting a proven authentication loss as E_PERMISSION {outcome: unknown} gave
+                # an agent nothing to act on and destroyed the cause on the way out, which is the
+                # same generic-translation failure as the receipt-certificate catch below and the
+                # MCP client's blanket transport_failure.
+                if exc.code == "E_UNAUTHENTICATED":
+                    # The uncertifiable permit must not also be the guard that answers. The
+                    # response middleware re-runs every registered guard at send time, and this
+                    # one can only fail the same way, overwriting the answer chosen here with the
+                    # generic denial again. What is still provable about releasing an
+                    # E_UNAUTHENTICATED body is that this caller's credential resolves at all,
+                    # and AuthenticationGuard is the owner of exactly that question -- so the
+                    # response stays fenced, by the check that can actually be completed.
+                    from bookflow.adapters.http.publication import AuthenticationGuard, replace_guard
+                    replace_guard(rejected, AuthenticationGuard(host, cred))
+                    raise BookflowError(exc.code, details={"stage": "publication", "outcome": "unknown"}) from None
                 raise BookflowError(denied.code, details={"stage": "publication", "outcome": "unknown"}) from None
             exc.publication_document = rejected
         raise
