@@ -133,6 +133,9 @@ class Matrix:
         return document
 
 
+_IDENTIFIER = re.compile(r'[0-9A-HJKMNP-TV-Z]{26}')
+
+
 def normalize(documents, root, baseline_ids):
     ids = {}
     def visit(value, key=None):
@@ -164,5 +167,15 @@ def normalize(documents, root, baseline_ids):
             return '<timestamp>'
         if re.fullmatch(r'[0-9A-HJKMNP-TV-Z]{26}', value) and value not in baseline_ids:
             return ids.setdefault(value, '<generated-' + str(len(ids)) + '>')
-        return value.replace(str(root), '<root>')
+        # An id can also ride inside a longer string. A correction names the field it changed
+        # by a composite key -- `lines.<line_id>.amount_minor_units` -- and each surface's copy
+        # of the seed minted its own line ids, so without this the same change reads as a
+        # difference. Substituting in place keeps the mapping, so a key naming a DIFFERENT line
+        # still maps to a different number and still fails: only the id is absorbed, never the
+        # reference. Numbering is by first encounter over sequences that are identical across
+        # surfaces, and every id here was already encountered in the document that minted it.
+        return _IDENTIFIER.sub(
+            lambda found: found.group(0) if found.group(0) in baseline_ids
+            else ids.setdefault(found.group(0), '<generated-' + str(len(ids)) + '>'),
+            value).replace(str(root), '<root>')
     return visit(documents)

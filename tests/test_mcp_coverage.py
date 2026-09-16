@@ -28,8 +28,8 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 444
-    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 439
+    assert len(rows) == 462
+    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 457
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     assert all(row['execution_witness'] and not row['coverage'].startswith('pending') for row in rows)
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
@@ -76,7 +76,23 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
-    assert sum(len(group["paths"]) for group in mapped)==2565
+    #
+    # 2565 -> 2694 since 666465a, and every one of the 129 is accounted for by a command that
+    # landed. Re-measure it the same way when it moves again -- per-command node counts on both
+    # trees, differenced -- because a census bumped without that arithmetic hides new shape.
+    #   +79  18 commands that did not exist: item-receipt update 19, item-receipt post 17,
+    #        vendor-credit update 15, customer-refund update 13, item-receipt query 5, and one
+    #        node each for the six delete verbs, item-receipt show/void, membership effective,
+    #        vendor-credit history (permission show/activate and item-receipt history add none).
+    #   +34  the Items grid on money-out documents: check and card-charge post (+8 each) and
+    #        update (+9 each) gained /items with its line_id, description, customer, class_id,
+    #        unit_cost and amount.
+    #   +10  bills built from receipts: bill post and update (+5 each) gained /receipts with its
+    #        unit_cost and amount.
+    #    +4  membership grant gained /grants, /denies and /expected_version, and revoke gained
+    #        /expected_version -- the explicit per-family Delete grant and its version guard.
+    #    +2  customer-refund show gained /revision_number; company attach gained /administrator.
+    assert sum(len(group["paths"]) for group in mapped)==2694
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
