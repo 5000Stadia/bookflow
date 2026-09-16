@@ -41,8 +41,10 @@ def _constraint(table_, name):
 
 def test_the_migration_sits_in_the_chain_where_it_says_it_does():
     assert M.revision == 'co0055' and M.down_revision == 'co0054'
+    # That it is in the chain the head walks back through is the durable claim. Asserting
+    # it IS the head was true only while nothing sat on top of it, and journal-entry
+    # deletion now does; a head pin here would have to be edited by every later revision.
     assert M.revision in _chain()
-    assert HEADS['company'] == 'co0055'
     # Every table it rebuilds is one it declares, and every declared replacement is used.
     assert M.CHANGED == ('work_documents', 'custom_field_scopes', 'work_billing_conversions')
 

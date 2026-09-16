@@ -6,10 +6,20 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 
 
+# The three documents that are stored as journal entries and are addressed as themselves.
+# A transfer is here because the journal editor now refuses it by name: a page that still
+# offered `journal update` on one would offer a button the core declines.
+OWNING_NOUNS = (('check', 'check'), ('card-charge', 'card_charge'), ('transfer', 'transfer'))
+
+
 def owning_record(run, company_id, transaction_id, revision_number=None):
-    """Resolve only explicit purchase markers through the owning read commands."""
-    for noun, selector in (('check', 'check'), ('card-charge', 'card_charge')):
-        raw = {selector: transaction_id, 'include_deleted': True}
+    """Resolve only explicit money-out markers through the owning read commands."""
+    from bookflow.core import registry
+    for noun, selector in OWNING_NOUNS:
+        fields = registry.get(noun + ' show').input_model.model_fields
+        raw = {selector: transaction_id}
+        if 'include_deleted' in fields:
+            raw['include_deleted'] = True
         if revision_number is not None:
             raw['revision_number'] = revision_number
         try:
@@ -100,9 +110,12 @@ def install_deletion(app, *, run, render, page_error):
         is_sale=noun in ('invoice','sales-receipt')
         is_bill=noun=='bill'
         is_credit=noun=='credit-memo'
-        label='sale' if is_sale else 'bill' if is_bill else 'credit memo' if is_credit else 'purchase'
+        is_journal=noun=='journal'
+        label=('sale' if is_sale else 'bill' if is_bill else 'credit memo' if is_credit
+               else 'journal entry' if is_journal else 'purchase')
         template=('sales_delete.html' if is_sale else 'bill_delete.html' if is_bill
-                  else 'credit_delete.html' if is_credit else 'purchase_delete.html')
+                  else 'credit_delete.html' if is_credit
+                  else 'journal_delete.html' if is_journal else 'purchase_delete.html')
         def display(request,company_id,record_id,values=None,result=None,error=None):
             record=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
             if record.get('deletion') and error is None:
@@ -112,7 +125,10 @@ def install_deletion(app, *, run, render, page_error):
             values=values if values is not None else dict(expected_version=record['version'],operation_key=new_id(),reason='')
             from bookflow.adapters.workbench import bills as Bills, sales as Sales
             from bookflow.adapters.workbench import credits as Credits
-            detail = (Bills.detail_context(record,company_id) if is_bill
+            # A journal entry has no document wrapper of its own: `journal_detail.html`
+            # renders the record it was handed, which is what the confirmation shows.
+            detail = (None if is_journal
+                      else Bills.detail_context(record,company_id) if is_bill
                       else Sales.detail_context(record,company_id) if is_sale
                       else Credits.detail_context(noun,record,company_id) if is_credit
                       else detail_context(record))
@@ -124,7 +140,8 @@ def install_deletion(app, *, run, render, page_error):
             # very document it is about to cancel.
             if is_credit: detail.update(links=[],print_url=None,apply_url=None,refund_url=None,spendable=False)
             return render(template,request,company_id=company_id,noun=noun,record=record,
-                purchase=None if (is_bill or is_credit) else detail,sale=detail if is_sale else None,
+                purchase=None if (is_bill or is_credit or is_journal) else detail,
+                sale=detail if is_sale else None,
                 bill=detail if is_bill else None,credit=detail if is_credit else None,
                 values=values,result=result,error=error,
                 status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
@@ -163,4 +180,4 @@ def install_deletion(app, *, run, render, page_error):
         # link into one; shadowing that with a redirect would take the page away.
         if not is_credit:
             app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
-    for noun in ('check','card-charge','invoice','sales-receipt','bill','credit-memo'):routes(noun)
+    for noun in ('check','card-charge','invoice','sales-receipt','bill','credit-memo','journal'):routes(noun)

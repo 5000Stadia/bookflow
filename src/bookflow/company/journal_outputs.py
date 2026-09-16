@@ -90,11 +90,15 @@ class JournalRevisionOutput(JournalRevisionSummaryOutput):
     lines: list[JournalLineOutput]
 
 
+from bookflow.company.journal_deletion_models import JournalDeletionInfo  # noqa: E402
+
+
 class JournalSummaryOutput(CommonOut):
     type: Literal['journal_entry']
     number: str
     current_revision_id: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'deleted']
+    deletion: 'JournalDeletionInfo | None' = Field(default=None, exclude_if=lambda v: v is None)
     voided_at: str | None
     voided_by: str | None
     void_reason: str | None

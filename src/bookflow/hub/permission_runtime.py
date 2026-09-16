@@ -107,6 +107,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.CREDIT_DELETE_POLICY_VERSION: 'b3818cc259b81e4f7ef277d386cfc703d1cab8bbffb499e3025afec51af9bf5b',
     c.DEPOSIT_DELETE_POLICY_VERSION: '449e98a8fa02bb9b5e3b805e70acbb70c0438df79b857a1e804526c2bf40c750',
     c.JOB_TIME_POLICY_VERSION: '0072e030fb0f0b63b11f41c99facfa400a127148080e1fa3a60cbeffa53d0d07',
+    c.JOURNAL_DELETE_POLICY_VERSION: '8bb60e36da0155cf3551b01e83e7ded46ee06fce8c2962876a69da66636c0b95',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -197,6 +198,7 @@ def known_catalog(version):
     from . import permission_credit_correction_catalog
     from . import permission_credit_deletion_catalog, permission_deposit_deletion_catalog
     from . import permission_job_time_catalog
+    from . import permission_journal_deletion_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -208,6 +210,7 @@ def known_catalog(version):
         c.CREDIT_DELETE_POLICY_VERSION: permission_credit_deletion_catalog,
         c.DEPOSIT_DELETE_POLICY_VERSION: permission_deposit_deletion_catalog,
         c.JOB_TIME_POLICY_VERSION: permission_job_time_catalog,
+        c.JOURNAL_DELETE_POLICY_VERSION: permission_journal_deletion_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -218,7 +221,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.JOB_TIME_POLICY_VERSION)
+    return known_catalog(c.JOURNAL_DELETE_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

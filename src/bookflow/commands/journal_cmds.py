@@ -55,4 +55,34 @@ def journal_history(inp, ctx, s):
     return Plan(journals.page(s, ctx, inp, history=True))
 
 
-JOURNAL_COMMANDS = [journal_post, journal_show, journal_update, journal_void, journal_query, journal_history]
+def _delete():
+    from bookflow.company import journal_deletions as deletion
+    from bookflow.company.journal_deletion_models import JournalDeleteInput, JournalDeleteOutput
+    from bookflow.core.deletion_families import capability as delete_capability
+
+    def planner(inp, ctx, s):
+        return deletion.prepare(s, ctx, inp)
+
+    def recover(inp, ctx, s):
+        return deletion.recover(inp, ctx, s)
+
+    cmd = command('journal delete', scope='company',
+        description='Delete this journal entry with a required reason and exact expected_version. Cancel its accounting at its original date; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. A check, card charge, transfer, inventory document or item receipt is refused by name and deleted or voided through the command that owns it. Reconciled, settled or closed effects refuse atomically.',
+        input_model=JournalDeleteInput, output_model=JournalDeleteOutput, writes={'company'},
+        required_role='standard', capability=delete_capability(deletion.FAMILY), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=['journal'],
+        version_source=('journal show', 'journal', 'version'),
+        error_codes=['E_RECORD_NOT_FOUND','E_VERSION_CONFLICT','E_VALIDATION','E_REASON_REQUIRED',
+                     'E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY',
+                     'E_HAS_APPLICATIONS','E_IDEMPOTENCY_MISMATCH'])(planner)
+    cmd.resource_requirements = (('ledger.read', 'member'),)
+    cmd.ledger = True
+    cmd.permanent_recovery = recover
+    cmd.applier(deletion.apply)
+    return cmd
+
+
+journal_delete = _delete()
+
+JOURNAL_COMMANDS = [journal_post, journal_show, journal_update, journal_void, journal_query,
+                    journal_history, journal_delete]

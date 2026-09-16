@@ -1,7 +1,7 @@
 """Literal activated purchase delta and full executable parity, without a count pin."""
 from bookflow.core import registry
 from bookflow.core.deletion_families import FAMILIES, TOMBSTONE_TABLE, capability
-from bookflow.hub import permission_catalog as c, permission_job_time_catalog as build, permission_deposit_deletion_catalog as previous
+from bookflow.hub import permission_catalog as c, permission_journal_deletion_catalog as build, permission_job_time_catalog as previous
 from tests.test_permission_catalog import R, owner
 
 
@@ -23,9 +23,7 @@ def test_complete_purchase_delete_catalog_and_finite_family_availability():
     for name,(requirements,owners) in actions.items():
         assert set(actual[name].requirements)==requirements,name
         assert set(actual[name].remaining_graph_owners)==owners,name
-    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'time-activity billing','time-activity create','time-activity history',
-        'time-activity invoice','time-activity query','time-activity sales-receipt',
-        'time-activity show','time-activity update','time-activity void'}
+    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'journal delete'}
     assert build.CATALOG.defaults==previous.CATALOG.defaults
     assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES==frozenset(map(capability,FAMILIES))
     contracts={x.key:x for x in build.CATALOG.company_actions if x.key.startswith('contract:')}
@@ -113,20 +111,32 @@ def test_historical_purchase_delta_remains_exact():
     # against bill, and re-layering it here is what keeps one linear chain in which no
     # already-accepted descriptor moved.
     from bookflow.hub import permission_credit_deletion_catalog as creditmemo
+    from bookflow.hub import permission_deposit_deletion_catalog as deposit
     assert {x.name for x in creditmemo.CATALOG.capabilities}-{x.name for x in correction.CATALOG.capabilities} == {'transaction.credit_memo.delete'}
     assert {x.key for x in creditmemo.CATALOG.company_actions}-{x.key for x in correction.CATALOG.company_actions} == {'contract:delete:credit_memo','credit-memo delete'}
-    assert {x.name for x in previous.CATALOG.capabilities}-{x.name for x in creditmemo.CATALOG.capabilities} == {'transaction.deposit.delete'}
-    assert {x.key for x in previous.CATALOG.company_actions}-{x.key for x in creditmemo.CATALOG.company_actions} == {'contract:delete:deposit','deposit delete'}
+    assert {x.name for x in deposit.CATALOG.capabilities}-{x.name for x in creditmemo.CATALOG.capabilities} == {'transaction.deposit.delete'}
+    assert {x.key for x in deposit.CATALOG.company_actions}-{x.key for x in creditmemo.CATALOG.company_actions} == {'contract:delete:deposit','deposit delete'}
     # Recorded time adds no Delete and no capability: nine commands on capabilities the
     # ancestor already declared. What it does carry besides them is the five moved
     # conditional-source call sites, which is the other thing the ancestor freezes.
-    assert build.CATALOG.capabilities == previous.CATALOG.capabilities
-    assert build.CATALOG.defaults == previous.CATALOG.defaults
-    assert {x.key for x in build.CATALOG.company_actions}-{x.key for x in previous.CATALOG.company_actions} == {'time-activity billing','time-activity create','time-activity history',
+    assert previous.CATALOG.capabilities == deposit.CATALOG.capabilities
+    assert previous.CATALOG.defaults == deposit.CATALOG.defaults
+    assert {x.key for x in previous.CATALOG.company_actions}-{x.key for x in deposit.CATALOG.company_actions} == {'time-activity billing','time-activity create','time-activity history',
         'time-activity invoice','time-activity query','time-activity sales-receipt',
         'time-activity show','time-activity update','time-activity void'}
-    moved = {x.owner for x, y in zip(build.CATALOG.conditional_sources, previous.CATALOG.conditional_sources)
+    moved = {x.owner for x, y in zip(previous.CATALOG.conditional_sources, deposit.CATALOG.conditional_sources)
              if x.call_sites != y.call_sites}
     assert moved == {'bookflow.company.billing_edits.carry_allocations','bookflow.company.billing_edits.protect_sale',
                      'bookflow.company.billing_queries.authorize_sale','bookflow.company.billing_queries.sale_source_links',
                      'bookflow.company.billing_queries.sale_source_output'}
+    # Journal entry is the last of the four prepared families to gain its Delete: the
+    # capability and the contract were declared in the ancestor and are flipped here, not
+    # added, which is why the capability names do not move and the contract does.
+    assert {x.name for x in build.CATALOG.capabilities} == {x.name for x in previous.CATALOG.capabilities}
+    assert build.CATALOG.defaults == previous.CATALOG.defaults
+    flipped = {x.name for x in build.CATALOG.capabilities if x.registered_thresholds} - {
+        x.name for x in previous.CATALOG.capabilities if x.registered_thresholds}
+    assert flipped == {'transaction.journal_entry.delete'}
+    assert {x.key for x in build.CATALOG.company_actions}-{x.key for x in previous.CATALOG.company_actions} == {'journal delete'}
+    assert next(x for x in build.CATALOG.company_actions if x.key=='contract:delete:journal_entry').available
+    assert not next(x for x in previous.CATALOG.company_actions if x.key=='contract:delete:journal_entry').available

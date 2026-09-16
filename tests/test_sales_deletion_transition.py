@@ -52,7 +52,7 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
 def test_purchase_policy_needs_explicit_sales_catalog_transition(books,monkeypatch):
     from pathlib import Path
     # The tip descriptor is the one an activation stores, whichever delta it is.
-    from bookflow.hub import permission_job_time_catalog as current, permission_deletion_catalog as previous
+    from bookflow.hub import permission_journal_deletion_catalog as current, permission_deletion_catalog as previous
     _,post=sale(books);client=books['client'];company=books['company']
     with monkeypatch.context() as historical:
         historical.setattr(current,'CATALOG',previous.CATALOG)
@@ -105,6 +105,7 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
     from bookflow.hub import permission_credit_deletion_catalog as credit
     from bookflow.hub import permission_deposit_deletion_catalog as deposit
     from bookflow.hub import permission_job_time_catalog as jobtime
+    from bookflow.hub import permission_journal_deletion_catalog as journal
     with sqlite3.connect(':memory:') as db:
         db.execute('CREATE TABLE permission_state(id INTEGER,mode TEXT,catalog_version TEXT)')
         db.execute('INSERT INTO permission_state VALUES(1,?,?)',('legacy','sales-deletion-v1'))
@@ -121,9 +122,10 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
             ('credit-memo-deletion-v1',credit),
             ('deposit-deletion-v1',deposit),
             ('job-time-v1',jobtime),
+            ('journal-deletion-v1',journal),
         ):
             db.execute("UPDATE permission_state SET mode='policy_v1',catalog_version=?",(version,))
             assert runtime.catalog_for_root(tx)==owner.catalog_bundle()
         db.execute("UPDATE permission_state SET catalog_version='unrecognized-future'")
         assert runtime.catalog_for_root(tx)==runtime.catalog_bundle()
-        assert runtime.current_catalog() is jobtime
+        assert runtime.current_catalog() is journal

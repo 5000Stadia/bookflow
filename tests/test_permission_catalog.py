@@ -81,6 +81,7 @@ RESOURCE_PAIRS = {
     'bill_deletions.admit': {('ledger.read', 'member')},
     'credit_deletions.admit': {('ledger.read', 'member')},
     'deposit_deletions.admit': {('ledger.read', 'member')},
+    'journal_deletions.admit': {('ledger.read', 'member')},
     'payment_deletions.admit': {('ledger.read', 'member')},
     'purchase_deletions.admit': {('ledger.read', 'member')},
     'sales_deletions.admit': {('ledger.read', 'member')},

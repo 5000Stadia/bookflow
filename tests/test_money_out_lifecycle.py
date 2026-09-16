@@ -476,16 +476,35 @@ def test_the_query_filters_each_narrow_the_page_they_say_they_do(books):
 # ---------------------------------------------------------------- what stopped being a document
 
 
-def test_an_entry_rearranged_in_the_journal_editor_says_so_rather_than_reporting_wrong_figures(books):
+def unguarded(monkeypatch):
+    """The journal editor as it behaved before it read the money-out marker.
+
+    `journals.foreign_document` now refuses the *journal editor* one of these documents at
+    all, which is what the first half of each test below asserts. The reader guards are what
+    answer when the shape is wrong however it got that way -- a register correction that
+    turns the entry around, or a company file written while the hole was open -- so the
+    second half reaches that shape by standing the writer's guard down, and nothing else.
+    """
+    from bookflow.company import money_out
+    monkeypatch.setattr(money_out, 'owning_document_kind', lambda s, transaction_id: None)
+
+
+def test_an_entry_rearranged_in_the_journal_editor_says_so_rather_than_reporting_wrong_figures(books, monkeypatch):
     """A check whose lines were turned around is still good accounting. It is not a check."""
     posted = books['run']('check post', _check(books), reason='Pay Northside Supply')
-    books['run']('journal update', dict(journal=posted['id'], expected_version=posted['version'],
-                                        lines=[{'account': books['bank'], 'side': 'debit',
-                                                'amount': SECOND},
-                                               {'account': books['first'], 'side': 'credit',
-                                                'amount': SECOND}]),
-                 reason='Turned it into a deposit by hand')
+    rearrange = dict(journal=posted['id'], expected_version=posted['version'],
+                     lines=[{'account': books['bank'], 'side': 'debit', 'amount': SECOND},
+                            {'account': books['first'], 'side': 'credit', 'amount': SECOND}])
+    # The journal editor will not do this to a cheque at all any more.
+    with pytest.raises(BookflowError) as refused:
+        books['run']('journal update', rearrange, reason='Turned it into a deposit by hand')
+    assert refused.value.code == 'E_VALIDATION'
+    assert refused.value.details['next'] == 'check update'
+    assert books['run']('check show', {'check': posted['id']})['document']['kind'] == 'check'
 
+    # A file written before that refusal can still hold the shape, and the reader names it.
+    unguarded(monkeypatch)
+    books['run']('journal update', rearrange, reason='Turned it into a deposit by hand')
     with pytest.raises(BookflowError) as raised:
         books['run']('check show', {'check': posted['id']})
     assert raised.value.code == 'E_VALIDATION'
@@ -498,16 +517,22 @@ def test_an_entry_rearranged_in_the_journal_editor_says_so_rather_than_reporting
     assert _signed(books)[1] == 10000
 
 
-def test_a_transfer_that_grew_a_third_line_is_no_longer_a_transfer(books):
+def test_a_transfer_that_grew_a_third_line_is_no_longer_a_transfer(books, monkeypatch):
     posted = books['run']('transfer post', dict(
         from_account=books['bank'], to_account=books['savings'], date='2026-03-06',
         amount=TRANSFER), reason='Fund savings')
-    books['run']('journal update', dict(
-        journal=posted['id'], expected_version=posted['version'],
-        lines=[{'account': books['bank'], 'side': 'credit', 'amount': TRANSFER},
-               {'account': books['savings'], 'side': 'debit', 'amount': TRANSFER_CORRECTED},
-               {'account': books['other_bank'], 'side': 'debit', 'amount': CORRECTED}]),
-        reason='Split it by hand')
+    split = dict(journal=posted['id'], expected_version=posted['version'],
+                 lines=[{'account': books['bank'], 'side': 'credit', 'amount': TRANSFER},
+                        {'account': books['savings'], 'side': 'debit', 'amount': TRANSFER_CORRECTED},
+                        {'account': books['other_bank'], 'side': 'debit', 'amount': CORRECTED}])
+    with pytest.raises(BookflowError) as refused:
+        books['run']('journal update', split, reason='Split it by hand')
+    assert refused.value.code == 'E_VALIDATION'
+    assert refused.value.details['next'] == 'transfer update'
+    assert books['run']('transfer show', {'transfer': posted['id']})['id'] == posted['id']
+
+    unguarded(monkeypatch)
+    books['run']('journal update', split, reason='Split it by hand')
     with pytest.raises(BookflowError) as raised:
         books['run']('transfer show', {'transfer': posted['id']})
     assert raised.value.code == 'E_VALIDATION'

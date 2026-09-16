@@ -3,7 +3,7 @@ from pathlib import Path
 import sqlite3
 import pytest
 from bookflow.core.errors import BookflowError
-from bookflow.hub import permission_job_time_catalog as current, permission_setup_catalog as previous
+from bookflow.hub import permission_journal_deletion_catalog as current, permission_setup_catalog as previous
 from tests.test_bill_item_lines import books
 from tests.test_purchase_deletion import location
 from tests.payment_raw_evidence import database
