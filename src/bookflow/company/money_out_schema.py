@@ -51,6 +51,13 @@ import sqlalchemy as sa
 # The three documents this marker distinguishes, in their stored spelling.
 KINDS = ('check', 'card_charge', 'transfer')
 
+# The transaction type all three post as. A check is a journal entry and says so in
+# ``transactions.type``, which is why that column cannot tell one from a hand-typed entry and
+# why this marker exists at all. Declared once and read by ``ck_money_out_type`` below and by
+# every reader that has to turn a money-out kind back into the row a report publishes for it,
+# because a copy of it written out somewhere else is a second vocabulary waiting to diverge.
+DOCUMENT_TYPE = 'journal_entry'
+
 # Every document that can carry a cheque, in the transaction type it posts as: the journal
 # entry ``check post`` writes, and the bill payment ``bill pay`` writes. Declared once and
 # read by ``ck_check_instrument_type`` below, by ``company/check_numbers.py`` -- which refuses
@@ -78,7 +85,7 @@ def define_tables(metadata, column, table):
         C('audit_event_id', sa.String(26), 'Audit event that committed the document this marks.',
           sa.ForeignKey('audit_events.id'), nullable=False),
         sa.CheckConstraint("kind IN ('check', 'card_charge', 'transfer')", name='ck_money_out_kind'),
-        sa.CheckConstraint("type = 'journal_entry'", name='ck_money_out_type'),
+        sa.CheckConstraint(f"type = '{DOCUMENT_TYPE}'", name='ck_money_out_type'),
         # One constraint says both things: the transaction exists, and it is the journal entry
         # these documents post as. A separate single-column reference would say half of it twice.
         sa.ForeignKeyConstraint(['transaction_id', 'type'], ['transactions.id', 'transactions.type'],

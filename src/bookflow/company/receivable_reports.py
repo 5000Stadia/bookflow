@@ -51,7 +51,9 @@ from bookflow.company.aging import (  # noqa: F401
     BUCKET_EDGES, BUCKETS, BUCKET_SQL as _BUCKET, COLUMNS as _COLUMNS,
     bucket_edges, bucket_of, days_past_due,
 )
-from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
+from bookflow.company.ledger_reports import (
+    MoneyOutput, StrictModel, TransactionType, iso_date, money,
+)
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_SQL, SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.core.errors import BookflowError
 
@@ -165,6 +167,12 @@ class StatementRow(StrictModel):
     active: bool | None
     date: str | None
     transaction_id: str | None
+    # The document's own stored type. `entry` is what the row is on a *statement*, which is a
+    # different vocabulary that happens to coincide with this one for every row that is a
+    # document and diverges for the one that is not: a settled credit is `applied_credit`, a
+    # movement rather than a document type, while the transaction it names is a real invoice
+    # or receipt. Only this field names the document, so only this field can open it.
+    transaction_type: TransactionType | None
     number: str | None
     document_date: str | None
     due_date: str | None
@@ -501,7 +509,8 @@ def statement(inp: StatementInput, s, *, principal_id=None) -> StatementOutput:
                 parent_id=row["parent_id"],
                 active=None if row["active"] is None else bool(row["active"]),
                 date=row["effect_date"] or None, transaction_id=row["tx"] or None,
-                number=row["document_number"], document_date=row["document_date"],
+                transaction_type=row["document_type"], number=row["document_number"],
+                document_date=row["document_date"],
                 due_date=row["due_date"], memo=row["document_memo"],
                 amount=money(int(row["net"]), currency), balance=money(int(row["balance"]), currency)))
         return StatementOutput(metadata=state.metadata, rows=rows, count=len(rows),
