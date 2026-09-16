@@ -64,9 +64,10 @@ from pydantic import Field, field_validator
 
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.ledger_reports import (
-    MoneyOutput, StrictModel, _account_display, account_order, iso_date, money,
+    MoneyOutput, StrictModel, TransactionType, _account_display, account_order, iso_date, money,
 )
 from bookflow.company.ledger_schema import TRANSACTION_STATUSES
+from bookflow.company.money_out_schema import KINDS as MONEY_OUT_KINDS
 from bookflow.core.errors import BookflowError
 
 # What a carried-over number is marked as: one an upgrade copied in rather than one this
@@ -105,8 +106,18 @@ class MissingChecksInput(StrictModel):
 
 
 class CheckUse(StrictModel):
-    """One check that occupies one number, as it stands now."""
+    """One check that occupies one number, as it stands now.
+
+    The two fields that name the document are here for the reason every report row carries
+    them: a reader that wants to go and look at the cheque has to know what kind of document
+    it is. Both are needed and neither is enough alone. A check posts as a journal entry, so
+    ``transaction_type`` says ``journal_entry`` and only ``money_out_kind`` says a person
+    entered a check; a cheque written from Pay Bills is a ``bill_payment`` in its own right
+    and carries no money-out marker at all.
+    """
     transaction_id: str
+    transaction_type: TransactionType
+    money_out_kind: Literal[MONEY_OUT_KINDS] | None = None
     number: str
     sequence_number: int
     date: str
@@ -168,10 +179,17 @@ _CHECKS = f"""
 WITH dated AS (
  SELECT i.transaction_id AS tx, i.account_id AS account_id, i.check_number AS number,
         i.check_sequence AS seq, i.origin AS origin, t.status AS status,
+        t.type AS transaction_type, m.kind AS money_out_kind,
         r.id AS revision_id, r.date AS date, r.memo AS memo
  FROM check_instruments i
  JOIN transactions t ON t.id=i.transaction_id AND t.type=i.type
  JOIN transaction_revisions r ON r.id=t.current_revision_id
+ -- What a person entered this cheque as. A check posts as a journal entry and says so in
+ -- `transactions.type`, so the type alone cannot tell a check from the journal entry it
+ -- posts through; `money_out_documents.kind` is the only fact that can, and it is what
+ -- lets a row open the document it actually is. A cheque written from Pay Bills is a
+ -- `bill_payment` in its own right and carries no marker, which is why this is an outer join.
+ LEFT JOIN money_out_documents m ON m.transaction_id=i.transaction_id AND m.type=i.type
  WHERE r.date<=:as_of
 ), funded AS (
  SELECT e.*, coalesce(p.funding_account_id, d.account_id) AS funding_account_id,
@@ -247,7 +265,7 @@ _USES = _CHECKS + """, asked AS (
  FROM json_each(:pairs)
 )
 SELECT u.account_id, u.seq, u.tx, u.number, u.status, u.date, u.memo, u.party_name,
-       u.amount_minor_units, u.currency
+       u.transaction_type, u.money_out_kind, u.amount_minor_units, u.currency
 FROM used u JOIN asked k ON k.account_id=u.account_id AND k.seq=u.seq
 ORDER BY u.account_id, u.seq, u.date, u.tx
 """
@@ -260,7 +278,8 @@ _RETIRED = _CHECKS + """, asked AS (
 )
 SELECT k.account_id AS account_id, k.seq AS seq, f.tx AS tx, f.number AS number,
        f.seq AS current_seq, f.status AS status, f.date AS date, f.memo AS memo,
-       f.party_name AS party_name, f.amount_minor_units AS amount_minor_units,
+       f.party_name AS party_name, f.transaction_type AS transaction_type,
+       f.money_out_kind AS money_out_kind, f.amount_minor_units AS amount_minor_units,
        f.currency AS currency
 FROM asked k
 JOIN check_instrument_revisions v ON v.account_id=k.account_id AND v.check_sequence=k.seq
@@ -286,7 +305,8 @@ def _use(row, sequence=None):
     """One occupied or once-occupied number, as the cheque carrying it stands now."""
     place = sequence if sequence is not None else row["seq"]
     return CheckUse(
-        transaction_id=row["tx"], number=row["number"], sequence_number=int(place),
+        transaction_id=row["tx"], transaction_type=row["transaction_type"],
+        money_out_kind=row["money_out_kind"], number=row["number"], sequence_number=int(place),
         date=row["date"], status=row["status"], party_name=row["party_name"],
         memo=row["memo"], amount=money(row["amount_minor_units"], row["currency"]))
 

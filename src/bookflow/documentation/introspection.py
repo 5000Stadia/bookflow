@@ -129,6 +129,14 @@ def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: s
 
 
 def _model_fields(model, *, leaves_only, prefix, constraints):
+    # A model whose annotation names a class defined below it holds that annotation as an
+    # unresolved `ForwardRef` until something rebuilds it, and Pydantic rebuilds lazily --
+    # on the model's first validation, which in a documentation run may be another test
+    # entirely. Left to that, the rendered type is the literal text `ForwardRef("...")` or
+    # the real type depending on what ran first, so the page is wrong or right by accident
+    # and the freshness check passes or fails by test order. Resolving it here is what makes
+    # the same source always render the same page. A no-op on a model already complete.
+    model.model_rebuild()
     result: list[FieldDoc] = []
     for name, field in model.model_fields.items():
         path = prefix + name
