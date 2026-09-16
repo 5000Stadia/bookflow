@@ -27,6 +27,7 @@ from bookflow.adapters.workbench import inventory as Stock
 from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import transaction_detail as Detail
 from bookflow.adapters.workbench import missing_checks as MissingChecks
+from bookflow.adapters.workbench import report_export as Export
 from bookflow.adapters.workbench import purchases as Purchases
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
@@ -1915,6 +1916,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, err)
             runtime_fields = F.custom_field_descriptors(definitions, originals.get("custom_fields"), attempted, update=verb == "update")
             described = [leaf for leaf in described if leaf["path"] not in ("custom_fields", "custom_field_kinds")]
+        report_page = Export.is_report(cmd) and company_id is not None
         return_token = attempted.get("_return_token") or request.query_params.get("return_token")
         return_target = attempted.get("_return_target") or request.query_params.get("return_target")
         return_context = None
@@ -1960,6 +1962,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       transaction_detail=Detail.view(result, report_input, company_id, source_report_watermark) if result and report_input is not None and cmd.name in Detail.COMMANDS else None,
                       missing_checks=MissingChecks.view(result, report_input, company_id) if result and report_input is not None and cmd.name in MissingChecks.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
+                      # A report page is one shape however many reports there are, so a link that
+                      # saves what is on the screen as a file is decided by the registry calling
+                      # this command a report rather than by naming any of them.
+                      report_export_url=(Export.export_url(company_id, verb, report_input)
+                          if report_page and result and report_input is not None and company_id else None),
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       collection_attempt_key=F.collection_attempt_key,
                       return_context=return_context, workflow_note=workflow_note,
@@ -2048,6 +2055,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # otherwise read `print` as a command name and answer `unknown command print`.
     from bookflow.adapters.workbench.document_print import install as install_document_print
     install_document_print(app, run=run, page_error=page_error)
+
+    # Same reason and the same place in the order: `export.csv` is the last segment of a
+    # report's download, not a verb of the `report` noun.
+    from bookflow.adapters.workbench.report_export import install as install_report_export
+    install_report_export(app, run=run, page_error=page_error)
 
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):

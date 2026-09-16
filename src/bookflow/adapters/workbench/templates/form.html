@@ -6,6 +6,7 @@
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 {% if document_nav %}{% include "document_nav.html" %}{% endif %}
 <h1>{{ document.heading if document else heading }}</h1>
+{% if report_export_url %}<p class="report-tools"><a href="{{ report_export_url }}" download id="report-export">Download this report as a spreadsheet file (CSV) — every page, not just this one</a></p>{% endif %}
 {% if receipt_choices %}<details class="workflow-note" data-receipt-chooser><summary>Bill goods already received</summary>
 <form method="get" action="{{ base }}/post"><p>Select receipts from the same vendor. Enter the bill date on the next form.</p>
 {% for receipt in receipt_choices %}<label><input type="checkbox" name="receipt" value="{{ receipt.id }}"> {{ receipt.number }} · {{ receipt.profile.vendor.label }} · {{ receipt.date }}</label><br>{% endfor %}
