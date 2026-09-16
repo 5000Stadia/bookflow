@@ -18,7 +18,7 @@ from html.parser import HTMLParser
 import pytest
 from fastapi.testclient import TestClient
 
-from bookflow.adapters.workbench import statements, transaction_detail
+from bookflow.adapters.workbench import missing_checks, statements, transaction_detail
 
 from tests.test_financial_statements_browser import fill
 from tests.test_row3_host import PASSWORD, hosted  # noqa: F401
@@ -253,14 +253,7 @@ def _delete_a_sale(hosted):  # noqa: F811
                                         "customer_tax_code": "Tax", "terms": "Net 30",
                                         "lines": [{"item": "Commercial Example Service", "quantity": "1"}]},
                        company=company, headers=why)
-    state = hosted.ok("permission.show")
-    hosted.ok("permission.activate", {"expected_generation": state["generation"],
-                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=why)
-    member = next(row for row in hosted.ok("membership.list", {"company": company})["items"]
-                  if row["scope_type"] == "company" and row["scope_id"] == company)
-    hosted.ok("membership.grant", {"user": member["user_id"], "company": company,
-                                   "expected_version": member["version"],
-                                   "grants": ["transaction.invoice.delete"]}, headers=why)
+    _grant(hosted, "transaction.invoice.delete", why)
     hosted.ok("invoice.delete", {"invoice": posted["id"], "expected_version": posted["version"]},
               company=company, headers=why)
     ledger = hosted.ok("report.general-ledger", {"date_from": "2031-04-07", "date_to": "2031-04-07",
@@ -318,3 +311,116 @@ def test_a_person_clicks_a_statement_figure_through_to_the_document(browser_site
         assert wording.split()[-1] in printed, f"{wording} opened a page that does not name it"
     finally:
         browser.close()
+
+
+def _grant(hosted, capability, why):  # noqa: F811
+    """One deletion capability, granted through the running host as the product grants it."""
+    state = hosted.ok("permission.show")
+    hosted.ok("permission.activate", {"expected_generation": state["generation"],
+                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=why)
+    member = next(row for row in hosted.ok("membership.list", {"company": hosted.company_id})["items"]
+                  if row["scope_type"] == "company" and row["scope_id"] == hosted.company_id)
+    hosted.ok("membership.grant", {"user": member["user_id"], "company": hosted.company_id,
+                                   "expected_version": member["version"], "grants": [capability]},
+              headers=why)
+
+
+# ------------------------------------- the chequebook, which kept a third spelling of its own
+
+
+def _missing_checks_result(before, after, watermark=23):
+    return {"rows": [{"kind": "gap", "account_id": "A1", "first_missing": 5002,
+                      "last_missing": 5002, "missing_count": 1, "legacy_uncertain": False,
+                      "before": before, "after": after, "checks": []}],
+            "next_cursor": None, "totals": {}, "disclosure": None,
+            "metadata": {"audit_watermark": watermark, "period": {"date_to": "2026-12-31"}}}
+
+
+def test_a_missing_check_row_opens_each_cheque_as_the_document_it_was_entered_as():
+    """The check test for the journey below: the cheques around a hole are two documents.
+
+    A check posts *as* a journal entry, so its stored transaction type cannot tell it from
+    one; only the money-out marker can. A cheque written from Pay Bills is a bill payment in
+    its own right and does not open as a check at all. A hand-built `/check/<id>` is wrong
+    about the second and, because it carries no retained-history flag, dead-ends on the
+    first as soon as somebody deletes it -- which is exactly when a hole appears in a
+    chequebook and somebody comes here to look.
+    """
+    written = {"transaction_id": "T1", "transaction_type": "journal_entry",
+               "money_out_kind": "check", "number": "5001", "status": "posted"}
+    from_pay_bills = {"transaction_id": "T2", "transaction_type": "bill_payment",
+                      "money_out_kind": None, "number": "5003", "status": "posted"}
+    shown = missing_checks.view(_missing_checks_result(written, from_pay_bills), {}, "CO")
+    row = shown["rows"][0]
+
+    assert row["before"]["document_url"] == "/c/CO/check/T1?include_deleted=1&source_report_watermark=23"
+    assert row["after"]["document_url"] == "/c/CO/bill-payment/T2?source_report_watermark=23"
+
+
+def test_a_hole_with_nothing_below_it_opens_nothing():
+    """The first number in a chequebook has no cheque under it, and must not link to one."""
+    shown = missing_checks.view(_missing_checks_result(None, None), {}, "CO")
+    assert shown["rows"][0]["before"] is None and shown["rows"][0]["after"] is None
+
+
+def _occupants(page, company):
+    """Every cheque the missing-checks page offered to open, by the number written on it."""
+    return {text.split(" ")[0]: href for href, text in _document_links(page, company)}
+
+
+@pytest.mark.timeout(900)
+def test_a_cheque_beside_a_hole_is_followed_to_the_cheque_even_once_it_is_deleted(hosted):  # noqa: F811
+    """The checks around a hole are clicked, and each opens the document it actually is.
+
+    Three cheques on one new chequebook, with a hole either side of the middle one: two
+    checks and one written from Pay Bills, which is a bill payment and has never opened as a
+    check. Then the first is deleted, because a deleted cheque is precisely the case this
+    report exists for -- the paper is still gone, so the number is still occupied, and the
+    row that names it has to still open it. Every link is fetched rather than asserted to
+    exist, for the reason the whole file exists.
+    """
+    browser = TestClient(hosted.handle.app)
+    assert browser.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    company = hosted.company_id
+    why = {"X-Bookflow-Reason": "Write the cheques this report is read with"}
+    write = dict(company=company, headers=why)
+
+    book = hosted.ok("account.create", {"name": "Drill Chequebook", "type": "bank"}, **write)
+    spend = {"account": book["id"], "date": "2031-06-01", "amount": "40.00",
+             "pay_to": {"name_type": "vendor", "name_id": "Regional Parts"},
+             "expenses": [{"account": "Professional Fees", "amount": "40.00"}]}
+    first = hosted.ok("check.post", {**spend, "number": "900001"}, **write)
+    hosted.ok("check.post", {**spend, "number": "900003"}, **write)
+    bill = hosted.ok("bill.post", {"vendor": "Regional Parts", "date": "2031-06-02",
+                                   "expenses": [{"account": "Professional Fees", "amount": "15.00"}]},
+                     **write)
+    hosted.ok("bill.pay", {"date": "2031-06-03", "bills": [{"bill": bill["id"]}],
+                           "funding_account": book["id"], "method": "check",
+                           "check_number": "900005"}, **write)
+
+    report = f"/c/{company}/report/missing-checks?f:as_of=2100-12-31&f:account={book['id']}"
+    occupants = _occupants(_run_report(browser, report), company)
+    assert {"900001", "900003", "900005"} <= set(occupants), \
+        f"the holes at 900002 and 900004 did not name the cheques around them: {occupants}"
+
+    # A check posts as a journal entry and a bill payment is its own document; the hand-built
+    # path this replaces called all three a check, and one of them is not.
+    assert "/check/" in occupants["900001"] and "/check/" in occupants["900003"]
+    assert "/bill-payment/" in occupants["900005"], \
+        f"the cheque written from Pay Bills was opened as {occupants['900005']}"
+    for number, href in occupants.items():
+        opened = _page(browser, href)
+        assert number in opened, f"following {href} did not open the cheque numbered {number}"
+
+    # The same chain once the first cheque is deleted out of the ordinary lists. Its number
+    # is still gone from the chequebook, so the report still names it and must still open it.
+    reason = "The cheque a chequebook must still reach after it is deleted"
+    _grant(hosted, "transaction.check.delete", why)
+    hosted.ok("check.delete", {"check": first["id"], "expected_version": first["version"]},
+              company=company, headers={"X-Bookflow-Reason": reason})
+
+    occupants = _occupants(_run_report(browser, report), company)
+    assert "900001" in occupants, "the deleted cheque stopped occupying the number it took"
+    retained = _page(browser, occupants["900001"])
+    assert "900001" in retained, "following the deleted cheque did not open it"
+    assert reason in retained, "the retained cheque did not present itself as deleted history"

@@ -1891,6 +1891,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].legacy_uncertain` | boolean | no | no | false | — |
 | `rows[].before` | object \| null | no | yes | null | — |
 | `rows[].before.transaction_id` | string | yes | no | — | — |
+| `rows[].before.transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `rows[].before.money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
 | `rows[].before.number` | string | yes | no | — | — |
 | `rows[].before.sequence_number` | integer | yes | no | — | — |
 | `rows[].before.date` | string | yes | no | — | — |
@@ -1903,6 +1905,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].before.amount.minor_units` | integer | yes | no | — | — |
 | `rows[].after` | object \| null | no | yes | null | — |
 | `rows[].after.transaction_id` | string | yes | no | — | — |
+| `rows[].after.transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `rows[].after.money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
 | `rows[].after.number` | string | yes | no | — | — |
 | `rows[].after.sequence_number` | integer | yes | no | — | — |
 | `rows[].after.date` | string | yes | no | — | — |
@@ -1915,6 +1919,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].after.amount.minor_units` | integer | yes | no | — | — |
 | `rows[].checks` | array[object] | no | no | [] | — |
 | `rows[].checks[].transaction_id` | string | yes | no | — | — |
+| `rows[].checks[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `rows[].checks[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
 | `rows[].checks[].number` | string | yes | no | — | — |
 | `rows[].checks[].sequence_number` | integer | yes | no | — | — |
 | `rows[].checks[].date` | string | yes | no | — | — |

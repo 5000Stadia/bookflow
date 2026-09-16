@@ -8,6 +8,7 @@ something.
 """
 from urllib.parse import urlencode
 
+from bookflow.adapters.workbench import routing as Routing
 from bookflow.core import registry
 
 
@@ -20,12 +21,27 @@ KINDS = {"opening": "Opening balance", "closing": "Total and closing balance"}
 IRREGULAR = {"journal_entry": "journal"}
 
 
-def document_noun(document_type):
-    """The record page a posting row opens, or none where that document has no page."""
-    if not document_type:
+def document_noun(document_type, money_out_kind=None):
+    """The path segment a report row's document opens at, or none where it has no page.
+
+    A document names itself twice over. Its stored transaction type is usually the whole
+    answer. The three documents that post *as* a journal entry -- a check, a credit card
+    charge and a transfer -- are the exception: their type says `journal_entry`, and only
+    ``money_out_documents.kind`` says which of the three a person entered, so a row that
+    carries that kind is opened as the document it was entered as rather than as the journal
+    it posts through.
+
+    What comes back is the segment, already legal in an ``href``, because every caller puts
+    it straight into one. A multi-word noun is spelled with a hyphen there and resolved back
+    through :mod:`routing` to ask the registry, which is how ``bill payment`` and ``sales-tax
+    payment`` are found at all: looking either up under the hyphenated spelling finds nothing
+    registered, and the row silently loses its link.
+    """
+    named = money_out_kind or document_type
+    if not named:
         return None
-    noun = IRREGULAR.get(document_type, document_type.replace("_", "-"))
-    return noun if registry.get(f"{noun} show") is not None else None
+    segment = IRREGULAR.get(named) or named.replace("_", "-")
+    return segment if registry.get(f"{Routing.noun(segment)} show") is not None else None
 
 
 def document_link(company_id, row, watermark=None):
@@ -39,11 +55,12 @@ def document_link(company_id, row, watermark=None):
     that can be deleted. And the audit position the report was read at travels too, so the
     document answers the question the statement asked rather than a fresh one.
     """
-    noun = document_noun(row.get("transaction_type")) if row.get("transaction_id") else None
+    noun = (document_noun(row.get("transaction_type"), row.get("money_out_kind"))
+            if row.get("transaction_id") else None)
     if noun is None:
         return None
     query = {}
-    if "include_deleted" in registry.get(f"{noun} show").input_model.model_fields:
+    if "include_deleted" in registry.get(f"{Routing.noun(noun)} show").input_model.model_fields:
         query["include_deleted"] = "1"
     if watermark is not None:
         query["source_report_watermark"] = str(watermark)

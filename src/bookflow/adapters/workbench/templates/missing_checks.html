@@ -1,5 +1,5 @@
 {% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
-{% macro occupant(use) %}<a href="{{ use.document_url }}">{{ use.number }}</a> · {{ use.date }} · {{ use.party_name or 'No name' }} · {{ use.amount.amount }} {{ use.amount.currency }}{% if use.status != 'posted' %} <span class="report-state">{{ use.status|capitalize }}</span>{% endif %}{% endmacro %}
+{% macro occupant(use) %}{% if use.document_url %}<a href="{{ use.document_url }}">{{ use.number }}</a>{% else %}{{ use.number }}{% endif %} · {{ use.date }} · {{ use.party_name or 'No name' }} · {{ use.amount.amount }} {{ use.amount.currency }}{% if use.status != 'posted' %} <span class="report-state">{{ use.status|capitalize }}</span>{% endif %}{% endmacro %}
 <section id="basic-report" class="document-detail basic-report missing-checks" aria-label="Missing checks">
 <p>{{ company_label }} · {{ missing_checks.metadata.currency }} · Checks dated on or before {{ missing_checks.as_of }}</p>
 <h2>Whole-report totals — all pages</h2>
