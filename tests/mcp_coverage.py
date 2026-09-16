@@ -44,9 +44,10 @@ payment void""".splitlines())
 # four through `matrix.documents`. A two-surface witness is real evidence and is not four-surface
 # parity, and the label must not be read as the stronger claim.
 #
-# `bill delete` and `payment delete` deliberately have no entry -- their executed evidence is HTTP
-# and real Chrome, with no CLI/MCP matrix witness anywhere -- so they fall through to a pending row
-# rather than being counted as parity they do not have.
+# `bill delete` and `payment delete` now hold witnesses of their own, each driving cli, http and
+# mcp and asserting the books the deletion leaves behind. Until those existed their only executed
+# evidence was HTTP and real Chrome, and they sat in a pending row rather than being counted as
+# parity they did not have.
 BATCH_2026_09_COMMANDS = frozenset("""bill delete
 card-charge delete
 check delete
@@ -521,6 +522,10 @@ def execution_map():
     from tests.test_sales_deletion_transports import COMMANDS as SALES_DELETE_COMMANDS
     from tests.test_receiving_surfaces import COMMANDS as RECEIVING_COMMANDS
     from tests.test_permission_setup_surfaces import COMMANDS as SETUP_SURFACE_COMMANDS
+    from tests.test_bill_deletion_transports import COMMANDS as BILL_DELETE_COMMANDS
+    from tests.test_payment_deletion_transports import COMMANDS as PAYMENT_DELETE_COMMANDS
+    from tests.test_customer_refund_correction_surfaces import COMMANDS as REFUND_CORRECTION_COMMANDS
+    from tests.test_vendor_credit_correction_surfaces import COMMANDS as VENDOR_CREDIT_CORRECTION_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -569,6 +574,10 @@ def execution_map():
                    'tests/test_sales_deletion_transports.py::test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history' if cmd.name in SALES_DELETE_COMMANDS else  # cli, http, mcp
                    'tests/test_receiving_surfaces.py::test_receiving_and_linked_bill_cross_all_four_actual_transports' if cmd.name in RECEIVING_COMMANDS else  # all four
                    'tests/test_permission_setup_surfaces.py::test_permission_setup_crosses_all_four_actual_transports' if cmd.name in SETUP_SURFACE_COMMANDS else  # all four
+                   'tests/test_bill_deletion_transports.py::test_bill_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books' if cmd.name in BILL_DELETE_COMMANDS else  # cli, http, mcp
+                   'tests/test_payment_deletion_transports.py::test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books' if cmd.name in PAYMENT_DELETE_COMMANDS else  # cli, http, mcp
+                   'tests/test_customer_refund_correction_surfaces.py::test_correcting_a_refund_crosses_all_four_actual_transports' if cmd.name in REFUND_CORRECTION_COMMANDS else  # all four
+                   'tests/test_vendor_credit_correction_surfaces.py::test_correcting_and_reading_a_vendor_credit_crosses_all_four_actual_transports' if cmd.name in VENDOR_CREDIT_CORRECTION_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
