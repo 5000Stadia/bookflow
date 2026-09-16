@@ -11,6 +11,44 @@ FAMILIES = {noun: tuple(noun+' '+verb for verb in ('invoice', 'sales-receipt', '
             for noun in ('estimate', 'work-order')}
 
 
+def settled(documents):
+    """The documents, with each forecast fingerprint checked and then set aside.
+
+    `forecast_fingerprint` is a sha256 over the forecast's own content -- and that content names
+    the source revision, the line ids and the per-line ordinals keyed by them, every one of which
+    is minted separately in each surface's own copy of the seed. So four correct surfaces produce
+    four different fingerprints for the same forecast, and comparing the values across surfaces
+    asks for something that cannot be true. Blanking it outright would hide a surface that
+    returned no fingerprint, or a malformed one, so each is required to be a real digest before it
+    is set aside.
+
+    What the fingerprint actually promises -- that it changes when the forecast content changes --
+    is witnessed in tests/test_tax_policy_work.py, on one database, where it means something.
+
+    This is the same shape as the continuation cursor, whose fingerprint hashes the query: an
+    opaque token derived from document content cannot be compared between surfaces that mint their
+    own ids. If a third one appears, it belongs in `normalize` rather than in a third test.
+    """
+    def scrub(value):
+        if isinstance(value, dict):
+            return {key: ('<content-derived>' if key == 'forecast_fingerprint' and _digest(value[key])
+                          else scrub(value[key])) for key in value}
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        if isinstance(value, tuple):
+            # normalize() hands back (command name, payload) pairs, so a scrub that walks only
+            # dicts and lists never reaches the payload at all.
+            return tuple(scrub(item) for item in value)
+        return value
+    return [scrub(document) for document in documents]
+
+
+def _digest(value):
+    assert isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value), (
+        f'forecast_fingerprint is not a digest: {value!r}')
+    return True
+
+
 @pytest.mark.parametrize('noun', FAMILIES)
 @pytest.mark.timeout(300)
 def test_work_billing_full_documents_retries_and_exact_batches(root, client, sale, tmp_path, noun):
@@ -67,9 +105,9 @@ def test_work_billing_full_documents_retries_and_exact_batches(root, client, sal
                         assert totals == (2468,2468,1)
                         assert db.execute('SELECT sum(credit_minor_units-debit_minor_units) FROM posting_lines WHERE transaction_id=? AND account_id=?', (identifier,sale['income'])).fetchone() == (2468,)
                     assert db.execute("SELECT count(*) FROM audit_events WHERE reason='Registry parity'").fetchone() == (2,)
-            expected = normalize(matrix.documents['python'], matrix.roots['python'], baseline_ids)
+            expected = settled(normalize(matrix.documents['python'], matrix.roots['python'], baseline_ids))
             for surface in ('cli', 'http', 'mcp'):
-                actual = normalize(matrix.documents[surface], matrix.roots[surface], baseline_ids)
+                actual = settled(normalize(matrix.documents[surface], matrix.roots[surface], baseline_ids))
                 assert len(actual) == len(expected)
                 for index,(a,b) in enumerate(zip(expected,actual)):
                     assert a == b, (surface,index,a,b)

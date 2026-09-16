@@ -5,6 +5,8 @@ import re
 import sqlite3
 import anyio
 import pytest
+
+from tests import provenance
 from tests.mcp_matrix_support import Matrix, normalize
 from tests.test_mcp_registry_rollout import state
 
@@ -12,7 +14,7 @@ COMMANDS = frozenset({'demo reset','upgrade'})
 
 
 @pytest.mark.parametrize('command', sorted(COMMANDS))
-@pytest.mark.timeout(240)
+@pytest.mark.timeout(provenance.MATRIX_SECONDS)
 def test_owned_demo_replacement_and_current_schema_upgrade(root, tmp_path, command):
     ids = set()
     for lines in state(root).values():

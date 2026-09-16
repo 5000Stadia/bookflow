@@ -29,9 +29,21 @@ def resolves(witness):
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
     assert len(rows) == 462
-    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 457
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
+    # The claim worth asserting: every registered command has an executed witness, and none is
+    # pending. What used to sit here instead was a count of `four_surface_scenario` rows -- which
+    # the ledger emitted for ANY witness, so a two-surface test raised the number exactly as a
+    # four-surface one did. That count could only ever confirm itself.
     assert all(row['execution_witness'] and not row['coverage'].startswith('pending') for row in rows)
+    # A row may claim all four surfaces only if its witness declares them. Nine do today; the rest
+    # are `transport_scenario` -- real executed evidence over at least one real transport, which is
+    # a weaker claim honestly made. Adding `SURFACES` to a witness that does drive all four is
+    # mechanical and moves its rows up.
+    for row in rows:
+        if row['coverage'] == 'four_surface_scenario':
+            assert row['surfaces'] and set(row['surfaces']) == {'python', 'cli', 'http', 'mcp'}, row
+        if row['surfaces']:
+            assert set(row['surfaces']) <= {'python', 'cli', 'http', 'mcp'}, row
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
     assert {row['mode'] for row in rows} == {'routed_json', 'advisory', 'binary_input', 'binary_output', 'local_lifecycle', 'standalone_local', 'standalone_protocol', 'finite_poll_with_local_follow'}
     # A witness that does not exist is the failure this ledger exists to catch, so

@@ -585,10 +585,55 @@ def execution_map():
         result.append({'command': cmd.name, 'mode': mode, 'scope': cmd.scope, 'kind': cmd.kind,
             'preview': cmd.is_write, 'idempotency_key': cmd.accepts_idempotency_key,
             'clearable': cmd.clearable, 'execution_witness': witness,
-            'coverage': 'local_lifecycle_scenario' if cmd.name in LOCAL_COMMANDS else 'four_surface_scenario' if witness else 'pending_four_surface_or_local_lifecycle',
+            'coverage': _coverage(cmd, witness, LOCAL_COMMANDS),
+            'surfaces': _surfaces(witness),
             'local_valid_witnesses': LOCAL_VALID_WITNESSES.get(cmd.name, []),
             'publication': permissions[cmd.name]})
     return result
+
+
+def _witness_surfaces(witness):
+    """The surfaces a witness test says it drives, or None when it does not say.
+
+    Read from the witness module's own `SURFACES`, beside the `COMMANDS` it declares, because the
+    test is the only thing that knows. A witness that does not declare is not assumed to drive all
+    four -- it is labelled for what is known about it, which is that it drives the product over
+    some transport.
+    """
+    import importlib
+    module = importlib.import_module(witness.split('::')[0].removesuffix('.py').replace('/', '.'))
+    declared = getattr(module, 'SURFACES', None)
+    return frozenset(declared) if declared else None
+
+
+ALL_SURFACES = frozenset(('python', 'cli', 'http', 'mcp'))
+
+
+def _surfaces(witness):
+    if witness is None:
+        return None
+    try:
+        declared = _witness_surfaces(witness)
+    except Exception:
+        return None
+    return tuple(sorted(declared)) if declared else None
+
+
+def _coverage(cmd, witness, local_commands):
+    """What is actually known about this command's executed evidence.
+
+    `four_surface_scenario` is reserved for a witness that declares all four surfaces. Everything
+    else with a witness is `transport_scenario`: real executed evidence over at least one real
+    transport, which is not the same claim. The label used to be `four_surface_scenario` for every
+    witness, which overstated every two- and three-surface row in the generated ledger -- and a
+    comment telling a reader not to trust the label does not fix a generated artifact.
+    """
+    if cmd.name in local_commands:
+        return 'local_lifecycle_scenario'
+    if witness is None:
+        return 'pending_four_surface_or_local_lifecycle'
+    return 'four_surface_scenario' if _surfaces(witness) and frozenset(_surfaces(witness)) == ALL_SURFACES \
+        else 'transport_scenario'
 
 
 class Controls(HTMLParser):

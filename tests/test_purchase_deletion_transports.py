@@ -2,6 +2,8 @@
 import asyncio
 from pathlib import Path
 import pytest
+
+from tests import provenance
 from tests.test_bill_item_lines import books, _inventory_part
 from tests.mcp_matrix_support import Matrix
 from tests.payment_raw_evidence import database
@@ -9,10 +11,14 @@ from tests.payment_raw_evidence import database
 
 # The commands this test is the designated transport witness for; the coverage ledger imports
 # this set rather than restating the names beside a path it cannot check.
+# The surfaces this test actually drives. The coverage ledger reads this rather than
+# assuming four, because a two- or three-surface witness is real evidence and is not
+# four-surface parity.
+SURFACES = ('cli', 'mcp')
 COMMANDS = frozenset(('check delete', 'card-charge delete'))
 
 
-@pytest.mark.timeout(180)
+@pytest.mark.timeout(provenance.MATRIX_SECONDS)
 def test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history(books,tmp_path):
     pytest.importorskip('mcp')
     run=books['run'];item=_inventory_part(books)

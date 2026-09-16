@@ -9,6 +9,10 @@ from tests.payment_raw_evidence import database
 
 # The commands this test is the designated transport witness for; the coverage ledger imports
 # this set rather than restating the names beside a path it cannot check.
+# The surfaces this test actually drives. The coverage ledger reads this rather than
+# assuming four, because a two- or three-surface witness is real evidence and is not
+# four-surface parity.
+SURFACES = ('cli', 'http', 'mcp')
 COMMANDS = frozenset(('invoice delete', 'sales-receipt delete'))
 
 
