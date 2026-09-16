@@ -123,10 +123,24 @@ def summary(header, rev):
                 **totals(rev['total_minor_units'], rev['total_minor_units'], rev['currency'], document=True))
 
 
+def visible(s, header, value, include_deleted):
+    """One place a deleted journal entry becomes visibly deleted, for every read of one.
+
+    Hidden from an ordinary read: ``deletion_info`` raises ``E_RECORD_NOT_FOUND`` where the
+    entry carries a retained deletion and the caller did not explicitly ask for one. Asked
+    for, the entry reads back whole, marked deleted and attributed to whoever deleted it,
+    because the history is retained rather than erased.
+    """
+    from bookflow.company.journal_deletions import deletion_info
+    deletion = deletion_info(s, header, include_deleted)
+    return dict(value, status='deleted', deletion=deletion) if deletion else value
+
+
 def show(s, inp):
     h = resolve(s, inp.journal)
     r = revision(s, h, inp.revision_number)
-    return JournalOutput(**summary(h, r), revision=revision_output(s, r))
+    return JournalOutput(**visible(s, h, summary(h, r), getattr(inp, 'include_deleted', False)),
+                         revision=revision_output(s, r))
 
 
 def open_dates(s, dates):
@@ -211,6 +225,57 @@ def allocate(s, explicit, own=None):
     return allocate_document(s, 'journal_entry', explicit, own)
 
 
+ITEM_RECEIPT_REFUSAL = 'This entry belongs to an item receipt; use item-receipt update/void.'
+
+# The account register, named where `prepare` interprets its writers. The journal editor alone
+# is unnamed: it is the only writer that treats an entry as nothing but its lines, which is why
+# it is the only one refused a transaction that is more than that.
+REGISTER = 'register'
+
+
+def item_receipt_entry(s, transaction_id):
+    """Whether this journal-stored transaction is an item receipt's accounting."""
+    return bool(sa.inspect(s.company.conn).has_table('item_receipts') and s.company.conn.execute(
+        sa.select(c.item_receipts.c.id).where(c.item_receipts.c.transaction_id == transaction_id)).first())
+
+
+def foreign_document(s, transaction_id, *, verb, owner=None):
+    """The refusal a journal write earns when the entry is really another document, or None.
+
+    Four documents are *stored* as ``transactions.type = 'journal_entry'`` and are told apart
+    only by a marker row of their own: a check, a card charge and a transfer by
+    ``money_out_documents``, an inventory adjustment or cost correction by
+    ``inventory_documents``, and an item receipt by ``item_receipts``. Each is refused by
+    what it actually is and pointed at the command that owns it, because half of one of them
+    rewritten in the journal editor leaves the other half describing a posting nobody
+    entered -- and a journal *deletion* of one would be a second tombstone on a document its
+    own family already owns.
+
+    **The register is not refused the three money-out documents.** It is the surface they
+    post through, and it corrects one in its own shape: the funding line stays line one, the
+    allocations keep their identities, and the cheque comes back a cheque. The register and
+    the document are two doors into one entry. The journal editor is the door that treats
+    the entry as nothing but lines, and that is the one refused.
+
+    One home for all of it, so every writer refuses the same documents in the same words.
+    """
+    from bookflow.company import inventory, money_out
+    kind = money_out.owning_document_kind(s, transaction_id) if owner is None else None
+    if kind is not None:
+        return money_out.owned_elsewhere(kind, transaction_id, verb=verb)
+    held = inventory.owning_document_kind(s, transaction_id)
+    if held is not None:
+        return BookflowError('E_VALIDATION', message=(
+            f'This entry is an inventory {held.replace("recost", "cost correction")} and its '
+            'stock movements are part of it. Use `inventory void` so the quantities and the '
+            'accounting move together.'), details={'fields': [
+                {'field': 'journal', 'problem': 'an inventory document is not edited as a journal entry'}],
+                'inventory_document': held, 'transaction_id': transaction_id})
+    if item_receipt_entry(s, transaction_id):
+        return invalid('journal', ITEM_RECEIPT_REFUSAL)
+    return None
+
+
 def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_revision=False, purchase_items=None):
     """``owner`` is the document module posting through this writer; the journal editor is None.
 
@@ -228,25 +293,20 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_
         raise invalid('items', 'commercial item rows require their purchase coordinator')
     old_h = resolve(s, inp.journal) if operation != 'post' else None
     if old_h is not None:
+        from bookflow.company.journal_deletions import require_not_deleted as require_journal_kept
         from bookflow.company.purchase_deletions import require_not_deleted
         require_not_deleted(s, old_h['id'])
+        require_journal_kept(s, old_h['id'])
     if old_h is not None and owner != 'inventory':
         if s.company.conn.execute(sa.select(c.money_out_item_lines.c.document_line_id).where(
                 c.money_out_item_lines.c.transaction_id == old_h['id']).limit(1)).first():
             raise invalid('journal', 'This purchase carries items; use check or card-charge update/void so stock and money change together.')
-    if old_h is not None and owner != 'inventory':
-        if sa.inspect(s.company.conn).has_table('item_receipts') and s.company.conn.execute(sa.select(c.item_receipts.c.id).where(c.item_receipts.c.transaction_id == old_h['id'])).first():
-            raise invalid('journal', 'This entry belongs to an item receipt; use item-receipt update/void.')
-    if old_h is not None and owner is None:
-        from bookflow.company.inventory import owning_document_kind
-        held = owning_document_kind(s, old_h['id'])
-        if held is not None:
-            raise BookflowError('E_VALIDATION', message=(
-                f'This entry is an inventory {held.replace("recost", "cost correction")} and its '
-                'stock movements are part of it. Use `inventory void` so the quantities and the '
-                'accounting move together.'), details={'fields': [
-                    {'field': 'journal', 'problem': 'an inventory document is not edited as a journal entry'}],
-                    'inventory_document': held, 'transaction_id': old_h['id']})
+    if old_h is not None and owner != 'inventory' and item_receipt_entry(s, old_h['id']):
+        raise invalid('journal', ITEM_RECEIPT_REFUSAL)
+    if old_h is not None and owner in (None, REGISTER):
+        refusal = foreign_document(s, old_h['id'], verb=operation, owner=owner)
+        if refusal is not None:
+            raise refusal
     old_r = revision(s, old_h) if old_h else None
     meta = version_meta(s, old_h, inp.expected_version) if old_h else None
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
@@ -593,6 +653,8 @@ def page(s, ctx, inp, history=False):
     state = page_state(s, 'journal history' if history else 'journal query', Contract(), ctx.on_behalf_of)
     if history:
         h = resolve(s, inp.journal)
+        from bookflow.company.journal_deletions import deletion_info
+        deletion_info(s, h, getattr(inp, 'include_deleted', False))
         t = c.transaction_revisions
         q = sa.select(*(column for column in t.c if not column.name.endswith('_snapshot'))).where(t.c.transaction_id == h['id']).order_by(t.c.revision_number)
     else:
@@ -606,6 +668,9 @@ def page(s, ctx, inp, history=False):
             q = q.where(r.c.date <= inp.date_to)
         if inp.query:
             q = q.where(sa.or_(t.c.number.contains(inp.query, autoescape=True), r.c.memo.contains(inp.query, autoescape=True)))
+        if not getattr(inp, 'include_deleted', False) and sa.inspect(s.company.conn).has_table('journal_deletions'):
+            q = q.where(~sa.exists(sa.select(c.journal_deletions.c.transaction_id).where(
+                c.journal_deletions.c.transaction_id == t.c.id)))
         q = q.order_by(r.c.date, t.c.id)
     found = [dict(r) for r in s.company.conn.execute(q.offset(state.offset).limit(inp.limit + 1)).mappings()]
     more, found = len(found) > inp.limit, found[:inp.limit]
@@ -613,4 +678,8 @@ def page(s, ctx, inp, history=False):
     if history:
         return JournalHistoryOutput(**{k: h[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
             items=[revision_output(s, r, summary_only=True) for r in found], **shared)
-    return JournalPageOutput(items=[JournalSummaryOutput(**summary(h, revision(s, h))) for h in found], **shared)
+    from bookflow.company.journal_deletions import deleted_ids
+    retained = deleted_ids(s, [h['id'] for h in found]) if getattr(inp, 'include_deleted', False) else set()
+    return JournalPageOutput(items=[JournalSummaryOutput(**visible(s, h, summary(h, revision(s, h)), True))
+                                    if h['id'] in retained else JournalSummaryOutput(**summary(h, revision(s, h)))
+                                    for h in found], **shared)

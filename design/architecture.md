@@ -2488,6 +2488,90 @@ with no frozen preparation to flip: the `transaction.bill.delete` capability spe
 `contract:delete:bill` company action and the `bill delete` command all arrive in it.
 `co0052` is the company head.
 
+### Journal-entry deletion
+
+`journal delete` is the last deletion family, and the only one whose obstacle is the
+storage layout rather than the document. A check, a card charge and a transfer are all
+`transactions.type = 'journal_entry'`; an inventory adjustment or cost correction and an
+item receipt are too. What tells them apart is a marker row of their own --
+`money_out_documents`, `inventory_documents`, `item_receipts` -- and nothing in the
+transaction says which. Two of those five already delete through `purchase_deletions`, so
+a journal delete that accepted one would write a second, conflicting tombstone on a
+document that already carries one.
+
+`journals.foreign_document(session, transaction_id, verb=...)` is the one owner of that
+resolution. It reads each marker in turn and returns the refusal that names what the
+document actually is and the command that owns it: `check delete`, `card-charge delete`,
+`transfer void` for a delete; `check update`, `transfer void` and so on for the journal
+editor's own verbs. `money_out.owning_document_kind` answers the money-out arm through
+`money_out._documents`, the same `transactions`-to-`money_out_documents` join `resolve`
+uses, so there is one join rather than two.
+
+**That guard closed a live defect wider than deletion.** `journals.prepare` already
+refused a purchase carrying item lines and an inventory document by name, but read
+neither `money_out_documents` nor any marker of its own, so a cheque entered with expense
+lines and no item grid passed both: `journal update` rewrote its memo and `journal void`
+cancelled it, and `check show` then read back the rewritten revision. `journal delete`,
+`journal update` and `journal void` are what the money-out arm refuses.
+
+**The register is not refused those three, and must not be.** It is the surface they post
+through, and `register update` corrects one in its own shape -- the funding line stays line
+one and the allocations keep their identities -- so the register and the document are two
+doors into one entry. `registers.py` names itself `journals.REGISTER` and `transfers.py`
+names itself `money_out.OWNER`; the journal editor alone stays unnamed, because it is the
+door that treats the entry as nothing but lines. The inventory and item-receipt arms still
+refuse the register, which has no shape for either.
+
+`company/journal_deletions.py` owns the command and follows the *payment* shape, not the
+purchase one: `core.deletion_families.PREPARED_FAMILIES` already lists `journal_entry`,
+and `transaction_deletion.prepare_delete` already builds its exact reversal, its
+tombstone, its work-billing releases and its deposit blocker, with
+`transaction_deletion_facts.load` selecting `journals.version_meta` for this family by
+name. So the coordinator adds the marker refusal, its own dependency reads, the
+tombstone and the audit event, and nothing else. Nothing on that path needs
+`ledger.post`, which is what lets the family Delete grant stand alone.
+
+`journal_deletions.dependencies` names the blocking record rather than cascading: live
+`applications` or `ap_applications` rows produce `E_HAS_APPLICATIONS` carrying the
+settlement transaction ids and the application ids, disclosed only after
+`reconciliation_adapters.authority` has authorized them; a held `reconciliation_keys`
+member produces `E_RECONCILIATION_DEPENDENCY` carrying the key id. The kernel computes
+live applications only for `payment` and `invoice`, which is why this family reads them
+itself.
+
+`co0055` adds `journal_deletions` with the same shape as `co0052` -- immutable tombstone,
+owner trigger, no-update/no-delete triggers, transaction fence, `principal_id` on the
+receipt. Its owner trigger carries one arm no other family has: a transaction naming any
+`money_out_documents` or `inventory_documents` row cannot carry a journal deletion at all,
+so the second tombstone this family exists to prevent cannot be written even by a writer
+that forgot to ask. The revision is numbered `co0055` over `co0052` because `co0053` and
+`co0054` are allocated on branches that have not landed.
+
+Reads follow the bill overlay. The database keeps status `voided`; `deleted` is overlaid
+by `journals.visible` for `journal show`, `journal query` and `journal history`, and an
+ordinary read of a deleted entry is `E_RECORD_NOT_FOUND` until `include_deleted` asks for
+it. `journal query` excludes deleted rows; the account register and the general-ledger
+register already hide every tombstoned transaction from `deletion_families.tombstone_tables()`.
+`journals.prepare` refuses to update or void a deleted entry through
+`journal_deletions.require_not_deleted`.
+
+The visible half is derived. `TOMBSTONE_TABLE` gains `journal_entry`, which is the whole
+of what the Users & permissions checkbox and the register hiding need;
+`workbench.permissions.NOUNS` maps each deletable family to the page it is read on
+through `transaction_detail.IRREGULAR`, because a journal entry is the one family whose
+page is not named after its stored type. `Purchases.install_deletion` gains `journal` as
+a sixth noun with `journal_delete.html`. The journal record page resolves its owning
+money-out document through `Purchases.owning_record` -- which now covers transfers as
+well as cheques and card charges -- and offers that document's verbs instead of the
+journal's, so a person is never shown a button the core would refuse; an ordinary entry
+offers Delete only when the real command admits it in a dry run.
+
+**Outstanding.** `journal delete` is registered and complete, but no permission-catalog
+delta carries its descriptor yet, so `hub.access.require_command_activation` refuses it
+with `command_unavailable` on an activated root. The delta must add the `journal delete`
+command descriptor, flip `contract:delete:journal_entry` to available, and declare
+`bookflow.company.journal_deletions.admit` as a conditional resource source.
+
 ### Where a new command enters the permission catalog
 
 The historical catalogs are a delta chain — activation, setup, purchase, sales, payment,

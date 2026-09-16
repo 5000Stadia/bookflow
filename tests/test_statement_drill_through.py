@@ -153,8 +153,9 @@ def test_a_ledger_row_links_its_document_and_keeps_the_position_it_was_read_at()
 
     assert opening["document_url"] is None, "a summary row names no document and must not link"
     assert invoice["document_url"] == "/c/CO/invoice/T1?include_deleted=1&source_report_watermark=312"
-    # A journal entry has no retained-deletion storage, so it asks for none.
-    assert journal["document_url"] == "/c/CO/journal/T2?source_report_watermark=312"
+    # A journal entry now has retained-deletion storage of its own, so it asks for it too --
+    # a report sums immutable effects, and a deleted entry's rows must still open behind them.
+    assert journal["document_url"] == "/c/CO/journal/T2?include_deleted=1&source_report_watermark=312"
 
     # A ledger opened directly, with no statement above it, anchors on its own watermark.
     alone = statements.view(_ledger_result(rows), {}, "CO", "report general-ledger")

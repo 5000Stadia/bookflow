@@ -1,8 +1,9 @@
 # Transaction deletion
 
 Status: accepted product requirement. Implemented for checks, credit-card charges,
-invoices, sales receipts, customer payments and vendor bills. Applies alongside the
-existing void action. *Family dispositions* below is the complete list of posted
+invoices, sales receipts, customer payments, vendor bills and journal entries; a family's
+command becomes runnable on a root once that root has activated a permission catalog
+carrying its descriptor. Applies alongside the existing void action. *Family dispositions* below is the complete list of posted
 transaction types and, for each type without a delete command, the reason.
 
 ## User setup and authority
@@ -49,15 +50,10 @@ disposition here. A type is either deletable, or it is listed with the reason it
 own lifecycle serves the person without deletion. A type absent from this section
 does not exist.
 
-Deletable: `invoice`, `sales_receipt`, `check`, `card_charge`, `payment`, `bill`.
+Deletable: `invoice`, `sales_receipt`, `check`, `card_charge`, `payment`, `bill`,
+`journal_entry`.
 
 Deferred, with the reason:
-
-- `journal_entry` — `check`, `card_charge` and `transfer` all store as this type with
-  a `money_out_documents` marker, and two of them already delete through the purchase
-  owner. A delete for this type must first settle which of those rows it may touch,
-  and must re-apply the stocked-purchase, item-receipt and inventory fences the void
-  planner owns.
 - `deposit` — `deposit void` already reverses the deposit at its original date and
   returns every banked receipt to Undeposited Funds. The deposit readers declare
   deletion unavailable (`feature: transaction_deleted`).
@@ -75,6 +71,25 @@ Deferred, with the reason:
   charge with `E_HAS_APPLICATIONS`, on `ledger_schema.SETTLEABLE_RECEIVABLE_TYPES`
   rather than on a type name, so the lifecycle is whole; a wrong charge is voided
   and re-entered, which is what a sixty-dollar document is worth.
+
+## What a journal entry is, before it is deleted
+
+`check`, `card_charge` and `transfer` all store as `journal_entry` with a
+`money_out_documents` marker; an inventory adjustment or cost correction stores the
+same way with an `inventory_documents` marker, and an item receipt with an
+`item_receipts` row. Nothing in the transaction itself says which. So every write that
+addresses a transaction *as a journal entry and nothing more* — delete, update, void —
+must first resolve what the document really is, and refuse it by name, pointing at the
+command that owns it: `check delete`, `card-charge delete`,
+`inventory void`, `item-receipt void`, or, for a transfer, `transfer void`, since a
+transfer has no deletion of its own. Refusing rather than accepting is the requirement:
+a cheque accepted here would carry a second deletion record over the one its own family
+already wrote, and a cheque edited here would leave its own form describing a posting
+nobody entered. The account register is not one of these writes: it is the surface the
+three money-out documents post through and it corrects one in the document's own shape,
+so the register and the document remain two doors into one entry. The storage enforces
+the deletion rule independently, so the second record cannot exist even if a writer
+forgot to ask.
 
 ## Implementation boundary
 
