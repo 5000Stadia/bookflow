@@ -1373,7 +1373,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
                       work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
-                      sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
+                      sale=Sales.detail_context(out, company_id) if command_noun in Sales.nouns() else None,
                       bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
                       purchase=Purchases.detail_context(purchase_record) if purchase_record and purchase_noun in Document.MONEY_OUT else None,
                       purchase_noun=purchase_noun, purchase_history=purchase_history, purchase_history_paging=purchase_history_paging,
@@ -1948,7 +1948,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else
                           '' if error and error.get('code') in ('E_PREVIEW_STALE', 'E_VERSION_CONFLICT') else attempted.get('f:expected_facts_fingerprint', '')),
-                      sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
+                      sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in Sales.nouns() or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
                       bill=Bills.detail_context(result, company_id, preview=preview) if result and noun == 'bill' and 'revision' in result else None,
                       credit=Credits.detail_context(noun, result, company_id, preview=preview) if result and noun in Credits.NOUNS and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt', 'credit-memo') and verb == 'history' else None,

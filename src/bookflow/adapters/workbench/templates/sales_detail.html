@@ -37,8 +37,8 @@
 </details>
 {% set billing_sources = r.billing_sources %}{% include "billing_sources.html" %}
 <nav class="actions" aria-label="Sales revisions">{% for label, href in sale.links %}<a href="{{ href }}">{{ label }}</a>{% endfor %}</nav>
-{% if sale.record.type == 'invoice' and not sale.preview %}<section aria-label="Current invoice settlement"><h3>Current invoice settlement</h3>
-{% if sale.settlement %}<p>{{ 'Deleted invoice' if sale.record.deletion else sale.settlement.status|capitalize }} · Gross {{ sale.settlement.gross.amount }} · Applied {{ sale.settlement.applied.amount }} · Due {{ sale.settlement.due.amount }} {{ sale.settlement.currency }}</p><p class="muted">All recorded current settlement, separate from the selected historical invoice revision.</p>{% endif %}
+{% if sale.settleable and not sale.preview %}<section aria-label="Current {{ sale.title|lower }} settlement"><h3>Current {{ sale.title|lower }} settlement</h3>
+{% if sale.settlement %}<p>{{ ('Deleted ' + sale.title|lower) if sale.record.deletion else sale.settlement.status|capitalize }} · Gross {{ sale.settlement.gross.amount }} · Applied {{ sale.settlement.applied.amount }} · Due {{ sale.settlement.due.amount }} {{ sale.settlement.currency }}</p><p class="muted">All recorded current settlement, separate from the selected historical revision.</p>{% endif %}
 <a href="{{ sale.settlement_url }}">Settlement and applications, including dated views</a></section>{% endif %}
 {% if sale.print_url %}<p class="muted">Print opens this {{ sale.title|lower }} as a PDF, to print or to save and send yourself. Emailing from Bookflow is not available yet.</p>{% endif %}
 </section>
