@@ -36,11 +36,17 @@ payment update
 payment void""".splitlines())
 
 # The deletion, receiving and permission-setup work of 2026-09-14/15 added these command
-# identities. Each is dispositioned below: the twelve with a designated transport witness are
-# mapped to it through that test's own COMMANDS set, and `bill delete` and `payment delete`
-# deliberately are not -- their executed evidence is HTTP and real Chrome, with no CLI/MCP
-# matrix witness anywhere, so they fall through to a pending row rather than being counted as
-# parity they do not have.
+# identities. Each is dispositioned below, mapped through the witness test's own COMMANDS set.
+#
+# Read the witness before trusting the word "four" in its coverage label: the surfaces a witness
+# actually drives are named beside it in the chain, because they differ. The purchase-deletion
+# witness loops ('cli','mcp'); the sales one adds http; receiving and permission setup drive all
+# four through `matrix.documents`. A two-surface witness is real evidence and is not four-surface
+# parity, and the label must not be read as the stronger claim.
+#
+# `bill delete` and `payment delete` deliberately have no entry -- their executed evidence is HTTP
+# and real Chrome, with no CLI/MCP matrix witness anywhere -- so they fall through to a pending row
+# rather than being counted as parity they do not have.
 BATCH_2026_09_COMMANDS = frozenset("""bill delete
 card-charge delete
 check delete
@@ -559,10 +565,10 @@ def execution_map():
                    'tests/test_mcp_registry_rollout.py::test_rollout_chart_profile_detach_reattach_full_documents' if cmd.name in ROLLOUT_COMMANDS else
                    'tests/test_mcp_registry_undo.py::test_undo_preview_compensation_replay_and_rejected_state' if cmd.name in UNDO_COMMANDS else
                    'tests/test_mcp_registry_demo_upgrade.py::test_owned_demo_replacement_and_current_schema_upgrade' if cmd.name in DEMO_UPGRADE_COMMANDS else
-                   'tests/test_purchase_deletion_transports.py::test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history' if cmd.name in PURCHASE_DELETE_COMMANDS else
-                   'tests/test_sales_deletion_transports.py::test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history' if cmd.name in SALES_DELETE_COMMANDS else
-                   'tests/test_receiving_surfaces.py::test_receiving_and_linked_bill_cross_all_four_actual_transports' if cmd.name in RECEIVING_COMMANDS else
-                   'tests/test_permission_setup_surfaces.py::test_permission_setup_crosses_all_four_actual_transports' if cmd.name in SETUP_SURFACE_COMMANDS else
+                   'tests/test_purchase_deletion_transports.py::test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history' if cmd.name in PURCHASE_DELETE_COMMANDS else  # cli, mcp
+                   'tests/test_sales_deletion_transports.py::test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history' if cmd.name in SALES_DELETE_COMMANDS else  # cli, http, mcp
+                   'tests/test_receiving_surfaces.py::test_receiving_and_linked_bill_cross_all_four_actual_transports' if cmd.name in RECEIVING_COMMANDS else  # all four
+                   'tests/test_permission_setup_surfaces.py::test_permission_setup_crosses_all_four_actual_transports' if cmd.name in SETUP_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
