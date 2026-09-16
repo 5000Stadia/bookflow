@@ -555,7 +555,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -1962,9 +1962,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       transaction_detail=Detail.view(result, report_input, company_id, source_report_watermark) if result and report_input is not None and cmd.name in Detail.COMMANDS else None,
                       missing_checks=MissingChecks.view(result, report_input, company_id) if result and report_input is not None and cmd.name in MissingChecks.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
-                      # A report page is one shape however many reports there are, so a link that
-                      # saves what is on the screen as a file is decided by the registry calling
-                      # this command a report rather than by naming any of them.
+                      # A report page is one shape however many reports there are, so what a report
+                      # page needs -- a print stylesheet that knows the furniture from the report,
+                      # and a link that saves what is on the screen as a file -- is decided by the
+                      # registry calling this command a report rather than by naming any of them.
+                      report_page=report_page,
                       report_export_url=(Export.export_url(company_id, verb, report_input)
                           if report_page and result and report_input is not None and company_id else None),
                       preview=preview, get=F.get_path, form_value=F.form_value,
