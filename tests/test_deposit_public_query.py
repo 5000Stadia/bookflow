@@ -70,7 +70,10 @@ def test_actual_reference_redaction_and_connected_denial_are_distinct(world):
     try:
         with reading(world) as (s,a,b):
             redacted=reads.query(s,m.QueryInput(),audience=a)
-            assert redacted.total_count==original.total_count==1
+            # The claim is that redaction changes what is disclosed, not what is counted.
+            # How many deposits this company holds is not the subject, and the trailing
+            # `==1` only tied the claim to a fixture that has since grown one more.
+            assert redacted.total_count==original.total_count
             assert redacted.totals==original.totals and redacted.effective_bank_total==original.effective_bank_total
             ref=redacted.items[0].selected.deposit_to
             assert not ref.disclosed and ref.id is None and ref.name is None

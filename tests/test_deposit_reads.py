@@ -46,25 +46,34 @@ def test_items_complete_identity_and_print(client,cash,run_private):
 
 
 def test_query_filters_counts_ties_and_freshness(client,cash,run_private):
+    # Every unscoped count below is what the company already held plus what this test posts.
+    # The fixture copies the seeded template, which ships deposits of its own, so a number
+    # written down here would be right only until the seed grew again -- which it has.
+    def held(s,ctx):
+        b=OSBinding.from_session(s)
+        return {status:q.query(s,m.QueryInput(**({'status':status} if status else {})),binding=b).total_count
+                for status in ('posted','voided','deleted',None)}
+    before=run_private(held)
     posted,draft=make_posted(client,cash,run_private)
     def read(s,ctx):
         b=OSBinding.from_session(s)
         for status in ('posted','voided',None):
             for explicit in (False,True):
+                # Asking to include deleted deposits without naming a status was refused as
+                # `feature_unavailable` until deposit deletion shipped; 57a4caa removed that
+                # guard along with the rest of the unavailability refusal. Every combination
+                # answers now, and this company has deleted nothing, so the flag moves no count.
                 inp=m.QueryInput(**({'status':status} if status else {}),include_deleted=explicit)
-                if status is None and explicit:
-                    with pytest.raises(BookflowError) as err:q.query(s,inp,binding=b)
-                    assert err.value.code=='E_VALIDATION';continue
                 result=q.query(s,inp,binding=b)
-                assert result.total_count==(0 if status=='voided' else 1)
+                assert result.total_count==before[status]+(0 if status=='voided' else 1)
         assert q.query(s,m.QueryInput(number=posted.current.number,date_from='2026-06-03',date_to='2026-06-03'),binding=b).total_count==1
         assert q.query(s,m.QueryInput(number='absent'),binding=b).total_count==0
         # Deletion exists now, so the deleted selection answers instead of refusing. This
-        # company has never deleted a deposit: asking for only deleted ones is empty, and
-        # asking to include them returns exactly the ordinary page.
-        assert q.query(s,m.QueryInput(status='deleted'),binding=b).total_count==0
+        # test deletes nothing: asking for only deleted ones returns whatever was there
+        # before, and asking to include them returns exactly the ordinary page.
+        assert q.query(s,m.QueryInput(status='deleted'),binding=b).total_count==before['deleted']
         assert (q.query(s,m.QueryInput(include_deleted=True,status='posted'),binding=b).total_count
-                ==q.query(s,m.QueryInput(status='posted'),binding=b).total_count==1)
+                ==q.query(s,m.QueryInput(status='posted'),binding=b).total_count==before['posted']+1)
     run_private(read)
 
 
@@ -72,15 +81,28 @@ def test_register_complete_relation_and_relevant_continuation(client,sale,run_pr
     from tests.test_deposit_lifecycle import additional_document,replacement
     docs=[additional_document(client,sale)]
     docs.append(dict(docs[0],memo='second retained memo'))
+    def read(s,ctx,direction='asc',cursor=None,limit=1):
+        return q.query(s,m.QueryInput(direction=direction,page=m.PageInput(limit=limit,cursor=cursor)),binding=OSBinding.from_session(s))
+    # The seeded company already holds deposits of its own, and a page's `total_count` and
+    # `totals` are over everything that matches rather than over the page -- so both are
+    # read here before anything is posted, and what this test adds is asserted against them.
+    before=run_private(lambda s,ctx:read(s,ctx,limit=200))
     values=[financial(run_private,dict(operation_key='read-register-'+str(n),document=d)) for n,d in enumerate(docs)]
     ids=sorted(v.current.id for v in values)
-    def read(s,ctx,direction='asc',cursor=None):
-        return q.query(s,m.QueryInput(direction=direction,page=m.PageInput(limit=1,cursor=cursor)),binding=OSBinding.from_session(s))
+    # One full read is what the paged reads below are checked against, so the order is
+    # derived rather than written down: where the company's own deposits sort among these
+    # two is not this test's subject, and pinning an index made it one.
+    whole=run_private(lambda s,ctx:read(s,ctx,limit=200))
+    order=[item.current.id for item in whole.items]
+    assert whole.total_count==before.total_count+2
+    assert whole.totals.bank_total.minor_units==before.totals.bank_total.minor_units+2000
+    assert order.index(ids[0])<order.index(ids[1])
     first=run_private(read)
-    assert first.total_count==2 and first.totals.bank_total.minor_units==2000 and first.items[0].current.id==ids[0]
+    assert first.total_count==whole.total_count and first.totals==whole.totals
+    assert first.items[0].current.id==order[0]
     second=run_private(lambda s,ctx:read(s,ctx,cursor=first.next_cursor))
-    assert second.items[0].current.id==ids[1] and second.previous_cursor
-    assert run_private(lambda s,ctx:read(s,ctx,'desc')).items[0].current.id==ids[1]
+    assert second.items[0].current.id==order[1] and second.previous_cursor
+    assert run_private(lambda s,ctx:read(s,ctx,'desc')).items[0].current.id==order[-1]
     client.account.create(name='Unrelated current master',type='expense',company=COMPANY)
     stable=run_private(read)
     assert (stable.next_cursor,stable.fingerprint)==(first.next_cursor,first.fingerprint)
