@@ -1,4 +1,4 @@
-"""co0053 rebuilds the inventory ledger so a return can name the issue it gives back.
+"""co0057 rebuilds the inventory ledger so a return can name the issue it gives back.
 
 This one is not additive in the way most are: it rebuilds ``inventory_movements`` to add a
 column with a foreign key and a check, and it widens the guard that decides which receipts may
@@ -18,7 +18,7 @@ from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS
 
-M = importlib.import_module("bookflow.storage.company_migrations.versions.0053_return_recosting")
+M = importlib.import_module("bookflow.storage.company_migrations.versions.0057_return_recosting")
 VERSIONS = Path(__file__).resolve().parents[1] / "src/bookflow/storage/company_migrations/versions"
 PREVIOUS = M.down_revision
 TABLE = "inventory_movements"
@@ -56,7 +56,7 @@ def test_the_number_this_migration_claims_is_the_one_the_chain_gives_it():
     metadata and not in any database, and every write naming it would fail.
     """
     chain = _chain()
-    assert M.revision == "co0053" and chain[M.revision] == PREVIOUS
+    assert M.revision == "co0057" and chain[M.revision] == PREVIOUS
     assert HEADS["company"] == M.revision
 
 

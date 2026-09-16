@@ -439,7 +439,7 @@ def test_the_migration_links_returns_a_shipped_company_already_holds(books):
     assert len(linked) == 2
 
     migration = importlib.import_module(
-        'bookflow.storage.company_migrations.versions.0053_return_recosting')
+        'bookflow.storage.company_migrations.versions.0057_return_recosting')
     import sqlite3
     with sqlite3.connect(_path(books)) as db:
         # The ledger is immutable once its guards are up, which is exactly why the migration
