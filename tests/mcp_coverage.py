@@ -38,11 +38,13 @@ payment void""".splitlines())
 # The deletion, receiving and permission-setup work of 2026-09-14/15 added these command
 # identities. Each is dispositioned below, mapped through the witness test's own COMMANDS set.
 #
-# Read the witness before trusting the word "four" in its coverage label: the surfaces a witness
-# actually drives are named beside it in the chain, because they differ. The purchase-deletion
-# witness loops ('cli','mcp'); the sales one adds http; receiving and permission setup drive all
-# four through `matrix.documents`. A two-surface witness is real evidence and is not four-surface
-# parity, and the label must not be read as the stronger claim.
+# The label no longer has to be distrusted: `four_surface_scenario` is derived from the witness
+# module's own `SURFACES` and is reserved for one that declares all four. A witness that declares
+# fewer, or declares nothing, is `transport_scenario` -- real executed evidence over at least one
+# real transport, which is a weaker claim honestly made. Adding `SURFACES` to a witness that does
+# drive all four is mechanical and moves its rows up. This paragraph used to say to read the
+# witness before trusting the word "four", which was the right advice while the label was a
+# guess; it is now a measurement.
 #
 # `bill delete` and `payment delete` now hold witnesses of their own, each driving cli, http and
 # mcp and asserting the books the deletion leaves behind. Until those existed their only executed
@@ -64,9 +66,51 @@ permission activate
 permission show
 sales-receipt delete""".splitlines())
 
+# Spec row 4, job time, which the human pinned post-v1: they want it with a calendar, each job
+# assigned to an employee, and time tracked per employee per job. What exists is the capture half.
+# It reached integration on 2026-09-16 only because the frozen-ancestor catalog repair had to
+# carry it to get the three deletion families out.
+#
+# These nine therefore ship with no transport witness ON PURPOSE, and the ledger records the
+# reason rather than claiming evidence or going quietly green. What exists for them:
+# `tests/test_job_time.py` is entirely in-process, and `tests/test_job_time_browser.py` drives
+# real Chrome at 1280 and 390 -- genuine evidence of the workbench, and NOT a transport witness,
+# because it exercises the browser rather than the CLI or a source-bound MCP child. There is no
+# workbench route either: `time-activity` appears in `work.py` and nowhere in `pages.py`.
+#
+# The distinction this records is the one that matters. An unwitnessed command in a deferred
+# feature is honest; an unwitnessed command in a shipped one is a lie. `payment delete` was the
+# second kind -- in scope, declared done, reviewed, and unreachable over every transport.
+JOB_TIME_COMMANDS = frozenset("""time-activity billing
+time-activity create
+time-activity history
+time-activity invoice
+time-activity query
+time-activity sales-receipt
+time-activity show
+time-activity update
+time-activity void""".splitlines())
+
+# Why a command ships without an executed transport witness, dated. A row may be pending only
+# with an entry here; a row with neither a witness nor a reason is the failure this ledger
+# exists to catch, and `test_registry_execution_ledger_has_no_unclassified_commands` fails on it.
+PENDING_REASONS = {name: ('2026-09-16',
+    'Spec row 4 (job time), pinned post-v1 by the human: the capture half only, with no '
+    'workbench route. In-process and real-Chrome evidence exist; neither is a transport '
+    'witness. Transport evidence lands with the rest of row 4, not before it.')
+    for name in JOB_TIME_COMMANDS}
+
+# The three verbs that closed the deletion set at nine families on 2026-09-16. Each arrived with
+# an in-process deletion suite and no transport evidence of any kind -- the position `payment
+# delete` was in when it turned out to be unreachable over every transport but Python. Each now
+# has a witness that drives all four surfaces and asserts what the deletion did to the books.
+DELETION_CLOSE_COMMANDS = frozenset("""credit-memo delete
+deposit delete
+journal delete""".splitlines())
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -399,15 +443,6 @@ term list
 term query
 term show
 term update
-time-activity billing
-time-activity create
-time-activity history
-time-activity invoice
-time-activity query
-time-activity sales-receipt
-time-activity show
-time-activity update
-time-activity void
 token issue
 token list
 token revoke
@@ -535,6 +570,9 @@ def execution_map():
     from tests.test_payment_deletion_transports import COMMANDS as PAYMENT_DELETE_COMMANDS
     from tests.test_customer_refund_correction_surfaces import COMMANDS as REFUND_CORRECTION_COMMANDS
     from tests.test_vendor_credit_correction_surfaces import COMMANDS as VENDOR_CREDIT_CORRECTION_COMMANDS
+    from tests.test_credit_memo_deletion_transports import COMMANDS as CREDIT_DELETE_COMMANDS
+    from tests.test_deposit_deletion_transports import COMMANDS as DEPOSIT_DELETE_COMMANDS
+    from tests.test_journal_deletion_transports import COMMANDS as JOURNAL_DELETE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -587,6 +625,9 @@ def execution_map():
                    'tests/test_payment_deletion_transports.py::test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books' if cmd.name in PAYMENT_DELETE_COMMANDS else  # cli, http, mcp
                    'tests/test_customer_refund_correction_surfaces.py::test_correcting_a_refund_crosses_all_four_actual_transports' if cmd.name in REFUND_CORRECTION_COMMANDS else  # all four
                    'tests/test_vendor_credit_correction_surfaces.py::test_correcting_and_reading_a_vendor_credit_crosses_all_four_actual_transports' if cmd.name in VENDOR_CREDIT_CORRECTION_COMMANDS else  # all four
+                   'tests/test_credit_memo_deletion_transports.py::test_credit_memo_deletion_crosses_all_four_actual_transports' if cmd.name in CREDIT_DELETE_COMMANDS else
+                   'tests/test_deposit_deletion_transports.py::test_deposit_deletion_crosses_all_four_actual_transports' if cmd.name in DEPOSIT_DELETE_COMMANDS else
+                   'tests/test_journal_deletion_transports.py::test_journal_deletion_crosses_all_four_actual_transports' if cmd.name in JOURNAL_DELETE_COMMANDS else
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
@@ -596,6 +637,7 @@ def execution_map():
             'clearable': cmd.clearable, 'execution_witness': witness,
             'coverage': _coverage(cmd, witness, LOCAL_COMMANDS),
             'surfaces': _surfaces(witness),
+            'pending_reason': PENDING_REASONS.get(cmd.name),
             'local_valid_witnesses': LOCAL_VALID_WITNESSES.get(cmd.name, []),
             'publication': permissions[cmd.name]})
     return result
