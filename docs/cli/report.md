@@ -1011,6 +1011,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].contacts[].points[].value` | string | yes | no | — | — |
 | `rows[].billing_address` | string \| null | no | yes | null | — |
 | `rows[].transaction_id` | string \| null | no | yes | null | — |
+| `rows[].document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable a document row is: an invoice, or a statement charge entered straight onto the account. Null on a customer row, which is no one document. |
 | `rows[].number` | string \| null | no | yes | null | — |
 | `rows[].date` | string \| null | no | yes | null | — |
 | `rows[].due_date` | string \| null | no | yes | null | — |

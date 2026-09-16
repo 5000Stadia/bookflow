@@ -157,6 +157,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].received_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, PaymentCurrentOutput. |
 | `items[].applied_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].available_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, PaymentCurrentOutput. |
+| `items[].document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `items[].version` | integer | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
@@ -167,6 +168,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current` | object \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current.version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |

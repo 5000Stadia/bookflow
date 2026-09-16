@@ -29,6 +29,7 @@ from bookflow.company import receivable_reports as receivable
 from bookflow.company import schema as c
 from bookflow.company.aging import BUCKETS, COLUMNS as _COLUMNS, bucket_edges, days_past_due
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.receivable_reports import ArAgingTotals
 from bookflow.core.errors import BookflowError
 
@@ -104,6 +105,10 @@ class CollectionRow(StrictModel):
     contacts: list[CustomerContactOutput] = Field(default_factory=list)
     billing_address: str | None = None
     transaction_id: str | None = None
+    # `kind` says what granularity a row is -- one customer, or one document beneath them --
+    # and never which receivable it is. That is its own field, read straight off the
+    # open-invoice row this list is built from rather than stamped as the invoice it isn't.
+    document_type: Literal[SETTLEABLE_RECEIVABLE_TYPES] | None = Field(default=None, description="Which receivable a document row is: an invoice, or a statement charge entered straight onto the account. Null on a customer row, which is no one document.")
     number: str | None = None
     date: str | None = None
     due_date: str | None = None
@@ -238,7 +243,8 @@ def collections(inp: CollectionsInput, s, *, principal_id=None) -> CollectionsOu
                     display_customer_label=receivable._label(invoice["full_name"]),
                     parent_id=invoice["parent_id"],
                     active=None, overdue=money(int(invoice["net"]), currency),
-                    transaction_id=invoice["tx"], number=invoice["document_number"],
+                    transaction_id=invoice["tx"], document_type=invoice["document_type"],
+                    number=invoice["document_number"],
                     date=invoice["document_date"], due_date=invoice["aging_date"],
                     days_past_due=days_past_due(inp.as_of, invoice["aging_date"]),
                     aging_bucket=bucket, balance=money(int(invoice["net"]), currency),

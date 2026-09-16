@@ -4413,6 +4413,32 @@ the half a widening leaves behind if it is forgotten: a charge goes through the 
 writer, so before it landed a paid charge could be voided with no refusal, leaving a live
 application pointing at a document worth nothing and a negative amount owing on the aging.
 
+**A settled charge reads back settled, and opens where it lives.** Settling one was only half the
+act: everything downstream still assumed the receivable it was reading was an invoice, so a person
+who charged a customer and took their money could not see that it was paid. `sales.show` and
+`sales.page` gate `settlement_current` on `SETTLEABLE_RECEIVABLE_TYPES` rather than on the word
+`invoice`, so `statement-charge show` and `statement-charge query` carry the applied amount, the
+balance due and the status the invoice reads have always carried. What that settlement belongs to
+travels with it: `payment_queries._invoice_current_values` — the one funnel every
+`InvoiceSettlementAmounts` comes out of — takes `document_type` off the resolved row's own `type`,
+the way `publication_payment.capture` takes a root kind, so a reader holding a settlement knows
+which receivable it has. The field is nullable because an effect snapshot written into immutable
+operation history before it existed is replayed verbatim out of `payment_operation_items` and
+cannot be rewritten; every live settlement read carries it.
+
+Links then derive their noun from the document instead of naming one.
+`transaction_detail.document_noun` is the single spelling — a stored type hyphenated, checked
+against the registry so a family with no record page links to nothing rather than to a dead URL —
+and `workbench/receivables` uses it for both `report open-invoices` and `report collections`,
+`workbench/customer_statement` uses it in place of the hand-written `NOUNS` map whose omissions
+also silently unlinked credit memos and customer refunds on a customer's own statement, and
+`workbench/payments` uses it with `registry.noun_meta` to pick the record command, its input field
+and the words on the page for the settlement page and the application page — both of which ran
+`invoice show` on a transaction id `co0043` had widened, and so errored outright for a receipt
+applied to a charge. `collection_reports.CollectionRow` carries `document_type` beside `kind`,
+which says the row's granularity — one customer, or one document beneath them — and not its type;
+it is read straight off the open-invoice row the collections list is built from.
+
 **What `co0034` does.** Three CHECK constraints widened by table rebuild — `transactions`
 (twelfth document type), `sales_profiles` (a commercial type with no due date) and
 `custom_field_scopes` (a charge takes custom fields like every other document) — and

@@ -93,7 +93,11 @@ def invoice_current(s, selector):
 def _invoice_current_values(header, revision, applied):
     gross = revision['total_minor_units'] if header['status'] == 'posted' else 0
     due = gross - applied
-    return dict(invoice_id=header['id'], version=header['version'], revision_id=revision['id'],
+    # Which receivable this is comes off the resolved row itself, never off the field the
+    # selector arrived in: an `invoice` field names either settleable type, so a reader that
+    # assumed the noun would send someone who paid a statement charge to an invoice page.
+    return dict(invoice_id=header['id'], document_type=header['type'],
+                version=header['version'], revision_id=revision['id'],
                 gross_minor_units=gross, applied_minor_units=applied, due_minor_units=due,
                 currency=revision['currency'], status=('voided' if header['status'] == 'voided' else
                     'paid' if due == 0 else 'partial' if applied else 'unpaid'))

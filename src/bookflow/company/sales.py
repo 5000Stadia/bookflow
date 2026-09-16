@@ -217,7 +217,10 @@ def show(s, inp, document_type):
     header = resolve(s, getattr(inp, document_type), document_type)
     revision = journals.revision(s, header, inp.revision_number)
     settlement = None
-    if document_type == 'invoice':
+    # A receivable a customer's money can settle reads back settled, whichever of the two it
+    # is. The set is the settlement contract's own, not a type named here, so a document type
+    # that becomes settleable is answered by this read on the day it does.
+    if document_type in SETTLEABLE_RECEIVABLE_TYPES:
         from bookflow.company.payment_queries import invoice_current
         settlement = invoice_current(s, header['id'])
     return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement)
@@ -287,7 +290,11 @@ def page(s, ctx, inp, document_type, *, history=False):
         if revision is None or revision['transaction_id'] != header['id']:
             raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'transaction_revision'})
     settlements = {}
-    if document_type == 'invoice':
+    # Every settleable receivable carries what has been applied to it and what is still due,
+    # read from the same contract `show` above reads: a paged list that answered nothing on a
+    # settled statement charge is the list a person reaches for first.
+    settleable = document_type in SETTLEABLE_RECEIVABLE_TYPES
+    if settleable:
         from bookflow.company.payment_queries import invoice_currents
         from bookflow.company.payment_outputs import InvoiceSettlementOutput
         settlements = invoice_currents(s, found, revisions)
@@ -295,7 +302,7 @@ def page(s, ctx, inp, document_type, *, history=False):
     for header in found:
         revision = revisions[header['current_revision_id']]
         item = SalesSummaryOutput(**_visible_summary(s, header, revision, profiles[revision['id']], getattr(inp, 'include_deleted', False)))
-        if document_type == 'invoice':
+        if settleable:
             item.settlement_current = InvoiceSettlementOutput(**settlements[header['id']])
         items.append(item)
     return SalesPageOutput(items=items, **shared)

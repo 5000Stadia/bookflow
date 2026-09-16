@@ -1,6 +1,8 @@
 """Presentation of typed receivables results; all amounts come from core commands."""
 from urllib.parse import urlencode
 
+from bookflow.adapters.workbench.transaction_detail import document_noun
+
 
 COMMANDS = {"report ar-aging", "report open-invoices", "report collections", "report unbilled-costs"}
 # Column keys in reading order, with the heading a bookkeeper expects above each.
@@ -39,6 +41,19 @@ def _person(contact):
     return name or contact["role"].capitalize()
 
 
+def _receivable_url(company_id, row):
+    """The record page one open receivable opens, named by the document's own type.
+
+    A receivables row is an invoice or a statement charge -- the two the settlement
+    contract admits -- and the row already says which it is, so the noun is derived from
+    that rather than assumed to be ``invoice``. A charge linked as an invoice is a link
+    that answers 404 to the person who just took the money for it. Where the document's
+    type has no record page the row carries no link at all rather than a broken one.
+    """
+    noun = document_noun(row.get("document_type")) if row.get("transaction_id") else None
+    return f"/c/{company_id}/{noun}/{row['transaction_id']}" if noun else None
+
+
 def view(result, inputs, company_id, verb):
     as_of = result["metadata"]["period"]["date_to"]
     rows = []
@@ -49,7 +64,7 @@ def view(result, inputs, company_id, verb):
                 {"f:as_of": as_of, "f:customer": row["customer_id"],
                  "source_report_watermark": result["metadata"]["audit_watermark"]})
         elif verb == "collections":
-            link["detail_url"] = (f"/c/{company_id}/invoice/{row['transaction_id']}"
+            link["detail_url"] = (_receivable_url(company_id, row)
                                   if row["kind"] == "invoice" else
                                   f"/c/{company_id}/customer/{row['customer_id']}" if row["customer_id"] else None)
             link["people"] = [{"name": _person(contact), "role": contact["role"].capitalize(),
@@ -63,7 +78,7 @@ def view(result, inputs, company_id, verb):
                                   if row["kind"] == "line" and row["source_id"] else None)
             link["state_label"] = STATES.get(row["state"], row["state"])
         else:
-            link["detail_url"] = f"/c/{company_id}/invoice/{row['transaction_id']}" if verb == "open-invoices" else None
+            link["detail_url"] = _receivable_url(company_id, row) if verb == "open-invoices" else None
         rows.append({**row, **link})
     next_fields = {f"f:{key}": (str(value).lower() if isinstance(value, bool) else str(value))
                    for key, value in inputs.items() if key != "cursor" and value is not None}
