@@ -7,6 +7,12 @@ from tests.test_bill_item_lines import books, _inventory_part
 from tests.payment_raw_evidence import database
 
 
+# The commands this test is the designated four-surface witness for; the coverage ledger imports
+# this set rather than restating the names beside a path it cannot check.
+COMMANDS = frozenset(('item-receipt post', 'item-receipt show', 'item-receipt query',
+                      'item-receipt update', 'item-receipt history', 'item-receipt void'))
+
+
 @pytest.mark.timeout(300)
 def test_receiving_and_linked_bill_cross_all_four_actual_transports(books,tmp_path):
     pytest.importorskip('mcp')

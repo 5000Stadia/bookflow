@@ -5,6 +5,11 @@ import pytest
 from tests.payment_raw_evidence import database
 
 
+# The commands this test is the designated four-surface witness for; the coverage ledger
+# imports this set rather than restating the names beside a path it cannot check.
+COMMANDS = frozenset(('permission show', 'permission activate', 'membership effective'))
+
+
 @pytest.mark.timeout(300)
 def test_permission_setup_crosses_all_four_actual_transports(root,client,tmp_path):
     pytest.importorskip('mcp')

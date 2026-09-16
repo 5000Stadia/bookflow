@@ -7,6 +7,11 @@ from tests.mcp_matrix_support import Matrix
 from tests.payment_raw_evidence import database
 
 
+# The commands this test is the designated transport witness for; the coverage ledger imports
+# this set rather than restating the names beside a path it cannot check.
+COMMANDS = frozenset(('invoice delete', 'sales-receipt delete'))
+
+
 @pytest.mark.timeout(300)
 def test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history(books,tmp_path):
     pytest.importorskip('mcp')
