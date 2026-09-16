@@ -27,25 +27,21 @@ intervals alone, so two writers preparing the same return read the same residue,
 that commits second re-reads it inside the writer transaction and finds its span gone.
 """
 from bookflow.core.errors import BookflowError
+from bookflow.core.exact import endpoint_share
 
 
 def owned(total: int, quantity: int, start: int, end: int) -> int:
-    """The endpoint-owned share of ``total`` for the half-open interval ``[start, end)``."""
-    if quantity <= 0 or start < 0 or end < start or end > quantity:
-        raise BookflowError('E_INTERNAL', message='Invalid returned interval for a captured line')
-    return total * end // quantity - total * start // quantity
+    """The endpoint-owned share of ``total`` for the half-open interval ``[start, end)``.
 
-
-def share(total: int, quantity: int, intervals) -> int:
-    """The endpoint-owned part of one captured total over a whole set of claimed intervals.
-
-    ``priced`` partitions a source line's net and each of its tax cells this way. A returned
-    line's captured *cost* -- what the issue that sold the quantity put into cost of goods
-    sold -- is a third total on that same line over that same quantity, and it is partitioned
-    by this same call rather than by a rule of its own. So the money and the cost telescope
-    together: a line returned in any order, in any pieces, gives back exactly what it took.
+    The rule itself is ``core.exact.endpoint_share``, which is also what the stock ledger
+    divides an issue's consumed cost by. One function, so the money a return hands back and
+    the cost it puts back on the shelf cannot be partitioned two ways that agree only today.
     """
-    return sum(owned(total, quantity, start, end) for start, end in intervals)
+    try:
+        return endpoint_share(total, quantity, start, end)
+    except BookflowError:
+        raise BookflowError(
+            'E_INTERNAL', message='Invalid returned interval for a captured line') from None
 
 
 def net_interval(net: int, quantity: int, start: int, end: int) -> tuple[int, int]:

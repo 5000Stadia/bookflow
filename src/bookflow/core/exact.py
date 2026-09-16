@@ -184,6 +184,30 @@ def round_ratio_half_even(numerator: Any, denominator: Any) -> int:
     return -quotient if negative and quotient else quotient
 
 
+def endpoint_share(total: int, whole: int, start: int, end: int) -> int:
+    """The part of ``total`` that the half-open span ``[start, end)`` of ``whole`` owns.
+
+        floor(total*end/whole) - floor(total*start/whole)
+
+    One statement of the rule, because two would be two answers waiting to disagree. It is a
+    difference of the same cumulative function at two endpoints, so any set of disjoint spans
+    telescopes to exactly ``total`` whatever order the spans were taken in; taking a span away
+    and taking it again yields the identical units; and no span can ever own a unit another
+    span also owns. No running-remainder scheme has those properties, which is why none is
+    used: a remainder carried forward makes the second share depend on the first.
+
+    ``company/credit_returns.py`` divides a returned line's captured net and its tax cells by
+    this, and ``company/inventory_costing.py`` divides the cost the issue consumed by it, so
+    the money a return hands back and the cost it puts back on the shelf are partitioned the
+    same way and cannot drift apart.
+    """
+    if isinstance(total, bool) or not isinstance(total, int):
+        raise _validation("total", "must be an integer")
+    if whole <= 0 or start < 0 or end < start or end > whole:
+        raise _validation("span", "must be a half-open span inside the whole")
+    return total * end // whole - total * start // whole
+
+
 def convert_quantity_micro_units(
     quantity_micro_units: Any,
     source_factor_nano_units: Any,

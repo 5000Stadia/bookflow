@@ -13,7 +13,11 @@ a second movement on one line would double-count it.
 
 **The five kinds, and why replay needs to tell them apart.**
 
-- ``receipt`` -- quantity in at a stated value. An input to costing.
+- ``receipt`` -- quantity in. An input to costing. Its value is stated -- what a bill paid,
+  or what a person entering an adjustment said it was worth -- **except** when it names an
+  issue in ``returns_movement_id``: a customer return gives back a share of what that issue
+  is worth now, so its value is an *output* of costing exactly as an issue's is, and a
+  backdated purchase that recosts the issue recosts the returns made against it too.
 - ``issue`` -- quantity out; its value is what the weighted average consumed. An input to
   costing in quantity, an *output* of costing in value.
 - ``value`` -- a value-only write-up or write-down; quantity does not move. An input.
@@ -29,6 +33,11 @@ a second movement on one line would double-count it.
 ``sequence`` is a company-wide monotonic counter that decides same-day order. Two movements
 on one day are replayed in the order they were recorded, which is a defined, stable order
 that does not change when a later backdated entry lands in front of them.
+
+**Returns.** ``returns_movement_id`` is the issue a receipt gives back, and it is what lets
+replay reach a return with a correction. The returns of one issue take contiguous spans of its
+issued quantity in replay order and divide its consumed cost by the endpoint rule, so they
+telescope to exactly what that issue took out and nothing is stranded in the asset account.
 
 **Attribution.** ``asset_account_id``, ``offset_account_id`` and ``class_id`` are the
 dimensions the original posting used. A correction reads them from the movement it corrects
@@ -87,6 +96,7 @@ def define_tables(metadata, column, table):
           sa.ForeignKey('classes.id'), nullable=True),
         C('corrects_movement_id', sa.String(26), 'Issue whose effective cost this delta corrects; null except on recost.', nullable=True),
         C('reverses_movement_id', sa.String(26), 'Movement this row exactly retires; null except on reversal.', nullable=True),
+        C('returns_movement_id', sa.String(26), 'Issue this receipt gives back; null except on a return.', nullable=True),
         sa.ForeignKeyConstraint(['transaction_id', 'posting_batch_id'],
                                 ['posting_batches.transaction_id', 'posting_batches.id'],
                                 name='fk_inventory_movement_batch'),
@@ -100,6 +110,8 @@ def define_tables(metadata, column, table):
                                 name='fk_inventory_movement_corrects'),
         sa.ForeignKeyConstraint(['reverses_movement_id'], ['inventory_movements.id'],
                                 name='fk_inventory_movement_reverses'),
+        sa.ForeignKeyConstraint(['returns_movement_id'], ['inventory_movements.id'],
+                                name='fk_inventory_movement_returns'),
         # One movement per asset posting line, both ways. Without the first half a movement
         # could claim a line already claimed and double the asset; without the second the
         # report total and the balance sheet would disagree with nothing to point at.
@@ -128,7 +140,11 @@ def define_tables(metadata, column, table):
             "AND (quantity_microunits != 0 OR value_minor_units != 0))",
             name='ck_inventory_movement_shape'),
         sa.Index('ix_inventory_movements_item', 'item_id', 'effective_date', 'sequence', 'id'),
+        # Only a receipt gives stock back, so only a receipt names the issue it mirrors.
+        sa.CheckConstraint("returns_movement_id IS NULL OR kind = 'receipt'",
+                           name='ck_inventory_movement_returns_kind'),
         sa.Index('ix_inventory_movements_corrects', 'corrects_movement_id'),
+        sa.Index('ix_inventory_movements_returns', 'returns_movement_id'),
         sa.Index('ix_inventory_movements_document', 'transaction_id', 'sequence'),
         description='Immutable signed inventory quantity and value changes, one per inventory-asset posting line.')
 

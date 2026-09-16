@@ -30,3 +30,4 @@ Database: `company`.
 | `class_id` | VARCHAR(26) | yes | — | — | — | classes.id | Class captured on the original posting; null when unclassified. |
 | `corrects_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_corrects | inventory_movements.id | Issue whose effective cost this delta corrects; null except on recost. |
 | `reverses_movement_id` | VARCHAR(26) | yes | — | unique | — | inventory_movements.id | Movement this row exactly retires; null except on reversal. |
+| `returns_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_returns | inventory_movements.id | Issue this receipt gives back; null except on a return. |
