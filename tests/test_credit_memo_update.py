@@ -6,6 +6,8 @@ import pytest
 from bookflow.core.errors import BookflowError
 from tests.credit_support import books, balances, goodwill_credit, returned_credit, taxed_invoice
 from tests.test_credit_memo_lifecycle import _three_unit_invoice
+import os
+from tests import provenance
 
 
 def update(books, credit, **patch):
@@ -233,7 +235,8 @@ def test_cli_correction_can_be_continued_and_cleared_by_python(books):
         sys.executable, '-c', 'from bookflow.bootstrap import main; main()', 'credit-memo', 'update', credit['id'],
         '--expected-version', str(credit['version']), '--memo', 'Entered through CLI',
         '--company', books['company'], '--reason', 'Correct credit', '--json'],
-        text=True, capture_output=True)
+        text=True, capture_output=True,
+        env=provenance.child_env(BOOKFLOW_DATA_ROOT=os.environ['BOOKFLOW_DATA_ROOT']))
     assert result.returncode == 0, result.stderr
     assert isinstance(json.loads(result.stdout), dict)
     # CLI returns the common result envelope, just as other commands do.

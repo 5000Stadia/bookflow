@@ -14,6 +14,7 @@ from bookflow.core import registry
 from bookflow.core.context import Context, Interface
 from bookflow.core.errors import BookflowError
 from tests.error_matrix import STANDALONE_MATRIX
+from tests import provenance
 
 
 def _command():
@@ -97,7 +98,8 @@ import sys
 assert 'bookflow.documentation.generate' not in sys.modules
 assert 'sqlalchemy' not in sys.modules
 """
-    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                            env=provenance.child_env())
     assert result.returncode == 0, result.stderr
 
 
@@ -108,7 +110,7 @@ def test_docs_generate_cli_needs_no_initialized_data_root(tmp_path):
         [sys.executable, "-m", "bookflow.adapters.cli.app", "--json", "docs", "generate", "--output", str(output)],
         capture_output=True,
         text=True,
-        env={**os.environ, "BOOKFLOW_DATA_ROOT": str(missing_root)},
+        env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(missing_root)),
     )
 
     assert result.returncode == 0, result.stderr

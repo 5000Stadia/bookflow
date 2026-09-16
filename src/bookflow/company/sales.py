@@ -11,6 +11,7 @@ from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom, list_service
 from bookflow.company import sales_calculations as calc
 from bookflow.company import tax_attribution as tax_facts
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.company.sales_outputs import (
@@ -216,7 +217,10 @@ def show(s, inp, document_type):
     header = resolve(s, getattr(inp, document_type), document_type)
     revision = journals.revision(s, header, inp.revision_number)
     settlement = None
-    if document_type == 'invoice':
+    # A receivable a customer's money can settle reads back settled, whichever of the two it
+    # is. The set is the settlement contract's own, not a type named here, so a document type
+    # that becomes settleable is answered by this read on the day it does.
+    if document_type in SETTLEABLE_RECEIVABLE_TYPES:
         from bookflow.company.payment_queries import invoice_current
         settlement = invoice_current(s, header['id'])
     return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement)
@@ -286,7 +290,11 @@ def page(s, ctx, inp, document_type, *, history=False):
         if revision is None or revision['transaction_id'] != header['id']:
             raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'transaction_revision'})
     settlements = {}
-    if document_type == 'invoice':
+    # Every settleable receivable carries what has been applied to it and what is still due,
+    # read from the same contract `show` above reads: a paged list that answered nothing on a
+    # settled statement charge is the list a person reaches for first.
+    settleable = document_type in SETTLEABLE_RECEIVABLE_TYPES
+    if settleable:
         from bookflow.company.payment_queries import invoice_currents
         from bookflow.company.payment_outputs import InvoiceSettlementOutput
         settlements = invoice_currents(s, found, revisions)
@@ -294,7 +302,7 @@ def page(s, ctx, inp, document_type, *, history=False):
     for header in found:
         revision = revisions[header['current_revision_id']]
         item = SalesSummaryOutput(**_visible_summary(s, header, revision, profiles[revision['id']], getattr(inp, 'include_deleted', False)))
-        if document_type == 'invoice':
+        if settleable:
             item.settlement_current = InvoiceSettlementOutput(**settlements[header['id']])
         items.append(item)
     return SalesPageOutput(items=items, **shared)
@@ -528,11 +536,21 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     old_header = resolve(s, getattr(inp, document_type), document_type) if operation != 'post' else None
     old_revision = journals.revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
-    if document_type == 'invoice' and old_header:
+    if document_type in SETTLEABLE_RECEIVABLE_TYPES and old_header and operation == 'void':
+        # Which receivables a customer's money can settle is the settlement contract's own
+        # answer, so this refuses on that fact rather than on a second list of types kept
+        # here: the hand-written 'invoice' let a settled statement charge through the same
+        # writer, leaving a live application pointing at a document worth nothing.
+        from bookflow.company.payment_authority import authorize
         from bookflow.company.payment_queries import active_applications
-        if operation == 'void' and active_applications(s, invoice=old_header['id']):
-            raise BookflowError('E_HAS_APPLICATIONS', details={'invoice_id': old_header['id'],
-                'next': 'Inspect invoice settlement dependencies before correcting or voiding.'})
+        if blocking := active_applications(s, invoice=old_header['id']):
+            # Name the blockers only to a caller with authority over the settlement graph
+            # they belong to, the way sales_deletions names the credit memos holding an
+            # invoice. The paying documents are the other end of every edge disclosed.
+            authorize(s, sorted({old_header['id'], *(row['paying_transaction_id'] for row in blocking)}))
+            raise BookflowError('E_HAS_APPLICATIONS', details={document_type + '_id': old_header['id'],
+                'application_ids': [row['id'] for row in blocking], 'action': 'unapply_first',
+                'next': 'Release these applications with payment unapply, then void.'})
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
     if operation == 'void':
         if not ctx.reason or not ctx.reason.strip():

@@ -3494,12 +3494,39 @@ and cleared when the request leaves. Finishing the publication permit is inside
 that window on both the successful and the failed path, because capture re-asks
 the company's own resource requirements and `identity_admin_binding.session_operation`
 admits them through this producer; cleared any earlier, every hosted read whose
-capture consults company permissions answers `E_IO {stage: publication, reason:
-receipt_certificate}` under an activated policy. The deposit commands pass it as
+capture consults company permissions fails inside that finish under an activated
+policy, and answers the refusal that finish raised. The deposit commands pass it as
 the binding, so `deposit_dependency_history.execution_binding` revalidates the
 actual bearer or session cookie instead of deriving an OS login the host does not
 have. A local session leaves it None and the private layer builds its `OSBinding`
 as before.
+
+`run_hosted.finish` is the publication boundary's error policy. A `BookflowError`
+raised by `PublicationPermit.finish` is answered as itself: it is already the public
+error contract -- a stable code with typed details, the same answer the command gives
+on every other surface -- and has no internals to fence off. Any other exception
+becomes `E_IO {stage: publication, outcome: unknown, reason: receipt_certificate}`,
+because an untyped failure can carry a path, a query or a stack across a boundary
+that must not describe what it could not certify; its exact cause and traceback go
+to the `bookflow.http` log, which the operator reads and the caller never sees. Both
+paths log the command name and request id. The undifferentiated catch that preceded
+this reported every publication failure as "A filesystem operation failed": a
+customer's payment for a statement charge failed over every published transport
+while working in process, and the person was told their disk had failed. The symptom
+named the wrong subsystem, which is why the defect was invisible until a journey
+suite ran the act end to end. `adapters/http/published_transfer` still carries the
+older undifferentiated catch on its own finish.
+
+Publication roots resolve the settlement contract, not one of its two types.
+`publication_payment.capture`'s `transaction()` resolves an `invoice` field against
+`ledger_schema.SETTLEABLE_RECEIVABLE_TYPES` -- the invoice and the statement charge
+-- exactly as `payment_queries`, `payment_selection` and `payment_dependencies` do,
+and then takes the root's kind from the resolved row's own `type` rather than from
+the field the selector arrived in. `invoice_settlement` is a disclosure graph, the
+document plus everything applied against it as the paid side, so both settleable
+types take it; a statement charge rooted as an invoice would be the same defect
+wearing a different mask. Resolving against both types also inherits `sales.resolve`'s
+refusal of a number that names one of each, which is already what execution answers.
 
 Correcting or voiding a deposit needs the authenticated `dependency_guard` its own
 dry run issues; committing without one is `E_PREVIEW_STALE`. Claiming a receipt
@@ -3782,17 +3809,49 @@ and tax cent is taken from what that invoice captured. A document is all of one 
 is refused — the tax calculator rounds across a whole document, so a document holding one
 calculated cell and one captured cell would carry a tax total that is neither.
 
-**A credited line that carries stock is refused, not approximated.** A credit memo's accounting
-is income, the tax it takes back and the receivable, and nothing else: it has no inventory
-movement on it and no cost to put back. A stock-carrying line would therefore hand the money
-back and leave the quantity sold with its cost still in Cost of Goods Sold — two wrong balances
-rather than one missing feature — so `credits._refuse_stocked` refuses it, naming the line, the
-item and the remedy: credit the money with a service or non-stock item, and bring the quantity
-back with `inventory adjust`, which moves the quantity and what it is worth together. The
-stock-carrying set is the item master's own `TRACKED_TYPES`, read where
-`sales_defaults.resolve_line` reads it, because a second list here is the list the next
-stock-carrying type is silently left out of. Both kinds of line are covered, because both are
-wrong in the same way: a named stock item and a return against a stocked invoice line alike.
+**A returned stock line gives the goods back with the money, in the one document.** It is the
+inverse of the issue the sale made, taken from the owner of that issue rather than rederived:
+beside its income and tax debits the line posts one more pair — debit Inventory Asset, credit
+Cost of Goods Sold — and writes one `receipt` movement against the debit, through the same
+`inventory_effects.plan` / `bind` / `bind_reversals` / `check` / `settle` sequence a sale uses.
+`inventory_effects.return_entry` declares that receipt from the line's captured facts, the way
+`purchase_entry` declares a bill's. The pair is equal and opposite, so Accounts Receivable is
+still credited the gross once and the batch still balances at it; what a thing sold for and what
+it cost stay two independent facts, and a return gives both back.
+
+**The cost that comes back is the cost that went out.** `inventory_effects.issued_cost` reads
+the source invoice line's live issue and returns what `inventory_costing`'s contract calls its
+`posted_effective` value — the issue's own value plus every active `recost` against it, which is
+what Cost of Goods Sold actually holds. A partial return owns a share of that figure by
+`credit_returns.share`, the same endpoint rule that partitions the line's net and each tax cell,
+so cost, net and tax telescope together and a line returned in pieces gives back exactly what it
+took. Never today's average and never the price on the credit: the value is *stated* on the
+receipt, exactly as every other receipt in this ledger states its value, because the average
+decides only what leaves. A zero-cost line returns a zero-value receipt with no monetary leg,
+which is what `ck_inventory_movement_value_link` requires and what the zero-value work
+established. A return landing behind a later sale owes that sale its own dated `recost`
+document, written by `inventory_effects.write_corrections` like any other.
+
+A correction retires the receipts the previous revision took and takes the new grid's at what it
+then says; a void reverses them exactly, one `reversal` movement per receipt bound to the leg
+that reverses the one the receipt hung off. Both are refused, naming the date, if the returned
+quantity is no longer on the shelf to take back out — the negative-stock check is on every
+chronological prefix, not on the balance as it stands today.
+
+**A credited line that *names* a stock item is still refused.** A standalone line carries an
+item, a quantity and a price, and a price is not a cost. Nothing in Bookflow derives what an
+unlinked quantity coming in is worth: every receipt in the ledger states its value because
+somebody knew it — a bill line states what was paid, and `inventory adjust` requires
+`value_change` from the person entering it. Picking a rule here instead would be a second answer
+to a question the stock ledger already answers one way, and a wrong cost put into stock is
+invisible to the person who typed a price. So `credits._refuse_stocked` refuses it with
+`unlinked_stocked_credit_unsupported`, naming the line, the item and both ways out: return the
+invoice line with `source_invoice` and `source_line`, or credit the money with a non-stock item
+and bring the quantity back with `inventory adjust`. A returned line whose capture holds no
+asset or cost-of-goods account is refused as `stocked_capture_incomplete`, for the plainer
+reason that there is nothing to post the cost between. The stock-carrying set is the item
+master's own `TRACKED_TYPES`, read where `sales_defaults.resolve_line` reads it, because a
+second list here is the list the next stock-carrying type is silently left out of.
 
 **What is judged is the grid that would be posted, not the grid that was typed.**
 `credits._refuse_stocked_document` runs in `credits.prepare` at the one boundary every written
@@ -3801,21 +3860,39 @@ before anything is written — over `resolved['lines']`, which is every line the
 the ones a caller entered and the ones a correction retained because it left `lines` out. Judging
 only entered lines was a hole the size of the feature: `credit-memo update --date` on a credit
 already stored against a stock item supplied no line to refuse, so it re-posted that credit's
-wrong stock accounting onto a new revision. Reading an old wrong document is not the same act as
-posting it again, and only the second one is refused.
+accounting onto a new revision with nothing entered to refuse. That chokepoint stays and only
+its answer changed, because it is also what makes a retained grid move its stock: an omitted-grid
+correction of a stored return retires its receipt and takes it again at the new date, rather than
+leaving the goods on the old one.
 
-So `show`, `history`, `query` and `void` are untouched: they resolve no grid and post nothing new
-— a void reverses exactly what the credit did post, which never included stock — and every credit
-memo already stored against a stock item still opens, still lists, still pages its history and can
-still be taken back. What a correction may do is replace that grid with non-stock lines, which is
-how a document written wrong is made right; what it may not do is post the stock-carrying grid a
-second time. The two corrections that write nothing are left alone and stay legal: a patch naming
-no field at all, which `credit_corrections.prepare_update` answers before any grid is resolved, and
-a patch whose values equal the stored ones, which `credit_corrections.unchanged` answers with the
-same `changed=False` and no revision. Both are measured as writing nothing, by comparing the whole
-company database before and after, rather than argued.
+So `show`, `history` and `query` are untouched: they resolve no grid and post nothing new. Every
+credit memo stored before this still opens, still lists, still pages its history and can still be
+taken back — and voiding one moves no stock, because it never moved any, which is exactly what
+reversing what a document posted means. Correcting one *does* bring its stock back, which is the
+point of correcting a document that was wrong. The two corrections that write nothing stay
+legal: a patch naming no field at all, which `credit_corrections.prepare_update` answers before
+any grid is resolved, and a patch whose values equal the stored ones, which
+`credit_corrections.unchanged` answers with the same `changed=False` and no revision. Both are
+measured as writing nothing, by comparing the whole company database before and after, rather
+than argued.
 
-Moving the inventory and restoring the cost is a feature of its own and is not in this release.
+**`credit_validation` checks the stock independently, the way it checks the money.**
+`_stock_pair` finds the inventory legs off the posting rows alone — a credit memo posts exactly
+one credit, the receivable, so any other credit leg must be a cost-of-goods offset against an
+inventory-asset debit of the same amount — and `_balanced` then expects the batch at the gross
+plus that pair. `_movements` ties every inventory-asset leg to exactly one movement carrying
+that leg's value, and recomputes each returned cost from the source line's own issue rather than
+taking it from the preparer. `validate_update` holds `_movements` back from the
+replacement-batch pass and runs it over the whole write, because a correction's reversal
+movements hang off legs the replacement batch does not hold.
+
+**Known limit, recorded deliberately.** A return's receipt states its value once and is never
+recosted, so a `recost` landing on the source issue *after* a partial return has been taken
+leaves the remaining shares priced against the new figure and the taken share against the old.
+Total asset value and total cost still reconcile — the ledger's own invariant is untouched — but
+a line returned in pieces across such a correction will not telescope to a single number. Making
+it telescope needs the cost a return claimed to be stored per interval, the way the intervals
+themselves are, which is a table this release does not have.
 
 **The endpoint rule** (`credit_returns.py`) decides every cent a return carries. A captured
 source line of base quantity `Q` and net `N` gives a returned half-open interval `[a,b)`
@@ -3978,11 +4055,12 @@ reconciliation fence of its own.
 
 A refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family. Price allowances against a source line, credited lines that carry stock and the cost
-restoration they would need, cross-party (parent↔job) credit, cash-basis treatment, the
-refund's reconciliation producer and print are outside the release entirely and are refused
-rather than approximated; the command help says so, and says why: not that there is nothing to
-return against, but that moving the inventory back and restoring the cost is not built.
+family. Price allowances against a source line, a credited line that *names* a stock item
+instead of returning one, cross-party (parent↔job) credit, cash-basis treatment, the refund's
+reconciliation producer and print are outside the release entirely and are refused rather than
+approximated; the command help says so, and says why — for the stock item, that a price is not
+a cost and nothing here guesses one, with `source_invoice`/`source_line` and `inventory adjust`
+named as the two ways out. Returning a stocked invoice line is built and moves the stock.
 
 ## The three credit documents in the browser
 
@@ -4331,12 +4409,60 @@ invoice/credit-memo shared run, and `uq_transaction_receivable_number` is delibe
 those two, so a charge numbered 1 is never refused because invoice 1 exists. The anchor numbers
 them separately for the same reason.
 
-**Nothing can settle one, and it says so.** `applications_paid_transaction_id_type` admits a
-document of type `invoice` and nothing else, and `co0034` does not touch it. Naming a charge where
-an invoice goes therefore fails, and `payment_queries.invoice_facts` catches that failure, asks
-whether the selector named a statement charge, and answers with `found_type` and a sentence saying
-what was found — so the boundary is reported rather than read as a typo. What settling one would
-need is in *What this does not do* below.
+**A payment settles one, exactly as it settles an invoice.** `co0043` widened the three insertion
+fences and the one CHECK that each admitted the invoice alone — `applications_paid_transaction_id_type`
+(the settlement edge itself), `payment_selection_items_invoice_id_type` (a shared draft's selected
+rows), `settlement_line_keys_transaction_id_type` (the durable line ordinals a settlement allocates
+against) and `ck_recovery_invoice_type` on `payment_selection_recovery_items` (the attempted-edit
+evidence a large selection uploads). Which receivables a customer's money can settle is written
+once, as `ledger_schema.SETTLEABLE_RECEIVABLE_TYPES`, and every reader takes it from there rather
+than from a type name of its own: `payment_queries.invoice_facts` resolves either type,
+`payment_selection` resolves against the tuple, `payment_preparation._candidate_query` filters
+`t.type IN` it — which is what puts a charge in `payment invoices` — `payment_dependencies.OWNER_TYPES`
+is built from it, `payment_recovery` reads it for both its presence check and its evidence, and
+`receivable_reports._OPEN` filters on `SETTLEABLE_RECEIVABLE_SQL`, which is what lists a charge in
+`report open-invoices`. No table gained a column and nothing was backfilled: `applications` and
+`payment_selection_items` already foreign-key `transactions.id` with no type column, and a charge
+already writes the `sales_profiles` row `applications_exact_party` joins. Widening a fence admits
+new rows and never invents one, so a company upgraded through `co0043` owes exactly what it owed
+before.
+
+**Voiding a settled charge is refused.** `sales.prepare` guards the void on
+`SETTLEABLE_RECEIVABLE_TYPES` too, rather than on the type name `invoice`, so it covers every
+settleable receivable by construction instead of by a second list someone has to remember to
+widen. A charge a payment or credit is still applied to raises `E_HAS_APPLICATIONS` carrying the
+blocking application ids, `action: unapply_first` and a `next` naming `payment unapply` —
+disclosed only after `payment_authority.authorize` over both ends of every edge named, the way
+`sales_deletions` authorizes before naming the credit memos that hold an invoice. That guard is
+the half a widening leaves behind if it is forgotten: a charge goes through the invoice's own
+writer, so before it landed a paid charge could be voided with no refusal, leaving a live
+application pointing at a document worth nothing and a negative amount owing on the aging.
+
+**A settled charge reads back settled, and opens where it lives.** Settling one was only half the
+act: everything downstream still assumed the receivable it was reading was an invoice, so a person
+who charged a customer and took their money could not see that it was paid. `sales.show` and
+`sales.page` gate `settlement_current` on `SETTLEABLE_RECEIVABLE_TYPES` rather than on the word
+`invoice`, so `statement-charge show` and `statement-charge query` carry the applied amount, the
+balance due and the status the invoice reads have always carried. What that settlement belongs to
+travels with it: `payment_queries._invoice_current_values` — the one funnel every
+`InvoiceSettlementAmounts` comes out of — takes `document_type` off the resolved row's own `type`,
+the way `publication_payment.capture` takes a root kind, so a reader holding a settlement knows
+which receivable it has. The field is nullable because an effect snapshot written into immutable
+operation history before it existed is replayed verbatim out of `payment_operation_items` and
+cannot be rewritten; every live settlement read carries it.
+
+Links then derive their noun from the document instead of naming one.
+`transaction_detail.document_noun` is the single spelling — a stored type hyphenated, checked
+against the registry so a family with no record page links to nothing rather than to a dead URL —
+and `workbench/receivables` uses it for both `report open-invoices` and `report collections`,
+`workbench/customer_statement` uses it in place of the hand-written `NOUNS` map whose omissions
+also silently unlinked credit memos and customer refunds on a customer's own statement, and
+`workbench/payments` uses it with `registry.noun_meta` to pick the record command, its input field
+and the words on the page for the settlement page and the application page — both of which ran
+`invoice show` on a transaction id `co0043` had widened, and so errored outright for a receipt
+applied to a charge. `collection_reports.CollectionRow` carries `document_type` beside `kind`,
+which says the row's granularity — one customer, or one document beneath them — and not its type;
+it is read straight off the open-invoice row the collections list is built from.
 
 **What `co0034` does.** Three CHECK constraints widened by table rebuild — `transactions`
 (twelfth document type), `sales_profiles` (a commercial type with no due date) and
@@ -4347,27 +4473,9 @@ kind CHECK already admits. No table is created, nothing is backfilled and no set
 trigger or capacity changes.
 
 **What this does not do.** No `statement-charge update` and no `history`: a wrong charge is voided
-and re-entered, which is what a sixty-dollar document is worth. No browser page and no `ui_group`,
-so nothing registers a tile that goes nowhere; the window it wants is the customer register, and
-`registers.py` would need to read a customer's Accounts Receivable rows the way it reads a bank
-account's. No demo seed extension. No finance charges — a different anchor feature that computes
-its own amounts from an aging.
+and re-entered, which is what a sixty-dollar document is worth. No demo seed extension. No finance
+charges — a different anchor feature that computes its own amounts from an aging.
 
-And, the real one: **a payment cannot settle a charge.** Doing it needs, in one increment:
-`applications_paid_transaction_id_type` and `payment_selection_items_invoice_id_type` widened to
-admit `statement_charge` (a migration, since both are triggers);
-`payment_queries.invoice_facts` and the three `sales.resolve(..., 'invoice')` calls in
-`payment_selection` widened to either type; `payment_preparation._candidate_query`'s
-`t.type='invoice'` condition widened, which is what makes a charge appear in `payment invoices`;
-`settlement_line_keys_transaction_id_type` widened, since the per-line settlement keys an
-invoice writes are what `application_allocations_owned_sources` verifies; `payment_recovery`'s
-`ck invoice_type` CHECK and its `invoice_type='invoice'` writes; `payment_dependencies`'s
-`owner_type` pair; and `receivable_reports._OPEN`, whose `document_type='invoice'` filter is why
-`report open-invoices` cannot list one. The storage under all of it already fits — `applications`
-and `payment_selection_items` both foreign-key `transactions.id` with no type column, and a charge
-already writes the `sales_profiles` row `applications_exact_party` joins — so this is a widening
-of nine type filters and four triggers, not a data-model change. What it is not is small, and
-half-doing it is how a settled charge disappears from an aging that still balances.
 ## Purchase orders, and the bill entered from one
 
 `purchase-order post/show/query/update/void/history` records what was ordered from a vendor.

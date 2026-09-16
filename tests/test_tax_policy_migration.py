@@ -14,6 +14,7 @@ import bookflow
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import migrate_to_head
 from tests.test_payment_migration import raw_snapshot
+from tests import provenance
 
 BASE = '15f3e034a773f0b227150403e491f2c5a5edcf5e'
 MIGRATION = importlib.import_module('bookflow.storage.company_migrations.versions.0015_sales_tax_policy')
@@ -38,7 +39,7 @@ from pathlib import Path
 Path(sys.argv[2]).write_text(json.dumps(dict(invoice=invoice,payment=payment)))
 '''
     process = subprocess.run([sys.executable,'-c',script,str(root),str(parent/'results.json')], cwd=source,
-        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root),PYTHONDONTWRITEBYTECODE='1'), capture_output=True,text=True)
+        env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root), PYTHONDONTWRITEBYTECODE='1'), capture_output=True,text=True)
     assert process.returncode == 0, process.stdout+process.stderr
     return root, json.loads((parent/'results.json').read_text())
 

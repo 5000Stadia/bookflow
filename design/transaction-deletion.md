@@ -71,16 +71,18 @@ Deferred, with the reason:
 - `customer_refund` — the document carries one revision for its whole life by design,
   which is what lets its receivable attribution name one posting row for ever.
 - `vendor_credit` — the gap here is the absent correction verb, not deletion.
-- `statement_charge` — `sales.prepare` raises `E_HAS_APPLICATIONS` only for
-  `invoice`, so the shared void writer does not refuse a settled statement charge;
-  that behaviour is settled before this type gains a delete.
+- `statement_charge` — the void it shares with the invoice now refuses a settled
+  charge with `E_HAS_APPLICATIONS`, on `ledger_schema.SETTLEABLE_RECEIVABLE_TYPES`
+  rather than on a type name, so the lifecycle is whole; a wrong charge is voided
+  and re-entered, which is what a sixty-dollar document is worth.
 
 ## Implementation boundary
 
 This supersedes the former product prohibition on user-facing deletion. Existing
-immutable-table guards remain required. No delete command is implemented by this
-document. The owning plan must settle deleted-state storage and preserving
-migration, history/filter behavior, numbering, retry/replay behavior, restoration
-policy, each supported type's dependencies and preview/confirmation flow before
-code. Accounting, authorization and migration changes require independent review.
+immutable-table guards remain required. Each family named deletable above ships a
+`delete` command carrying its own `transaction.<family>.delete` capability. A
+family added to that list settles deleted-state storage and preserving migration,
+history/filter behavior, numbering, retry/replay behavior, restoration policy, its
+own dependencies and preview/confirmation flow before code. Accounting,
+authorization and migration changes require independent review.
 Payment/application planning must accommodate this lifecycle alongside voiding.

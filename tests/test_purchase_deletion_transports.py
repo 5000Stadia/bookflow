@@ -7,6 +7,11 @@ from tests.mcp_matrix_support import Matrix
 from tests.payment_raw_evidence import database
 
 
+# The commands this test is the designated transport witness for; the coverage ledger imports
+# this set rather than restating the names beside a path it cannot check.
+COMMANDS = frozenset(('check delete', 'card-charge delete'))
+
+
 @pytest.mark.timeout(180)
 def test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history(books,tmp_path):
     pytest.importorskip('mcp')
@@ -19,8 +24,7 @@ def test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history(book
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(Path(books['client'].data_root),tmp_path/'surfaces',mcp_env={
-                'PYTHONPATH':str(Path(__file__).resolve().parents[1]/'src')})
+            await matrix.open(Path(books['client'].data_root),tmp_path/'surfaces')
             for surface in ('cli','mcp'):
                 async def call(name,raw,**ctx):return await matrix.call(surface,name,raw,**ctx)
                 state=await call('permission show',{})

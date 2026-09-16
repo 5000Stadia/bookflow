@@ -20,6 +20,7 @@ from bookflow import BookflowError
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import database, attachments
+from tests import provenance
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0019_payment_payer_covering_indexes')
 BASE = '296f57352aae5887c49b7eb294c7a7fc2e00f9bd'
@@ -159,7 +160,7 @@ def co18(tmp_path_factory):
     root = folder/'root'
     code = 'import bookflow,sys,io;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset();co=c.company.list()["items"][0]["company_id"];p=c.customer.create(name="Co19 attachment",company=co);c.attachment.add(record_type="customer",record_id=p["id"],original_filename="index.bin",input_stream=io.BytesIO(bytes([0,128,255])),company=co)'
     result = subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,
-        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+        env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     return root
 
@@ -212,7 +213,7 @@ def test_fresh_chain_and_old_index_metadata(tmp_path):
 
 def source_call(source, root, code, *args):
     result = subprocess.run([sys.executable,'-c',code,str(root),*map(str,args)],cwd=Path(__file__).parents[1],
-        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+        env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     return result.stdout
 

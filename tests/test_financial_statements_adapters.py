@@ -9,6 +9,7 @@ import bookflow
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user,make_actor
 from tests.test_row3_host import hosted,PASSWORD,WB  # noqa: F401
+from tests import provenance
 
 
 def test_statement_errors_match_http_browser_python_and_cli(hosted,root):
@@ -44,7 +45,7 @@ def test_statement_errors_match_http_browser_python_and_cli(hosted,root):
             if isinstance(value,bool):
                 if value: args.append('--'+key.replace('_','-'))
             else: args.extend(['--'+key.replace('_','-'),str(value)])
-        output=subprocess.run(args,env={**os.environ,'BOOKFLOW_DATA_ROOT':str(root)},capture_output=True,text=True)
+        output=subprocess.run(args,env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
         assert output.returncode!=0 and code in output.stdout+output.stderr
 
 

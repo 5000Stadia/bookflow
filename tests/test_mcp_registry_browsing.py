@@ -19,9 +19,7 @@ def company_snapshot(root, company):
 
 @pytest.mark.parametrize("noun", tuple(LIST_DEFINITIONS))
 def test_list_browsing_four_interfaces(root, tmp_path, monkeypatch, noun):
-    # An explicit candidate executable pins both subprocess adapters.
-    if binary := os.environ.get('BOOKFLOW_MCP_TEST_BINARY'):
-        monkeypatch.setattr('tests.conftest.BIN', Path(binary))
+    # tests/provenance.py owns which launcher every subprocess adapter runs.
     async def witness():
         matrix = Matrix()
         receipts = {}

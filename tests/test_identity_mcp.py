@@ -6,6 +6,7 @@ This file needs the `mcp` extra, exactly like the other MCP witnesses in this su
 import pytest
 
 from tests.test_identity_commands import live, office  # noqa: F401 - fixtures
+from tests import provenance
 
 
 @pytest.mark.timeout(180)
@@ -21,15 +22,14 @@ def test_an_agent_over_mcp_can_set_a_workstation_up_end_to_end(office, live, tmp
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
     issued = office.admin("token.issue", {"label": "setup agent"})
-    binary = str(Path(sys.executable).with_name("bookflow"))
+    binary = provenance.launcher()
     source = str(Path(__file__).resolve().parents[1] / "src")
     result = {}
 
     async def witness():
         params = StdioServerParameters(
             command=binary, args=["mcp", "--url", live, "--client-name", "identity-witness"],
-            env={"BOOKFLOW_TOKEN": issued["secret"], "PYTHONPATH": source,
-                 "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent"), "PATH": os.environ.get("PATH", "")},
+            env=provenance.child_env(source, BOOKFLOW_TOKEN=issued["secret"], BOOKFLOW_DATA_ROOT=str(tmp_path / "absent"), PATH=os.environ.get("PATH", "")),
             cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:

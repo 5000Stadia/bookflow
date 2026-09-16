@@ -15,6 +15,7 @@ from bookflow.hub import schema as h
 from tests.conftest import make_actor
 from tests.test_row3_host import hosted, live
 from tests.test_row7_credentials import writer
+from tests import provenance
 
 GHOST = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -38,7 +39,7 @@ def test_actual_mcp_siblings_foreign_org_readonly_and_intent_ownership(hosted, l
             assigned_by=principal, assigned_at=clock.now_iso()))
     tokens = {name: hosted.ok('token.issue', {'user': actor, 'label': 'Isolation fixture', **options})['secret']
               for name, actor, options in [('agent', agent, {'principal': principal}), ('reader', readonly, {})]}
-    binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+    binary = provenance.launcher()
 
     def business_snapshot():
         with sqlite3.connect((hosted.root / 'hub.db').as_uri() + '?mode=ro', uri=True) as db:
@@ -55,7 +56,7 @@ def test_actual_mcp_siblings_foreign_org_readonly_and_intent_ownership(hosted, l
             sessions = {}
             for name, secret in {'owner': hosted.secret, **tokens}.items():
                 params = StdioServerParameters(command=binary, args=['mcp', '--url', live],
-                    env={'BOOKFLOW_TOKEN': secret, 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+                    env=provenance.child_env(BOOKFLOW_TOKEN=secret, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
                 read, write = await stack.enter_async_context(stdio_client(params))
                 session = await stack.enter_async_context(ClientSession(read, write))
                 await session.discover()

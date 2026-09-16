@@ -138,14 +138,31 @@ def posting_documents(client, company):
 # total to another's is unsound -- two scenarios each totalling 150 combine to 50 when an
 # account crosses sign between them.
 # Balances are trial-balance signed nets, debits positive, so a payable is negative here.
+#
+# `balances` is every account the trial balance prints, compared as a whole mapping. Three
+# accounts used to be named here and the total stood in for everything else, so a seed addition
+# could only ever report "the total moved": the December restock below moved four accounts, none
+# of which were named, and reading that failure took a full per-document reconciliation where a
+# dict diff would have named the account and the amount.
 DEMO_POSITION = {
-    'Checking': 657295,
-    'Accounts Receivable': 13839,
-    'Sales Tax Payable': -4004,
-    'trial_balance': 781754,
-    'journal_entries': 14,
-    'net_income': 149290,
-    'total_equity': 649290,
+    'balances': {
+        'Checking': 657295,
+        'Accounts Receivable': 13839,
+        'Inventory Asset': 36184,
+        'Accounts Payable': -7810,
+        'Sales Tax Payable': -4004,
+        'Opening Balance Equity': -500000,
+        'Service Income': -215630,
+        'Cost of Goods Sold': 523,
+        'Professional Fees': 84823,
+        'Business Credit Card': -5000,
+        'Payment Example Bank': -42220,
+        'Payment Example Income': -18000,
+    },
+    'trial_balance': 792664,
+    'journal_entries': 19,
+    'net_income': 148284,
+    'total_equity': 648284,
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -169,16 +186,29 @@ DEMO_ARCS = {
     'DEMO-FEE': 'a bank fee',
     'DEMO-JPY': 'a foreign-tagged entry posting in home currency',
     'DEMO-COUNT': 'the inventory count adjustment',
+    'DEMO-KIT-': 'December service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
-    # Four documents take a bare series number rather than a DEMO- prefix, and they are NOT all
-    # one series: each document type numbers from 1 independently, so these are a deposit and
-    # three journal-family documents that the buying month writes without naming -- the cheque,
-    # the card charge and the card payment. The manifest used to call all of them "the deposit
-    # number series" and match them by prefix, which is how `1` also claimed `10` and `123` and
-    # how a whole arc could go missing without anything noticing. They are matched exactly now.
-    '1': 'a deposit, and the first of the unnamed journal-family documents',
+    # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
+    # one series: each document type numbers from 1 independently. `1` is three separate
+    # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`
+    # are journal-family documents the buying months write without naming. The manifest used to
+    # call all of them "the deposit number series" and match them by prefix, which is how `1`
+    # also claimed `10` and `123` and how a whole arc could go missing without anything
+    # noticing. They are matched exactly now.
+    #
+    # A document lands here whenever a seed omits `number` *or* names something that is not the
+    # ledger document's number: `check post` takes the cheque number, so the December cheque
+    # numbered DEMO-KIT-CHECK is journal-family `4`, and an item receipt's own number likewise
+    # never reaches the ledger. That is why the December restock shows up mostly as bare
+    # numbers, and why only its sales receipt and its bill carry `DEMO-KIT-`.
+    '1': 'a deposit, a shipping vendor bill, and the first unnamed journal-family document',
     '2': 'unnamed journal-family document from the buying month',
     '3': 'unnamed journal-family document from the buying month',
+    '4': 'December kits paid by cheque: half a kit to stock plus a delivery expense',
+    '5': 'December kits bought on the company card',
+    '6': 'December kits received against their order, before the vendor bill',
+    '7': 'the purchase-price correction the December kit bill makes to the received cost',
+    '8': 'shipping-kit receipt: three units and their allocated shipping',
 }
 
 # Arcs that deliberately post nothing. They are declared because they exist and are seeded, and

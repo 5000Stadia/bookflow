@@ -11,6 +11,7 @@ import anyio
 import pytest
 
 from tests.test_row3_host import hosted, live
+from tests import provenance
 
 
 @pytest.mark.timeout(180)
@@ -28,13 +29,12 @@ def test_installed_json_file_large_valid_write_full_receipt_and_no_reexecution(h
     source.write_text(json.dumps(raw), encoding='utf-8')
     assert source.stat().st_size > 8 * 1024 * 1024
     destination = outbox / 'complete.json'
-    binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+    binary = provenance.launcher()
 
     async def witness():
         params = StdioServerParameters(command=binary, args=['mcp', '--url', live,
             '--input-dir', str(inbox), '--output-dir', str(outbox)],
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()

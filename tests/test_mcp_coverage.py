@@ -6,7 +6,20 @@ from tests.mcp_coverage import execution_map
 
 
 def resolves(witness):
-    """The named test function exists in the named file, or the row is a claim about nothing."""
+    """The named test function exists in the named file, or the row is a claim about nothing.
+
+    Read this for exactly what it says. It parses the file and looks for a function of that
+    name; it does not import the module, collect the test, or run it. **A witness that exists
+    and cannot run resolves fine**, and that is not hypothetical: five witness tests spent a
+    day dying on a TypeError inside `Matrix.open`, before driving a single command, while the
+    commands they witness sat in rows this function was happy with.
+
+    Static resolution is the cheap half of the check and is worth keeping -- a cited name that
+    was renamed or deleted is caught here in milliseconds. The other half cannot be done
+    statically, because the breakage is at run time: it needs the witnesses actually executed.
+    `notes/witnesses.sh` derives this ledger's distinct witnesses and runs them, and that is
+    what a parity claim rests on. Do not read a green run of this file as a parity claim.
+    """
     filename, name = witness.split('::')
     module = ast.parse(Path(filename).read_text())
     return any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name

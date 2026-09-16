@@ -6,7 +6,7 @@ import pytest
 from tests.mcp_matrix_support import Matrix
 from tests.test_service_sales_lifecycle import sale
 from tests.test_payment_recovery import setup,declaration
-from tests.payment_recovery_support import launcher,provenance,source_environment
+from tests.payment_recovery_support import launcher,provenance
 
 VERBS=('begin','upload','seal','compare','compare-items','apply','abort','replace','show','items','query')
 COMMANDS=frozenset('payment recovery '+verb for verb in VERBS)
@@ -19,7 +19,7 @@ def test_complete_recovery_contract_on_all_four_interfaces(client,sale,root,tmp_
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(root,tmp_path,mcp_env=source_environment())
+            await matrix.open(root,tmp_path)
             for surface in matrix.documents:
                 async def call(verb,inp,**context):
                     return await matrix.call(surface,'payment recovery '+verb,inp,**context)
@@ -87,7 +87,7 @@ def test_full_403_201_barrier_and_single_receipt_on_every_adapter(client,sale,ro
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(root,tmp_path,mcp_env=source_environment())
+            await matrix.open(root,tmp_path)
             for surface in matrix.documents:
                 async def recovery(verb,inp,**context):return await matrix.call(surface,'payment recovery '+verb,inp,**context)
                 receive=dict(customer=sale['customer'],date='2026-06-01',amount='10.00',payment_method=method,operation_key='403-201-'+surface,applications=dict(mode='selection',selection=draft['id'],expected_version=draft['version']))
@@ -126,7 +126,7 @@ def test_preserved_calculation_and_new_candidate_match_on_real_adapters(client,s
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(root,tmp_path,mcp_env=source_environment())
+            await matrix.open(root,tmp_path)
             for surface in matrix.documents:
                 async def call(verb,inp):return await matrix.call(surface,'payment recovery '+verb,inp)
                 begin=declaration(draft,entries)

@@ -6,6 +6,7 @@ import subprocess
 import time
 
 from tests.conftest import BIN
+from tests import provenance
 
 
 def test_errors_are_json_on_stderr(cli):
@@ -113,7 +114,7 @@ def test_cold_start(cli, record_property):
     best = 10.0
     for _ in range(3):
         t = time.perf_counter()
-        subprocess.run([str(BIN), "--help"], capture_output=True, check=True)
+        subprocess.run([str(BIN), "--help"], capture_output=True, check=True, env=provenance.child_env())
         best = min(best, time.perf_counter() - t)
     t = time.perf_counter()
     cli.run("company", "list", "--json")

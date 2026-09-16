@@ -9,6 +9,7 @@ import pytest
 from tests.test_row5_browser_acceptance import CHROME, browser_site
 from tests.test_row8_register_browser import register_browser, _command
 from tests.test_service_sales_browser import _contained
+from tests import provenance
 
 
 @pytest.mark.parametrize('width',[1280,390])
@@ -35,10 +36,10 @@ def test_installed_mcp_file_browser_and_agent_continuation(register_browser,tmp_
     target={'record_type':'customer','record_id':record}
     note='Human checked the café receipt; retain both original files.'
     async def witness():
-        binary=os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow')))
+        binary=provenance.launcher()
         params=StdioServerParameters(command=binary,args=['mcp','--url',env.site.base_url,'--input-dir',str(inbox),
             '--output-dir',str(outbox),'--client-name','mcp-file-gui-witness'],cwd=str(tmp_path),
-            env={'BOOKFLOW_TOKEN':issued['secret'],'BOOKFLOW_COMPANY':env.site.company_id,'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')})
+            env=provenance.child_env(BOOKFLOW_TOKEN=issued['secret'], BOOKFLOW_COMPANY=env.site.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path/'absent')))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as session:
                 await session.discover()

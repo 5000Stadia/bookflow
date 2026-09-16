@@ -18,6 +18,7 @@ from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import migrate_to_head
 from tests.payment_raw_evidence import table,attachments
+from tests import provenance
 
 BASE='703c002945b2ccbd564d98ea20b0a0d5f690f300'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0023_deposit_coordinate')
@@ -53,7 +54,7 @@ with sqlite3.connect(path) as db: db.execute('INSERT INTO local_external VALUES 
 c.attachment.add(record_type='customer',record_id=p['id'],original_filename='C-bytes.bin',input_stream=io.BytesIO(b'A\\0B\\x80\\xff'),company=co)
 print(json.dumps(dict(path=str(path),operation=post.operation_id)))
 '''
-    run=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src')+':'+str(Path(__file__).parents[1]),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
+    run=subprocess.run([sys.executable,'-c',code,str(root)],cwd=source,env=provenance.child_env(str(source/'src')+':'+str(Path(__file__).parents[1]), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     (parent/'seed.log').write_text(run.stdout+run.stderr)
     assert run.returncode==0,run.stderr
     return parent,root,source
@@ -134,7 +135,7 @@ with open_database(Path(sys.argv[1]),writable=sys.argv[2]=='write') as db:
   print(getattr(e,'code',type(e).__name__))
  else: raise AssertionError('old binary admitted successor')
 """
-        run=subprocess.run([sys.executable,'-c',code,str(path),verb],cwd=binary,env=dict(os.environ,PYTHONPATH=str(binary/'src')),capture_output=True,text=True)
+        run=subprocess.run([sys.executable,'-c',code,str(path),verb],cwd=binary,env=provenance.child_env(str(binary/'src')),capture_output=True,text=True)
         assert run.returncode==0 and 'E_SCHEMA_UNKNOWN' in run.stdout,run.stdout+run.stderr
     with sqlite3.connect(path) as db:assert raw(db)==before
     (tmp_path/'preservation.json').write_text(json.dumps(dict(before=before,attachments=files),indent=2))
@@ -214,3 +215,47 @@ def test_only_dependency_closure_ddl_and_external_reference_inspection(old_co22,
         assert sum(s=='PRAGMA main.foreign_key_list("local_external")' for s in commands)==2
         assert db.raw.execute('PRAGMA foreign_key_list(local_external)').fetchone()[2]=='deposit_operations'
         assert db.raw.execute('SELECT count(*) FROM local_transitive').fetchone()[0]==1
+
+
+def test_whole_chain_upgrade_to_head_preserves_customer_file(old_co22,tmp_path):
+    """The co0022 fixture carried all the way to the head, through the product's own runner.
+
+    The transition test above stops at co0023 deliberately: a claim about one migration has to
+    be made at that migration, or every later legitimate rewrite reads as this one losing
+    something. That leaves the other half of the claim unmade -- an ordinary customer file
+    opened by today's binary runs the whole chain, not one step of it -- so this test makes it,
+    against the same populated fixture, over the real `migrate_to_head` rather than a direct
+    alembic call.
+
+    What it asserts is retention, not stasis. Twenty-nine migrations legitimately widen and
+    rebuild Bookflow's own tables; none of them may drop a value that was already stored, an
+    object the customer added beside our schema, or an attachment, and the file has to come out
+    referentially intact.
+    """
+    from bookflow.storage.migrate import HEADS
+    _,original,_=old_co22
+    root=tmp_path/'root';shutil.copytree(original,root)
+    path=next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
+    from tests.payment_raw_evidence import preserved
+    with open_database(path,writable=True) as db:
+        before=raw(db.raw)
+        objects={(kind,name):(owner,sql) for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM main.sqlite_schema')}
+        files=attachments(root)
+        was,now=migrate_to_head(db,'company',None)
+        assert (was,now)==('co0022',HEADS['company'])
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone()==(HEADS['company'],)
+        # Every table that existed at co0022 still exists and still holds exactly what it held,
+        # read through the columns that existed then -- later columns are the migrations' own.
+        surviving={r[0] for r in db.raw.execute("SELECT name FROM main.sqlite_schema WHERE type='table'")}
+        assert set(before)<=surviving,sorted(set(before)-surviving)
+        for name in sorted(before):
+            assert preserved(db.raw,name,before[name])==before[name],name
+        # Objects the customer added beside our schema -- a view, a partial index, a foreign key
+        # into deposit_operations, generated and typed columns -- survive a rebuild of the table
+        # they hang off. A rebuild that recreates a table without them loses them silently.
+        after={(kind,name):(owner,sql) for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM main.sqlite_schema')}
+        assert set(objects)<=set(after),sorted(set(objects)-set(after))
+        assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
+        assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
+    assert attachments(root)==files
+    (tmp_path/'head-preservation.json').write_text(json.dumps(dict(head=HEADS['company'],before=before,attachments=files),indent=2))

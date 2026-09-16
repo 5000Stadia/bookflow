@@ -55,8 +55,7 @@ def test_successive_permit_checks_reload_after_public_application(hosted, paymen
 
 def test_actual_http_mcp_audit_outputs_and_publication_denial(root, tmp_path, monkeypatch):
     """Existing pure permission seam, on the actual SDK and HTTP transports."""
-    if binary := os.environ.get('BOOKFLOW_MCP_TEST_BINARY'):
-        monkeypatch.setattr('tests.conftest.BIN', Path(binary))
+    # tests/provenance.py owns which launcher every subprocess adapter runs.
     async def witness():
         matrix = Matrix()
         try:

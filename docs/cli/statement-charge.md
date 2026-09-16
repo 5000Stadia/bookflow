@@ -94,6 +94,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_via` | string | yes | no | — | — |
 | `settlement_current` | object \| null | no | yes | null | — |
 | `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement_current.version` | integer | yes | no | — | — |
 | `settlement_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement_current.gross_minor_units` | integer | yes | no | — | — |
@@ -106,6 +107,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
 | `settlement_current.all_committed_current` | object \| null | no | yes | null | — |
 | `settlement_current.all_committed_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement_current.all_committed_current.version` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement_current.all_committed_current.gross_minor_units` | integer | yes | no | — | — |
@@ -670,6 +672,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.allocations[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.document_changes` | array[object \| object] | yes | no | — | — |
 | `settlement.effect.document_changes[].invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].version` | integer | yes | no | — | — |
 | `settlement.effect.document_changes[].revision_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.document_changes[].gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
@@ -682,6 +685,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current` | object \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
@@ -727,6 +731,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
+| `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement.current.version` | integer | yes | no | — | — |
 | `settlement.current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement.current.gross_minor_units` | integer | yes | no | — | — |
@@ -739,6 +744,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.audit_watermark` | integer \| null | no | yes | null | — |
 | `settlement.current.all_committed_current` | object \| null | no | yes | null | — |
 | `settlement.current.all_committed_current.invoice_id` | string | yes | no | — | — |
+| `settlement.current.all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement.current.all_committed_current.version` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement.current.all_committed_current.gross_minor_units` | integer | yes | no | — | — |
@@ -1230,6 +1236,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_via` | string | yes | no | — | — |
 | `items[].settlement_current` | object \| null | no | yes | null | — |
 | `items[].settlement_current.invoice_id` | string | yes | no | — | — |
+| `items[].settlement_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `items[].settlement_current.version` | integer | yes | no | — | — |
 | `items[].settlement_current.revision_id` | string \| null | yes | yes | — | — |
 | `items[].settlement_current.gross_minor_units` | integer | yes | no | — | — |
@@ -1242,6 +1249,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
 | `items[].settlement_current.all_committed_current` | object \| null | no | yes | null | — |
 | `items[].settlement_current.all_committed_current.invoice_id` | string | yes | no | — | — |
+| `items[].settlement_current.all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `items[].settlement_current.all_committed_current.version` | integer | yes | no | — | — |
 | `items[].settlement_current.all_committed_current.revision_id` | string \| null | yes | yes | — | — |
 | `items[].settlement_current.all_committed_current.gross_minor_units` | integer | yes | no | — | — |
@@ -1395,6 +1403,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_via` | string | yes | no | — | — |
 | `settlement_current` | object \| null | no | yes | null | — |
 | `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement_current.version` | integer | yes | no | — | — |
 | `settlement_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement_current.gross_minor_units` | integer | yes | no | — | — |
@@ -1407,6 +1416,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
 | `settlement_current.all_committed_current` | object \| null | no | yes | null | — |
 | `settlement_current.all_committed_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement_current.all_committed_current.version` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement_current.all_committed_current.gross_minor_units` | integer | yes | no | — | — |
@@ -2071,7 +2081,7 @@ Example JSON output:
 
 ## `statement-charge void`
 
-Void a statement charge with a required reason. Its accounting is reversed at its own date, so the customer’s balance, their aging and their statement all go back to what they were; its number stays occupied and its history stays readable.
+Void a statement charge with a required reason. Its accounting is reversed at its own date, so the customer’s balance, their aging and their statement all go back to what they were; its number stays occupied and its history stays readable. A charge a payment or credit is still applied to is refused with `E_HAS_APPLICATIONS` naming those applications, exactly as an invoice is: release them with `payment unapply` first, so the money that settled the charge is never left pointing at a document worth nothing.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2144,6 +2154,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_via` | string | yes | no | — | — |
 | `settlement_current` | object \| null | no | yes | null | — |
 | `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement_current.version` | integer | yes | no | — | — |
 | `settlement_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement_current.gross_minor_units` | integer | yes | no | — | — |
@@ -2156,6 +2167,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
 | `settlement_current.all_committed_current` | object \| null | no | yes | null | — |
 | `settlement_current.all_committed_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement_current.all_committed_current.version` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement_current.all_committed_current.gross_minor_units` | integer | yes | no | — | — |
@@ -2720,6 +2732,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.allocations[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.document_changes` | array[object \| object] | yes | no | — | — |
 | `settlement.effect.document_changes[].invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].version` | integer | yes | no | — | — |
 | `settlement.effect.document_changes[].revision_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.document_changes[].gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
@@ -2732,6 +2745,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current` | object \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
@@ -2777,6 +2791,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
+| `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement.current.version` | integer | yes | no | — | — |
 | `settlement.current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement.current.gross_minor_units` | integer | yes | no | — | — |
@@ -2789,6 +2804,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.audit_watermark` | integer \| null | no | yes | null | — |
 | `settlement.current.all_committed_current` | object \| null | no | yes | null | — |
 | `settlement.current.all_committed_current.invoice_id` | string | yes | no | — | — |
+| `settlement.current.all_committed_current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `settlement.current.all_committed_current.version` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.revision_id` | string \| null | yes | yes | — | — |
 | `settlement.current.all_committed_current.gross_minor_units` | integer | yes | no | — | — |
@@ -3188,6 +3204,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |

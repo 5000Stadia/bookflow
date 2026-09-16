@@ -20,6 +20,7 @@ from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F40
 from tests.test_row7_credentials import writer
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _click, _contained, _fill, _preview, _saved
+from tests import provenance
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason="Chrome unavailable")
 
@@ -52,11 +53,10 @@ def test_mcp_invoice_human_correction_mcp_continuation(register_browser, width, 
     exempt = next(x["id"] for x in human("sales-tax-code.list", {})["items"] if not x["taxable"])
     item = human("item.create", dict(name="Handoff service", type="service", sales_enabled=True,
         description="Service labor", income_account_id=income, price="12.34", sales_tax_code_id=exempt))["id"]
-    binary = os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow")))
+    binary = provenance.launcher()
     params = StdioServerParameters(command=binary,
         args=["mcp", "--url", env.site.base_url, "--client-name", "handoff-mcp-agent"],
-        env={"BOOKFLOW_TOKEN": issued["secret"], "BOOKFLOW_COMPANY": env.site.company_id,
-             "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent-caller-root")}, cwd=str(tmp_path))
+        env=provenance.child_env(BOOKFLOW_TOKEN=issued["secret"], BOOKFLOW_COMPANY=env.site.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / "absent-caller-root")), cwd=str(tmp_path))
     with ExitStack() as stack:
         portal = stack.enter_context(start_blocking_portal())
         read, write = stack.enter_context(portal.wrap_async_context_manager(stdio_client(params)))

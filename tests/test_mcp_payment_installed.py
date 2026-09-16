@@ -7,6 +7,7 @@ import sys
 import anyio
 import pytest
 from tests.test_row3_host import hosted, live
+from tests import provenance
 
 
 @pytest.mark.timeout(180)
@@ -31,10 +32,9 @@ def test_installed_payment_preview_receive_retry_and_settlement(hosted, live, tm
     method = seed('payment-method.create', {'name': 'Installed cash', 'kind': 'cash'})['id']
     result_ids = {}
     async def witness():
-        binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+        binary = provenance.launcher()
         params = StdioServerParameters(command=binary, args=['mcp', '--url', live, '--client-name', 'installed-payment'],
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()

@@ -5,6 +5,8 @@ the hole and opens them, and each bank account narrows the report to itself.
 """
 from urllib.parse import urlencode
 
+from bookflow.adapters.workbench.transaction_detail import document_link
+
 
 COMMANDS = {"report missing-checks"}
 # The counts printed above the rows, in the order a person reads them.
@@ -31,11 +33,18 @@ def _range(row):
             else f"{row['first_missing']}–{row['last_missing']}")
 
 
-def _use(use, company_id):
-    """One occupied number, with the check that occupies it opened where it was written."""
+def _use(use, company_id, watermark):
+    """One occupied number, with the check that occupies it opened where it was written.
+
+    The link is the one every accounting report builds, not a third spelling of ``/check/``
+    written out here. A hand-built path cannot be right about this page: a cheque written
+    from Pay Bills is a bill payment and does not open as a check at all, and a cheque
+    deleted out of ordinary lists still occupies its number here, so the row that names it
+    has to ask for retained history. `document_link` derives both from the document itself.
+    """
     if use is None:
         return None
-    return {**use, "document_url": f"/c/{company_id}/check/{use['transaction_id']}"}
+    return {**use, "document_url": document_link(company_id, use, watermark)}
 
 
 def view(result, inputs, company_id):
@@ -44,9 +53,9 @@ def view(result, inputs, company_id):
     rows = []
     for row in result["rows"]:
         rows.append({**row,
-            "before": _use(row["before"], company_id),
-            "after": _use(row["after"], company_id),
-            "checks": [_use(use, company_id) for use in row["checks"]],
+            "before": _use(row["before"], company_id, watermark),
+            "after": _use(row["after"], company_id, watermark),
+            "checks": [_use(use, company_id, watermark) for use in row["checks"]],
             "range_label": _range(row),
             "kind_label": KINDS[row["kind"]],
             "account_url": f"/c/{company_id}/report/missing-checks?" + urlencode(

@@ -1,0 +1,77 @@
+/* What a report looks like on paper.
+
+   Every report page in this workbench is the same page: the same header bar, the same
+   section navigation, the same filter form under the same table, whichever of the
+   twenty-three reports is showing. That shared shape is what this sheet is written
+   against, so one file dresses every report for the printer and a report added tomorrow
+   prints the day it is added -- there is no per-report stylesheet to remember to write.
+
+   The page says it is a report by carrying `data-report-page` on its body, which the
+   form page sets from the registry rather than from any list of report names. Every print
+   rule here is scoped to that attribute, so nothing in this file can change how anything
+   else in the workbench prints. Exactly one rule sits outside the print block -- the one
+   that keeps the printed identification block off the screen -- and it is the only way
+   this sheet is allowed to change what a reader sees in a window.
+
+   The rule the whole sheet follows: what goes on paper is the report and what identifies
+   it -- the company, the report, the period, the basis, the currency and when it was
+   taken. The furniture a person uses to get to the report -- navigation, filters,
+   buttons, the drill-down links, the structured-data panels -- is how the screen works
+   and has no meaning once it is printed. */
+
+/* On screen the page already names itself: its heading is the report, and the report's
+   own first line carries the company and the period. The printed block below repeats
+   that on paper because paper leaves the window behind. */
+.report-print-heading { display: none; }
+
+@media print {
+  [data-report-page] { background: #fff; }
+
+  /* Getting to the report, and doing anything with it once you are there. */
+  [data-report-page] header,
+  [data-report-page] nav.group-menu,
+  [data-report-page] nav.crumbs,
+  [data-report-page] .report-tools,
+  [data-report-page] .save-feedback,
+  [data-report-page] .workflow-note,
+  [data-report-page] .annotations,
+  [data-report-page] noscript,
+  [data-report-page] form,
+  [data-report-page] button,
+  [data-report-page] details { display: none !important; }
+
+  /* What the report is, on the sheet of paper it is on. */
+  [data-report-page] .report-print-heading { display: block; margin: 0 0 .6rem; }
+  [data-report-page] .report-print-heading h2 { margin: 0; font-size: 1.3rem; }
+  [data-report-page] .report-print-heading p { margin: .1rem 0; }
+
+  /* The report itself gets the whole page: no screen gutter, no card, no scrollbox
+     cutting a wide statement off at the edge of a viewport that does not exist here. */
+  [data-report-page] main { max-width: none; margin: 0; padding: 0; }
+  [data-report-page] .table-wrap,
+  [data-report-page] .report-lines-wrap { overflow: visible !important; max-width: none; }
+  [data-report-page] table { min-width: 0 !important; width: 100%; }
+  [data-report-page] .workspace-card,
+  [data-report-page] .document-detail { border: 0; padding: 0; margin: 0 0 .6rem; }
+
+  /* A column that is pinned while a reader scrolls has nothing to be pinned to here,
+     and a sticky cell prints over the cell beside it. */
+  [data-report-page] th, [data-report-page] td { position: static !important; }
+
+  /* A report longer than a sheet is still readable: its column headings repeat on every
+     sheet, and no row is cut in half by a page break. */
+  [data-report-page] thead { display: table-header-group; }
+  [data-report-page] tfoot { display: table-footer-group; }
+  [data-report-page] tr { break-inside: avoid; page-break-inside: avoid; }
+  [data-report-page] caption { text-align: left; font-weight: 600; }
+
+  /* A drill-down is a link on the screen; on paper it is the name of an account. */
+  [data-report-page] a { color: inherit; text-decoration: none; }
+
+  /* Figures line up under each other whatever typeface the printer has. */
+  [data-report-page] td, [data-report-page] th { font-size: 11pt; }
+  [data-report-page] [data-value], [data-report-page] [data-total],
+  [data-report-page] [data-amount] { font-variant-numeric: tabular-nums; }
+
+  @page { margin: 12mm; }
+}

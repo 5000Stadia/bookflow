@@ -16,7 +16,8 @@ from tests.test_row8_register_browser import register_browser
 from tests.test_payment_review_gui import setup,invoice_setup
 from tests.test_customer_payment_browser import click,field,shot
 from tests.test_payment_recovery_browser import press
-from tests.payment_recovery_support import launcher,provenance,source_environment
+from tests.payment_recovery_support import launcher,provenance
+from tests import provenance as provenance_owner
 
 @pytest.mark.timeout(420)
 @pytest.mark.parametrize('width',[1280,390])
@@ -38,8 +39,9 @@ def test_actual_mcp_recovery_human_confirmation_and_original_operation(register_
     (tmp_path/'source-provenance.json').write_text(json.dumps(provenance(binary),indent=2))
     async def witness():
         params=StdioServerParameters(command=str(binary),
-            args=['mcp','--url',register_browser.site.base_url],env={**source_environment(),'BOOKFLOW_TOKEN':issuance['secret'],'BOOKFLOW_COMPANY':register_browser.site.company_id,
-                'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')},cwd=str(tmp_path))
+            args=['mcp','--url',register_browser.site.base_url],
+            env=provenance_owner.child_env(BOOKFLOW_TOKEN=issuance['secret'],BOOKFLOW_COMPANY=register_browser.site.company_id,
+                BOOKFLOW_DATA_ROOT=str(tmp_path/'absent')),cwd=str(tmp_path))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as session:
                 await session.discover()

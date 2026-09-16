@@ -15,6 +15,7 @@ import sqlalchemy as sa
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
+from tests import provenance
 
 BASE = '14a871a31268cbb5c0311ae5352d9965a587e492'
 MIGRATION = importlib.import_module('bookflow.storage.company_migrations.versions.0014_customer_payments')
@@ -31,7 +32,7 @@ def historical_root(tmp_path_factory):
     root = parent / 'data'
     result = subprocess.run([sys.executable, '-c',
         'import bookflow,sys; c=bookflow.connect(data_root=sys.argv[1]); c.init(); c.demo.reset()', str(root)],
-        env=dict(os.environ, PYTHONPATH=str(source / 'src'), PYTHONDONTWRITEBYTECODE='1'), cwd=source,
+        env=provenance.child_env(str(source / 'src'), PYTHONDONTWRITEBYTECODE='1'), cwd=source,
         capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     return root
@@ -80,7 +81,7 @@ def test_documented_cli_upgrade_preserves_every_old_raw_column(historical_root, 
     files = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file() and 'attachments' in p.parts}
     result = subprocess.run([str(Path(sys.executable).parent / 'bookflow'), 'upgrade', '--data-root', str(root),
                              '--reason', 'Disposable co14 preserving witness', '--json'], capture_output=True, text=True,
-                             env=dict(os.environ, PYTHONPATH=str(frozen_co14 / 'src')))
+                             env=provenance.child_env(str(frozen_co14 / 'src')))
     assert result.returncode == 0, result.stdout + result.stderr
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0014',)
@@ -141,7 +142,7 @@ for name in m.NEW_TABLES:
 print(json.dumps([expected,list(statements())]))
 """
     expected, guards = json.loads(subprocess.check_output([sys.executable, '-c', script],
-        cwd=frozen_co14, env=dict(os.environ, PYTHONPATH=str(frozen_co14 / 'src')), text=True))
+        cwd=frozen_co14, env=provenance.child_env(str(frozen_co14 / 'src')), text=True))
     assert tuple(expected) == MIGRATION.DDL
     assert tuple(guards) == MIGRATION.GUARDS
     with open_database(tmp_path / 'company.db', writable=True, create=True) as db:

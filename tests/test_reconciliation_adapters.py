@@ -11,6 +11,7 @@ from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_deposit_lifecycle import driver, additional_document, replacement
 from tests.test_payment_receipts import method
 from tests.test_deposit_sources import uf
+from tests import provenance
 
 
 def run(client,name,data=None,**ctx):
@@ -539,7 +540,7 @@ for kind in ('receipt','invoice','foreign'):
  (parent/(kind+'-raw.json')).write_text(json.dumps({str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}))
 '''
     result=subprocess.run([sys.executable,'-c',code,str(parent)],cwd=source,
-        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(parent/'seed')),capture_output=True,text=True)
+        env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(parent/'seed')),capture_output=True,text=True)
     (parent/'legacy-run.log').write_text(result.stdout+result.stderr)
     (parent/'source-pin.json').write_text(json.dumps(dict(commit=pin,interpreter=sys.executable,returncode=result.returncode)))
     assert result.returncode==0,result.stderr

@@ -16,6 +16,16 @@ is credited the gross once. That single credit is what the customer is owed, and
 share of it is an attribution row on it -- which is exactly what ``credit_components`` name, so
 a later application can land on particular lines. Saving a credit applies nothing: it posts the
 reversal and leaves capacity standing.
+
+A returned line that carries stock reverses the *cost* half of that sale in the same document,
+because the goods came back with the money. Beside its income and tax debits it posts one more
+pair -- debit Inventory Asset, credit Cost of Goods Sold -- for the share of the source issue's
+own posted cost the returned quantity owns, and writes one ``receipt`` movement against the
+debit. The pair is equal and opposite, so the receivable is still credited the gross and the
+batch still balances at it. What the money side does is unchanged by any of this: what a thing
+sold for and what it cost are two independent facts, and a return gives both back. Correcting
+such a credit retires those receipts and takes them again at what the grid then says; voiding
+it takes them out exactly.
 """
 from __future__ import annotations
 
@@ -193,15 +203,26 @@ def _article(item_type):
     return ('an ' if readable[0] in 'aeiou' else 'a ') + readable
 
 
-def _refuse_stocked(profile, field):
-    """Refuse a credited line whose item carries stock, named or returned.
+def _refuse_stocked(profile, field, source=None):
+    """Refuse a credited stock line this release still cannot put back on the shelf.
 
-    A credit memo posts income, the tax it takes back and the receivable, and nothing else:
-    there is no inventory movement on it and no cost to put back. A stock-carrying line would
-    therefore hand the money back and leave the quantity sold with its cost still in cost of
-    goods sold, which is two wrong balances rather than one missing feature. Moving the stock
-    and restoring the cost is a feature of its own; until it is built the line is refused
-    rather than approximated, which is what the credit memo help says this release does.
+    A **returned** line is built and is not refused. It names the invoice line it gives back,
+    and that line's own issue says what came off the shelf and what the shelf lost, so the
+    credit posts the exact inverse: the quantity in, and that issue's own posted cost out of
+    cost of goods sold and back into the inventory asset. ``_stock_entries`` does it.
+
+    A **standalone** line names an item, a quantity and a price, and a price is not a cost.
+    Nothing in Bookflow derives what an unlinked quantity coming in is worth: every receipt
+    the stock ledger holds states its value, because somebody knew it -- a bill line states
+    what was paid for the goods, and ``inventory adjust`` requires ``value_change`` from the
+    person entering it. Picking a rule here instead -- today's average, the item's standard
+    cost -- would be a second answer to a question the ledger already answers one way, and a
+    wrong cost put into stock is not visible to the person who typed a price. So the line is
+    refused and the two ways that do work are named.
+
+    A returned line whose captured facts carry no inventory-asset or cost-of-goods account is
+    refused for the plainer reason that there is nothing to post the cost between. That is
+    what a revision captured before those accounts were captured looks like.
 
     The stock-carrying set is the item master's own, read through the same name the sales
     grid and the stock ledger read, because a second list here is the list the next
@@ -209,18 +230,31 @@ def _refuse_stocked(profile, field):
     """
     if profile.item_type not in TRACKED_TYPES:
         return
-    raise BookflowError('E_VALIDATION', message=(
-        f'Returning stock is not supported yet. The line at `{field}` credits '
-        f'"{profile.item.label}", {_article(profile.item_type)} item, and a credit memo moves '
-        'no inventory and restores no cost: posting it would hand the money back and leave the '
-        'quantity sold with its cost still in cost of goods sold, so stock and cost of goods '
-        'sold would both be wrong. Credit the money with a service or non-stock item, and bring '
-        'the quantity back with `inventory adjust`, which moves the quantity and what it is '
-        'worth together.'),
-        details={'fields': [{'field': field, 'problem': 'this item carries stock'}],
-                 'reason': 'stocked_credit_unsupported',
-                 'item_id': profile.item.id, 'item_name': profile.item.label,
-                 'item_type': profile.item_type})
+    if source is None:
+        raise BookflowError('E_VALIDATION', message=(
+            f'Credit this item by returning the invoice line it was sold on. The line at '
+            f'`{field}` names "{profile.item.label}", {_article(profile.item_type)} item, and '
+            'gives a price -- but bringing stock back needs what the quantity cost, which a '
+            'price does not say and Bookflow never guesses. Name `source_invoice` and '
+            '`source_line` and the credit puts the money and the goods back together, at what '
+            'that invoice line actually took out of stock. If there is no invoice line to '
+            'return, credit the money with a service or non-stock item and bring the quantity '
+            'back with `inventory adjust`, which takes the value you say it is worth.'),
+            details={'fields': [{'field': field, 'problem': 'this item carries stock'}],
+                     'reason': 'unlinked_stocked_credit_unsupported',
+                     'item_id': profile.item.id, 'item_name': profile.item.label,
+                     'item_type': profile.item_type})
+    if profile.asset_account is None or profile.cogs_account is None:
+        raise BookflowError('E_VALIDATION', message=(
+            f'This invoice line cannot be returned into stock. The line at `{field}` returns '
+            f'"{profile.item.label}", {_article(profile.item_type)} item, and the invoice '
+            'captured no inventory asset or cost of goods sold account for it, so there is '
+            'nothing to move the cost between. Credit the money with a service or non-stock '
+            'item, and bring the quantity back with `inventory adjust`.'),
+            details={'fields': [{'field': field, 'problem': 'this capture names no stock accounts'}],
+                     'reason': 'stocked_capture_incomplete',
+                     'item_id': profile.item.id, 'item_name': profile.item.label,
+                     'item_type': profile.item_type})
 
 
 def _refuse_stocked_document(lines):
@@ -228,20 +262,54 @@ def _refuse_stocked_document(lines):
 
     A correction that leaves ``lines`` out re-posts the document from what was captured, so
     judging only the lines a caller supplied let an omitted-grid ``credit-memo update`` post a
-    stored stocked credit's wrong accounting a second time -- the same two wrong balances, on a
-    new revision, with nothing entered to refuse. What is judged is therefore the final grid:
-    every line the write would post, retained and entered alike, each named by the position it
-    holds in that grid and by the half of the line that carries the item.
+    stored credit's stock accounting a second time with nothing entered to refuse. What is
+    judged is therefore the final grid: every line the write would post, retained and entered
+    alike, each named by the position it holds in that grid and by the half of the line that
+    carries the item. That chokepoint is what closed the reposting bypass and it stays; what
+    changed underneath it is the answer for a returned line, which is now built.
 
-    Reading such a document is untouched by this. ``show``, ``history``, ``query`` and ``void``
-    resolve no grid and post nothing new -- void reverses exactly what the credit did post --
-    so a credit already stored against a stock item still opens, still lists, and can still be
-    taken back. Replacing its grid with non-stock lines is a correction like any other, which
-    is how a bad document is made good.
+    Reading is untouched by this, as it always was: ``show``, ``history`` and ``query``
+    resolve no grid. ``void`` resolves none either, and now reverses whatever the credit did
+    post -- its stock included.
     """
     for index, line in enumerate(lines):
         field = f'lines.{index}.source_line' if line['source'] else f'lines.{index}.item'
-        _refuse_stocked(line['profile'], field)
+        _refuse_stocked(line['profile'], field, line['source'])
+
+
+def _stock_entries(s, lines):
+    """The credited lines that bring stock back, in the shape the inventory ledger takes them.
+
+    A returned line is the inverse of the issue its source invoice line made. The quantity is
+    that line's *base* quantity, because stock is held in the item's base unit and something
+    sold by the case comes back to the shelf in eaches. The cost is the share of that issue's
+    own posted cost the returned interval owns, under the same endpoint rule in
+    ``credit_returns`` that decides the line's net and every tax cent -- so a line returned in
+    pieces gives back exactly what it took, and a later price or average cannot move a cent of
+    an issued credit. Both accounts come off the captured facts, never the item master, so
+    what a stored revision returns cannot change when the item is repointed.
+    """
+    from bookflow.company import inventory, inventory_effects
+    entries = []
+    for line in lines:
+        facts = line['profile']
+        if facts.item_type not in inventory.TRACKED_TYPES:
+            continue
+        source = line['source']
+        if source is None:      # refused by `_refuse_stocked` before any of this is reached
+            raise BookflowError('E_INTERNAL', message='A standalone credit line carries stock.')
+        issued = inventory_effects.issued_cost(s, source['transaction_id'], source['document_line_id'])
+        quantity = int(source['base_quantity_microunits'])
+        if issued is None or issued['quantity_microunits'] != quantity:
+            raise BookflowError('E_INTERNAL', message=(
+                'The invoice line being returned issued no stock, or issued a quantity its '
+                'own capture does not name.'))
+        entries.append(inventory_effects.return_entry(
+            facts, key=line['envelope']['id'],
+            quantity_microunits=line['base_quantity_microunits'],
+            amount=returns.share(issued['cost_minor_units'], quantity, line['intervals']),
+            class_id=line['envelope']['class_id']))
+    return entries
 
 
 # ------------------------------------------------------------------ resolving the whole document
@@ -371,10 +439,15 @@ def _line_semantic(line):
 
 
 def _posting_accounts_active(s, resolved):
+    from bookflow.company import inventory
     ids = {resolved['profile'].control_account.id}
     for line in resolved['lines']:
         ids.add(line['profile'].income_account.id)
         ids.update(_liability(cell).id for cell in line['taxes'])
+        # A returned stock line posts to two more captured accounts, so they are held to the
+        # same bar as the income account: still there, and still active.
+        if line['profile'].item_type in inventory.TRACKED_TYPES:
+            ids.update({line['profile'].asset_account.id, line['profile'].cogs_account.id})
     accounts = effects.rows(s, c.accounts, c.accounts.c.id.in_(ids))
     if {account['id'] for account in accounts} != ids:
         raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'account'})
@@ -480,6 +553,18 @@ def prepare(s, ctx, inp, *, previous=None):
                          source_revision_id=line['source']['revision_id'],
                          source_document_line_id=line['source']['document_line_id'],
                          reverses_claim_id=None, effective_date=resolved['date'], **audited)
+    # What this write does to stock, decided in full before any of it is built: whatever a
+    # previous revision brought back is retired, this revision's returned quantities come back
+    # at the cost their source issues put into cost of goods sold, and any later sale the
+    # change displaces is owed its own dated correction. A refusal here -- more going out than
+    # is on hand on some earlier date, a closed period a delta would land in -- leaves nothing
+    # behind, because nothing has been written.
+    from bookflow.company import inventory_effects
+    stock = inventory_effects.plan(
+        s, entries=_stock_entries(s, resolved['lines']),
+        reversing=inventory_effects.own_movements(s, header['id']) if previous else (),
+        date=resolved['date'], currency=currency)
+    inventory_effects.open_dates(s, stock)
     old_batch = None
     if previous:
         batches = effects.rows(s, c.posting_batches,
@@ -499,7 +584,13 @@ def prepare(s, ctx, inp, *, previous=None):
                  effective_date=revision['date'], reverses_batch_id=None, replaces_batch_id=old_batch['id'] if old_batch else None,
                  audit_event_id=event)
     pending['posting_batches'].append(batch)
-    _business_postings(header, revision, batch, resolved, pending, created, audited)
+    assets = _business_postings(header, revision, batch, resolved, pending, created, audited, stock.costs)
+    for movement in stock.movements:
+        if movement.key is not None:
+            inventory_effects.bind(movement, assets.get(movement.key), transaction_id=header['id'],
+                                   revision_id=revision['id'], document_line_id=movement.key, batch=batch)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
+    inventory_effects.check(s, stock, pending['posting_lines'])
     restatement = None
     if previous:
         from bookflow.company.credit_restatement import prepare as restate
@@ -511,15 +602,28 @@ def prepare(s, ctx, inp, *, previous=None):
     plan = Plan(output, dict(input=inp, operation='update' if previous else 'post', changed=True, header=header,
                              before=previous['header'] if previous else None, previous=previous,
                              pending=pending, sequence=resolved['sequence'], event=event,
-                             custom_plan=resolved['custom_plan'], resolved=resolved, restatement=restatement))
+                             custom_plan=resolved['custom_plan'], resolved=resolved, restatement=restatement,
+                             stock=stock))
     from bookflow.company.credit_validation import validate, validate_update
     (validate_update if previous else validate)(plan, s, ctx)
     return plan
 
 
-def _business_postings(header, revision, batch, resolved, pending, created, audited):
-    """Dr each line's captured income and tax; Cr the receivable the gross, once."""
+def _business_postings(header, revision, batch, resolved, pending, created, audited, costs=None):
+    """Dr each line's captured income and tax; Cr the receivable the gross, once.
+
+    ``costs`` is what the stock ledger says each returned line brings back, per entered line,
+    signed the way the receipt movement carries it. A line without one posts what a credit has
+    always posted; a line with one posts two more legs beside it -- debit Inventory Asset,
+    credit Cost of Goods Sold -- which is the sale's own cost being given back, not the
+    customer being credited anything different. The pair is equal and opposite, so the batch
+    still balances at the document gross with the receivable, exactly as before.
+
+    The returned value is the inventory-asset leg of each such line, which is what the
+    movement hanging off it has to name.
+    """
     profile, currency = resolved['profile'], resolved['currency']
+    costs, assets = costs or {}, {}
     line_no = 0
 
     def leg(account, amount, debit, envelope, description):
@@ -579,6 +683,11 @@ def _business_postings(header, revision, batch, resolved, pending, created, audi
                 component_snapshot=json_text(captured['snapshot'].model_dump()),
                 posting_source_id=source['id'] if source else None,
                 source_tax_component_id=cell.get('source_tax_component_id', cell['source']['id'] if cell['rule'] is None else None)))
+        cost = costs.get(envelope['id'], 0)
+        if cost:
+            assets[envelope['id']] = leg(facts.asset_account, cost, True, envelope, envelope['description'])
+            attribute(assets[envelope['id']], envelope, cost)
+            attribute(leg(facts.cogs_account, cost, False, envelope, envelope['description']), envelope, cost)
     receivable = leg(profile.control_account, resolved['total'], False,
                      dict(class_id=profile.class_id.id if profile.class_id else None,
                           class_name=profile.class_id.label if profile.class_id else None),
@@ -599,6 +708,7 @@ def _business_postings(header, revision, batch, resolved, pending, created, audi
             document_line_id=line['envelope']['id'], posting_source_id=source['id'],
             amount_minor_units=line['gross_minor_units'], currency=currency,
             audit_event_id=audited['audit_event_id']))
+    return assets
 
 
 def _cell_snapshot(cell, position):
@@ -628,6 +738,12 @@ def prepare_void(s, ctx, inp, *, posting=True):
     application would leave an invoice settled by a document that no longer exists, and an
     active refund would leave cash paid against capacity that is gone. Unapply or void those
     first, which is exactly what an invoice with applied payments asks for.
+
+    The stock a returned line brought back goes out again in the same act, exactly: one
+    reversal movement per receipt, hanging off the leg that reverses the one the receipt hung
+    off. So a void of a return leaves the quantity, the inventory asset and cost of goods sold
+    where the sale left them -- and it is refused, naming the date, if the returned quantity is
+    no longer there to take back out.
     """
     source = facts(s, inp.credit_memo, write=True, posting=posting)
     old_header, revision = source['header'], source['revision']
@@ -654,6 +770,11 @@ def prepare_void(s, ctx, inp, *, posting=True):
             'refund_ids': sorted({row['transaction_id'] for row in source['consumptions']}),
             'next': 'Void the refund that paid this credit out, then void the credit memo.'})
     journals.open_dates(s, [revision['date']])
+    from bookflow.company import inventory_effects
+    stock = inventory_effects.plan(
+        s, entries=[], reversing=inventory_effects.own_movements(s, old_header['id']),
+        date=revision['date'], currency=revision['currency'])
+    inventory_effects.open_dates(s, stock)
     at, event = clock.now_iso(), new_id()
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     pending = {table: [] for table, _, _ in TABLE_KINDS}
@@ -669,6 +790,8 @@ def prepare_void(s, ctx, inp, *, posting=True):
                               order=claims.c.id):
         pending['credit_source_claims'].append(dict(
             claim, **created(), audit_event_id=event, kind='release', reverses_claim_id=claim['id']))
+    inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
+    inventory_effects.check(s, stock, pending['posting_lines'])
     header = dict(old_header, version=old_header['version'] + 1, updated_at=at,
                   updated_by=s.actor.id, updated_via=ctx.interface.value, status='voided',
                   voided_at=at, voided_by=s.actor.id, void_reason=ctx.reason.strip(),
@@ -678,7 +801,7 @@ def prepare_void(s, ctx, inp, *, posting=True):
                                    source_current=_void_current(source), changed=True)
     return Plan(output, dict(input=inp, operation='void', changed=True, header=header,
                              before=old_header, pending=pending, sequence=None, event=event,
-                             revision=revision, source=source))
+                             revision=revision, source=source, stock=stock))
 
 
 def _void_current(source):
@@ -702,9 +825,21 @@ def apply(plan, ctx, s):
     from bookflow.company.credit_restatement import Companion
     if fresh.preview.facts_fingerprint != plan.preview.facts_fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'credit_facts'})
-    return effects.persist(fresh, ctx, s, command_name='credit-memo ' + operation,
-                           table_kinds=TABLE_KINDS,
-                           companion=Companion(fresh.data.get('restatement') or {}))
+    command_name = 'credit-memo ' + operation
+    applied = effects.persist(fresh, ctx, s, command_name=command_name, table_kinds=TABLE_KINDS,
+                              companion=Companion(fresh.data.get('restatement') or {}))
+    # The document is written and none of the three writes above writes stock; this is the one
+    # seam all of them come back through, so the movements and the dated cost corrections they
+    # owe are written here, once, inside the same company transaction.
+    from bookflow.company import inventory_effects
+    stock = fresh.data.get('stock')
+    if stock is None or not stock.moves_stock:
+        return applied
+    header = fresh.data['header']
+    return inventory_effects.settle(
+        applied, stock, ctx, s, command_name=command_name,
+        summary=f"stock moved by credit memo {header['number']}",
+        created_at=header['updated_at'])
 
 
 # ------------------------------------------------------------------ reading it back

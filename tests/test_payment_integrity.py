@@ -14,6 +14,7 @@ from tests.conftest import make_actor, as_user
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_payment_receipts import method, posted, snapshots
 from tests.test_row8_journal import database_path
+from tests import provenance
 
 
 def test_receipt_preview_binds_resolved_automatic_number(client, sale):
@@ -130,7 +131,7 @@ def test_actual_cli_receipt_and_recoverable_request(client, sale, root):
     args = [str(Path(sys.executable).parent / 'bookflow'), 'payment', 'receive', '--data-root', str(root),
             '--company', COMPANY, '--customer', sale['customer'], '--date', '2026-06-01', '--amount', '12.34',
             '--payment-method', payment_method, '--operation-key', 'actual-cli-payment', '--json']
-    completed = subprocess.run(args, capture_output=True, text=True)
+    completed = subprocess.run(args, capture_output=True, text=True, env=provenance.child_env())
     assert completed.returncode == 0, completed.stdout + completed.stderr
     receipt = json.loads(completed.stdout)
     assert receipt['current']['available_minor_units'] == 1234
@@ -138,7 +139,7 @@ def test_actual_cli_receipt_and_recoverable_request(client, sale, root):
     assert recovered['request']['input']['amount'] == '12.34'
     assert 'applications' not in recovered['request']['input'] and recovered['request']['context'] == {}
     before = snapshots(client)
-    retry = subprocess.run(args, capture_output=True, text=True)
+    retry = subprocess.run(args, capture_output=True, text=True, env=provenance.child_env())
     assert retry.returncode == 0, retry.stdout + retry.stderr
     assert json.loads(retry.stdout)['idempotent_replay']
     assert snapshots(client) == before

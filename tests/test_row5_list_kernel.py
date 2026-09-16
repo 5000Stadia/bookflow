@@ -45,6 +45,7 @@ from bookflow.core.registry import Applied, Plan, REGISTRY
 from bookflow.core.session import Session
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, current_revision, migrate_to_head
+from tests import provenance
 
 
 ACTOR = "01J00000000000000000000000"
@@ -337,5 +338,6 @@ def test_factory_import_does_not_eagerly_import_any_noun_service():
         "import json,sys; import bookflow.commands.list_factory; "
         f"print(json.dumps([name for name in {noun_modules!r} if name in sys.modules]))"
     )
-    result = subprocess.run([sys.executable, "-c", program], check=True, text=True, capture_output=True)
+    result = subprocess.run([sys.executable, "-c", program], check=True, text=True, capture_output=True,
+                            env=provenance.child_env())
     assert json.loads(result.stdout) == []

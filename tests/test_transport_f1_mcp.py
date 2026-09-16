@@ -12,6 +12,7 @@ import uvicorn
 
 from bookflow.adapters.http.admission import AdmissionProtocol
 from tests.test_row3_host import hosted
+from tests import provenance
 
 
 def test_sdk_current_source_commands_errors_and_file_terminals(hosted, tmp_path, monkeypatch):
@@ -37,10 +38,8 @@ def test_sdk_current_source_commands_errors_and_file_terminals(hosted, tmp_path,
     source=inputs/'receipt.pdf';source.write_bytes(BODY)
     code=str(Path(__file__).resolve().parents[1]/'src')
     async def run():
-        params=StdioServerParameters(command=str(Path(sys.executable).with_name('bookflow')),args=['mcp','--url',url,
-            '--input-dir',str(inputs),'--output-dir',str(outputs)],env={
-            'PYTHONPATH':code,'BOOKFLOW_TOKEN':hosted.secret,'BOOKFLOW_COMPANY':hosted.company_id,
-            'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent'),'TMPDIR':str(tmp_path)},cwd=str(tmp_path))
+        params=StdioServerParameters(command=provenance.launcher(),args=['mcp','--url',url,
+            '--input-dir',str(inputs),'--output-dir',str(outputs)],env=provenance.child_env(code, BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path/'absent'), TMPDIR=str(tmp_path)),cwd=str(tmp_path))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as client:
                 await client.discover()

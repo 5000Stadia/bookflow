@@ -18,6 +18,7 @@ from bookflow import BookflowError
 from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
+from tests import provenance
 
 MIGRATION = importlib.import_module('bookflow.storage.company_migrations.versions.0012_progress_billing')
 BASE = '45cfd75e95eccdc41881bea82fbafc17c8e604b9'
@@ -59,7 +60,7 @@ def co11_template(tmp_path_factory):
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         tar.extractall(source, filter='data')
     root = directory / 'data'
-    env = dict(os.environ, PYTHONPATH=str(source / 'src'), BOOKFLOW_DATA_ROOT=str(root))
+    env = provenance.child_env(source / 'src', BOOKFLOW_DATA_ROOT=str(root))
     script = """import bookflow
 from bookflow.storage.migrate import HEADS
 assert HEADS['company'] == 'co0011'

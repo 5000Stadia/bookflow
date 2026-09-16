@@ -8,6 +8,7 @@ from bookflow.documentation.examples import EXAMPLES
 from tests.test_row3_host import hosted, live
 from tests.test_mcp_registry_credentials import hub_snapshot
 from tests.test_mcp_registry_work import company_snapshot
+from tests import provenance
 
 COMMANDS = frozenset({'init', 'company use', 'docs generate', 'mcp', 'serve'})
 
@@ -24,9 +25,9 @@ def test_installed_local_boundaries_are_explicit_and_do_not_execute(hosted, live
         monkeypatch.setattr(registry.get(name), 'plan', forbidden)
     output = tmp_path/'never-generated'
     async def witness():
-        binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow')))
+        binary = provenance.launcher()
         params = StdioServerParameters(command=binary,args=['mcp','--url',live],cwd=str(tmp_path),
-            env={'BOOKFLOW_TOKEN':hosted.secret, 'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')})
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_DATA_ROOT=str(tmp_path/'absent')))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as session:
                 await session.discover()

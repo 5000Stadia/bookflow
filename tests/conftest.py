@@ -13,8 +13,11 @@ import bookflow  # noqa: E402
 from bookflow.core import registry  # noqa: E402
 from bookflow.core.context import Context, Interface  # noqa: E402
 from bookflow.core.dispatch import run as dispatch_run  # noqa: E402
+from tests import provenance  # noqa: E402
 
-BIN = Path(sys.executable).parent / "bookflow"
+#: The packaged launcher every CLI witness in this suite runs. One owner names
+#: it (tests/provenance.py), so a test cannot quietly run a different build.
+BIN = Path(provenance.launcher())
 
 
 @pytest.fixture(scope="session")
@@ -60,8 +63,24 @@ class Cli:
         self.root = root
 
     def run(self, *args: str, env: dict | None = None, expect: int | None = 0):
-        e = {**os.environ, "BOOKFLOW_DATA_ROOT": str(self.root), **(env or {})}
-        p = subprocess.run([str(BIN), *args], capture_output=True, text=True, env=e)
+        # tests/provenance.py owns what a child is given: the pinned import path
+        # for the product this process itself imported, a short list of variables
+        # any process needs, and exactly what the caller named here. The parent's
+        # environment is not copied, so a credential this test did not mention
+        # cannot reach the child and change what it does.
+        e = provenance.child_env(BOOKFLOW_DATA_ROOT=str(self.root), **(env or {}))
+        try:
+            p = subprocess.run([str(BIN), *args], capture_output=True, text=True, env=e,
+                               timeout=provenance.CHILD_SECONDS)
+        except subprocess.TimeoutExpired as waited:
+            # A CLI witness that never returns is not a slow test, it is an
+            # unmeasurable one: without this bound the suite waits for as long as
+            # anyone lets it. Say which command, and what it had said so far.
+            raise provenance.ChildProvenanceError(
+                f"`bookflow {' '.join(args)}` did not finish within "
+                f"{provenance.CHILD_SECONDS}s and was killed.\n"
+                f"stdout: {(waited.stdout or b'')[-1000:]!r}\n"
+                f"stderr: {(waited.stderr or b'')[-1000:]!r}") from None
         if expect is not None:
             assert p.returncode == expect, (p.stdout, p.stderr)
         return p

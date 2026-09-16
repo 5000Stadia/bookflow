@@ -7,21 +7,20 @@ import subprocess
 import sys
 import bookflow
 from tests import conftest
+from tests import provenance as provenance_owner
 
 
 def launcher(monkeypatch=None):
-    binary=Path(os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(conftest.BIN))).resolve()
-    if not binary.is_file():
-        raise AssertionError('Install the reviewed package entry point beside the test interpreter, or set BOOKFLOW_MCP_TEST_BINARY to its launcher: '+str(binary))
+    binary=Path(provenance_owner.launcher(required=True)).resolve()
     if monkeypatch is not None:
         monkeypatch.setenv('BOOKFLOW_MCP_TEST_BINARY',str(binary))
-        monkeypatch.setenv('PYTHONPATH',source_environment()['PYTHONPATH'])
         monkeypatch.setattr(conftest,'BIN',binary)
     return binary
 
 
 def source_environment():
-    return {'PYTHONPATH':str(Path(__file__).resolve().parents[1]/'src')}
+    """The pinned import path, recorded in the receipt; tests/provenance.py owns it."""
+    return {'PYTHONPATH':provenance_owner.child_env()['PYTHONPATH']}
 
 
 def provenance(binary):

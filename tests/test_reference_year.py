@@ -38,15 +38,29 @@ def demo_runner(client, company, why, *, dry_run=False):
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user, make_actor
 from tests.demo_oracle import (DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
+from tests import provenance
 
 REFERENCE = 'Reference Plumbing Co'
 DEMO = 'Demo Plumbing Co'
 EXPECTED = json.loads(files('bookflow.demo').joinpath('reference-expected.json').read_text())
 
+# Why this file states its own deadline. `reference_template` seeds *two* complete companies
+# through a CLI child, and pytest charges that whole cost to whichever test asks for the fixture
+# first. The project default is 60s (pyproject.toml), which is under the seed, so running this
+# file on its own timed the fixture out and turned every test that needs it into a setup error --
+# 46 of them, all saying "Timeout", none saying what had actually not finished. That is why the
+# five demo-oracle failures below went undiagnosed: the file could not be run by itself.
+#
+# Measured here: `init` plus one `demo reset --include-reference` took 427s wall with three
+# other pytest jobs on the machine; the per-reset figures below were taken when it was quieter.
+# 900s is a bound, not a target -- a wedged seed still fails in fifteen minutes instead of
+# waiting all night. Tests that state their own deadline keep it.
+pytestmark = pytest.mark.timeout(900)
+
 
 def cli_run(root, *args):
     process = subprocess.run([sys.executable, '-m', 'bookflow.adapters.cli.app', '--json', *args],
-        env={**os.environ, 'BOOKFLOW_DATA_ROOT': str(root)}, capture_output=True, text=True)
+        env=provenance.child_env(BOOKFLOW_DATA_ROOT=str(root)), capture_output=True, text=True)
     assert process.returncode == 0, (process.stdout, process.stderr)
     return json.loads(process.stdout)
 
@@ -258,15 +272,19 @@ def assert_demo_position(c):
     is `sum(max(net_per_account, 0))`, so recomputing it from the position is what catches a
     total that no set of balances could produce. The balances themselves are the stored
     expectation a seed addition updates -- once, here.
+
+    The whole balance mapping is compared before the total, and that order is the point. A
+    trial total is not additive across accounts -- an account that crosses sign leaves it
+    altogether -- so a total that has moved says only that something did, and cannot say what.
+    Comparing the accounts first fails with the account and the amount in the message.
     """
     rows, totals = page_rows(c.report.trial_balance, company=DEMO, date_to='2026-12-31', limit=200)
     balances = {row['current_account_label']: row['signed_net']['minor_units'] for row in rows}
     assert sum(balances.values()) == 0, 'the demo books do not balance'
     assert totals['debit']['minor_units'] == totals['credit']['minor_units'] == trial_total(balances)
+    assert balances == DEMO_POSITION['balances']
     assert totals['debit']['minor_units'] == DEMO_POSITION['trial_balance']
-    for account in ('Checking', 'Accounts Receivable', 'Sales Tax Payable'):
-        assert balances[account] == DEMO_POSITION[account], account
-    assert c.account.show(company=DEMO, account='Checking')['balance']['minor_units'] == DEMO_POSITION['Checking']
+    assert c.account.show(company=DEMO, account='Checking')['balance']['minor_units'] == DEMO_POSITION['balances']['Checking']
     assert c.journal.query(company=DEMO)['count'] == DEMO_POSITION['journal_entries']
     statement = c.report.profit_and_loss(company=DEMO, date_from='2026-01-01', date_to='2026-12-31')
     assert statement['totals']['net_income']['minor_units'] == DEMO_POSITION['net_income']
@@ -478,7 +496,7 @@ def test_partial_seed_failure_reports_committed_effects_and_rerun_recovers(refer
     assert c.account.show(company=REFERENCE,account='Checking')['balance']['minor_units'] == 1000000
     # DEMO is untouched by a reference-side failure. What untouched means is the one oracle's
     # figure, not a copy of it kept here to go stale beside the original.
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == DEMO_POSITION['Checking']
+    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == DEMO_POSITION['balances']['Checking']
     monkeypatch.setattr(hub_cmds,'_load_seed',load)
     assert c.demo.reset(include_reference=True)['trashed_path']
     assert_balances(c)
@@ -507,5 +525,5 @@ def test_public_boolean_schema_defaults_and_first_default_reset(tmp_path, monkey
     assert [r['display_name'] for r in c.company.list()['items']] == [DEMO]
     assert c.journal.query(company=DEMO)['count'] == DEMO_POSITION['journal_entries']
     help_result = subprocess.run([sys.executable,'-m','bookflow.adapters.cli.app','demo','reset','--help'],
-        capture_output=True,text=True,env={**os.environ,'NO_COLOR':'1'})
+        capture_output=True,text=True,env=provenance.child_env(NO_COLOR='1'))
     assert help_result.returncode == 0 and '--include-reference' in help_result.stdout

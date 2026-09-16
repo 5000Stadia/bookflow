@@ -1075,12 +1075,13 @@ MATRIX["vendor-credit history"] = {
 # A credit memo refuses for the invoice's reasons -- it is the same resolver on the same
 # accounts -- plus the two only a return can hit: asking for more of a line than is left, and
 # a source line the invoice has since corrected out from under the claim. It also refuses what
-# it cannot post: a line whose item carries stock, because a credit memo moves no inventory and
-# restores no cost, so posting one would give the money back and leave the quantity sold.
+# it cannot value: a line that *names* a stock-carrying item rather than returning the invoice
+# line it was sold on, because a price is not a cost and nothing here derives one. Returning a
+# stocked line is posted, and refuses in turn if the stock it moves cannot stand on some date.
 MATRIX["credit-memo post"] = {
     "E_RECORD_NOT_FOUND": "unknown customer, item, account, class, tax item, source invoice or source line",
     "E_INACTIVE_REFERENCE": "deactivated customer, item, account, class or tax item",
-    "E_VALIDATION": "no single active Accounts Receivable account, an ineligible posting account, a source invoice for another customer, a priced return, a line whose item carries stock, a document mixing returns with named items, or a zero total",
+    "E_VALIDATION": "no single active Accounts Receivable account, an ineligible posting account, a source invoice for another customer, a priced return, a line naming a stock-carrying item instead of returning one, a return that would leave stock below zero on some date, a document mixing returns with named items, or a zero total",
     "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
     "E_AMOUNT_PRECISION": "more decimals than the home currency has",
     "E_PERIOD_CLOSED": "credit date on or before the closing date",
@@ -1183,7 +1184,7 @@ MATRIX["customer-credit unapply"] = {
 MATRIX["credit-memo void"] = {
     "E_RECORD_NOT_FOUND": "unknown credit memo",
     "E_VERSION_CONFLICT": "stale expected_version",
-    "E_VALIDATION": "a reason longer than 140 characters, or ambiguous posting evidence",
+    "E_VALIDATION": "a reason longer than 140 characters, ambiguous posting evidence, or returned stock that is no longer on hand to take back out",
     "E_REASON_REQUIRED": "no reason given",
     "E_PERIOD_CLOSED": "the credit memo's own date is in a closed period",
     "E_HAS_APPLICATIONS": "a live application; unapply it first",
@@ -1299,6 +1300,7 @@ MATRIX["billing-group create"] = {
 }
 MATRIX["statement-charge void"] = {
     "E_RECORD_NOT_FOUND": "unknown statement charge",
+    "E_HAS_APPLICATIONS": "the charge still carries active applications; unapply them before voiding",
     "E_VERSION_CONFLICT": "stale expected_version",
     "E_VALIDATION": "a reason longer than 140 characters",
     "E_REASON_REQUIRED": "no reason given",

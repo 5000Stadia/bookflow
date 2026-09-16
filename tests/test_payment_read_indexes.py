@@ -17,6 +17,7 @@ from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import migrate_to_head
 from tests.test_payment_migration import raw_snapshot
+from tests import provenance
 
 BASE = 'f527a7185656745a66d136e211c5a4f140c260ad'
 MIGRATION = importlib.import_module('bookflow.storage.company_migrations.versions.0017_payment_read_indexes')
@@ -33,7 +34,7 @@ def co16(tmp_path_factory):
     root = parent / 'data'
     result = subprocess.run([sys.executable, '-c',
         'import bookflow,sys; c=bookflow.connect(data_root=sys.argv[1]); c.init(); c.demo.reset()', str(root)],
-        env=dict(os.environ, PYTHONPATH=str(source / 'src'), PYTHONDONTWRITEBYTECODE='1'), cwd=source,
+        env=provenance.child_env(str(source / 'src'), PYTHONDONTWRITEBYTECODE='1'), cwd=source,
         capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     return root
@@ -82,7 +83,7 @@ def test_public_preserving_upgrade(co16, tmp_path, statistics):
     files = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file() and 'attachments' in p.parts}
     args = [str(Path(sys.executable).parent / 'bookflow'), 'upgrade', '--data-root', str(root),
             '--reason', 'Disposable co17 preserving witness', '--json']
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, env=provenance.child_env())
     assert result.returncode == 0, result.stdout + result.stderr
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0017',)
@@ -117,7 +118,7 @@ def test_public_preserving_upgrade(co16, tmp_path, statistics):
         assert raw.execute('PRAGMA integrity_check').fetchone() == ('ok',)
     assert {name:(root/name).read_bytes() for name in files} == files
     assert list(path.parent.glob('backups/*from-co0016.db'))
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, env=provenance.child_env())
     assert result.returncode == 0, result.stdout + result.stderr
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall() == after_objects

@@ -12,7 +12,9 @@ after.
 with the credit source named in ``credit_source_key_id`` / ``credit_source_component_id``
 instead of the receipt columns. That is deliberate and it is the whole reason this was not
 given a table of its own: ``invoice_facts`` already subtracts this edge from an invoice's
-gross, ``sales.prepare`` already refuses to void an invoice that has one, ``payment_restatement``
+gross, ``sales.prepare`` already refuses to void any receivable that has one -- every type
+in ``ledger_schema.SETTLEABLE_RECEIVABLE_TYPES``, the statement charge included, not the
+invoice alone -- ``payment_restatement``
 already restates it when the invoice is corrected, and ``payments._target_components`` already
 subtracts its allocations from what a later cash payment may relieve. Twenty owners read that
 edge; a second table would have had to be added to all of them.

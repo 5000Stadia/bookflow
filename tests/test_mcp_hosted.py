@@ -6,6 +6,7 @@ import anyio
 import pytest
 
 from tests.test_row3_host import hosted, live
+from tests import provenance
 
 
 @pytest.mark.timeout(120)
@@ -21,13 +22,12 @@ def test_real_mcp_receipt_files_preview_upload_download_and_json_artifact(hosted
     outbox.mkdir(mode=0o700)
     receipt = inbox / 'Receipt é.pdf'
     receipt.write_bytes(BODY)
-    binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+    binary = provenance.launcher()
 
     async def witness():
         params = StdioServerParameters(command=binary, args=['mcp', '--url', live,
             '--input-dir', str(inbox), '--output-dir', str(outbox), '--client-name', 'mcp-file-witness'],
-            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id,
-                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.discover()
@@ -89,11 +89,10 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
     async def witness():
-        binary = os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow")))
+        binary = provenance.launcher()
         params = StdioServerParameters(command=binary,
             args=["mcp", "--url", live, "--client-name", "mcp-installed-witness"],
-            env={"BOOKFLOW_TOKEN": hosted.secret, "BOOKFLOW_COMPANY": hosted.company_id,
-                 "BOOKFLOW_DATA_ROOT": str(tmp_path / "never-created")}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / "never-created")), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await (session.initialize() if protocol == "legacy" else session.discover())
@@ -161,9 +160,8 @@ def test_installed_launcher_rejects_mixed_bridge_before_business_submission(host
     before = hosted.info()["version"]
 
     async def witness():
-        params = StdioServerParameters(command=os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow"))),
-            args=["mcp", "--url", live], env={"BOOKFLOW_TOKEN": hosted.secret,
-            "BOOKFLOW_COMPANY": hosted.company_id, "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent")}, cwd=str(tmp_path))
+        params = StdioServerParameters(command=provenance.launcher(),
+            args=["mcp", "--url", live], env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / "absent")), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -196,11 +194,10 @@ def agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
     issued = hosted.ok("token.issue", {"user": agent, "principal": principal, "label": "MCP business witness"})
 
     async def witness():
-        binary = os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow")))
+        binary = provenance.launcher()
         params = StdioServerParameters(command=binary,
             args=["mcp", "--url", live, "--client-name", "mcp-business-witness"],
-            env={"BOOKFLOW_TOKEN": issued["secret"], "BOOKFLOW_COMPANY": hosted.company_id,
-                 "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent-launcher-root")}, cwd=str(tmp_path))
+            env=provenance.child_env(BOOKFLOW_TOKEN=issued["secret"], BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path / "absent-launcher-root")), cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -302,9 +299,8 @@ def test_installed_retained_write_preflight_mismatch_keeps_identity_and_unknown(
     from mcp.client.stdio import StdioServerParameters, stdio_client
     from bookflow.adapters.mcp import bridge
     async def witness():
-        params = StdioServerParameters(command=os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow'))),
-            args=['mcp','--url',live],cwd=str(tmp_path),env={'BOOKFLOW_TOKEN':hosted.secret,
-                'BOOKFLOW_COMPANY':hosted.company_id,'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')})
+        params = StdioServerParameters(command=provenance.launcher(),
+            args=['mcp','--url',live],cwd=str(tmp_path),env=provenance.child_env(BOOKFLOW_TOKEN=hosted.secret, BOOKFLOW_COMPANY=hosted.company_id, BOOKFLOW_DATA_ROOT=str(tmp_path/'absent')))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as session:
                 await session.discover()

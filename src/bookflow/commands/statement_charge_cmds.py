@@ -36,7 +36,11 @@ DESCRIPTIONS = {
     'void': (
         'Void a statement charge with a required reason. Its accounting is reversed at its'
         ' own date, so the customer’s balance, their aging and their statement all go back'
-        ' to what they were; its number stays occupied and its history stays readable.'
+        ' to what they were; its number stays occupied and its history stays readable. A'
+        ' charge a payment or credit is still applied to is refused with'
+        ' `E_HAS_APPLICATIONS` naming those applications, exactly as an invoice is: release'
+        ' them with `payment unapply` first, so the money that settled the charge is never'
+        ' left pointing at a document worth nothing.'
     ),
     'show': (
         'Show a statement charge: its current or a selected immutable revision, the captured'
@@ -53,7 +57,7 @@ ERRORS = {
     'post': ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', 'E_VALUE_RANGE',
              'E_AMOUNT_PRECISION', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER', 'E_PREVIEW_STALE'],
     'void': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
-             'E_PERIOD_CLOSED'],
+             'E_PERIOD_CLOSED', 'E_HAS_APPLICATIONS'],
 }
 
 

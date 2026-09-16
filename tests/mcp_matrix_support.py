@@ -9,6 +9,8 @@ import re
 import shutil
 import sys
 
+import anyio
+
 import bookflow
 from bookflow.adapters.cli.app import _flatten, _leaf_type
 from bookflow.commands.host_cmds import start_serving
@@ -16,6 +18,7 @@ from bookflow.core import registry
 from bookflow.core.context import client_version
 from tests.conftest import Cli
 from tests.test_row3_host import Hosted, live
+from tests import provenance
 
 
 class Matrix:
@@ -40,13 +43,25 @@ class Matrix:
         generator = live.__wrapped__(self.hosts['mcp'])
         url = next(generator)
         self.stack.callback(generator.close)
-        binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
-        read, write = await self.stack.enter_async_context(stdio_client(StdioServerParameters(
-            command=binary, args=['mcp', '--url', url, *mcp_args], cwd=str(directory),
-            env={'BOOKFLOW_TOKEN': issued['secret'], 'BOOKFLOW_COMPANY': self.company,
-                 'BOOKFLOW_DATA_ROOT': str(directory / 'absent'), **(mcp_env or {})})))
+        parameters = StdioServerParameters(
+            command=provenance.launcher(), args=['mcp', '--url', url, *mcp_args], cwd=str(directory),
+            env=provenance.child_env(BOOKFLOW_TOKEN=issued['secret'], BOOKFLOW_COMPANY=self.company,
+                                     BOOKFLOW_DATA_ROOT=str(directory / 'absent'), **(mcp_env or {})))
+        read, write = await self.stack.enter_async_context(stdio_client(parameters))
         self.mcp = await self.stack.enter_async_context(ClientSession(read, write))
-        await self.mcp.discover()
+        # Starting the child is quick; waiting for it to speak is where a dead one
+        # leaves this side asleep on a stream nothing will ever write to. The bound
+        # goes on that wait, and only on that wait: a cancel scope around the exit
+        # stack above would unwind in a different task than it was entered in.
+        # Every parity test in the suite arrives here, so one bound covers them all.
+        try:
+            with anyio.fail_after(provenance.HANDSHAKE_SECONDS):
+                await self.mcp.discover()
+        except TimeoutError:
+            raise provenance.ChildProvenanceError(
+                f"The MCP child did not answer within {provenance.HANDSHAKE_SECONDS}s: "
+                f"{parameters.command} {' '.join(parameters.args)}\n"
+                f"Its import path was pinned to {parameters.env['PYTHONPATH']}.") from None
         return self
 
     async def close(self):

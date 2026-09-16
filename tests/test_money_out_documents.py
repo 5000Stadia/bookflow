@@ -316,8 +316,7 @@ def test_the_same_check_and_card_charge_through_python_cli_http_and_mcp(root, tm
         try:
             # MCP starts outside the checkout; bind its subprocess to these sources,
             # not whichever checkout the test venv's editable install last named.
-            await matrix.open(root, tmp_path, mcp_env={
-                'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')})
+            await matrix.open(root, tmp_path)
             for surface in matrix.documents:
                 calls = {}
 
