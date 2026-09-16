@@ -28,6 +28,8 @@ import os
 import shutil
 
 import pytest
+
+from bookflow.core.money import Money
 from fastapi.testclient import TestClient
 
 from tests.conftest import _seeded_template  # noqa: F401
@@ -245,4 +247,25 @@ def test_a_paid_statement_charge_is_readable_and_navigable_as_a_paid_receivable(
     assert _link_naming(statement_rows, 'SURF-SC-PAID') == \
         f'/c/{company.id}/statement-charge/{paid["id"]}', (
         'a statement charge on the statement opens somewhere other than the charge')
-    _readable(company, f'/c/{company.id}/statement-charge/{paid["id"]}')
+
+    # ------------------- 8. the charge's own page, which is where a person asks "was this paid?"
+    # Every surface above sends a reader here, and until now the page said nothing about the
+    # money that settled it: the settlement block and its link were built for `type == 'invoice'`
+    # and a charge is the other settleable receivable. Somebody chasing a customer arrives at the
+    # one page that will not tell them whether they have already been paid.
+    charge_page = _readable(company, f'/c/{company.id}/statement-charge/{paid["id"]}')
+    settled = company.read('read what settled the charge', 'invoice.settlement',
+                           {'invoice': paid['id']})
+    assert 'Current statement charge settlement' in charge_page, (
+        '\n  THE CHARGE\'S OWN PAGE SHOWS NO SETTLEMENT AT ALL.'
+        '\n  a statement charge is settled exactly as an invoice is -- it appears in'
+        '\n  `payment invoices`, and `payment receive` takes it wherever an invoice is named --'
+        '\n  so the page a person opens to ask whether it was paid has to answer.')
+    assert 'Current invoice settlement' not in charge_page, (
+        'the charge\'s page calls its own settlement an invoice settlement')
+    applied = Money(settled['applied_minor_units'], settled['currency']).to_dict()['amount']
+    assert applied in charge_page, (
+        f'\n  THE CHARGE\'S PAGE DOES NOT SAY WHAT WAS APPLIED TO IT.'
+        f'\n  `invoice settlement` reports {applied} applied; the page carries no such figure.')
+    assert f'href="/c/{company.id}/invoice/{paid["id"]}/settlement"' in charge_page, (
+        'the charge\'s page offers no way through to its settlement and applications')

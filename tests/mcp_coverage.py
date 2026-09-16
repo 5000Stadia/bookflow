@@ -44,9 +44,10 @@ payment void""".splitlines())
 # four through `matrix.documents`. A two-surface witness is real evidence and is not four-surface
 # parity, and the label must not be read as the stronger claim.
 #
-# `bill delete` and `payment delete` deliberately have no entry -- their executed evidence is HTTP
-# and real Chrome, with no CLI/MCP matrix witness anywhere -- so they fall through to a pending row
-# rather than being counted as parity they do not have.
+# `bill delete` and `payment delete` now hold witnesses of their own, each driving cli, http and
+# mcp and asserting the books the deletion leaves behind. Until those existed their only executed
+# evidence was HTTP and real Chrome, and they sat in a pending row rather than being counted as
+# parity they did not have.
 BATCH_2026_09_COMMANDS = frozenset("""bill delete
 card-charge delete
 check delete
@@ -530,6 +531,10 @@ def execution_map():
     from tests.test_sales_deletion_transports import COMMANDS as SALES_DELETE_COMMANDS
     from tests.test_receiving_surfaces import COMMANDS as RECEIVING_COMMANDS
     from tests.test_permission_setup_surfaces import COMMANDS as SETUP_SURFACE_COMMANDS
+    from tests.test_bill_deletion_transports import COMMANDS as BILL_DELETE_COMMANDS
+    from tests.test_payment_deletion_transports import COMMANDS as PAYMENT_DELETE_COMMANDS
+    from tests.test_customer_refund_correction_surfaces import COMMANDS as REFUND_CORRECTION_COMMANDS
+    from tests.test_vendor_credit_correction_surfaces import COMMANDS as VENDOR_CREDIT_CORRECTION_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -578,6 +583,10 @@ def execution_map():
                    'tests/test_sales_deletion_transports.py::test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history' if cmd.name in SALES_DELETE_COMMANDS else  # cli, http, mcp
                    'tests/test_receiving_surfaces.py::test_receiving_and_linked_bill_cross_all_four_actual_transports' if cmd.name in RECEIVING_COMMANDS else  # all four
                    'tests/test_permission_setup_surfaces.py::test_permission_setup_crosses_all_four_actual_transports' if cmd.name in SETUP_SURFACE_COMMANDS else  # all four
+                   'tests/test_bill_deletion_transports.py::test_bill_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books' if cmd.name in BILL_DELETE_COMMANDS else  # cli, http, mcp
+                   'tests/test_payment_deletion_transports.py::test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books' if cmd.name in PAYMENT_DELETE_COMMANDS else  # cli, http, mcp
+                   'tests/test_customer_refund_correction_surfaces.py::test_correcting_a_refund_crosses_all_four_actual_transports' if cmd.name in REFUND_CORRECTION_COMMANDS else  # all four
+                   'tests/test_vendor_credit_correction_surfaces.py::test_correcting_and_reading_a_vendor_credit_crosses_all_four_actual_transports' if cmd.name in VENDOR_CREDIT_CORRECTION_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
@@ -585,10 +594,55 @@ def execution_map():
         result.append({'command': cmd.name, 'mode': mode, 'scope': cmd.scope, 'kind': cmd.kind,
             'preview': cmd.is_write, 'idempotency_key': cmd.accepts_idempotency_key,
             'clearable': cmd.clearable, 'execution_witness': witness,
-            'coverage': 'local_lifecycle_scenario' if cmd.name in LOCAL_COMMANDS else 'four_surface_scenario' if witness else 'pending_four_surface_or_local_lifecycle',
+            'coverage': _coverage(cmd, witness, LOCAL_COMMANDS),
+            'surfaces': _surfaces(witness),
             'local_valid_witnesses': LOCAL_VALID_WITNESSES.get(cmd.name, []),
             'publication': permissions[cmd.name]})
     return result
+
+
+def _witness_surfaces(witness):
+    """The surfaces a witness test says it drives, or None when it does not say.
+
+    Read from the witness module's own `SURFACES`, beside the `COMMANDS` it declares, because the
+    test is the only thing that knows. A witness that does not declare is not assumed to drive all
+    four -- it is labelled for what is known about it, which is that it drives the product over
+    some transport.
+    """
+    import importlib
+    module = importlib.import_module(witness.split('::')[0].removesuffix('.py').replace('/', '.'))
+    declared = getattr(module, 'SURFACES', None)
+    return frozenset(declared) if declared else None
+
+
+ALL_SURFACES = frozenset(('python', 'cli', 'http', 'mcp'))
+
+
+def _surfaces(witness):
+    if witness is None:
+        return None
+    try:
+        declared = _witness_surfaces(witness)
+    except Exception:
+        return None
+    return tuple(sorted(declared)) if declared else None
+
+
+def _coverage(cmd, witness, local_commands):
+    """What is actually known about this command's executed evidence.
+
+    `four_surface_scenario` is reserved for a witness that declares all four surfaces. Everything
+    else with a witness is `transport_scenario`: real executed evidence over at least one real
+    transport, which is not the same claim. The label used to be `four_surface_scenario` for every
+    witness, which overstated every two- and three-surface row in the generated ledger -- and a
+    comment telling a reader not to trust the label does not fix a generated artifact.
+    """
+    if cmd.name in local_commands:
+        return 'local_lifecycle_scenario'
+    if witness is None:
+        return 'pending_four_surface_or_local_lifecycle'
+    return 'four_surface_scenario' if _surfaces(witness) and frozenset(_surfaces(witness)) == ALL_SURFACES \
+        else 'transport_scenario'
 
 
 class Controls(HTMLParser):

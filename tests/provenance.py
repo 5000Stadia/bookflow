@@ -86,6 +86,19 @@ PREFLIGHT_SECONDS = 60      # the product, started once as a child, saying anyth
 CHILD_SECONDS = 300         # one CLI witness, start to exit
 HANDSHAKE_SECONDS = 90      # an MCP child's first reply over its own pipe
 
+# The floor for a test that drives the four-surface Matrix, and the reason it is derived rather
+# than chosen. Such a test is permitted to spend PREFLIGHT_SECONDS starting a child, then
+# HANDSHAKE_SECONDS waiting for the MCP child to speak, then CHILD_SECONDS on a *single* CLI
+# witness -- and it makes many. A per-test cap below that sum can kill a run while a call it is
+# expressly allowed to make is still inside its own bound, which is not a timeout, it is a test
+# killing itself. `test_purchase_deletion_transports` carried 180 and was killed at 181.29s and
+# 181.47s in two independent runs doing nothing wrong.
+#
+# This is a floor, not a budget: a cap must be high enough to be incoherent to trip by accident,
+# and low enough to catch a genuine hang. Raise a test above it when the test earns it; never
+# set one below it.
+MATRIX_SECONDS = PREFLIGHT_SECONDS + HANDSHAKE_SECONDS + CHILD_SECONDS
+
 
 class ChildProvenanceError(AssertionError):
     """A child could not be started or could not answer. Says which, and why."""

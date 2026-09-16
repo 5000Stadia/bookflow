@@ -17,8 +17,8 @@ def resolves(witness):
     Static resolution is the cheap half of the check and is worth keeping -- a cited name that
     was renamed or deleted is caught here in milliseconds. The other half cannot be done
     statically, because the breakage is at run time: it needs the witnesses actually executed.
-    `notes/witnesses.sh` derives this ledger's distinct witnesses and runs them, and that is
-    what a parity claim rests on. Do not read a green run of this file as a parity claim.
+    `scripts/witness-suite.sh` derives this ledger's distinct witnesses and runs them, and that
+    is what a parity claim rests on. Do not read a green run of this file as a parity claim.
     """
     filename, name = witness.split('::')
     module = ast.parse(Path(filename).read_text())
@@ -28,10 +28,22 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 444
-    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 439
+    assert len(rows) == 462
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
+    # The claim worth asserting: every registered command has an executed witness, and none is
+    # pending. What used to sit here instead was a count of `four_surface_scenario` rows -- which
+    # the ledger emitted for ANY witness, so a two-surface test raised the number exactly as a
+    # four-surface one did. That count could only ever confirm itself.
     assert all(row['execution_witness'] and not row['coverage'].startswith('pending') for row in rows)
+    # A row may claim all four surfaces only if its witness declares them. Nine do today; the rest
+    # are `transport_scenario` -- real executed evidence over at least one real transport, which is
+    # a weaker claim honestly made. Adding `SURFACES` to a witness that does drive all four is
+    # mechanical and moves its rows up.
+    for row in rows:
+        if row['coverage'] == 'four_surface_scenario':
+            assert row['surfaces'] and set(row['surfaces']) == {'python', 'cli', 'http', 'mcp'}, row
+        if row['surfaces']:
+            assert set(row['surfaces']) <= {'python', 'cli', 'http', 'mcp'}, row
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
     assert {row['mode'] for row in rows} == {'routed_json', 'advisory', 'binary_input', 'binary_output', 'local_lifecycle', 'standalone_local', 'standalone_protocol', 'finite_poll_with_local_follow'}
     # A witness that does not exist is the failure this ledger exists to catch, so
@@ -76,7 +88,23 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
-    assert sum(len(group["paths"]) for group in mapped)==2565
+    #
+    # 2565 -> 2694 since 666465a, and every one of the 129 is accounted for by a command that
+    # landed. Re-measure it the same way when it moves again -- per-command node counts on both
+    # trees, differenced -- because a census bumped without that arithmetic hides new shape.
+    #   +79  18 commands that did not exist: item-receipt update 19, item-receipt post 17,
+    #        vendor-credit update 15, customer-refund update 13, item-receipt query 5, and one
+    #        node each for the six delete verbs, item-receipt show/void, membership effective,
+    #        vendor-credit history (permission show/activate and item-receipt history add none).
+    #   +34  the Items grid on money-out documents: check and card-charge post (+8 each) and
+    #        update (+9 each) gained /items with its line_id, description, customer, class_id,
+    #        unit_cost and amount.
+    #   +10  bills built from receipts: bill post and update (+5 each) gained /receipts with its
+    #        unit_cost and amount.
+    #    +4  membership grant gained /grants, /denies and /expected_version, and revoke gained
+    #        /expected_version -- the explicit per-family Delete grant and its version guard.
+    #    +2  customer-refund show gained /revision_number; company attach gained /administrator.
+    assert sum(len(group["paths"]) for group in mapped)==2694
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

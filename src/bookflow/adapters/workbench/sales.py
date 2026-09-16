@@ -14,6 +14,10 @@ from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
 from bookflow.documents.model import address_lines
 # One home for the print route's shape, shared with the estimate and the statement.
 from bookflow.adapters.workbench.document_print import document_url
+# One home for turning a stored transaction type into the segment its page lives at.
+from bookflow.adapters.workbench.transaction_detail import document_noun
+# The settlement contract: which receivables money can be applied to.
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 
 
 def _id(value):
@@ -88,11 +92,27 @@ def preserve_line_origins(raw, originals):
 
 
 
+def nouns():
+    """The documents this page renders: every noun whose `show` returns `SalesOutput`.
+
+    Derived rather than listed, because the reason these share one page is that they share
+    one output shape. A fourth document that adopts it renders on the day it lands, and one
+    that stops is dropped on the day it stops -- which is how `statement-charge` came to be
+    missing from a hand-kept pair for as long as it did.
+    """
+    from bookflow.core import registry
+    from bookflow.company.sales_outputs import SalesOutput
+    return frozenset(command.name.removesuffix(' show')
+                     for command in registry.all_commands(include_standalone=True)
+                     if command.name.endswith(' show')
+                     and getattr(command, 'output_model', None) is SalesOutput)
+
+
 def detail_context(record, company_id, *, preview=False):
     """Template context from the selected revision, including safe local links."""
     record = deepcopy(record)
     revision = record['revision']
-    noun = 'invoice' if record['type'] == 'invoice' else 'sales-receipt'
+    noun = document_noun(record['type'])
     base = '/c/' + quote(str(company_id), safe='') + '/' + noun
     url = base + '/' + quote(str(record['id']), safe='')
     links = []
@@ -123,11 +143,18 @@ def detail_context(record, company_id, *, preview=False):
     if settlement:
         for field in ('gross', 'applied', 'due'):
             settlement[field] = Money(settlement[field + '_minor_units'], settlement['currency']).to_dict()
+    from bookflow.core import registry
     return dict(record=record, revision=revision, profile=revision['profile'], preview=preview,
                 print_url=print_url, credit_url=credit_url,
                 tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
-                settlement=settlement, settlement_url=url+'/settlement',
-                title='Invoice' if noun == 'invoice' else 'Sales receipt', links=links,
+                settlement=settlement,
+                # A settlement page exists for what money can be applied to, and the page it
+                # lives at is the invoice route for both kinds -- `_settled_document` resolves
+                # the real type out of the settlement's own row.
+                settleable=record['type'] in SETTLEABLE_RECEIVABLE_TYPES,
+                settlement_url='/c/' + quote(str(company_id), safe='') + '/invoice/'
+                               + quote(str(record['id']), safe='') + '/settlement',
+                title=registry.noun_meta(noun)['singular_label'], links=links,
                 issuer=issuer, billing=address_lines(revision['profile'].get('billing_address')),
                 shipping=address_lines(revision['profile'].get('shipping_address')),
                 issuer_address=address_lines({k.removeprefix('address_'): v for k, v in issuer.items() if k.startswith('address_')}))

@@ -7,21 +7,41 @@ than a surprise for whoever calls the odd one out.
 
 The scenario is the whole vertical slice: open some stock, read it back, run both reports it
 feeds, take the adjustment back out, and be refused for naming an item that carries no stock.
+
+**Every figure is derived from the company in front of it, never pinned.** The seeded demo
+already holds this item and already sells it, so the adjustment is one movement among many and
+the company's asset total is not this adjustment's total. What is asserted is what the
+adjustment is answerable for: the quantity rises by exactly `quantity_change` and the void puts
+it back, and the stock asset rises by exactly `value_change` **plus the corrections the
+adjustment itself declares**.
+
+That second clause is the part worth having. This adjustment is dated 2026-05-04 into a company
+that issued this item later in the year, so backdating a receipt re-costs that later issue under
+average costing. The product posts the correction and names it in `corrections`, with its date,
+the movement it corrects and its delta. Requiring the two reports to have moved by exactly
+value_change plus those declared corrections proves the re-costing did what it said it did --
+which a total pinned to an empty company never could, and could not survive a reseed either.
 """
 from copy import deepcopy
+from decimal import Decimal
 
 import pytest
 
 ITEM = 'Brass Shutoff Valve'
 SERVICE = 'Copper Coupling'
-OPENING = '114.00'        # 11400 minor units for ten units, so 11.40 each
+OPENING = '114.00'        # what this adjustment puts in
+OPENING_MINOR = 11400
 UNITS = '10'
 
 COMMANDS = frozenset(('inventory adjust', 'inventory show', 'inventory void',
                       'report inventory-valuation', 'report stock-status'))
 
 
-@pytest.mark.timeout(300)
+def _row(report, item):
+    return next(row for row in report['rows'] if row['item_id'] == item)
+
+
+@pytest.mark.timeout(600)
 def test_the_same_inventory_adjustment_through_python_cli_http_and_mcp(root, tmp_path):
     pytest.importorskip('mcp')
     import anyio
@@ -43,6 +63,15 @@ def test_the_same_inventory_adjustment_through_python_cli_http_and_mcp(root, tmp
 
                 item = (await matrix.call(surface, 'item show', {'item': ITEM}))['id']
                 service = (await matrix.call(surface, 'item show', {'item': SERVICE}))['id']
+
+                # What this company already holds, before the adjustment touches it.
+                opening = await call('report inventory-valuation',
+                                     {'as_of': '2026-12-31', 'limit': 50})
+                held = _row(opening, item)
+                opening_units = Decimal(held['quantity_on_hand'])
+                opening_item = held['asset_value']['minor_units']
+                opening_company = opening['totals']['asset_value']['minor_units']
+
                 entry = dict(item=item, date='2026-05-04',
                              adjustment_account='Opening Balance Equity',
                              quantity_change=UNITS, value_change=OPENING,
@@ -51,18 +80,43 @@ def test_the_same_inventory_adjustment_through_python_cli_http_and_mcp(root, tmp
                 posted = await call('inventory adjust', entry, idempotency_key='inventory-1')
                 replay = await call('inventory adjust', entry, idempotency_key='inventory-1')
                 assert replay['id'] == posted['id'] and replay['idempotent_replay']
-                assert posted['adjustment']['quantity_on_hand'] == UNITS
-                assert posted['adjustment']['average_cost']['amount'] == '11.40'
+
+                adjustment = posted['adjustment']
+                assert adjustment['value_change']['minor_units'] == OPENING_MINOR
+                assert Decimal(adjustment['quantity_on_hand']) == opening_units + Decimal(UNITS)
+                # Backdating a receipt into a company that already issued this item re-costs
+                # the later issues. The adjustment names every correction that forced, so the
+                # stock asset moves by what went in less what those corrections took back.
+                corrections = sum(row['delta']['minor_units'] for row in adjustment['corrections'])
+                moved = OPENING_MINOR + corrections
+                assert adjustment['inventory_value']['minor_units'] == opening_item + moved
 
                 shown = await call('inventory show', {'adjustment': posted['id']})
-                assert shown['adjustment']['inventory_value']['amount'] == OPENING
+                assert shown['adjustment']['value_change']['minor_units'] == OPENING_MINOR
+                assert shown['adjustment']['inventory_value'] == adjustment['inventory_value']
+                assert shown['adjustment']['average_cost'] == adjustment['average_cost']
+
                 valuation = await call('report inventory-valuation',
                                        {'as_of': '2026-12-31', 'limit': 50})
-                assert valuation['totals']['asset_value']['amount'] == OPENING
+                assert valuation['totals']['asset_value']['minor_units'] == opening_company + moved
+                after = _row(valuation, item)
+                assert Decimal(after['quantity_on_hand']) == opening_units + Decimal(UNITS)
+                # The writer and the report are two readers of one number, and they agree.
+                assert after['asset_value'] == adjustment['inventory_value']
+                assert after['average_cost'] == adjustment['average_cost']
+
                 status = await call('report stock-status', {'as_of': '2026-12-31', 'limit': 50})
-                assert status['totals']['asset_value']['amount'] == OPENING
+                assert status['totals']['asset_value']['minor_units'] == opening_company + moved
+                assert _row(status, item)['asset_value'] == adjustment['inventory_value']
+
                 await call('inventory void', {'adjustment': posted['id'],
                                               'expected_version': posted['version']})
+                # The void gives back the stock and the money, corrections included.
+                restored = await call('report stock-status', {'as_of': '2026-12-31', 'limit': 50})
+                assert restored['totals']['asset_value']['minor_units'] == opening_company
+                back = _row(restored, item)
+                assert Decimal(back['quantity_on_hand']) == opening_units
+                assert back['asset_value']['minor_units'] == opening_item
 
                 refused = await call('inventory adjust', {
                     **entry, 'number': 'PINV-2', 'item': service}, rejected=True)

@@ -9,6 +9,10 @@ from tests.payment_raw_evidence import database
 
 # The commands this test is the designated four-surface witness for; the coverage ledger imports
 # this set rather than restating the names beside a path it cannot check.
+# The surfaces this test actually drives. The coverage ledger reads this rather than
+# assuming four, because a two- or three-surface witness is real evidence and is not
+# four-surface parity.
+SURFACES = ('python', 'cli', 'http', 'mcp')
 COMMANDS = frozenset(('item-receipt post', 'item-receipt show', 'item-receipt query',
                       'item-receipt update', 'item-receipt history', 'item-receipt void'))
 

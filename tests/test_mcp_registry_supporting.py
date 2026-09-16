@@ -6,6 +6,8 @@ import sqlite3
 import anyio
 import pytest
 
+from tests import provenance
+
 import bookflow
 from bookflow.core import registry
 from bookflow.documentation.examples import EXAMPLES
@@ -28,7 +30,7 @@ FAMILIES = {
 }
 
 
-@pytest.mark.timeout(240)
+@pytest.mark.timeout(provenance.MATRIX_SECONDS)
 @pytest.mark.parametrize('family', FAMILIES)
 def test_supporting_family_full_documents_and_rejections(root, tmp_path, family):
     registry.load_all()

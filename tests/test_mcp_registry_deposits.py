@@ -111,6 +111,14 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
         with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True) as db:
             for line in db.iterdump():
                 baseline_ids.update(re.findall(r'\b[0-9A-HJKMNP-TV-Z]{26}\b', line))
+    # What the seeded company already recorded against a deposit command before any surface
+    # touched it. Read rather than assumed: the seed banks a deposit of its own, in-process,
+    # and every surface's copy inherits that row.
+    inherited = []
+    for path in root.rglob('company.db'):
+        with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True) as db:
+            inherited += db.execute("SELECT command,interface FROM audit_events "
+                                    "WHERE command LIKE 'deposit %' ORDER BY seq").fetchall()
 
     async def witness():
         matrix, deposits = Matrix(), {}
@@ -118,11 +126,24 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
             await matrix.open(root, tmp_path)
             for surface in matrix.documents:
                 calls = {}
+                # Every write this surface actually completed, in the order it completed them.
+                # The audit trail is asserted against this rather than against a pinned count.
+                # A count says nothing about which commands were recorded, in what order, or
+                # over which transport, and it goes stale the moment this lifecycle gains a
+                # verb -- which is how the assertion below came to expect three rows against a
+                # trail of four. Two things decide membership and neither can be assumed:
+                # a dry run writes nothing, and an idempotent replay changes nothing and is
+                # not audited either, so the answer comes from what the product returned.
+                audited = []
 
                 async def call(name, data, **ctx):
+                    answer = await matrix.call(surface, name, data, **ctx)
                     if not ctx.get('rejected'):
                         calls[name] = deepcopy(data)
-                    return await matrix.call(surface, name, data, **ctx)
+                        if (registry.get(name).is_write and not ctx.get('dry_run')
+                                and not (isinstance(answer, dict) and answer.get('idempotent_replay'))):
+                            audited.append(name)
+                    return answer
 
                 available = await call('deposit sources', dict(date='2026-06-03', limit=200))
                 assert available['total_count'] == 2 and available['subtotal']['minor_units'] == 16000
@@ -223,7 +244,15 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
                 with sqlite3.connect((path / 'hub.db').as_uri() + '?mode=ro', uri=True) as db:
                     relative = db.execute('SELECT path FROM companies WHERE id=?', (matrix.company,)).fetchone()[0]
                 with sqlite3.connect((path / relative / 'company.db').as_uri() + '?mode=ro', uri=True) as db:
-                    assert db.execute("SELECT interface FROM audit_events WHERE command LIKE 'deposit %'").fetchall() == [(surface,)] * 3
+                    trail = db.execute("SELECT command,interface FROM audit_events "
+                                       "WHERE command LIKE 'deposit %' ORDER BY seq").fetchall()
+                    # Each surface works on its own copy of the seeded company, and the seed
+                    # banks a deposit of its own in-process -- so every copy inherits that row,
+                    # attributed to `python`, before this test touches it. What this asserts is
+                    # what THIS surface added: one audited event per completed write, in order,
+                    # each attributed to the transport it actually arrived over.
+                    assert trail == inherited + [(name, surface) for name in audited], (
+                        surface, trail, inherited, audited)
                     batches = db.execute('SELECT sum(debit_minor_units),sum(credit_minor_units) FROM posting_lines '
                                          'WHERE transaction_id=? GROUP BY batch_id', (deposits[surface],)).fetchall()
                     assert len(batches) == 4 and all(debit == credit for debit, credit in batches)
