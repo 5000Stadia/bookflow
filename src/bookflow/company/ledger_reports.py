@@ -22,12 +22,17 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 from bookflow.core.session import now_iso
 from bookflow.company.ledger_schema import TRANSACTION_TYPES
+from bookflow.company.money_out_schema import KINDS as MONEY_OUT_KINDS
 from bookflow.company.query import permission_fingerprint
 
 I64_MIN, I64_MAX = -(2**63), 2**63 - 1
 # Read off the schema rather than retyped: a report that closes this set by hand stops
 # validating the day a new document type posts, and does it silently.
 TransactionType = Literal[TRANSACTION_TYPES]
+# What a person entered a document *as*, where its transaction type cannot say. A check,
+# a credit card charge and a transfer all post as journal entries, so a row carrying one
+# of these opens the document it was entered as rather than the journal it posts through.
+MoneyOutKind = Literal[MONEY_OUT_KINDS]
 # What a posting line's split column says when the entry has more than two lines and so
 # has no single other side. The bookkeeping convention every register prints.
 MANY_SPLITS = "-SPLIT-"
@@ -227,6 +232,7 @@ class GeneralLedgerRow(StrictModel):
     batch_kind: Literal["original", "reversal", "replacement"] | None = None
     transaction_id: str | None = None
     transaction_type: TransactionType | None = None
+    money_out_kind: MoneyOutKind | None = None
     transaction_number: str | None = None
     revision_id: str | None = None
     reverses_batch_id: str | None = None
@@ -252,6 +258,7 @@ class TransactionDetailRow(StrictModel):
     display_account_label: str
     date: str | None = None
     transaction_type: TransactionType | None = None
+    money_out_kind: MoneyOutKind | None = None
     transaction_number: str | None = None
     party_name: str | None = None
     description: str | None = None
@@ -755,13 +762,14 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
           LIMIT :limit OFFSET :offset)
           SELECT p.*, a.full_name AS current_account_label, a.name AS current_account_name,
             a.number AS current_account_number, e.batch_kind, e.transaction_id,
-            t.type AS transaction_type,
+            t.type AS transaction_type, m.kind AS money_out_kind,
             e.revision_id, r.number AS transaction_number, e.reverses_batch_id, e.replaces_batch_id,
             e.recorded_at, e.account_snapshot, e.party_name, e.class_name, e.description
           FROM page p JOIN accounts a ON a.id=p.account_id
           LEFT JOIN effects e ON e.id=p.posting_line_id
           LEFT JOIN transaction_revisions r ON r.id=e.revision_id
           LEFT JOIN transactions t ON t.id=e.transaction_id
+          LEFT JOIN money_out_documents m ON m.transaction_id=t.id AND m.type=t.type
           ORDER BY {account_order("a.")}, p.phase, p.effective_date, p.batch_id, p.line_no, p.posting_line_id
         """, {**params, "limit": inp.limit+1, "offset": offset})
         columns = [d[0] for d in result.description]
@@ -830,13 +838,14 @@ def transaction_detail(inp: TransactionDetailInput, s, *, principal_id=None) -> 
           LIMIT :limit OFFSET :offset)
           SELECT p.*, a.full_name AS current_account_label, a.name AS current_account_name,
             a.number AS current_account_number, e.batch_kind, e.transaction_id,
-            t.type AS transaction_type,
+            t.type AS transaction_type, m.kind AS money_out_kind,
             e.revision_id, r.number AS transaction_number, r.memo AS memo,
             e.recorded_at, e.account_snapshot, e.party_name, e.class_name, e.description
           FROM page p JOIN accounts a ON a.id=p.account_id
           LEFT JOIN effects e ON e.id=p.posting_line_id
           LEFT JOIN transaction_revisions r ON r.id=e.revision_id
           LEFT JOIN transactions t ON t.id=e.transaction_id
+          LEFT JOIN money_out_documents m ON m.transaction_id=t.id AND m.type=t.type
           ORDER BY {account_order("a.")}, p.phase, p.effective_date, p.batch_id, p.line_no, p.posting_line_id
         """, {**params, "limit": inp.limit + 1, "offset": offset})
         columns = [d[0] for d in result.description]

@@ -19,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from bookflow.adapters.workbench import missing_checks, statements, transaction_detail
+from bookflow.company import ledger_reports, ledger_schema, money_out_schema
 
 from tests.test_financial_statements_browser import fill
 from tests.test_row3_host import PASSWORD, hosted  # noqa: F401
@@ -109,9 +110,9 @@ def _run_report(browser, url):
                                                headers={"X-Bookflow-Workbench": "1"}))
 
 
-def _report_rows(page):
+def _report_rows(page, table="report-lines"):
     """Only the report's own table, so the surrounding navigation is never mistaken for a row."""
-    start = page.index('id="report-lines"')
+    start = page.index(f'id="{table}"')
     return page[start:page.index("</table>", start)]
 
 
@@ -123,9 +124,9 @@ def _ledger_link(page, company_id):
     return found[0]
 
 
-def _document_links(page, company_id):
-    """Every ledger row's own document link, which is the step this file exists for."""
-    return [(href, text) for href, text in _anchors(_report_rows(page))
+def _document_links(page, company_id, table="report-lines"):
+    """Every report row's own document link, which is the step this file exists for."""
+    return [(href, text) for href, text in _anchors(_report_rows(page, table))
             if href.startswith(f"/c/{company_id}/") and "/report/" not in href]
 
 
@@ -166,18 +167,55 @@ def test_a_ledger_row_links_its_document_and_keeps_the_position_it_was_read_at()
                                      "&source_report_watermark=7")
 
 
+def _row_a_ledger_publishes(**names):
+    """One general-ledger row, built through the report's own model rather than by hand.
+
+    A hand-written dict is how the assertion below came to be green about a row no report
+    can produce. ``{"transaction_type": "check"}`` reads perfectly plausibly and is what the
+    test used to assert on; a general ledger has never emitted it, because ``check`` is a
+    deletion family and never a transaction type. Built here, the model refuses it, so a row
+    shape that cannot exist fails the test instead of passing it.
+    """
+    zero = ledger_reports.money(0, "USD")
+    return ledger_reports.GeneralLedgerRow(
+        kind="posting", account_id="A", current_account_label="A", current_account_name="A",
+        current_account_number=None, display_account_label="A",
+        signed_balance=zero, debit=zero, credit=zero, transaction_id="X", **names).model_dump()
+
+
+def _how_a_report_names(family):
+    """What a report row calls a document of this deletion family: its type, and its kind.
+
+    Two vocabularies meet here and they are not the same one. A deletion family is a
+    business kind of document; ``transaction_type`` is how the ledger stores it. They
+    coincide for the four families that post as themselves and diverge for exactly the two
+    that do not: a check and a card charge post *as* journal entries, and only the money-out
+    marker says which was entered. Both halves are read from the declarations that own them,
+    and a family neither can name fails rather than being quietly skipped -- a family whose
+    documents no report row can name is a family whose deletions nobody can reach.
+    """
+    if family in ledger_schema.TRANSACTION_TYPES:
+        return {"transaction_type": family}
+    if family in money_out_schema.KINDS:
+        return {"transaction_type": money_out_schema.DOCUMENT_TYPE, "money_out_kind": family}
+    raise AssertionError(f"no report row can name a {family}, so its deletions cannot be reached")
+
+
 def test_every_deletable_family_can_be_reached_from_a_report():
     """The families whose documents can be hidden from lists all ask for their history.
 
     Named from the deletion registry rather than from a list kept here, so a family that
-    ships a deletion tomorrow is covered on the day it ships.
+    ships a deletion tomorrow is covered on the day it ships. What the registry hands over
+    is a family name, which is not what a report row carries, so it is translated through
+    the two declarations that own the two spellings and then put through the report's own
+    row model -- because the whole failure this guards against is an assertion that passes
+    against a row the product never builds.
     """
     from bookflow.core.deletion_families import TOMBSTONE_TABLE
     for family in TOMBSTONE_TABLE:
-        noun = transaction_detail.document_noun(family)
-        if noun is None:  # a family whose stored type is not its own report row
-            continue
-        link = transaction_detail.document_link("CO", {"transaction_id": "X", "transaction_type": family})
+        row = _row_a_ledger_publishes(**_how_a_report_names(family))
+        link = transaction_detail.document_link("CO", row)
+        assert link is not None, f"a ledger row naming a {family} offered no way to open it"
         assert "include_deleted=1" in link, f"{family} could not be opened as retained history"
 
 
@@ -424,3 +462,80 @@ def test_a_cheque_beside_a_hole_is_followed_to_the_cheque_even_once_it_is_delete
     retained = _page(browser, occupants["900001"])
     assert "900001" in retained, "following the deleted cheque did not open it"
     assert reason in retained, "the retained cheque did not present itself as deleted history"
+
+    # And the same deleted cheque from the general ledger, which is the other page a person
+    # lands on holding a chequebook. A cheque posts as a journal entry, so a ledger row that
+    # knew only its transaction type opened `/journal/<id>`, which cannot be asked for
+    # retained history and refuses a deleted cheque outright.
+    ledger = _run_report(browser, f"/c/{company}/report/general-ledger?f:account={book['id']}"
+                         + "&f:date_from=2031-06-01&f:date_to=2031-06-03")
+    from_ledger = [href for href, _ in _document_links(ledger, company) if first["id"] in href]
+    assert from_ledger, "the deleted cheque's ledger rows no longer offered the document behind them"
+    assert all("/check/" in href for href in from_ledger), \
+        f"the general ledger opened the deleted cheque as {from_ledger[0]}"
+    from_ledger_page = _page(browser, from_ledger[0])
+    assert "900001" in from_ledger_page
+    assert reason in from_ledger_page, \
+        "the cheque opened from the general ledger did not present itself as deleted history"
+
+    # Transaction detail reads the same lines through a query of its own, so it is walked
+    # rather than assumed to follow: two queries carrying the same fact is two places it can
+    # be missing from, and the shared link cannot tell which one forgot.
+    detail = _run_report(browser, f"/c/{company}/report/transaction-detail"
+                         + "?f:date_from=2031-06-01&f:date_to=2031-06-03")
+    from_detail = [href for href, _ in _document_links(detail, company) if first["id"] in href]
+    assert from_detail, "the deleted cheque's transaction-detail rows offered no document behind them"
+    assert all("/check/" in href for href in from_detail), \
+        f"transaction detail opened the deleted cheque as {from_detail[0]}"
+    assert reason in _page(browser, from_detail[0]), \
+        "the cheque opened from transaction detail did not present itself as deleted history"
+
+
+@pytest.mark.timeout(900)
+def test_a_customer_statement_row_hands_on_what_every_other_report_row_hands_on(hosted):  # noqa: F811
+    """A statement row is followed to its document, carrying the two things a link carries.
+
+    A statement had been building its own path once it knew the noun, so it lost both: the
+    audit position the statement was read at, and the request for retained history that a
+    report summing immutable effects has to make. Neither can be seen by looking at the page;
+    the link is taken out of it and fetched, and the document has to say which reading of the
+    books sent the reader here.
+    """
+    browser = TestClient(hosted.handle.app)
+    assert browser.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    company = hosted.company_id
+
+    credit = hosted.ok("credit-memo.post", {
+        "customer": "Commercial Example Customer", "date": "2031-05-09",
+        "number": "DRILL-CREDIT-1", "sales_tax_item": "Commercial Example Tax 8%",
+        "customer_tax_code": "Tax",
+        "lines": [{"item": "Commercial Example Service", "quantity": "1"}]},
+        company=company, headers={"X-Bookflow-Reason": "Credit a service that was not delivered"})
+
+    statement = _run_report(browser, f"/c/{company}/report/statement?"
+                            + "&".join(f"{key}={value}" for key, value in PERIOD.items()))
+    links = _document_links(statement, company, "statement-lines")
+    assert links, "no row on this statement offered the document behind it"
+
+    found = [href for href, _ in links if credit["id"] in href]
+    assert found, f"the credit memo row offered no way to open it; the row's links were {links}"
+    assert "source_report_watermark=" in found[0], \
+        "a statement row lost the audit position the statement was read at"
+    watermark = found[0].split("source_report_watermark=")[1].split("&")[0]
+
+    opened = _page(browser, found[0])
+    assert credit["id"] in opened, f"following {found[0]} did not open what the row named"
+    assert "DRILL-CREDIT-1" in opened, "the page the credit memo row opened does not name it"
+    assert f"audit watermark {watermark}" in opened, \
+        "the document did not say which reading of the books sent the reader here"
+
+    # A family that can be deleted asks for its retained history, the way every other
+    # report's rows do, and every row still opens what it names.
+    deletable = [href for href, _ in links if "/invoice/" in href or "/sales-receipt/" in href]
+    assert deletable, "this statement printed no document of a family that can be deleted"
+    assert all("include_deleted=1" in href for href in deletable), \
+        f"a statement row could not ask for its retained history: {deletable}"
+    for href in dict.fromkeys(href for href, _ in links):
+        document = _page(browser, href)
+        assert href.split("?")[0].rsplit("/", 1)[-1] in document, \
+            f"following {href} did not open what the row named"

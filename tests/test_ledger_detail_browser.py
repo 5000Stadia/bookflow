@@ -130,9 +130,15 @@ def test_transaction_detail_and_missing_checks_pages(register_browser, tmp_path)
     assert 'CDP Plumbing Supply' in visible, visible
     assert 'Check 1001 to the supplier' in visible, visible
     assert '-SPLIT-' in visible and env.expense['full_name'] in visible, visible
-    # The document a line came from opens where it was written.
+    # The document a line came from opens where it was written -- which for this line is a
+    # check, and a check is not the journal entry it posts as. A row that knew only its
+    # transaction type sent the reader to `/journal/<id>`: a page that cannot be asked for
+    # retained history, so it refused the cheque outright once anybody deleted it. The row
+    # now opens the document a person entered, and asks for the history behind it.
     posted = next(row for row in expected['rows'] if row['kind'] == 'posting')
-    assert b.evaluate(f'!!document.querySelector(`a[href$="/journal/{posted["transaction_id"]}"]`)')
+    opens = f'document.querySelector(`#report-lines a[href*="/check/{posted["transaction_id"]}"]`)'
+    assert b.evaluate(f'!!{opens}'), b.evaluate('document.querySelector("#report-lines").innerHTML')
+    assert 'include_deleted=1' in b.evaluate(f'{opens}.getAttribute("href")')
 
     following = run('report.transaction-detail', dict(detail, cursor=expected['next_cursor']))
     b.evaluate('document.querySelector("#statement-next-page button").click()')
@@ -177,4 +183,10 @@ def test_transaction_detail_and_missing_checks_pages(register_browser, tmp_path)
     b.wait_for('document.querySelector("#report-lines").innerText.includes("1006")')
     assert printed(b) == check_expectation(following)
     assert following['rows'][0]['before']['number'] == '1005'
-    assert b.evaluate(f'!!document.querySelector(`a[href$="/check/{following["rows"][0]["before"]["transaction_id"]}"]`)')
+    # The cheque below the hole opens as the check it is, and asks for its retained history:
+    # a deleted cheque still occupies the number it took, so the row that names it has to
+    # still open it. Matched on containment rather than on the end of the href, because the
+    # link carries that request and the audit position the report was read at.
+    occupant = f'document.querySelector(`#report-lines a[href*="/check/{following["rows"][0]["before"]["transaction_id"]}"]`)'
+    assert b.evaluate(f'!!{occupant}'), b.evaluate('document.querySelector("#report-lines").innerHTML')
+    assert 'include_deleted=1' in b.evaluate(f'{occupant}.getAttribute("href")')
