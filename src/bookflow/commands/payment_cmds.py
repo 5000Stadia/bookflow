@@ -39,7 +39,10 @@ def _financial(verb, model):
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY', 'E_APPLICATION_INCOMPATIBLE',
             'E_APPLICATION_INACTIVE', 'E_PAYMENT_OPERATION_KEY_REUSED', 'E_SELECTION_CONSUMED', 'E_PREVIEW_STALE',
             'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
-            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else [])
+            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']
+            # Only a void takes the cash back off the books, so only a void can strand
+            # a refund that paid this receipt's overpayment back.
+            +(['E_HAS_REFUND'] if verb == 'void' else [])+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else [])
             # Only a correction restates the payer's capacity, so only update can drop
             # it below what is already applied (payment_corrections).
             +(['E_APPLIED_EXCEEDS_TOTAL'] if verb == 'update' else []))(planner)
@@ -72,7 +75,7 @@ def _delete():
         version_source=('payment show', 'payment', 'version'),
         error_codes=['E_RECORD_NOT_FOUND','E_VERSION_CONFLICT','E_VALIDATION','E_REASON_REQUIRED',
                      'E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY',
-                     'E_IDEMPOTENCY_MISMATCH','E_HAS_APPLICATIONS','E_VALUE_RANGE'])(planner)
+                     'E_IDEMPOTENCY_MISMATCH','E_HAS_APPLICATIONS','E_HAS_REFUND','E_VALUE_RANGE'])(planner)
     cmd.resource_requirements = (('ledger.read','member'),)
     cmd.ledger = True
     cmd.permanent_recovery = recover

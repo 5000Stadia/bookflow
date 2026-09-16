@@ -100,6 +100,10 @@ SETTLEMENT_EDGES = (
     ('ap_applications', 'source_transaction_id', 'obligation_transaction_id', None),
     ('deposit_memberships', 'transaction_id', 'source_transaction_id', None),
     ('customer_refund_consumptions', 'transaction_id', 'credit_source_key_id', 'credit_source_keys'),
+    # The same table again through its other source: a refund that paid an overpayment back
+    # reaches the receipt through `payment_component_keys`, and a row of that kind has a null
+    # credit key, so the join above drops it rather than following it.
+    ('customer_refund_consumptions', 'transaction_id', 'payment_source_key_id', 'payment_component_keys'),
 )
 
 

@@ -1,7 +1,9 @@
-"""Pay a customer back what a credit memo says they are owed, and correct it when it is wrong.
+"""Pay a customer back what they are owed, and correct it when it is wrong.
 
-The third of the three things that can be done with an available credit -- retain it, apply it
-to an invoice, or refund it -- and the only one that moves cash. The accounting lives in
+The third of the three things that can be done with money a customer has standing on the
+receivable -- retain it, apply it to an invoice, or refund it -- and the only one that moves
+cash. That money comes from a credit memo or from a payment whose cash was more than the
+invoices it settled, and one refund pays back either. The accounting lives in
 ``company/refunds.py``.
 """
 from bookflow.core.registry import Plan, command
@@ -14,16 +16,19 @@ from bookflow.company.refund_models import (
 
 _POST = (
     'Pay a customer back. The refund debits Accounts Receivable and credits the bank account'
-    ' the money left, and posts nothing else: the credit memo already took the income and the'
-    ' sales tax back down, so a refund that touched either again would reverse the same sale'
-    ' twice. Name the credit memos being paid out in `sources`; leave an amount out and the'
-    ' whole of that credit is refunded. A credit that has been refunded cannot then be applied'
-    ' to an invoice, and one that has been applied cannot be refunded beyond what is left --'
-    ' either way the refund is refused and nothing is written. One refund pays back one customer'
-    ' on one'
-    ' receivable account in one currency, taken from the credits themselves; `customer` is an'
-    ' optional guard rather than a choice. `check_number` is the number on the paper check and'
-    ' is accepted only when the method is a check.'
+    ' the money left, and posts nothing else: a credit memo already took the income and the'
+    ' sales tax back down and an overpayment never recognised any, so a refund that touched'
+    ' either would move revenue it is not entitled to move. Name what is being paid out in'
+    ' `sources`: each source is a `credit_memo` or a `payment`, never both. A payment source'
+    ' pays back the cash on that receipt which settled no invoice -- the 50.00 left standing'
+    ' when a 150.00 cheque met a 100.00 invoice -- and that overage stops being available the'
+    ' moment it is refunded. Leave an amount out and the whole of that source is refunded.'
+    ' Money that has been refunded cannot then be applied to an invoice, and money that has'
+    ' been applied cannot be refunded beyond what is left -- either way the refund is refused'
+    ' and nothing is written. One refund pays back one customer on one receivable account in'
+    ' one currency, taken from the sources themselves; `customer` is an optional guard rather'
+    ' than a choice. `check_number` is the number on the paper check and is accepted only when'
+    ' the method is a check.'
 )
 
 ERRORS = {
@@ -41,29 +46,33 @@ ERRORS['update'] = ERRORS['post'] + ['E_VERSION_CONFLICT', 'E_REASON_REQUIRED',
 DESCRIPTIONS = {
     'post': _POST,
     'void': ('Void a customer refund with a required reason. Its accounting is reversed at its'
-             ' own date, every credit it paid out is worth again exactly what it was worth'
-             ' before, its number stays occupied and its history stays readable. A refund that'
+             ' own date, every credit memo and every payment overage it paid out is worth again'
+             ' exactly what it was worth before, its number stays occupied and its history stays'
+             ' readable. A refund that'
              ' was merely typed wrong is corrected with `customer-refund update` instead, which'
              ' keeps one document where one payment happened.'),
     'update': ('Correct a customer refund with a required reason and another immutable revision.'
                ' What you supply replaces what was captured and what you leave out stands, so a'
                ' wrong date, memo, reference, check number, bank account or payment method is'
-               ' corrected on its own; supply `sources` to change which credit memos are paid'
-               ' out and how much of each, and the whole list is replaced. The superseded'
+               ' corrected on its own; supply `sources` to change which credit memos and'
+               ' payments are paid out and how much of each, and the whole list is replaced.'
+               ' The superseded'
                " revision's accounting is reversed at its own date and a replacement is posted"
-               ' at the corrected date -- both periods must be open -- and every credit the old'
+               ' at the corrected date -- both periods must be open -- and every capacity the old'
                ' revision consumed is released and the corrected amounts taken again in the same'
-               ' write, so no credit is ever spent twice in between and what a credit is worth'
-               ' is never wrong. The number is kept unless you give a new one. A correction'
+               ' write, so nothing is ever spent twice in between and what a credit or an'
+               ' overpayment is worth is never wrong. The number is kept unless you give a new'
+               ' one. A correction'
                ' cannot change who is paid: the customer, receivable account and currency come'
-               ' from the credits and must stay what they were, and `customer` remains a guard'
+               ' from the sources and must stay what they were, and `customer` remains a guard'
                ' rather than a choice. A voided refund cannot be corrected, and neither can one'
                ' a finished bank reconciliation already holds -- undo that reconciliation first.'
                ' An empty patch writes nothing and reports `changed` false. Pass'
                ' `expected_version` to refuse a write over somebody else, and reuse one'
                ' idempotency key to retry safely.'),
     'show': ('Show a customer refund: who was paid back, out of which bank account, by what'
-             ' method and check number, which credit memos it paid out and how much of each,'
+             ' method and check number, which credit memos or payments it paid out and how much'
+             ' of each,'
              ' and its posting batches. Give `revision_number` to read a superseded revision'
              ' rather than what the refund says now.'),
     'query': ('Page customer refunds in accounting-date and stable-id order, oldest first or'

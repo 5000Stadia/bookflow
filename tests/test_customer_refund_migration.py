@@ -42,12 +42,19 @@ def _at(path, revision):
 
 
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_modules():
-    indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes],
-                     key=lambda index: index.name)
+    # A table a later revision rebuilt no longer reads as this revision froze it, and should
+    # not: co0058 widened `customer_refund_consumptions` to admit a payment overage as a second
+    # kind of refunded source. Which tables and indexes those are is derived from the later
+    # migrations themselves, never listed here.
+    rebuilt = _rebuilt_since(M.revision)
+    indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes
+                      if name not in rebuilt], key=lambda index: index.name)
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())).strip()
-                     for name in M.NEW_TABLES)
+                     for name in M.NEW_TABLES if name not in rebuilt)
     compiled += tuple(str(CreateIndex(index).compile(dialect=dialect())).strip() for index in indexes)
-    assert M.DDL == compiled
+    assert tuple(statement for statement in M.DDL
+                 if not any(statement.startswith(f'CREATE TABLE {name} (')
+                            or f' ON {name} (' in statement for name in rebuilt)) == compiled
     # Frozen text can only equal today's metadata for the objects no later revision has
     # rewritten. Which those are is derived from the later migrations themselves, never
     # listed here: a literal list is what makes the next migration falsify this test.

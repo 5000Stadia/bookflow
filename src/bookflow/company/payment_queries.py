@@ -152,6 +152,17 @@ def payer_balances(s, customer_id):
 
 
 def payment_facts(s, selector, *, write=False):
+    """Current settlement capacity of one receipt, per exact-party component key.
+
+    Three terms, not two. What the cash created is the component; what settled an invoice is
+    an active application; and what was handed back to the customer in cash is an active
+    ``customer_refund_consumptions`` row against the same component key. All three subtract
+    here, in the one place every caller reads, because a receipt whose overage has been
+    refunded must stop offering that money to the next invoice -- and the apply path, the
+    shared draft, the correction, the recovery and every payment read reach availability only
+    through this dictionary.
+    """
+    from bookflow.company.credits import active_consumptions
     header = sales.resolve(s, selector, 'payment')
     authorize(s, [header['id']], write=write)
     revision = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.id == header['current_revision_id'])[0]
@@ -160,13 +171,17 @@ def payment_facts(s, selector, *, write=False):
     keys = {row['id']: row for row in effects.rows(s, c.payment_component_keys,
             c.payment_component_keys.c.transaction_id == header['id'])}
     applications = active_applications(s, payment=header['id'])
+    consumptions = active_consumptions(s, payment_key_id=list(keys)) if keys else []
     available = {key: 0 for key in keys}
     if header['status'] == 'posted':
         available.update({row['component_key_id']: row['amount_minor_units'] for row in components})
     for app in applications:
         available[app['source_component_key_id']] -= app['amount_minor_units']
+    for row in consumptions:
+        available[row['payment_source_key_id']] -= row['amount_minor_units']
     return dict(header=header, revision=revision, profile=profile, components=components,
-                keys=keys, applications=applications, available=available)
+                keys=keys, applications=applications, consumptions=consumptions,
+                available=available)
 
 
 def page(s, noun, inp, items, *, facts=None):

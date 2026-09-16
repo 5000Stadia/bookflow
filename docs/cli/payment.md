@@ -640,6 +640,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -3264,6 +3265,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |

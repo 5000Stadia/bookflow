@@ -4,7 +4,7 @@
 
 ## `customer-refund post`
 
-Pay a customer back. The refund debits Accounts Receivable and credits the bank account the money left, and posts nothing else: the credit memo already took the income and the sales tax back down, so a refund that touched either again would reverse the same sale twice. Name the credit memos being paid out in `sources`; leave an amount out and the whole of that credit is refunded. A credit that has been refunded cannot then be applied to an invoice, and one that has been applied cannot be refunded beyond what is left -- either way the refund is refused and nothing is written. One refund pays back one customer on one receivable account in one currency, taken from the credits themselves; `customer` is an optional guard rather than a choice. `check_number` is the number on the paper check and is accepted only when the method is a check.
+Pay a customer back. The refund debits Accounts Receivable and credits the bank account the money left, and posts nothing else: a credit memo already took the income and the sales tax back down and an overpayment never recognised any, so a refund that touched either would move revenue it is not entitled to move. Name what is being paid out in `sources`: each source is a `credit_memo` or a `payment`, never both. A payment source pays back the cash on that receipt which settled no invoice -- the 50.00 left standing when a 150.00 cheque met a 100.00 invoice -- and that overage stops being available the moment it is refunded. Leave an amount out and the whole of that source is refunded. Money that has been refunded cannot then be applied to an invoice, and money that has been applied cannot be refunded beyond what is left -- either way the refund is refused and nothing is written. One refund pays back one customer on one receivable account in one currency, taken from the sources themselves; `customer` is an optional guard rather than a choice. `check_number` is the number on the paper check and is accepted only when the method is a check.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -27,8 +27,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `sources[].credit_memo` | inside `--sources` JSON array | string | yes | no | — | minimum length 1 |
-| `sources[].amount` | inside `--sources` JSON array | string \| object \| null | no | yes | null | How much of this credit to pay out; omit to pay out everything it is still worth. |
+| `sources[].credit_memo` | inside `--sources` JSON array | string \| null | no | yes | null | A credit memo to pay out. Give this or `payment`, not both. |
+| `sources[].payment` | inside `--sources` JSON array | string \| null | no | yes | null | A customer payment to pay back out of, for the cash on it that settled no invoice. Give this or `credit_memo`, not both. |
+| `sources[].amount` | inside `--sources` JSON array | string \| object \| null | no | yes | null | How much of this source to pay out; omit to pay out everything it is still worth. |
 | `funding_account` | `--funding-account` | string | yes | no | — | minimum length 1 |
 | `method` | `--method` | string | yes | no | — | minimum length 1 |
 | `check_number` | `--check-number` | string \| null | no | yes | null | — |
@@ -161,10 +162,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.sources` | array[object] | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_id` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_number` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_date` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_source_key_id` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_source_key_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_source_key_id` | string \| null | no | yes | null | — |
 | `revision.profile.sources[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.sources[].available_minor_units` | integer | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
@@ -227,10 +232,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `consumptions[].reverses_consumption_id` | string \| null | yes | yes | — | — |
 | `consumptions[].transaction_id` | string | yes | no | — | — |
 | `consumptions[].revision_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_number` | string | yes | no | — | — |
-| `consumptions[].credit_source_key_id` | string | yes | no | — | — |
-| `consumptions[].credit_source_component_id` | string | yes | no | — | — |
+| `consumptions[].credit_memo_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_memo_number` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_component_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_number` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_component_id` | string \| null | yes | yes | — | — |
 | `consumptions[].amount` | object | yes | no | — | — |
 | `consumptions[].amount.amount` | string | yes | no | — | — |
 | `consumptions[].amount.currency` | string | yes | no | — | — |
@@ -530,7 +539,7 @@ Example JSON output:
 
 ## `customer-refund show`
 
-Show a customer refund: who was paid back, out of which bank account, by what method and check number, which credit memos it paid out and how much of each, and its posting batches. Give `revision_number` to read a superseded revision rather than what the refund says now.
+Show a customer refund: who was paid back, out of which bank account, by what method and check number, which credit memos or payments it paid out and how much of each, and its posting batches. Give `revision_number` to read a superseded revision rather than what the refund says now.
 
 | Contract | Value |
 |---|---|
@@ -664,10 +673,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.sources` | array[object] | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_id` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_number` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_date` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_source_key_id` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_source_key_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_source_key_id` | string \| null | no | yes | null | — |
 | `revision.profile.sources[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.sources[].available_minor_units` | integer | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
@@ -730,10 +743,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `consumptions[].reverses_consumption_id` | string \| null | yes | yes | — | — |
 | `consumptions[].transaction_id` | string | yes | no | — | — |
 | `consumptions[].revision_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_number` | string | yes | no | — | — |
-| `consumptions[].credit_source_key_id` | string | yes | no | — | — |
-| `consumptions[].credit_source_component_id` | string | yes | no | — | — |
+| `consumptions[].credit_memo_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_memo_number` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_component_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_number` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_component_id` | string \| null | yes | yes | — | — |
 | `consumptions[].amount` | object | yes | no | — | — |
 | `consumptions[].amount.amount` | string | yes | no | — | — |
 | `consumptions[].amount.currency` | string | yes | no | — | — |
@@ -877,7 +894,7 @@ Example JSON output:
 
 ## `customer-refund update`
 
-Correct a customer refund with a required reason and another immutable revision. What you supply replaces what was captured and what you leave out stands, so a wrong date, memo, reference, check number, bank account or payment method is corrected on its own; supply `sources` to change which credit memos are paid out and how much of each, and the whole list is replaced. The superseded revision's accounting is reversed at its own date and a replacement is posted at the corrected date -- both periods must be open -- and every credit the old revision consumed is released and the corrected amounts taken again in the same write, so no credit is ever spent twice in between and what a credit is worth is never wrong. The number is kept unless you give a new one. A correction cannot change who is paid: the customer, receivable account and currency come from the credits and must stay what they were, and `customer` remains a guard rather than a choice. A voided refund cannot be corrected, and neither can one a finished bank reconciliation already holds -- undo that reconciliation first. An empty patch writes nothing and reports `changed` false. Pass `expected_version` to refuse a write over somebody else, and reuse one idempotency key to retry safely.
+Correct a customer refund with a required reason and another immutable revision. What you supply replaces what was captured and what you leave out stands, so a wrong date, memo, reference, check number, bank account or payment method is corrected on its own; supply `sources` to change which credit memos and payments are paid out and how much of each, and the whole list is replaced. The superseded revision's accounting is reversed at its own date and a replacement is posted at the corrected date -- both periods must be open -- and every capacity the old revision consumed is released and the corrected amounts taken again in the same write, so nothing is ever spent twice in between and what a credit or an overpayment is worth is never wrong. The number is kept unless you give a new one. A correction cannot change who is paid: the customer, receivable account and currency come from the sources and must stay what they were, and `customer` remains a guard rather than a choice. A voided refund cannot be corrected, and neither can one a finished bank reconciliation already holds -- undo that reconciliation first. An empty patch writes nothing and reports `changed` false. Pass `expected_version` to refuse a write over somebody else, and reuse one idempotency key to retry safely.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -902,8 +919,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `refund` | `REFUND` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
-| `sources[].credit_memo` | inside `--sources` JSON array | string | yes | no | — | minimum length 1 |
-| `sources[].amount` | inside `--sources` JSON array | string \| object \| null | no | yes | null | How much of this credit to pay out; omit to pay out everything it is still worth. |
+| `sources[].credit_memo` | inside `--sources` JSON array | string \| null | no | yes | null | A credit memo to pay out. Give this or `payment`, not both. |
+| `sources[].payment` | inside `--sources` JSON array | string \| null | no | yes | null | A customer payment to pay back out of, for the cash on it that settled no invoice. Give this or `credit_memo`, not both. |
+| `sources[].amount` | inside `--sources` JSON array | string \| object \| null | no | yes | null | How much of this source to pay out; omit to pay out everything it is still worth. |
 | `funding_account` | `--funding-account` | string \| null | no | yes | null | — |
 | `method` | `--method` | string \| null | no | yes | null | — |
 | `check_number` | `--check-number` | string \| null | no | yes | null | — |
@@ -1037,10 +1055,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.sources` | array[object] | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_id` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_number` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_date` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_source_key_id` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_source_key_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_source_key_id` | string \| null | no | yes | null | — |
 | `revision.profile.sources[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.sources[].available_minor_units` | integer | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
@@ -1103,10 +1125,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `consumptions[].reverses_consumption_id` | string \| null | yes | yes | — | — |
 | `consumptions[].transaction_id` | string | yes | no | — | — |
 | `consumptions[].revision_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_number` | string | yes | no | — | — |
-| `consumptions[].credit_source_key_id` | string | yes | no | — | — |
-| `consumptions[].credit_source_component_id` | string | yes | no | — | — |
+| `consumptions[].credit_memo_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_memo_number` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_component_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_number` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_component_id` | string \| null | yes | yes | — | — |
 | `consumptions[].amount` | object | yes | no | — | — |
 | `consumptions[].amount.amount` | string | yes | no | — | — |
 | `consumptions[].amount.currency` | string | yes | no | — | — |
@@ -1269,7 +1295,7 @@ Example JSON output:
 
 ## `customer-refund void`
 
-Void a customer refund with a required reason. Its accounting is reversed at its own date, every credit it paid out is worth again exactly what it was worth before, its number stays occupied and its history stays readable. A refund that was merely typed wrong is corrected with `customer-refund update` instead, which keeps one document where one payment happened.
+Void a customer refund with a required reason. Its accounting is reversed at its own date, every credit memo and every payment overage it paid out is worth again exactly what it was worth before, its number stays occupied and its history stays readable. A refund that was merely typed wrong is corrected with `customer-refund update` instead, which keeps one document where one payment happened.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1417,10 +1443,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.sources` | array[object] | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_id` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_number` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_memo_date` | string | yes | no | — | — |
-| `revision.profile.sources[].credit_source_key_id` | string | yes | no | — | — |
+| `revision.profile.sources[].credit_memo_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_memo_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].credit_source_key_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_id` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_number` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_date` | string \| null | no | yes | null | — |
+| `revision.profile.sources[].payment_source_key_id` | string \| null | no | yes | null | — |
 | `revision.profile.sources[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.profile.sources[].available_minor_units` | integer | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
@@ -1483,10 +1513,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `consumptions[].reverses_consumption_id` | string \| null | yes | yes | — | — |
 | `consumptions[].transaction_id` | string | yes | no | — | — |
 | `consumptions[].revision_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_id` | string | yes | no | — | — |
-| `consumptions[].credit_memo_number` | string | yes | no | — | — |
-| `consumptions[].credit_source_key_id` | string | yes | no | — | — |
-| `consumptions[].credit_source_component_id` | string | yes | no | — | — |
+| `consumptions[].credit_memo_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_memo_number` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].credit_source_component_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_number` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_key_id` | string \| null | yes | yes | — | — |
+| `consumptions[].payment_source_component_id` | string \| null | yes | yes | — | — |
 | `consumptions[].amount` | object | yes | no | — | — |
 | `consumptions[].amount.amount` | string | yes | no | — | — |
 | `consumptions[].amount.currency` | string | yes | no | — | — |
