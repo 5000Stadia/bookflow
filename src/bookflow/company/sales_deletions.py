@@ -6,7 +6,7 @@ from bookflow.company import schema as c, sales, journals
 from bookflow.company import billing_queries, reconciliation_adapters as reconciliation
 from bookflow.company.sales_deletion_models import SalesDeleteOutput
 from bookflow.core import audit, clock
-from bookflow.core.deletion_families import capability
+from bookflow.core.deletion_families import capability, deleted_record_refusal
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
@@ -17,11 +17,11 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'))
 
 
-def require_not_deleted(s, identity):
+def require_not_deleted(s, identity, *, deleting=False):
     # Historical migrations may call an older coordinator before co0050 exists.
     if sa.inspect(s.company.conn).has_table('sales_deletions') and s.company.conn.execute(
             sa.select(c.sales_deletions.c.transaction_id).where(c.sales_deletions.c.transaction_id == identity)).first():
-        raise journals.invalid('transaction', 'This sale was deleted; its retained history cannot be edited or voided.')
+        raise journals.invalid('transaction', deleted_record_refusal('sale', deleting=deleting))
 
 
 def admit(s, noun):
@@ -95,9 +95,11 @@ def prepare(s, ctx, inp, noun):
         return Plan(found.output, dict(recovered=True, input=inp, noun=noun))
     kind = noun.replace('-', '_')
     old = sales.resolve(s, getattr(inp, kind), kind)
+    # Ahead of the version guard: a second delete is told the sale is already deleted, which
+    # ends the attempt, rather than that its version is stale, which invites another one.
+    require_not_deleted(s, old['id'], deleting=True)
     if inp.expected_version != old['version']:
         raise BookflowError('E_VERSION_CONFLICT', details={'expected_version': inp.expected_version, 'current_version': old['version']})
-    require_not_deleted(s, old['id'])
     from bookflow.company.sales_models import InvoiceVoidInput, SalesReceiptVoidInput
     model = InvoiceVoidInput if kind == 'invoice' else SalesReceiptVoidInput
     intent = model.model_validate({kind: old['id'], 'expected_version': inp.expected_version})

@@ -159,9 +159,14 @@ def test_bill_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books(bo
                 replay = await witnessed('bill delete', raw)
                 assert replay['idempotent_replay'] and not replay['changed'], surface
                 assert database(path) == after, surface
+                # A fresh key against a bill that is already gone is a new operation, and
+                # every surface says the same terminal thing: the delete already happened.
+                # The stale-version answer above is for a bill that is still there.
                 losing = await witnessed('bill delete', {**raw, 'operation_key': 'losing-bill'},
                                     rejected=True)
-                assert losing['code'] == 'E_VERSION_CONFLICT', surface
+                assert losing['code'] == 'E_VALIDATION', surface
+                assert 'already deleted and cannot be deleted again' in \
+                    losing['details']['fields'][0]['problem'], surface
 
                 gone = await call('bill show', {'bill': doomed['id']}, rejected=True)
                 assert gone['code'] == 'E_RECORD_NOT_FOUND', surface

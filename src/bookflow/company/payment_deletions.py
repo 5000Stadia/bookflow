@@ -8,7 +8,7 @@ from bookflow.company import transaction_deletion, transaction_deletion_validati
 from bookflow.company.payment_deletion_models import PaymentDeleteOutput, PaymentDeletionInfo
 from bookflow.company.transaction_deletion_models import DeleteIntent
 from bookflow.core import audit
-from bookflow.core.deletion_families import PAYMENT_FAMILIES, capability
+from bookflow.core.deletion_families import PAYMENT_FAMILIES, capability, deleted_record_refusal
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
@@ -29,10 +29,10 @@ def stored(s):
     return sa.inspect(s.company.conn).has_table('payment_deletions')
 
 
-def require_not_deleted(s, identity):
+def require_not_deleted(s, identity, *, deleting=False):
     if stored(s) and s.company.conn.execute(sa.select(c.payment_deletions.c.transaction_id).where(
             c.payment_deletions.c.transaction_id == identity)).first():
-        raise journals.invalid('transaction', 'This payment was deleted; its retained history cannot be edited or voided.')
+        raise journals.invalid('transaction', deleted_record_refusal('payment', deleting=deleting))
 
 
 def admit(s):
@@ -104,7 +104,9 @@ def prepare(s, ctx, inp):
     if found is not None:
         return Plan(found.output, dict(recovered=True, input=inp))
     old = sales.resolve(s, inp.payment, NOUN)
-    require_not_deleted(s, old['id'])
+    # Already ahead of the version guard, which lives in the prepared kernel below. The five
+    # other families were moved to match this one.
+    require_not_deleted(s, old['id'], deleting=True)
     intent = DeleteIntent(family=FAMILY, transaction_id=old['id'], expected_version=inp.expected_version)
     # The authenticated producer: the host's credential, or — with no host, as on the
     # CLI — this login's OS binding, which each owner derives for itself when none is

@@ -133,11 +133,16 @@ def test_concurrent_deletes_and_revoked_permanent_retry(books):
         results=[f.result() for f in futures]
     assert sum(isinstance(result,dict) for result in results)==1,results
     loser=next(i for i,result in enumerate(results) if isinstance(result,str))
-    assert results[loser] in ('E_DB_BUSY','E_VERSION_CONFLICT'),results
+    # The loser may not get in at all, or may arrive after the winner committed and be told
+    # the sale is already deleted. Both are correct, and neither writes anything.
+    assert results[loser] in ('E_DB_BUSY','E_VERSION_CONFLICT','E_VALIDATION'),results
     after=database(path)
     with pytest.raises(BookflowError) as stale:
         books['run']('invoice delete',dict(invoice=post['id'],expected_version=1,operation_key=('race-a','race-b')[loser]),reason='Concurrent deletion')
-    assert stale.value.code=='E_VERSION_CONFLICT' and database(path)==after
+    # The loser's key wrote no receipt, so this is a new operation against a record that is
+    # already gone: it is told the delete happened, not that its version is stale.
+    assert stale.value.code=='E_VALIDATION' and database(path)==after
+    assert 'already deleted and cannot be deleted again' in stale.value.details['fields'][0]['problem']
     with sqlite3.connect(path) as db:
         assert db.execute('SELECT count(*) FROM sales_deletions').fetchone()==(1,)
         assert db.execute("SELECT count(*) FROM posting_batches WHERE transaction_id=? AND kind='reversal'",(post['id'],)).fetchone()==(1,)
