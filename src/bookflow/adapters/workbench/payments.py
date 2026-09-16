@@ -1,11 +1,38 @@
 """Payment workspace shell; all facts and actions use the shared commands."""
 from fastapi import Request
 
+from bookflow.adapters.workbench.transaction_detail import document_noun
 from bookflow.core import registry
 from bookflow.core.deletion_families import PAYMENT_FAMILIES, capability
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 from urllib.parse import urlencode
+
+
+def _settled_document(run, request, company_id, settlement, document_id):
+    """Read the receivable a settlement belongs to, from the command that owns its type.
+
+    A settlement names either settleable receivable -- an invoice, or a statement charge
+    entered straight onto the account -- and says which, taken from the document's own row.
+    The read command, the words on the page and the link out of it all come off that one
+    fact. `invoice settlement` and `application show` accept both types; `invoice show`
+    accepts only one, so a receipt applied to a charge used to error the whole page.
+
+    Retained settlement history outlives the document, so the read asks for the deleted facts
+    wherever that family can be deleted -- asked of the registry, the way every report row's
+    own link asks it, because only some families take the flag and the rest refuse it.
+
+    A settlement with no type named is one replayed out of operation history written before
+    the type was recorded, which only reaches pages that read stored effects; a settlement
+    read live always names it, and an unnamed one opens where it always did.
+    """
+    noun = document_noun(settlement.get('document_type')) or 'invoice'
+    meta = registry.noun_meta(noun)
+    fields = registry.get(noun + ' show').input_model.model_fields
+    record = run(request, noun + ' show', {meta['identifier']: document_id,
+        **({'include_deleted': True} if 'include_deleted' in fields else {})}, company_id)
+    return record, dict(noun=noun, label=meta['singular_label'],
+                        url=f"/c/{company_id}/{noun}/{document_id}")
 
 
 def mount(app, *, render, run, credential, page_error, role_allows, form_page):
@@ -17,14 +44,15 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
                 if request.query_params.get(name):
                     inputs[name] = request.query_params[name]
             state = run(request, 'invoice settlement', inputs, company_id)
-            invoice = run(request, 'invoice show', {'invoice': invoice_id, 'include_deleted': True}, company_id)
+            invoice, document = _settled_document(run, request, company_id, state, invoice_id)
             for group in (state, state['all_committed_current']):
                 for field in ('gross', 'applied', 'due'):
                     group[field] = Money(group[field+'_minor_units'], group['currency']).to_dict()
             for row in state['applications']:
                 row['amount'] = Money(row['amount_minor_units'], row['currency']).to_dict()
             next_url = '?' + urlencode(dict(request.query_params, cursor=state['next_cursor'])) if state['next_cursor'] else None
-            return render('invoice_settlement.html', request, company_id=company_id, invoice=invoice, settlement=state, next_url=next_url)
+            return render('invoice_settlement.html', request, company_id=company_id, invoice=invoice,
+                          document=document, settlement=state, next_url=next_url)
         except BookflowError as exc:
             return page_error(request, exc, company_id=company_id)
 
@@ -38,17 +66,18 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             history = run(request, 'application history', {'application': application_id, 'limit': 50,
                 **({'cursor': request.query_params['cursor']} if request.query_params.get('cursor') else {})}, company_id)
             record = shown['record']
-            invoice = run(request, 'invoice show', {'invoice': record['paid_transaction_id'], 'include_deleted': True}, company_id)
+            invoice, document = _settled_document(run, request, company_id,
+                shown['current_invoice'], record['paid_transaction_id'])
             # Retained settlement history outlives the receipt: an application whose payer
             # was later deleted is still readable, so this read asks for the deleted facts
-            # exactly as the invoice read above already does.
+            # exactly as the receivable read above already does.
             payment = run(request, 'payment show', {'payment': record['paying_transaction_id'], 'include_deleted': True}, company_id)
             for row in history['items']:
                 value = row.get('application') or row.get('allocation')
                 if value:
                     row['amount_label'] = Money(value['amount_minor_units'], value['currency']).to_dict()['amount'] + ' ' + value['currency']
             return render('payment_application.html', request, company_id=company_id, application=shown,
-                application_history=history, invoice=invoice, payment=payment,
+                application_history=history, invoice=invoice, document=document, payment=payment,
                 amount=Money(record['amount_minor_units'], record['currency']).to_dict())
         except BookflowError as exc:
             return page_error(request, exc, company_id=company_id)

@@ -80,6 +80,11 @@ class SelectionPageOutput(StrictModel):
 
 class InvoiceSettlementAmounts(StrictModel):
     invoice_id: str
+    # Taken from the settled document's own row, so a reader knows which receivable it is
+    # holding and can open it where it actually lives. Absent only on an effect snapshot
+    # written into immutable operation history before this field existed; every live
+    # settlement read carries it.
+    document_type: Literal[SETTLEABLE_RECEIVABLE_TYPES] | None = Field(default=None, description='Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields.')
     version: int
     revision_id: str | None
     gross_minor_units: int
