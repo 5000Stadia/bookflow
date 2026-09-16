@@ -324,17 +324,21 @@ def test_a_deleted_entry_leaves_ordinary_reads_and_comes_back_when_asked_for(led
 
 # ---------------------------------------------------------------- the storage itself
 
-def test_co55_declaration_is_exact_and_the_storage_is_immutable(ledger, admitted):
+def test_co56_declaration_is_exact_and_the_storage_is_immutable(ledger, admitted):
     import importlib
     import re
     from sqlalchemy.schema import CreateTable
     from sqlalchemy.dialects.sqlite import dialect
     from bookflow.company import schema as c, journal_deletion_schema
     from bookflow.core.deletion_families import PREPARED_FAMILIES, TOMBSTONE_TABLE
-    from bookflow.storage.migrate import HEADS
+    from bookflow.storage.migrate import known_revisions
     migration = importlib.import_module('bookflow.storage.company_migrations.versions.0056_journal_deletions')
     assert migration.revision == 'co0056' and migration.down_revision == 'co0055'
-    assert HEADS['company'] == 'co0056'
+    # This revision's own place in the chain, never that it is the end of it. Written the
+    # day it was the head, this line read `HEADS['company'] == 'co0056'` -- true then, false
+    # the moment anything landed behind it, which is a test that fails for a reason its
+    # subject had nothing to do with. What is durably true is that the chain knows it.
+    assert migration.revision in known_revisions('company')
     assert migration.DDL == (str(CreateTable(c.journal_deletions).compile(dialect=dialect())),
                              *journal_deletion_schema.guards())
     check = next(x for x in c.journal_deletions.constraints if x.name == 'ck_journal_delete_family')
