@@ -17,8 +17,8 @@ def resolves(witness):
     Static resolution is the cheap half of the check and is worth keeping -- a cited name that
     was renamed or deleted is caught here in milliseconds. The other half cannot be done
     statically, because the breakage is at run time: it needs the witnesses actually executed.
-    `notes/witnesses.sh` derives this ledger's distinct witnesses and runs them, and that is
-    what a parity claim rests on. Do not read a green run of this file as a parity claim.
+    `scripts/witness-suite.sh` derives this ledger's distinct witnesses and runs them, and that
+    is what a parity claim rests on. Do not read a green run of this file as a parity claim.
     """
     filename, name = witness.split('::')
     module = ast.parse(Path(filename).read_text())
