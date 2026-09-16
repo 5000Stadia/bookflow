@@ -5,6 +5,11 @@ amounts are re-added from the rows themselves, the postings are re-balanced leg 
 returned cells are recomputed from the source invoice's own capture through the endpoint rule,
 and the claimed intervals are re-checked against the live residue. A preparer and a checker
 that share a calculation agree with each other and are wrong together.
+
+The stock a returned line brings back is checked the same way: the inventory pair is found off
+the posting rows alone, the cost is recomputed from the source invoice line's own issue, and
+every movement is tied back to the leg that carries its value -- which is what keeps the
+inventory asset on the balance sheet and the total on the stock reports one figure.
 """
 import sqlalchemy as sa
 
@@ -18,7 +23,7 @@ def _require(condition, detail):
         raise BookflowError('E_INTERNAL', message='Prepared credit memo is inconsistent: ' + detail)
 
 
-def validate(plan, s, ctx, *, batch_kind='original'):
+def validate(plan, s, ctx, *, batch_kind='original', movements=True):
     data = plan.data
     if not data['changed']:
         return
@@ -56,26 +61,58 @@ def validate(plan, s, ctx, *, batch_kind='original'):
              'header totals are the sum of the lines')
     _require(revision['total_minor_units'] == gross == subtotal + tax and gross > 0, 'document total')
 
-    _balanced(pending, header, profile, revision, gross, batch_kind)
-    _posting_attribution(pending, lines, profile)
+    stock = _stock_pair(s, pending, profile)
+    _balanced(pending, header, profile, revision, gross, batch_kind, stock)
+    _posting_attribution(pending, lines, profile, stock)
     _capacity(pending, header, revision, lines, profile)
     _returns(s, pending, lines, profile)
+    if movements:
+        _movements(s, data)
 
 
-def _balanced(pending, header, profile, revision, gross, batch_kind):
+def _stock_pair(s, pending, profile):
+    """The inventory legs in this batch, found off the posting rows and nothing else.
+
+    A credit memo posts exactly one credit -- the receivable -- and debits for everything else.
+    A returned stock line adds one more pair: a debit to an inventory-asset control account and
+    a credit of the same amount to the cost-of-goods account its sale captured. Both halves are
+    identified by those two facts alone and checked against each other here, so the batch
+    arithmetic below never has to be told which legs they are, and a stray credit leg on any
+    other account is a failure rather than something quietly counted as stock.
+    """
+    from bookflow.company import inventory
+    control = inventory.asset_account_ids(s)
+    legs = pending['posting_lines']
+    assets = [leg for leg in legs if leg['account_id'] in control]
+    offsets = [leg for leg in legs if leg['credit_minor_units']
+               and leg['account_id'] != profile['ar_account_id']]
+    _require(all(leg['debit_minor_units'] and not leg['credit_minor_units'] for leg in assets),
+             'an inventory-asset leg of a credit memo is not a debit')
+    total = sum(leg['debit_minor_units'] for leg in assets)
+    _require(len(assets) == len(offsets)
+             and sum(leg['credit_minor_units'] for leg in offsets) == total,
+             'the stock a credit brings back does not come out of cost of goods sold')
+    return dict(assets=assets, offsets=offsets, total=total)
+
+
+def _balanced(pending, header, profile, revision, gross, batch_kind, stock):
     batches = pending['posting_batches']
     _require(len(batches) == 1 and batches[0]['kind'] == batch_kind
              and batches[0]['effective_date'] == revision['date'], 'one business batch at the document date')
     legs = pending['posting_lines']
     debits = sum(leg['debit_minor_units'] for leg in legs)
     credits = sum(leg['credit_minor_units'] for leg in legs)
-    _require(debits == credits == gross, 'the batch balances at the document gross')
+    # The inventory pair is equal and opposite, so it adds the same amount to each side and
+    # the receivable still stands alone against the document gross.
+    _require(debits == credits == gross + stock['total'], 'the batch balances at the document gross')
     receivable = [leg for leg in legs if leg['account_id'] == profile['ar_account_id']]
     _require(len(receivable) == 1 and receivable[0]['credit_minor_units'] == gross
              and receivable[0]['debit_minor_units'] == 0, 'exactly one receivable credit for the gross')
     _require(all(leg['name_type'] == 'customer' and leg['name_id'] == profile['customer_id'] for leg in legs),
              'every leg names the exact credited party')
-    _require(all(leg['debit_minor_units'] > 0 for leg in legs if leg is not receivable[0]),
+    cost_legs = {id(leg) for leg in stock['offsets']}
+    _require(all(leg['debit_minor_units'] > 0 for leg in legs
+                 if leg is not receivable[0] and id(leg) not in cost_legs),
              'every other leg is a debit')
     by_line = {}
     for source in pending['posting_line_sources']:
@@ -225,8 +262,15 @@ def validate_void(plan, s, ctx):
                  'a reversal moves a leg to another account or party')
         debit += leg['debit_minor_units']
         credit += leg['credit_minor_units']
-    _require(debit == credit == data['revision']['total_minor_units'],
+    # The stock pair the credit posted is reversed leg for leg with everything else, so the
+    # reversal balances at the gross plus that pair -- the same figure the original did.
+    from bookflow.company import inventory
+    control = inventory.asset_account_ids(s)
+    stock_total = sum(leg['debit_minor_units'] + leg['credit_minor_units']
+                      for leg in pending['posting_lines'] if leg['account_id'] in control)
+    _require(debit == credit == data['revision']['total_minor_units'] + stock_total,
              'the reversal does not balance at the credit\'s own total')
+    _movements(s, data)
     fields = ('credit_transaction_id', 'credit_revision_id', 'credit_document_line_id',
               'source_transaction_id', 'source_revision_id', 'source_document_line_id',
               'source_line_id', 'start_microunits', 'end_microunits',
@@ -322,13 +366,18 @@ def validate_update(plan, s, ctx):
     ids = {row['id'] for row in business['posting_lines']}
     business['posting_line_sources'] = [row for row in pending['posting_line_sources'] if row['posting_line_id'] in ids]
     business['credit_source_keys'] = [key]
-    validate(Plan(plan.preview, dict(data, pending=business)), s, ctx, batch_kind='replacement')
+    # The movement check is held back from that call and run below against the whole write,
+    # because a correction's reversal movements hang off legs the replacement batch does not
+    # hold and a narrowed row set cannot see them.
+    validate(Plan(plan.preview, dict(data, pending=business)), s, ctx, batch_kind='replacement',
+             movements=False)
+    _movements(s, data)
     from bookflow.company.credit_restatement import compatible, validate as validate_uses
     compatible(s, ctx, previous, data['resolved'])
     validate_uses(s, data)
 
 
-def _posting_attribution(pending, lines, profile):
+def _posting_attribution(pending, lines, profile, stock):
     """Each business leg must post the captured account and amount of its own component."""
     import json
     sources = {row['id']: row for row in pending['posting_line_sources']}
@@ -358,4 +407,101 @@ def _posting_attribution(pending, lines, profile):
     for component in pending['credit_components']:
         add(component['posting_source_id'], profile['ar_account_id'], component['amount_minor_units'],
             component['document_line_id'], False)
+    # The inventory pair is owned by the entered line it was returned on, the same way every
+    # other leg is; without this the set below would not close and the pair would be posting
+    # cents nothing accounts for.
+    for leg in stock['assets'] + stock['offsets']:
+        own = [row for row in sources.values() if row['posting_line_id'] == leg['id']]
+        _require(len(own) == 1 and own[0]['document_line_id'] in lines
+                 and own[0]['amount_minor_units']
+                 == leg['debit_minor_units'] + leg['credit_minor_units'],
+                 'a stock leg is attributed to exactly one credited line')
+        expected[own[0]['id']] = own[0]['amount_minor_units']
     _require(set(expected) == set(sources), 'every business attribution has exactly one commercial owner')
+
+
+def _movements(s, data):
+    """What this credit does to the stock ledger, read back off the rows it will write.
+
+    The tie is the point, exactly as it is on the sale: every posting to an inventory control
+    account is claimed by one movement and carries that movement's value, which is what makes
+    the inventory asset on the balance sheet and the total on the stock reports one number.
+    Beyond that the cost each returned line brings back is recomputed here from the source
+    invoice line's own live issue, through the same endpoint rule the net and the tax cells go
+    through -- never taken from the preparer.
+    """
+    from bookflow.company import document_effects as effects, inventory, inventory_effects
+    from bookflow.company.sales_facts import SalesLineProfile
+
+    change = data.get('stock')
+    if change is None:
+        return
+    header, pending = data['header'], data['pending']
+    movements = [movement.values for movement in change.movements]
+    legs = {row['id']: row for row in pending['posting_lines']}
+    batches = {row['id']: row for row in pending['posting_batches']}
+    control = inventory.asset_account_ids(s)
+    claimed = [row['posting_line_id'] for row in movements if row['value_minor_units']]
+    _require(len(claimed) == len(set(claimed)), 'two stock movements claim one posting line')
+    _require(set(claimed) == {leg['id'] for leg in legs.values() if leg['account_id'] in control},
+             'an inventory-asset posting is not attributed to exactly one item')
+
+    lines = {row['document_line_id']: row for row in pending['credit_line_profiles']}
+    claims = {}
+    for row in pending['credit_source_claims']:
+        if row['kind'] == 'claim':
+            claims.setdefault(row['credit_document_line_id'], []).append(row)
+    prior = {row['id']: row for row in effects.rows(
+        s, c.inventory_movements, c.inventory_movements.c.transaction_id == header['id'])}
+    for row in movements:
+        leg = legs.get(row['posting_line_id'])
+        batch = batches.get(row['posting_batch_id'])
+        _require(batch is not None and batch['transaction_id'] == row['transaction_id']
+                 and batch['effective_date'] == row['effective_date'], 'stock batch ownership/date')
+        if row['value_minor_units']:
+            _require(leg is not None and leg['batch_id'] == row['posting_batch_id']
+                     and leg['account_id'] == row['asset_account_id']
+                     and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units'],
+                     'stock monetary attribution')
+        else:
+            _require(row['posting_line_id'] is None and row['quantity_microunits'] != 0,
+                     'zero stock effect must have quantity and no monetary leg')
+        _require(row['kind'] in ('receipt', 'reversal'), 'a credit memo moves stock only in or back out')
+        if row['kind'] == 'reversal':
+            original = prior.get(row['reverses_movement_id'])
+            _require(original is not None
+                     and (leg['reversed_line_id'] if leg else None) == original['posting_line_id']
+                     and row['quantity_microunits'] == -original['quantity_microunits']
+                     and row['value_minor_units'] == -original['value_minor_units']
+                     and row['item_id'] == original['item_id']
+                     and row['document_line_id'] == original['document_line_id']
+                     and row['revision_id'] == original['revision_id'],
+                     'a stock reversal is not the exact inverse of the movement it retires')
+            continue
+        line = lines.get(row['document_line_id'])
+        _require(line is not None and line['item_id'] == row['item_id']
+                 and row['quantity_microunits'] == line['base_quantity_microunits']
+                 and row['revision_id'] == line['revision_id'] and row['value_minor_units'] >= 0,
+                 'a stock receipt does not match the entered line that returned it')
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        _require(facts.item_type in inventory.TRACKED_TYPES
+                 and facts.asset_account is not None and facts.cogs_account is not None
+                 and facts.asset_account.id == row['asset_account_id']
+                 and facts.cogs_account.id == row['offset_account_id'],
+                 'a stock receipt was written for a line that carries no stock')
+        own = claims.get(row['document_line_id'], [])
+        issued = inventory_effects.issued_cost(
+            s, line['source_transaction_id'], line['source_document_line_id'])
+        _require(bool(own) and issued is not None
+                 and issued['quantity_microunits'] == own[0]['source_base_quantity_microunits'],
+                 'the returned invoice line issued no stock, or not the quantity it captured')
+        _require(row['value_minor_units'] == returns.share(
+            issued['cost_minor_units'], issued['quantity_microunits'],
+            [(claim['start_microunits'], claim['end_microunits']) for claim in own]),
+            'a returned line does not bring back the cost its source line issued')
+    for envelope_id, line in lines.items():
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        if facts.item_type in inventory.TRACKED_TYPES:
+            _require(any(row['document_line_id'] == envelope_id and row['kind'] == 'receipt'
+                         for row in movements),
+                     'an entered line returned stock that no movement received')

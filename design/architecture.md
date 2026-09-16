@@ -3784,17 +3784,49 @@ and tax cent is taken from what that invoice captured. A document is all of one 
 is refused — the tax calculator rounds across a whole document, so a document holding one
 calculated cell and one captured cell would carry a tax total that is neither.
 
-**A credited line that carries stock is refused, not approximated.** A credit memo's accounting
-is income, the tax it takes back and the receivable, and nothing else: it has no inventory
-movement on it and no cost to put back. A stock-carrying line would therefore hand the money
-back and leave the quantity sold with its cost still in Cost of Goods Sold — two wrong balances
-rather than one missing feature — so `credits._refuse_stocked` refuses it, naming the line, the
-item and the remedy: credit the money with a service or non-stock item, and bring the quantity
-back with `inventory adjust`, which moves the quantity and what it is worth together. The
-stock-carrying set is the item master's own `TRACKED_TYPES`, read where
-`sales_defaults.resolve_line` reads it, because a second list here is the list the next
-stock-carrying type is silently left out of. Both kinds of line are covered, because both are
-wrong in the same way: a named stock item and a return against a stocked invoice line alike.
+**A returned stock line gives the goods back with the money, in the one document.** It is the
+inverse of the issue the sale made, taken from the owner of that issue rather than rederived:
+beside its income and tax debits the line posts one more pair — debit Inventory Asset, credit
+Cost of Goods Sold — and writes one `receipt` movement against the debit, through the same
+`inventory_effects.plan` / `bind` / `bind_reversals` / `check` / `settle` sequence a sale uses.
+`inventory_effects.return_entry` declares that receipt from the line's captured facts, the way
+`purchase_entry` declares a bill's. The pair is equal and opposite, so Accounts Receivable is
+still credited the gross once and the batch still balances at it; what a thing sold for and what
+it cost stay two independent facts, and a return gives both back.
+
+**The cost that comes back is the cost that went out.** `inventory_effects.issued_cost` reads
+the source invoice line's live issue and returns what `inventory_costing`'s contract calls its
+`posted_effective` value — the issue's own value plus every active `recost` against it, which is
+what Cost of Goods Sold actually holds. A partial return owns a share of that figure by
+`credit_returns.share`, the same endpoint rule that partitions the line's net and each tax cell,
+so cost, net and tax telescope together and a line returned in pieces gives back exactly what it
+took. Never today's average and never the price on the credit: the value is *stated* on the
+receipt, exactly as every other receipt in this ledger states its value, because the average
+decides only what leaves. A zero-cost line returns a zero-value receipt with no monetary leg,
+which is what `ck_inventory_movement_value_link` requires and what the zero-value work
+established. A return landing behind a later sale owes that sale its own dated `recost`
+document, written by `inventory_effects.write_corrections` like any other.
+
+A correction retires the receipts the previous revision took and takes the new grid's at what it
+then says; a void reverses them exactly, one `reversal` movement per receipt bound to the leg
+that reverses the one the receipt hung off. Both are refused, naming the date, if the returned
+quantity is no longer on the shelf to take back out — the negative-stock check is on every
+chronological prefix, not on the balance as it stands today.
+
+**A credited line that *names* a stock item is still refused.** A standalone line carries an
+item, a quantity and a price, and a price is not a cost. Nothing in Bookflow derives what an
+unlinked quantity coming in is worth: every receipt in the ledger states its value because
+somebody knew it — a bill line states what was paid, and `inventory adjust` requires
+`value_change` from the person entering it. Picking a rule here instead would be a second answer
+to a question the stock ledger already answers one way, and a wrong cost put into stock is
+invisible to the person who typed a price. So `credits._refuse_stocked` refuses it with
+`unlinked_stocked_credit_unsupported`, naming the line, the item and both ways out: return the
+invoice line with `source_invoice` and `source_line`, or credit the money with a non-stock item
+and bring the quantity back with `inventory adjust`. A returned line whose capture holds no
+asset or cost-of-goods account is refused as `stocked_capture_incomplete`, for the plainer
+reason that there is nothing to post the cost between. The stock-carrying set is the item
+master's own `TRACKED_TYPES`, read where `sales_defaults.resolve_line` reads it, because a
+second list here is the list the next stock-carrying type is silently left out of.
 
 **What is judged is the grid that would be posted, not the grid that was typed.**
 `credits._refuse_stocked_document` runs in `credits.prepare` at the one boundary every written
@@ -3803,21 +3835,39 @@ before anything is written — over `resolved['lines']`, which is every line the
 the ones a caller entered and the ones a correction retained because it left `lines` out. Judging
 only entered lines was a hole the size of the feature: `credit-memo update --date` on a credit
 already stored against a stock item supplied no line to refuse, so it re-posted that credit's
-wrong stock accounting onto a new revision. Reading an old wrong document is not the same act as
-posting it again, and only the second one is refused.
+accounting onto a new revision with nothing entered to refuse. That chokepoint stays and only
+its answer changed, because it is also what makes a retained grid move its stock: an omitted-grid
+correction of a stored return retires its receipt and takes it again at the new date, rather than
+leaving the goods on the old one.
 
-So `show`, `history`, `query` and `void` are untouched: they resolve no grid and post nothing new
-— a void reverses exactly what the credit did post, which never included stock — and every credit
-memo already stored against a stock item still opens, still lists, still pages its history and can
-still be taken back. What a correction may do is replace that grid with non-stock lines, which is
-how a document written wrong is made right; what it may not do is post the stock-carrying grid a
-second time. The two corrections that write nothing are left alone and stay legal: a patch naming
-no field at all, which `credit_corrections.prepare_update` answers before any grid is resolved, and
-a patch whose values equal the stored ones, which `credit_corrections.unchanged` answers with the
-same `changed=False` and no revision. Both are measured as writing nothing, by comparing the whole
-company database before and after, rather than argued.
+So `show`, `history` and `query` are untouched: they resolve no grid and post nothing new. Every
+credit memo stored before this still opens, still lists, still pages its history and can still be
+taken back — and voiding one moves no stock, because it never moved any, which is exactly what
+reversing what a document posted means. Correcting one *does* bring its stock back, which is the
+point of correcting a document that was wrong. The two corrections that write nothing stay
+legal: a patch naming no field at all, which `credit_corrections.prepare_update` answers before
+any grid is resolved, and a patch whose values equal the stored ones, which
+`credit_corrections.unchanged` answers with the same `changed=False` and no revision. Both are
+measured as writing nothing, by comparing the whole company database before and after, rather
+than argued.
 
-Moving the inventory and restoring the cost is a feature of its own and is not in this release.
+**`credit_validation` checks the stock independently, the way it checks the money.**
+`_stock_pair` finds the inventory legs off the posting rows alone — a credit memo posts exactly
+one credit, the receivable, so any other credit leg must be a cost-of-goods offset against an
+inventory-asset debit of the same amount — and `_balanced` then expects the batch at the gross
+plus that pair. `_movements` ties every inventory-asset leg to exactly one movement carrying
+that leg's value, and recomputes each returned cost from the source line's own issue rather than
+taking it from the preparer. `validate_update` holds `_movements` back from the
+replacement-batch pass and runs it over the whole write, because a correction's reversal
+movements hang off legs the replacement batch does not hold.
+
+**Known limit, recorded deliberately.** A return's receipt states its value once and is never
+recosted, so a `recost` landing on the source issue *after* a partial return has been taken
+leaves the remaining shares priced against the new figure and the taken share against the old.
+Total asset value and total cost still reconcile — the ledger's own invariant is untouched — but
+a line returned in pieces across such a correction will not telescope to a single number. Making
+it telescope needs the cost a return claimed to be stored per interval, the way the intervals
+themselves are, which is a table this release does not have.
 
 **The endpoint rule** (`credit_returns.py`) decides every cent a return carries. A captured
 source line of base quantity `Q` and net `N` gives a returned half-open interval `[a,b)`
@@ -3980,11 +4030,12 @@ reconciliation fence of its own.
 
 A refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family. Price allowances against a source line, credited lines that carry stock and the cost
-restoration they would need, cross-party (parent↔job) credit, cash-basis treatment, the
-refund's reconciliation producer and print are outside the release entirely and are refused
-rather than approximated; the command help says so, and says why: not that there is nothing to
-return against, but that moving the inventory back and restoring the cost is not built.
+family. Price allowances against a source line, a credited line that *names* a stock item
+instead of returning one, cross-party (parent↔job) credit, cash-basis treatment, the refund's
+reconciliation producer and print are outside the release entirely and are refused rather than
+approximated; the command help says so, and says why — for the stock item, that a price is not
+a cost and nothing here guesses one, with `source_invoice`/`source_line` and `inventory adjust`
+named as the two ways out. Returning a stocked invoice line is built and moves the stock.
 
 ## The three credit documents in the browser
 
