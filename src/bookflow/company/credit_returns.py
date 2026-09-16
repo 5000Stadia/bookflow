@@ -36,6 +36,18 @@ def owned(total: int, quantity: int, start: int, end: int) -> int:
     return total * end // quantity - total * start // quantity
 
 
+def share(total: int, quantity: int, intervals) -> int:
+    """The endpoint-owned part of one captured total over a whole set of claimed intervals.
+
+    ``priced`` partitions a source line's net and each of its tax cells this way. A returned
+    line's captured *cost* -- what the issue that sold the quantity put into cost of goods
+    sold -- is a third total on that same line over that same quantity, and it is partitioned
+    by this same call rather than by a rule of its own. So the money and the cost telescope
+    together: a line returned in any order, in any pieces, gives back exactly what it took.
+    """
+    return sum(owned(total, quantity, start, end) for start, end in intervals)
+
+
 def net_interval(net: int, quantity: int, start: int, end: int) -> tuple[int, int]:
     """The cumulative net endpoints a quantity interval maps onto."""
     return net * start // quantity, net * end // quantity

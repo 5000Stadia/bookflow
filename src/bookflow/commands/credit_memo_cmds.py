@@ -22,15 +22,24 @@ _LINES = (
     ' One credit memo is all returns or all named items: the tax calculation rounds across a'
     ' whole document, so a document holding both would carry a tax total that is neither.'
 )
+_STOCK = (
+    ' Returning a line whose item carries stock puts the goods back with the money, in this one'
+    ' document: the quantity goes back on hand and its cost comes out of cost of goods sold and'
+    ' back into the inventory asset, at what that invoice line actually took out of stock --'
+    ' not at the price on the credit and not at what the item is worth today. Return half a'
+    ' line and half that cost comes back; return the rest later and the two halves add up to'
+    ' exactly what went out. Voiding the credit takes the quantity and the cost out again, and'
+    ' is refused, naming the date, if the goods have already been sold on.'
+)
 _LIMITS = (
     ' Not supported in this release, and refused rather than approximated: a price allowance'
-    ' against a source line without returning any of it; a line whose item carries stock,'
-    ' whether you name the item or return a stocked invoice line, because moving the inventory'
-    ' back and restoring the cost is not built -- credit the money with a service or non-stock'
-    ' item, and bring the quantity back with `inventory adjust`, which moves the quantity and'
-    ' what it is worth together; a credit from one customer settling another customer or job;'
-    ' cash-basis treatment, since every report is accrual today; and printing, which the'
-    ' document print work owns.'
+    ' against a source line without returning any of it; a line that names a stock-carrying'
+    ' item instead of returning the invoice line it was sold on, because a price is not a cost'
+    ' and nothing here guesses one -- name `source_invoice` and `source_line` to return it, or'
+    ' credit the money with a service or non-stock item and bring the quantity back with'
+    ' `inventory adjust`, which takes the value you say it is worth; a credit from one customer'
+    ' settling another customer or job; cash-basis treatment, since every report is accrual'
+    ' today; and printing, which the document print work owns.'
 )
 _NUMBERING = (
     ' A credit memo takes the next number from the invoice series, so invoices and credits read'
@@ -49,7 +58,7 @@ DESCRIPTIONS = {
              ' liabilities it charged, and Accounts Receivable is credited the total, so the'
              ' customer owes that much less. Saving it applies nothing to any invoice: the credit'
              ' stands available until it is applied or refunded.'
-             + _NUMBERING + _LINES + _LIMITS),
+             + _NUMBERING + _LINES + _STOCK + _LIMITS),
     'show': ('Show a credit memo: its current or a selected immutable revision, captured customer,'
              ' receivable account and custom facts, its credited lines with the tax components and'
              ' the source invoice quantities they claim, its posting batches, and what the credit'
@@ -58,11 +67,14 @@ DESCRIPTIONS = {
                 ' header and version and their posting batches; restart on company audit changes.'),
     'void': ('Void a credit memo with a required reason. Its accounting is reversed at its own'
              ' date, so the income and the sales tax it took back go back where they were and'
-             ' the customer owes the full amount again; every source invoice quantity it'
-             ' claimed is released and can be returned again; its number stays occupied and'
-             ' every revision stays readable. A credit still applied to an invoice is refused'
-             ' with `E_HAS_APPLICATIONS` and one a refund has paid out with `E_HAS_REFUND`:'
-             ' take the credit back off the invoice, or void the refund, first.'),
+             ' the customer owes the full amount again; any stock it brought back goes out'
+             ' again at exactly what it came in at, leaving the quantity and the cost where the'
+             ' sale left them; every source invoice quantity it claimed is released and can be'
+             ' returned again; its number stays occupied and every revision stays readable. A'
+             ' credit still applied to an invoice is refused with `E_HAS_APPLICATIONS` and one a'
+             ' refund has paid out with `E_HAS_REFUND`: take the credit back off the invoice, or'
+             ' void the refund, first. A void that would take returned stock back out of an'
+             ' empty shelf is refused naming the date, and writes nothing.'),
     'query': ('Page credit memos in accounting-date and stable-id order, oldest first or newest'
               ' first, with exact customer, receivable-account, date, number, origin and status'
               ' filters. Each row carries what the credit is still worth -- its total less what'
@@ -151,10 +163,15 @@ credit_memo_update = command(
                  ' and replaced by one application per line; invoice settlement exposes the current'
                  ' application IDs for later unapply. An unused standalone credit may change customer'
                  ' or receivable account; linked returns keep exact source ownership.'
-                 ' A correction that would post a line whose item carries stock is refused,'
-                 ' whether you supply that line or leave the grid out and let it be retained,'
-                 ' because a credit memo moves no inventory and restores no cost: replace the'
-                 ' grid with non-stock lines to correct such a credit, or void it. Preview with'
+                 ' Stock follows the corrected grid: whatever the previous revision brought back'
+                 ' is taken out again and the corrected grid brings back what it now returns, at'
+                 ' the cost its source invoice lines took out -- including a correction that'
+                 ' leaves the grid out and only moves the date, which moves the goods to that'
+                 ' date too. A correction that would post a line *naming* a stock-carrying item'
+                 ' is refused, whether you supply it or it is retained, because a price is not a'
+                 ' cost: return the invoice line instead, or put the credit on a non-stock item.'
+                 ' A correction that would leave stock below zero on any date is refused naming'
+                 ' that date, and writes nothing. Preview with'
                  ' expected_version, then save with expected_facts_fingerprint and an idempotency key'
                  ' reused for retries.'),
     input_model=CreditMemoUpdateInput, output_model=CreditMemoWriteOutput, writes={'company'},

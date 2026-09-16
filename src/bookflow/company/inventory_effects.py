@@ -19,6 +19,14 @@ credit Inventory Asset -- for what the weighted average says the quantity leavin
 and writes one ``issue`` movement against the credit. The revenue side is untouched: what a
 thing sold for and what it cost are two independent facts and this changes only the second.
 
+A **return** is that sale's issue read backwards. A credit memo line that gives back a stocked
+invoice line adds the same two legs the other way round -- debit Inventory Asset, credit Cost
+of Goods Sold -- and writes one ``receipt`` movement against the debit, for the share of that
+issue's own posted cost the returned quantity owns. The cost is *stated*, exactly as a bill
+line's is, and ``issued_cost`` is where it is read from: the average decides what leaves, and
+what leaves is what comes back. The money side of the credit is untouched by this, for the
+same reason a sale's revenue is.
+
 A **correction or a void** reverses those legs exactly, the way it reverses every other leg,
 and writes one ``reversal`` movement against each reversing leg. A replacement revision then
 receives or issues again at whatever the average says *now*. There is no separate rule for a
@@ -105,6 +113,52 @@ def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
                  kind='receipt', quantity_microunits=facts.quantity_microunits,
                  asset_account_id=facts.account.id, offset_account_id=offset_account_id,
                  class_id=class_id, value_minor_units=amount)
+
+
+def return_entry(facts, *, key, quantity_microunits, amount, class_id):
+    """Declare one receipt for stock a customer has brought back, at its own captured cost.
+
+    The inverse of the issue ``sales._stock_entries`` made, declared here beside it: the same
+    two accounts the sale captured, used the other way round, so the quantity goes back on the
+    shelf and ``amount`` comes out of cost of goods sold and back into the inventory asset.
+    Like every other receipt in this ledger the value is stated, never derived -- the caller
+    reads it off the issue being undone with ``issued_cost``.
+    """
+    if facts.item_type not in inventory.TRACKED_TYPES:
+        return None
+    return Entry(key=key, item_id=facts.item.id, item_name=facts.item.label,
+                 kind='receipt', quantity_microunits=quantity_microunits,
+                 asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
+                 class_id=class_id, value_minor_units=amount)
+
+
+def issued_cost(s, transaction_id, document_line_id):
+    """What one entered line's issue is actually standing in cost of goods sold, right now.
+
+    ``inventory_costing``'s contract names this figure: ``posted_effective(M)`` is the issue's
+    own value plus every active correction written against it, and it is what the accounts
+    hold, which a re-derived average is not. A return of that line is the inverse of that
+    issue, so this is what it takes back out.
+
+    ``None`` when the line issued no stock. Zero is a different answer and comes back as zero:
+    a zero-value quantity went out with no monetary leg and comes back the same way.
+    """
+    issues = [row for row in own_movements(s, transaction_id)
+              if row['kind'] == 'issue' and row['document_line_id'] == document_line_id]
+    if not issues:
+        return None
+    if len(issues) > 1:
+        raise BookflowError('E_INTERNAL', message=(
+            'One entered line stands behind more than one live stock issue.'))
+    issue = issues[0]
+    rows = inventory.movements(s, item_id=issue['item_id'])
+    retired = {row['reverses_movement_id'] for row in rows if row['kind'] == 'reversal'}
+    posted = int(issue['value_minor_units']) + sum(
+        int(row['value_minor_units']) for row in rows
+        if row['kind'] == CORRECTION_KIND and row['corrects_movement_id'] == issue['id']
+        and row['id'] not in retired)
+    return dict(movement=issue, cost_minor_units=-posted,
+                quantity_microunits=-int(issue['quantity_microunits']))
 
 
 @dataclass
