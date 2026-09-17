@@ -1,0 +1,13 @@
+/* Full report viewing uses each report's existing responsive table layout. */
+[data-report-full] .report-print-filters { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+[data-report-full] .report-print-filters div { max-width: 100%; overflow-wrap: anywhere; }
+[data-report-full] .report-print-filters dt { font-weight: 600; }
+[data-report-full] .report-print-filters dd { margin: 0; }
+[data-report-full] .report-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+[data-report-full] form[data-generated-form],
+[data-report-full] .report-structured { display: none; }
+@media print {
+  [data-report-full] #report-print-scope { font-size: 9pt; }
+  [data-report-full] .report-print-filters { gap: .2rem 1rem; }
+  [data-report-full] th, [data-report-full] td { overflow-wrap: anywhere; }
+}

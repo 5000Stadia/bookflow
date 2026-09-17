@@ -28,6 +28,7 @@ from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import transaction_detail as Detail
 from bookflow.adapters.workbench import missing_checks as MissingChecks
 from bookflow.adapters.workbench import report_export as Export
+from bookflow.adapters.workbench import report_print as ReportPrint
 from bookflow.adapters.workbench import purchases as Purchases
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
@@ -555,7 +556,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -1448,6 +1449,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         attempted: dict[str, str] | None = None,
         workflow_note: str | None = None,
         report_input: dict | None = None,
+        report_full: dict | None = None,
     ):
         if company_id and noun == 'payment' and verb in ('receive', 'apply', 'update', 'unapply', 'void'):
             if verb != 'receive' and record_id in (None, 'self'):
@@ -1972,6 +1974,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, err)
             runtime_fields = F.custom_field_descriptors(definitions, originals.get("custom_fields"), attempted, update=verb == "update")
             described = [leaf for leaf in described if leaf["path"] not in ("custom_fields", "custom_field_kinds")]
+        if report_full:
+            labels = {leaf['path']: (leaf.get('reference') or {}).get('current') for leaf in described}
+            report_full['filters'] = [(label, (labels.get(key) or {}).get('label') or value)
+                for key, label, value in report_full['filters']]
         report_page = Export.is_report(cmd) and company_id is not None
         return_token = attempted.get("_return_token") or request.query_params.get("return_token")
         return_target = attempted.get("_return_target") or request.query_params.get("return_target")
@@ -2022,7 +2028,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       # page needs -- a print stylesheet that knows the furniture from the report,
                       # and a link that saves what is on the screen as a file -- is decided by the
                       # registry calling this command a report rather than by naming any of them.
-                      report_page=report_page,
+                      report_page=report_page, report_full=report_full,
+                      report_print_url=(ReportPrint.print_url(company_id, verb, report_input)
+                          if report_page and result and report_input is not None and company_id and not report_full else None),
                       report_export_url=(Export.export_url(company_id, verb, report_input)
                           if report_page and result and report_input is not None and company_id else None),
                       preview=preview, get=F.get_path, form_value=F.form_value,
@@ -2118,6 +2126,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # report's download, not a verb of the `report` noun.
     from bookflow.adapters.workbench.report_export import install as install_report_export
     install_report_export(app, run=run, page_error=page_error)
+    ReportPrint.install(app, run=run, page_error=page_error, form_page=form_page)
 
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
