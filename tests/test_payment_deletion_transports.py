@@ -165,17 +165,17 @@ def test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books
                 assert replay['idempotent_replay'] and not replay['changed'], surface
                 assert database(path) == after, surface
                 # A fresh permanent key over an already-deleted receipt refuses and writes
-                # nothing. It refuses as E_VALIDATION naming the retained history, not as
-                # E_VERSION_CONFLICT the way the bill, cheque, card-charge, invoice and
-                # sales-receipt families answer the identical action: payment_deletions.prepare
-                # runs require_not_deleted before the version guard and the others run it after.
-                # Both codes are declared for the verb and both write nothing, so this asserts
-                # what the product actually says rather than what its siblings say.
+                # nothing, saying the delete already happened rather than that a version moved.
+                # This family answered that way first and de565dd moved the other five to match,
+                # because E_VERSION_CONFLICT is true and useless here: the version is stale
+                # precisely BECAUSE the delete happened, so an agent re-reads it and retries for
+                # ever. The wording below is the one all six now share.
                 losing = await witnessed('payment delete', {**raw, 'operation_key': 'losing-payment'},
                                     rejected=True)
                 assert losing['code'] == 'E_VALIDATION', surface
                 assert losing['details']['fields'][0]['field'] == 'transaction', surface
-                assert 'deleted' in losing['details']['fields'][0]['problem'], surface
+                assert 'already deleted and cannot be deleted again' in \
+                    losing['details']['fields'][0]['problem'], surface
                 assert database(path) == after, surface
 
                 gone = await call('payment show', {'payment': doomed['id']}, rejected=True)
