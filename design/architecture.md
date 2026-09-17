@@ -2020,7 +2020,11 @@ the budget includes all requests, waits and cached-result decoding. Only complet
 state with an available receipt permits cached execute retrieval. Only normal
 verified framing establishes command completion or the original business rejection;
 status remains an observation. Recovery never admits an intent or resends business
-input. Missing/expired receipts, failed polling, authorization loss and deadline
+input. During recovery, E_DB_BUSY with operation=filesystem_change from status
+or cached retrieval retries with the same backoff and deadline; each request
+reauthenticates and reauthorizes. Other failures and framed business rejections
+are not retried by this rule. Missing/expired receipts, failed polling,
+authorization loss and deadline
 exhaustion preserve unknown outcome, the reference and status guidance. Caller
 cancellation propagates without cancelling server work. Existing 5-second connect/30-second
 per-request inactivity bounds remain unchanged. Client failure diagnostics contain

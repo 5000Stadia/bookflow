@@ -192,9 +192,10 @@ def hosted(tmp_path, monkeypatch):
     local = bookflow.connect(data_root=str(root))
     local.init()
     issued = local.token.issue(label='timeout-test')
+    observer = local.token.issue(label='timeout-test-observer')
     handle = start_serving(root, client_version(), bind='127.0.0.1:8765', secure_cookies=False)
     try:
-        yield SimpleNamespace(handle=handle, secret=issued['secret'])
+        yield SimpleNamespace(handle=handle, secret=issued['secret'], observer_secret=observer['secret'], token_id=issued['token_id'])
     finally:
         handle.stop()
 
@@ -207,11 +208,19 @@ def delayed_route(hosted, monkeypatch, request):
     original_plan = cmd.plan
     plans = []
     mode = request.param
+    import threading
+    gate_observed = threading.Event()
+    hosted.busy_observations = []
+    hosted.revoked = mode == 'filesystem_revoked'
+    hosted.filesystem_case = mode.startswith('filesystem_')
     hosted.rejection = mode in {'rejection', 'ordinary_rejection'}
     hosted.ordinary_rejection = mode == 'ordinary_rejection'
     hosted.expired = mode == 'expired'
     def delayed_plan(*args, **kwargs):
         plans.append(True)
+        if mode in {'filesystem_busy', 'filesystem_revoked'}:
+            hosted.handle.host.release_company(None)
+            assert gate_observed.wait(5), 'No real busy recovery poll reached the held gate'
         if mode == 'command':
             time.sleep(1)
         return original_plan(*args, **kwargs)
@@ -232,6 +241,27 @@ def delayed_route(hosted, monkeypatch, request):
             if scope['path'].endswith('/run') and message['type'] == 'http.request':
                 bodies.append(message.get('body', b''))
             return message
+        if scope['path'].endswith('/status') and mode in {'filesystem_busy', 'filesystem_revoked'}:
+            messages = []
+            async def capture_status(message):
+                messages.append(message)
+            await app(scope, observed_receive, capture_status)
+            body = json.loads(b''.join(m.get('body', b'') for m in messages))
+            if body.get('code') == 'E_DB_BUSY':
+                assert body['details']['operation'] == 'filesystem_change'
+                hosted.busy_observations.append(scope['path'])
+                gate_observed.set()
+                if hosted.revoked:
+                    # Revocation completes before the next status poll; the
+                    # real host gate/credential checks remain in place.
+                    await anyio.to_thread.run_sync(lambda: hosted.handle.host.submit(lambda: None))
+                    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app),
+                            base_url='http://fixture', headers={'Authorization': f'Bearer {hosted.observer_secret}'}) as admin:
+                        revoked = await admin.post('/commands/token.revoke', json={'token': hosted.token_id})
+                        assert revoked.status_code == 200, revoked.text
+            for message in messages:
+                await send(message)
+            return
         if not scope['path'].endswith('/run'):
             return await app(scope, observed_receive, send)
         messages = []
@@ -257,7 +287,7 @@ def live(delayed_route, hosted):
     yield from live_fixture.__wrapped__(hosted)
 
 
-@pytest.mark.parametrize('delayed_route', ['command', 'reply', 'rejection', 'ordinary_rejection', 'expired'], indirect=True)
+@pytest.mark.parametrize('delayed_route', ['command', 'reply', 'rejection', 'ordinary_rejection', 'expired', 'filesystem_busy', 'filesystem_revoked'], indirect=True)
 def test_actual_route_recovers_original_with_one_execution(hosted, delayed_route, live, monkeypatch):
     import io
     from bookflow.adapters.mcp.framing import Decoder
@@ -278,11 +308,13 @@ def test_actual_route_recovers_original_with_one_execution(hosted, delayed_route
                 'Authorization': f'Bearer {hosted.secret}', 'X-Bookflow-Session-Id': new_id()},
                 timeout=httpx2.Timeout(2, connect=1), event_hooks={'request': [read_bound]}) as http:
                 client = Client(http, dirs, dirs)
-                if hosted.expired:
+                if hosted.expired or hosted.revoked:
                     with pytest.raises(BookflowError) as caught:
                         await client.run(arguments, metadata={'transfer': None},
                             selection={'value': None, 'source': 'none'})
                     assert caught.value.details['outcome'] == 'unknown'
+                    if hosted.revoked:
+                        assert caught.value.code == 'E_UNAUTHENTICATED'
                     ref = caught.value.details['operation_ref']
                     assert caught.value.details['recovery']['action'] == 'status'
                 else:
@@ -297,13 +329,20 @@ def test_actual_route_recovers_original_with_one_execution(hosted, delayed_route
                     decoder.feed(original_frames[0])
                     decoder.finish()
                     assert result == json.loads(sink.getvalue())
-                async with http.stream('POST', '/commands/hub.audit.list', json={'command': 'user add'}, timeout=2) as response:
+                async with http.stream('POST', '/commands/hub.audit.list', json={'command': 'user add'},
+                        headers={'Authorization': f'Bearer {hosted.observer_secret}'}, timeout=2) as response:
                     await response.aread()
                     assert response.status_code == 200, response.text
                     assert len(response.json()['items']) == (0 if rejection else 1)
                 return ref
     ref = anyio.run(witness)
     assert plans == [True]
+    if hosted.filesystem_case:
+        assert hosted.busy_observations
+        assert set(hosted.busy_observations) == {f'/adapters/mcp/intents/{ref}/status'}
+    if hosted.revoked:
+        assert hosted.busy_observations
+        assert not any(p.endswith('/execute') for p in paths)
     assert sum(path.endswith('/new') for path in paths) == 1
     assert sum(path.endswith('/run') for path in paths) == 1
     assert json.loads(b''.join(bodies)) == arguments.input
