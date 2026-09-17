@@ -14,6 +14,7 @@ open behind them.
 """
 import json
 from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -221,6 +222,71 @@ def test_every_deletable_family_can_be_reached_from_a_report():
 
 
 # ------------------------------------------------------------------------- the journey
+
+
+@pytest.mark.timeout(300)
+def test_real_card_transfer_and_tax_payment_report_links_open_their_records(hosted):  # noqa: F811
+    """Follow actual ledger links for the three previously source-only noun branches."""
+    company, date = hosted.company_id, "2037-06-18"
+    why = {"X-Bookflow-Reason": "Witness real report-to-record links"}
+
+    def post(command, raw):
+        return hosted.ok(command, raw, company=company, headers=why)
+
+    accounts = hosted.ok("account.query", {"limit": 200}, company=company)["items"]
+    bank = next(row["id"] for row in accounts if row["type"] == "bank")
+    expense = next(row["id"] for row in accounts if row["type"] == "expense")
+    card = post("account.create", {"name": "Report Link Card", "type": "credit_card"})["id"]
+    savings = post("account.create", {"name": "Report Link Savings", "type": "bank"})["id"]
+    charge = post("card-charge.post", {
+        "account": card, "date": date, "amount": "73.29", "memo": "Report link card purchase",
+        "expenses": [{"account": expense, "amount": "73.29"}],
+    })
+    transfer = post("transfer.post", {
+        "from_account": bank, "to_account": savings, "date": date,
+        "amount": "241.17", "memo": "Report link savings transfer",
+    })
+    # Establish tax owed through an ordinary taxable sale, not a database fixture.
+    sale = post("invoice.post", {
+        "customer": "Commercial Example Customer", "date": date, "number": "REPORT-LINK-TAX",
+        "sales_tax_item": "Commercial Example Tax 8%", "customer_tax_code": "Tax", "terms": "Net 30",
+        "lines": [{"item": "Commercial Example Service", "quantity": "1"}],
+    })
+    assert sale["tax"]["minor_units"] >= 123
+    tax = post("sales-tax.pay", {
+        "agency": "Commercial Example Tax Agency", "date": date, "funding_account": bank,
+        "method": "Check", "amount": "1.23", "memo": "Report link tax remittance",
+    })
+    expected = (
+        (charge["id"], "journal_entry", "card_charge", "card-charge", "73.29", "Report link card purchase"),
+        (transfer["id"], "journal_entry", "transfer", "transfer", "241.17", "Report link savings transfer"),
+        (tax["id"], "sales_tax_payment", None, "sales-tax-payment", "1.23", "Report link tax remittance"),
+    )
+    report = hosted.ok("report.general-ledger", {"date_from": date, "date_to": date, "limit": 50}, company=company)
+    assert report["next_cursor"] is None, "the witness must include every target on the rendered page"
+    watermark = str(report["metadata"]["audit_watermark"])
+    with TestClient(hosted.handle.app) as browser:
+        assert browser.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+        ledger = _run_report(browser, f"/c/{company}/report/general-ledger?f:date_from={date}&f:date_to={date}&f:limit=50")
+        links = _document_links(ledger, company)
+        for identity, stored_type, kind, noun, amount, memo in expected:
+            rows = [row for row in report["rows"] if row.get("transaction_id") == identity]
+            assert rows, f"the real ledger did not emit {noun} {identity}"
+            assert {(row["transaction_type"], row.get("money_out_kind")) for row in rows} == {(stored_type, kind)}
+            emitted = {href for href, _ in links if urlsplit(href).path.rsplit("/", 1)[-1] == identity}
+            assert emitted, f"the rendered ledger did not link {noun} {identity}"
+            for href in emitted:
+                url = urlsplit(href)
+                assert url.path == f"/c/{company}/{noun}/{identity}"
+                query = parse_qs(url.query)
+                assert query["source_report_watermark"] == [watermark]
+                if noun == "card-charge":
+                    assert query["include_deleted"] == ["1"]
+                document = _page(browser, href)
+                body = document.split("<main>", 1)[-1].split("</main>", 1)[0]
+                assert identity in body
+                assert amount in body and memo in body
+                assert f"audit watermark {watermark}" in body
 
 
 @pytest.mark.timeout(600)
