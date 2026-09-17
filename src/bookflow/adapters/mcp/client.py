@@ -157,24 +157,32 @@ class Client:
             with anyio.fail_after(RECOVERY_SECONDS):
                 delay = RECOVERY_INITIAL_DELAY
                 while True:
-                    state = await self.post(f'/adapters/mcp/intents/{reference}/status', reference=reference)
-                    if state['state'] == 'completed':
-                        if not state['receipt_available']:
-                            raise invalid('receipt_unavailable')
-                        try:
-                            # Runtime.queue refuses completed/active identities. Expiry
-                            # removes the identity; it cannot become a new execution.
-                            result = await self.result(reference, 'execute',
-                                result_file=result_file, output_file=output_file)
-                        except httpx2.ReadTimeout:
-                            pass
-                        else:
-                            if result[2]['response_kind'] == 'verified_command_completion':
-                                return result
-                            # A concurrent delivery may have claimed the receipt.
-                            # Its observation is not the original command output.
-                    elif state['state'] not in {'preparing', 'ready', 'receiving', 'queued', 'started', 'delivering'}:
-                        raise invalid('recovery_unavailable')
+                    try:
+                        state = await self.post(f'/adapters/mcp/intents/{reference}/status', reference=reference)
+                        if state['state'] == 'completed':
+                            if not state['receipt_available']:
+                                raise invalid('receipt_unavailable')
+                            try:
+                                # Runtime.queue refuses completed/active identities. Expiry
+                                # removes the identity; it cannot become a new execution.
+                                result = await self.result(reference, 'execute',
+                                    result_file=result_file, output_file=output_file)
+                            except httpx2.ReadTimeout:
+                                pass
+                            else:
+                                if result[2]['response_kind'] == 'verified_command_completion':
+                                    return result
+                                # A concurrent delivery may have claimed the receipt.
+                                # Its observation is not the original command output.
+                        elif state['state'] not in {'preparing', 'ready', 'receiving', 'queued', 'started', 'delivering'}:
+                            raise invalid('recovery_unavailable')
+                    except BookflowError as exc:
+                        # Folder-changing writers temporarily block all readers,
+                        # including status authentication/publication. Retry only
+                        # that observation failure, under this same deadline.
+                        # Framed business rejections return above, never raise here.
+                        if exc.code != 'E_DB_BUSY' or exc.details.get('operation') != 'filesystem_change':
+                            raise
                     await anyio.sleep(delay)
                     delay = min(delay * 2, RECOVERY_MAX_DELAY)
         except Exception as exc:

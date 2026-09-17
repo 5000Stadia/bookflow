@@ -69,7 +69,10 @@ evicted submitted receipt is unknown, never proof of rollback. After a submitted
 run/execute read timeout, the launcher polls the same reference for up to 30 seconds,
 with 100 ms exponential backoff capped at 1 second, including requests and receipt
 retrieval within that deadline. A completed state with an available receipt permits
-retrieving the original verified result under current authority. Status alone is
+retrieving the original verified result under current authority. Temporary
+E_DB_BUSY filesystem_change responses while checking status or retrieving the
+receipt retry within that same deadline; other failures and original business
+rejections do not receive that retry. Status alone is
 not command success. Failed recovery returns unknown outcome with the reference
 and guidance to use action=status; do not resubmit the business command. Caller
 cancellation stops client recovery without claiming server cancellation. No
