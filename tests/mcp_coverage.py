@@ -208,6 +208,7 @@ customer-type list
 customer-type query
 customer-type show
 customer-type update
+customer-refund history
 customer-refund post
 customer-refund query
 customer-refund show
@@ -552,6 +553,7 @@ def execution_map():
     from tests.test_credit_memo_lifecycle import COMMANDS as CREDIT_LIFECYCLE_COMMANDS
     from tests.test_credit_settlement import COMMANDS as CREDIT_SETTLEMENT_COMMANDS
     from tests.test_customer_refund import COMMANDS as REFUND_COMMANDS
+    from tests.test_customer_refund_history_surfaces import COMMANDS as REFUND_HISTORY_COMMANDS
     from tests.test_vendor_credit import COMMANDS as VENDOR_CREDIT_COMMANDS
     from tests.test_batch_invoicing_interfaces import COMMANDS as BATCH_COMMANDS
     from tests.test_inventory_interfaces import COMMANDS as INVENTORY_COMMANDS
@@ -599,6 +601,7 @@ def execution_map():
                    'tests/test_credit_memo.py::test_the_same_credit_memo_through_python_cli_http_and_mcp' if cmd.name in CREDIT_MEMO_COMMANDS else
                    'tests/test_credit_memo_lifecycle.py::test_the_same_credit_memo_lifecycle_through_python_cli_http_and_mcp' if cmd.name in CREDIT_LIFECYCLE_COMMANDS else
                    'tests/test_credit_settlement.py::test_the_same_credit_application_through_python_cli_http_and_mcp' if cmd.name in CREDIT_SETTLEMENT_COMMANDS else
+                   'tests/test_customer_refund_history_surfaces.py::test_retained_refund_history_on_four_actual_surfaces' if cmd.name in REFUND_HISTORY_COMMANDS else
                    'tests/test_customer_refund.py::test_the_same_refund_through_python_cli_http_and_mcp' if cmd.name in REFUND_COMMANDS else
                    'tests/test_sales_tax_remittance.py::test_the_same_sales_tax_remittance_through_python_cli_http_and_mcp' if cmd.name in SALES_TAX_COMMANDS else
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else

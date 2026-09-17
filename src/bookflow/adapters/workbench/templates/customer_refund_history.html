@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}History of customer refund {{ history.number }}{% endblock %}
+{% block body %}
+<nav class="crumbs"><a href="{{ noun_base(company_id, 'customer-refund') }}">Customer refunds</a> / <a href="{{ refund_url }}">{{ history.number }}</a> / History</nav>
+<h1>History of customer refund {{ history.number }}</h1>
+<section class="workspace-card" aria-label="Customer refund history">
+<p>Current status: <strong>{{ history.status|capitalize }}</strong>. Revisions are shown oldest first.</p>
+{% if history.void_reason %}<p class="warn">Voided: {{ history.void_reason }}. Retained amounts describe what was recorded; reversal effects cancel the refund.</p>{% endif %}
+<p><a data-history-current href="{{ refund_url }}">Back to the current refund</a></p>
+{% for revision in history['items'] %}
+<article class="workspace-card document-detail" data-refund-history-revision="{{ revision.revision_number }}">
+<h2><a href="{{ refund_url }}?revision_number={{ revision.revision_number }}">Revision {{ revision.revision_number }}</a>{% if revision.id == history.current_revision_id %} (current){% else %} (superseded){% endif %}</h2>
+<p>{{ revision.date }} · {{ revision.total.amount }} {{ revision.currency }} · {{ revision.number }}</p>
+{% if revision.memo is not none %}<p>Memo: {{ revision.memo }}</p>{% endif %}
+<p>Paid to {{ revision.profile.customer.label }} from {{ revision.profile.funding_account.full_name }} · {{ revision.profile.payment_method.label }}{% if revision.profile.check_number %} · Check {{ revision.profile.check_number }}{% endif %}</p>
+<h3>Recorded changes</h3>
+<ul>{% for event in revision.events %}<li>{{ event.at }} — {{ event.command }} by {{ event.actor_name or event.actor_id or 'Unknown actor' }}{% if event.on_behalf_of %} on behalf of {{ event.on_behalf_of_name or event.on_behalf_of }}{% endif %} via {{ event.interface }} ({{ event.client_name }}){% if event.reason %}: {{ event.reason }}{% endif %}{% if event.directive_code or event.directive_id %}; directive {{ event.directive_code or event.directive_id }}{% endif %}{% if event.source_ref %}; source {{ event.source_ref }}{% endif %}</li>{% endfor %}</ul>
+<details><summary>Financial effects for revision {{ revision.revision_number }}</summary>
+<h3>Posting batches</h3>
+<div class="table-wrap"><table class="ledger-table document-lines"><thead><tr><th>Effect</th><th>Accounting date</th><th>Debits</th><th>Credits</th></tr></thead><tbody>
+{% for batch in revision.batches %}<tr><td data-label="Effect"><span class="document-cell-label" aria-hidden="true">Effect</span>{{ batch.kind|capitalize }}</td><td data-label="Accounting date"><span class="document-cell-label" aria-hidden="true">Accounting date</span>{{ batch.effective_date }}</td><td data-label="Debits"><span class="document-cell-label" aria-hidden="true">Debits</span>{{ batch.debit_total.amount }} {{ batch.currency }}</td><td data-label="Credits"><span class="document-cell-label" aria-hidden="true">Credits</span>{{ batch.credit_total.amount }} {{ batch.currency }}</td></tr>{% endfor %}
+</tbody></table></div>
+<h3>Refunded source capacity</h3>
+<p class="muted">Consume pays out source capacity; release returns it after correction or void. Source numbers below are current labels; the revision detail keeps the captured source facts.</p>
+<div class="table-wrap"><table class="ledger-table document-lines"><thead><tr><th>Effect</th><th>Source</th><th>Accounting date</th><th>Amount</th></tr></thead><tbody>
+{% for row in revision.consumptions %}<tr><td data-label="Effect"><span class="document-cell-label" aria-hidden="true">Effect</span>{{ row.kind|capitalize }}</td><td data-label="Source"><span class="document-cell-label" aria-hidden="true">Source</span>{% if row.payment_id %}Payment {{ row.payment_number }}{% else %}Credit memo {{ row.credit_memo_number }}{% endif %}</td><td data-label="Accounting date"><span class="document-cell-label" aria-hidden="true">Accounting date</span>{{ row.effective_date }}</td><td data-label="Amount"><span class="document-cell-label" aria-hidden="true">Amount</span>{{ row.amount.amount }} {{ row.currency }}</td></tr>{% endfor %}
+</tbody></table></div></details>
+</article>
+{% else %}<p>No revisions on this page.</p>{% endfor %}
+<nav class="actions" aria-label="Refund history pages">{% if next_url %}<a rel="next" href="{{ next_url }}">Next revisions</a>{% endif %}<a href="{{ refund_url }}/history">Start history again</a></nav>
+</section>
+{% endblock %}

@@ -7,11 +7,12 @@ invoices it settled, and one refund pays back either. The accounting lives in
 ``company/refunds.py``.
 """
 from bookflow.core.registry import Plan, command
-from bookflow.company import refunds
+from bookflow.company import refunds, refund_history
 from bookflow.company.refund_models import (
     CustomerRefundOutput, CustomerRefundPageOutput, CustomerRefundPostInput,
     CustomerRefundQueryInput, CustomerRefundShowInput, CustomerRefundUpdateInput,
     CustomerRefundVoidInput, CustomerRefundWriteOutput,
+    CustomerRefundHistoryInput, CustomerRefundHistoryOutput,
 )
 
 _POST = (
@@ -75,6 +76,13 @@ DESCRIPTIONS = {
              ' of each,'
              ' and its posting batches. Give `revision_number` to read a superseded revision'
              ' rather than what the refund says now.'),
+    'history': ('Page retained customer-refund revisions oldest first, with current document status.'
+                ' Each revision includes captured facts, posting/reversal batches, source'
+                ' consumptions/releases and audit attribution, including correction and void reasons.'
+                ' A void adds effects to the last revision, not a new revision. Actor labels use'
+                ' the company principal directory. Consumption source numbers are current labels;'
+                ' the revision profile retains captured source facts. Writes invalidate cursors;'
+                ' restart without cursor. Show still defaults to the current revision.'),
     'query': ('Page customer refunds in accounting-date and stable-id order, oldest first or'
               ' newest first, with exact customer, date, funding-account, method, number,'
               ' check-number and status filters; restart on company audit changes.'),
@@ -99,14 +107,16 @@ def _write(name, verb, model):
 
 def _read(verb, model, output_model):
     def planner(inp, ctx, s):
+        if verb == 'history':
+            return Plan(refund_history.history(s, ctx, inp))
         return Plan(refunds.show(s, inp) if verb == 'show' else refunds.page(s, ctx, inp))
 
     return command(
         'customer-refund ' + verb, scope='company', description=DESCRIPTIONS[verb],
         input_model=model, output_model=output_model,
         required_role='member', capability='ledger.read',
-        positional=['refund'] if verb == 'show' else [],
-        error_codes=['E_RECORD_NOT_FOUND'] + (['E_QUERY_STALE'] if verb == 'query' else []),
+        positional=['refund'] if verb in ('show', 'history') else [],
+        error_codes=['E_RECORD_NOT_FOUND'] + (['E_QUERY_STALE'] if verb in ('query', 'history') else []),
     )(planner)
 
 
@@ -116,5 +126,7 @@ customer_refund_void = _write('customer-refund void', 'void', CustomerRefundVoid
 customer_refund_show = _read('show', CustomerRefundShowInput, CustomerRefundOutput)
 customer_refund_query = _read('query', CustomerRefundQueryInput, CustomerRefundPageOutput)
 
+customer_refund_history = _read('history', CustomerRefundHistoryInput, CustomerRefundHistoryOutput)
+
 REFUND_COMMANDS = [customer_refund_post, customer_refund_show, customer_refund_query,
-                   customer_refund_update, customer_refund_void]
+                   customer_refund_update, customer_refund_void, customer_refund_history]

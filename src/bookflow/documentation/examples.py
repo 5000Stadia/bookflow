@@ -730,6 +730,9 @@ EXAMPLES.update({
          "check_number": "1041", "sources": [{"credit_memo": ID}]}),
     "customer-refund show": Example(
         f'bookflow customer-refund show {ID} --company "Demo Plumbing Co" --json', {"refund": ID}),
+    "customer-refund history": Example(
+        f'bookflow customer-refund history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"refund": ID, "limit": 25}),
     "customer-refund query": Example(
         'bookflow customer-refund query --customer "Rivera Construction" --limit 25'
         ' --company "Demo Plumbing Co" --json',
