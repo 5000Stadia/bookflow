@@ -57,7 +57,8 @@ class PublicationMiddleware:
 
         def check():
             from bookflow.core.permission_package import read_package
-            if self.host is None:
+            if self.host is None or not hasattr(self.host, "data_root"):
+                # Admission-only transports need no database package.
                 return check_guards()
             # Actual release never inherits the execution snapshot, including
             # retries and subsequent bounded frames.

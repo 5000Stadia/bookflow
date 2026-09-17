@@ -126,7 +126,7 @@ def test_real_host_sessions_do_not_share_identity_or_company_and_writer_discards
         assert host._readers_attached == 0
         # Actual queue boundary releases idle snapshots before a filesystem owner
         # can wait for command readers, even when submit is not through HTTP.
-        host.submit(lambda: host.close_company(hosted.company_id))
+        host.submit(lambda: host.release_company(hosted.company_id))
         assert db._closed
     assert host._readers_attached == 0
 
