@@ -65,9 +65,16 @@ same intent; execute again observes its original receipt/state. A new command
 envelope is new work, even if its input is equal. Use the command's idempotency or
 permanent business key when deliberately retrying one business effect. Status,
 execute, release and inspect always require current authority. A lost, expired or
-evicted submitted receipt is unknown, never proof of rollback. No automatic write
-retry occurs. A lost one-time secret is not reconstructed: identify/revoke that
-credential and deliberately replace it under current permissions.
+evicted submitted receipt is unknown, never proof of rollback. After a submitted
+run/execute read timeout, the launcher polls the same reference for up to 30 seconds,
+with 100 ms exponential backoff capped at 1 second, including requests and receipt
+retrieval within that deadline. A completed state with an available receipt permits
+retrieving the original verified result under current authority. Status alone is
+not command success. Failed recovery returns unknown outcome with the reference
+and guidance to use action=status; do not resubmit the business command. Caller
+cancellation stops client recovery without claiming server cancellation. No
+automatic write retry occurs. A lost one-time secret is not reconstructed:
+identify/revoke that credential and deliberately replace it under current permissions.
 
 Initial host intent capacity is8 total/2 per effective principal, shared across
 tokens/companies. Unsubmitted work has30s idle/300s absolute deadlines. Prepared

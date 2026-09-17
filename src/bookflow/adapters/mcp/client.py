@@ -7,6 +7,7 @@ import json
 from contextlib import ExitStack
 
 import anyio
+import httpx2
 
 from bookflow.core.errors import BookflowError
 from .catalog import BRIDGE_VERSION
@@ -15,6 +16,10 @@ from .framing import Decoder, invalid, json_chunks
 from .responses import annotate, observation
 
 log = logging.getLogger(__name__)
+
+RECOVERY_SECONDS = 30
+RECOVERY_INITIAL_DELAY = 0.1
+RECOVERY_MAX_DELAY = 1.0
 
 
 class Client:
@@ -139,6 +144,48 @@ class Client:
             document = json.loads(json_sink.getvalue())
         return document, terminal['is_error'], delivery
 
+    async def execution_result(self, reference, action, *, content=None, result_file=None, output_file=None):
+        """Recover a read timeout using only the submitted identity's cached result."""
+        try:
+            return await self.result(reference, action, content=content,
+                                     result_file=result_file, output_file=output_file)
+        except httpx2.ReadTimeout:
+            log.warning('mcp recovery: reference=%s stage=read_timeout exception=ReadTimeout', reference)
+        try:
+            # One budget covers polling, backoff, HTTP reads and framed decoding.
+            # Caller cancellation is not shielded or translated into server cancellation.
+            with anyio.fail_after(RECOVERY_SECONDS):
+                delay = RECOVERY_INITIAL_DELAY
+                while True:
+                    state = await self.post(f'/adapters/mcp/intents/{reference}/status', reference=reference)
+                    if state['state'] == 'completed':
+                        if not state['receipt_available']:
+                            raise invalid('receipt_unavailable')
+                        try:
+                            # Runtime.queue refuses completed/active identities. Expiry
+                            # removes the identity; it cannot become a new execution.
+                            result = await self.result(reference, 'execute',
+                                result_file=result_file, output_file=output_file)
+                        except httpx2.ReadTimeout:
+                            pass
+                        else:
+                            if result[2]['response_kind'] == 'verified_command_completion':
+                                return result
+                            # A concurrent delivery may have claimed the receipt.
+                            # Its observation is not the original command output.
+                    elif state['state'] not in {'preparing', 'ready', 'receiving', 'queued', 'started', 'delivering'}:
+                        raise invalid('recovery_unavailable')
+                    await anyio.sleep(delay)
+                    delay = min(delay * 2, RECOVERY_MAX_DELAY)
+        except Exception as exc:
+            log.warning('mcp recovery failed: reference=%s stage=recovery exception=%s',
+                        reference, type(exc).__name__)
+            error = exc if isinstance(exc, BookflowError) else invalid(
+                'recovery_deadline' if isinstance(exc, TimeoutError) else 'recovery_unavailable')
+            error.details['recovery'] = {'operation_ref': reference, 'action': 'status'}
+            error.details['guidance'] = 'Check this operation reference with bookflow_run action=status; do not resubmit the business command.'
+            raise annotate(error, reference, submitted=True) from None
+
     async def run(self, arguments, *, metadata=None, selection=None):
         reference = None
         submitted = False
@@ -147,7 +194,7 @@ class Client:
                 reference = intent_reference(arguments.operation_ref or arguments.input_ref)
                 submitted = True
                 if arguments.action == 'execute':
-                    return await self.result(reference, 'execute', result_file=arguments.result_file,
+                    return await self.execution_result(reference, 'execute', result_file=arguments.result_file,
                                              output_file=arguments.output_file)
                 if arguments.action == 'inspect':
                     from .inspection import inspect_file
@@ -177,7 +224,7 @@ class Client:
             raw = self.source(files.input_json_file) if files.input_json_file else self.object_source(arguments.input)
             if not direction and not files.prepare_only:
                 submitted = True
-                return await self.result(reference, 'run', content=raw, result_file=files.result_file)
+                return await self.execution_result(reference, 'run', content=raw, result_file=files.result_file)
             prepared = await self.result(reference, 'prepare', content=raw, result_file=files.result_file)
             if prepared[2]['response_kind'] == 'verified_command_completion':
                 return prepared
@@ -195,21 +242,14 @@ class Client:
             if files.prepare_only:
                 return await self.post(f'/adapters/mcp/intents/{reference}/status', reference=reference), False, {"operation_ref": reference, "response_kind": "recovery_observation"}
             submitted = True
-            return await self.result(reference, 'execute', result_file=files.result_file, output_file=output_file)
+            return await self.execution_result(reference, 'execute', result_file=files.result_file, output_file=output_file)
         except BookflowError as exc:
             if getattr(exc, "command_rejection", False):
                 raise
             raise annotate(exc, reference, submitted=submitted)
-        except Exception:
-            # The generic certificate is the right thing to hand the caller: an untyped failure
-            # here can carry internals -- a path, a socket, a stack -- across a boundary that must
-            # not describe what it could not certify, and `outcome: unknown` is the honest answer
-            # when the request was submitted and the reply never arrived.
-            #
-            # Throwing the cause away with it is not. `from None` plus a broad catch means nobody
-            # can ever find out why a call failed, and `demo reset` over MCP reproducibly lands
-            # here with no evidence of what went wrong. The caller keeps the same certificate; the
-            # exact cause and its traceback go to the log, which an operator reads and the caller
-            # never sees.
-            log.exception('mcp client call failed: reference=%s submitted=%s', reference, submitted)
+        except Exception as exc:
+            # Preserve operator evidence without logging payloads, credentials or
+            # exception messages (which can contain request URLs and local paths).
+            log.warning('mcp client call failed: reference=%s submitted=%s exception=%s',
+                        reference, submitted, type(exc).__name__)
             raise annotate(invalid('transport_failure'), reference, submitted=submitted) from None

@@ -2014,6 +2014,19 @@ permitted input/output paths, hashing, binary streaming and atomic verified file
 POSIX-only, with Linux tested and no macOS/WSL execution claim. `inspection.py`
 provides authorized bounded navigation of mapped, verified result files.
 
+A submitted run/execute HTTP read timeout starts one 30-second recovery budget.
+The client polls the same reference with 100 ms exponential backoff capped at 1 second;
+the budget includes all requests, waits and cached-result decoding. Only completed
+state with an available receipt permits cached execute retrieval. Only normal
+verified framing establishes command completion or the original business rejection;
+status remains an observation. Recovery never admits an intent or resends business
+input. Missing/expired receipts, failed polling, authorization loss and deadline
+exhaustion preserve unknown outcome, the reference and status guidance. Caller
+cancellation propagates without cancelling server work. Existing 5-second connect/30-second
+per-request inactivity bounds remain unchanged. Client failure diagnostics contain
+reference, stage/submission state and exception type, without raw exception text
+or payloads.
+
 `framing.py` authenticates complete JSON/binary delivery using ordered bounded
 records and terminal sizes/digests. `json_validation.py` validates syntax without
 assembling scalars, keys, numeric lexemes or object paths. Validation holds one
