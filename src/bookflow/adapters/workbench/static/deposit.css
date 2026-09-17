@@ -59,7 +59,7 @@
 
 /* Saved list: exact source values, one table shared with phone cards and print. */
 .deposit-list #deposit-filters{display:flex;flex-wrap:wrap;align-items:end;gap:.7rem;margin:1rem 0}
-.deposit-list #deposit-filters label{display:flex;flex-direction:column;flex:1 1 12rem;min-width:0}
+.deposit-list #deposit-filters > label{display:flex;flex-direction:column;flex:1 1 12rem;min-width:0}
 .deposit-list #deposit-filters input,.deposit-list #deposit-filters select{width:100%;min-width:0;box-sizing:border-box}
 .deposit-list-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));gap:.6rem}
 .deposit-list dd{margin:.2rem 0 .7rem;font-variant-numeric:tabular-nums}
