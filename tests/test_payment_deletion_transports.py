@@ -215,35 +215,14 @@ def test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books
     asyncio.run(witness())
 
 
-@pytest.mark.timeout(180)
-def test_activated_agent_deletes_for_bound_human_once_over_mcp(books, tmp_path):
-    """Real agent bearer, active Delete grant, retained principal, fresh-session retry.
-
-    Authority assignment uses the credential tests' fixture (there is no public
-    assignment command); permission activation, grants and token issue are real.
-    No transport idempotency key is supplied: retry exercises the permanent
-    business operation_key through a new MCP session, not a cached MCP receipt.
-    """
-    import anyio
-    from mcp import ClientSession
-    from mcp.client.stdio import StdioServerParameters, stdio_client
-    from bookflow.commands.host_cmds import start_serving
+def _agent_delete_authority(books, *, missing=None):
     from bookflow.core import clock
-    from bookflow.core.context import client_version
     from bookflow.hub import schema as h
-    from tests import provenance
-    from tests.test_row3_host import Hosted, live
-    from tests.test_row7_credentials import writer
     from tests.conftest import make_actor
+    from tests.test_row7_credentials import writer
 
-    client, company, run = books['client'], books['company'], books['run']
+    client, company = books['client'], books['company']
     root = Path(client.data_root)
-    payment = run('payment receive', dict(customer=books['customer'],
-        date='2017-01-03', amount='25.00', operation_key='agent-receipt',
-        payment_method=books['methods']['Cash'], deposit_to=books['bank']),
-        reason='Duplicate receipt to remove')
-    original = run('payment show', {'payment': payment['id']})
-    receivable = _receivable(books)
     principal = client.user.add(username='deletion-human', display_name='Deletion human')['user_id']
     agent = make_actor(root, 'deletion-agent', kind='agent', owner_user_id=principal)
     with writer(root) as db:
@@ -259,7 +238,9 @@ def test_activated_agent_deletes_for_bound_human_once_over_mcp(books, tmp_path):
         member = next(row for row in members if row['user_id'] == user)
         client.membership.grant(user=user, company=company, role='standard',
             expected_version=member['version'],
-            grants=['transaction.payment.delete'], denies=['ledger.post'])
+            grants=[] if missing == ('agent' if user == agent else 'principal') else
+                ['transaction.payment.delete', 'transaction.journal_entry.delete'],
+            denies=['ledger.post', *(['ledger.read'] if missing == 'ledger' and user == principal else [])])
     with writer(root) as db:
         # Fixture authorization follows completed policy setup, just as credential
         # fixtures bind authority before issue; no public agent-authorize verb exists.
@@ -274,6 +255,35 @@ def test_activated_agent_deletes_for_bound_human_once_over_mcp(books, tmp_path):
     with sqlite3.connect(root / 'hub.db') as db:
         assert db.execute('SELECT user_id,on_behalf_of,authority_epoch FROM api_tokens '
                           'WHERE id=?', (issued['token_id'],)).fetchone() == (agent, principal, epoch)
+    return agent, principal, issued
+
+
+@pytest.mark.timeout(180)
+def test_activated_agent_deletes_for_bound_human_once_over_mcp(books, tmp_path):
+    """Real agent bearer, active Delete grant, retained principal, fresh-session retry.
+
+    Authority assignment uses the credential tests' fixture (there is no public
+    assignment command); permission activation, grants and token issue are real.
+    No transport idempotency key is supplied: retry exercises the permanent
+    business operation_key through a new MCP session, not a cached MCP receipt.
+    """
+    import anyio
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.context import client_version
+    from tests import provenance
+    from tests.test_row3_host import Hosted, live
+
+    client, company, run = books['client'], books['company'], books['run']
+    root = Path(client.data_root)
+    payment = run('payment receive', dict(customer=books['customer'],
+        date='2017-01-03', amount='25.00', operation_key='agent-receipt',
+        payment_method=books['methods']['Cash'], deposit_to=books['bank']),
+        reason='Duplicate receipt to remove')
+    original = run('payment show', {'payment': payment['id']})
+    receivable = _receivable(books)
+    agent, principal, issued = _agent_delete_authority(books)
     path = Path(client.company.show(company=company)['path']) / 'company.db'
     before = database(path)
     with sqlite3.connect(path) as db:
@@ -369,5 +379,63 @@ def test_activated_agent_deletes_for_bound_human_once_over_mcp(books, tmp_path):
             assert after['tables'][table] == before['tables'][table]
     finally:
         server.close()
+        hosted.api.close()
+        handle.stop()
+
+
+@pytest.mark.parametrize('missing', ['agent', 'principal', 'ledger'])
+def test_activated_agent_delete_requires_both_authorities_without_writes(books, missing):
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.context import client_version
+    from tests.test_row3_host import Hosted
+
+    payment = books['run']('payment receive', dict(customer=books['customer'],
+        date='2017-01-03', amount='25.00', operation_key='denial-receipt',
+        payment_method=books['methods']['Cash'], deposit_to=books['bank']), reason='Receipt')
+    agent, principal, issued = _agent_delete_authority(books, missing=missing)
+    root, company = Path(books['client'].data_root), books['company']
+    path = Path(books['client'].company.show(company=company)['path']) / 'company.db'
+    before = database(path)
+    handle = start_serving(root, client_version(), bind='127.0.0.1:8765',
+                           secure_cookies=False, publish_descriptor=False)
+    hosted = Hosted(handle, root, '', company, issued, '', {})
+    try:
+        for identifier in (payment['id'], '01ARZ3NDEKTSV4RRFFQ69G5FAV'):
+            for preview in ('true', 'false'):
+                response = hosted.api.post(f'/companies/{company}/commands/payment.delete',
+                    headers={**hosted.bearer, 'X-Bookflow-Reason': 'Remove duplicate'},
+                    params={'dry_run': preview}, json=dict(payment=identifier,
+                        expected_version=1, operation_key='denied-delete'))
+                assert response.status_code == 403, response.text
+                assert response.json()['code'] == 'E_PERMISSION'
+                assert database(path) == before
+    finally:
+        hosted.api.close()
+        handle.stop()
+
+
+def test_activated_agent_journal_delete_uses_same_bound_authority(books):
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.context import client_version
+    from tests.test_row3_host import Hosted
+
+    journal = books['run']('journal post', dict(date='2017-01-03', lines=[
+        dict(account=books['bank'], side='debit', amount='25.00'),
+        dict(account=books['income'], side='credit', amount='25.00')]), reason='Duplicate entry')
+    agent, principal, issued = _agent_delete_authority(books)
+    root, company = Path(books['client'].data_root), books['company']
+    handle = start_serving(root, client_version(), bind='127.0.0.1:8765',
+                           secure_cookies=False, publish_descriptor=False)
+    hosted = Hosted(handle, root, '', company, issued, '', {})
+    try:
+        raw = dict(journal=journal['id'], expected_version=1, operation_key='agent-journal-delete')
+        response = hosted.call('journal.delete', raw, company=company,
+                              headers={'X-Bookflow-Reason': 'Remove duplicate'})
+        assert response.status_code == 200, response.text
+        assert response.json()['status'] == 'deleted'
+        events = hosted.ok('audit.list', {'command': 'journal delete'}, company=company)['items']
+        assert len(events) == 1
+        assert (events[0]['actor_id'], events[0]['on_behalf_of']) == (agent, principal)
+    finally:
         hosted.api.close()
         handle.stop()

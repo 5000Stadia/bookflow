@@ -79,6 +79,12 @@ def actors(s, ctx, binding):
     actor, kind, principal, _ = execution_binding(s, binding)
     if principal != ctx.on_behalf_of:
         raise BookflowError('E_UNAUTHENTICATED')
+    from bookflow.hub.permission_access import activated
+    if activated(s):
+        # The shared policy owner checks the authenticated actor/bound-human
+        # intersection for every resource. Retain its credential and context;
+        # swapping the actor would impersonate the human and break that binding.
+        return (s,), (actor, kind, principal)
     result = []
     for identity in (actor,) if principal is None else (actor, principal):
         value = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == identity, h.users.c.active.is_(True))).mappings().one_or_none()
