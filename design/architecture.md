@@ -4799,3 +4799,19 @@ cursors, and dispatch rechecks authority on every page. Show remains current by 
 The command is added by the customer-refund-history-v1 permission delta; accepted
 ancestor descriptors remain unchanged. The browser history has revision/current links,
 paging and stale restart, and uses the same command without posting financial effects.
+
+### Transaction-local permission observation reuse
+
+`storage.snapshot_sqlite` owns a conservative native connection lifetime counter.
+Transaction boundaries, rollback and potentially mutating statements invalidate it;
+unchanged SELECTs and nested savepoint bookkeeping retain it. Connection shortcuts,
+cursors, SQLAlchemy and optional traced handles use the same owner. Untracked custom
+cursor factories disable reuse for that connection. The live key also includes the
+exact connection and `total_changes`; closed handles and autocommit have no key.
+
+`permission_runtime._operation_observation` retains only successful observations whose
+key is unchanged throughout construction. `require_company` reuses those facts but
+evaluates every actor/principal/company/requirement independently. Authenticated binding
+and expiry checks still precede evaluation. `observe_current` remains explicitly fresh
+for administration and other independent evidence. This mechanism does not group
+multiple request connections or replace publication freshness checks.

@@ -129,7 +129,8 @@ def test_preexisting_native_handles_and_finished_capture(recording, tmp_path):
     performance.close()
     native = Database(tmp_path / "hub.db", writable=True, create=True)
     try:
-        assert type(native.raw) is sqlite3.Connection
+        from bookflow.storage.snapshot_sqlite import Connection as SnapshotConnection
+        assert type(native.raw) is SnapshotConnection
     finally:
         native.close()
     traced = sqlite3.connect(":memory:", factory=Connection)
@@ -176,3 +177,23 @@ def test_recording_failure_preserves_durable_success_and_original_error(recordin
 ])
 def test_bounded_statement_labels(sql, phase):
     assert _phase(sql) == phase
+
+
+def test_tracing_keeps_snapshot_lifetime_tracking(recording, tmp_path):
+    db = Database(tmp_path / 'hub.db', writable=True, create=True)
+    try:
+        db.raw.execute('CREATE TABLE facts(value)')
+        db.raw.execute('BEGIN')
+        first = db.authority_snapshot_key()
+        assert first is not None
+        db.raw.execute('SELECT * FROM facts').fetchall()
+        assert db.authority_snapshot_key() == first
+        db.raw.execute('SAVEPOINT before_insert')
+        db.raw.execute('INSERT INTO facts VALUES(1)')
+        changed = db.authority_snapshot_key()
+        assert changed != first
+        db.raw.execute('ROLLBACK TO before_insert')
+        assert db.authority_snapshot_key() != changed
+        assert 'sql.execute' in names(recording)
+    finally:
+        db.close()

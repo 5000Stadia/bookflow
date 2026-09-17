@@ -98,47 +98,23 @@ def test_real_host_token_actor_principal_conjunction(path,changed):
     finally:host.stop()
 
 
-def test_complete_current_catalog_source_delta_no_policy_rewrite():
-    import ast
-    from pathlib import Path
-    from tests.test_permission_catalog import RESOURCE_PAIRS, test_complete_unfiltered_registry_descriptors_and_action_owners
+def test_frozen_runtime_ancestor_and_current_source_inventory():
+    from tests.test_permission_catalog import (
+        test_complete_unfiltered_registry_descriptors_and_action_owners,
+        test_every_resource_call_site_has_explicit_owner_disposition,
+    )
     test_complete_unfiltered_registry_descriptors_and_action_owners()
-    assert replace(r.CURRENT_CATALOG,conditional_sources=c.CONDITIONAL_RESOURCE_SOURCES)==c.FROZEN_CATALOG
+    # CURRENT_* is the frozen runtime ancestor, not the newest installed build.
+    # Complete live call coverage belongs to the canonical tip inventory gate;
+    # comparing later owners with ancestor line numbers leaves later checks dark.
+    test_every_resource_call_site_has_explicit_owner_disposition()
+    assert r.CURRENT_SOURCES == c.CONDITIONAL_RESOURCE_SOURCES
+    assert replace(r.CURRENT_CATALOG, conditional_sources=c.CONDITIONAL_RESOURCE_SOURCES) == c.FROZEN_CATALOG
     from bookflow.company.transaction_deletion_facts import FAMILIES
-    assert FAMILIES==('journal_entry','invoice','sales_receipt','payment')
-    expected=dict(RESOURCE_PAIRS, **{
-        'transaction_deletion_facts.admit':{
-            ('transaction.journal_entry.delete','standard'),
-            ('transaction.invoice.delete','standard'),
-            ('transaction.sales_receipt.delete','standard'),
-            ('transaction.payment.delete','standard'),('ledger.read','member')},
-        'transaction_deletion_facts.load':{('customer-work','standard')},
-        'reconciliation_adapters.authority':{('ledger.read','member')},
-        'reconciliation_adapters.population':{('ledger.read','member')},
-        'reconciliation_adapters.prepare_prospective':{('customer-work','member')},
-        'reconciliation_proposals.preview':{('ledger.post','standard')},
-    })
-    root=Path(__file__).resolve().parents[1];sites={}
-    for folder in ('company','commands'):
-        for path in (root/'src/bookflow'/folder).rglob('*.py'):
-            tree=ast.parse(path.read_text());parents={child:n for n in ast.walk(tree) for child in ast.iter_child_nodes(n)}
-            for node in ast.walk(tree):
-                if isinstance(node,ast.ImportFrom):assert all(x.name!='require_resource' or x.asname in (None,'require_resource') for x in node.names)
-                if not isinstance(node,ast.Call):continue
-                fn=node.func
-                if not ((isinstance(fn,ast.Name) and fn.id=='require_resource') or (isinstance(fn,ast.Attribute) and fn.attr=='require_resource')):continue
-                current=node;names=[]
-                while current in parents:
-                    current=parents[current]
-                    if isinstance(current,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):names.append(current.name)
-                key='.'.join(path.relative_to(root/'src').with_suffix('').parts)+'.'+'.'.join(reversed(names))
-                assert key.removeprefix('bookflow.company.') in expected
-                sites.setdefault(key,set()).add((str(path.relative_to(root)),node.lineno))
-    assert {source.owner:set(source.call_sites) for source in r.CURRENT_SOURCES}==sites
-    assert {source.owner.removeprefix('bookflow.company.'):{(q.capability,q.threshold) for q in source.requirements} for source in r.CURRENT_SOURCES}==expected
-    assert r.CURRENT_MANIFEST==c.catalog_manifest(r.CURRENT_CATALOG,c.FROZEN_MANIFEST.standalone_names)
-    assert r.CURRENT_MANIFEST.company_requirements==c.FROZEN_MANIFEST.company_requirements
-    assert r.CURRENT_MANIFEST.registered_requirements==c.FROZEN_MANIFEST.registered_requirements
+    assert FAMILIES == ('journal_entry', 'invoice', 'sales_receipt', 'payment')
+    assert r.CURRENT_MANIFEST == c.catalog_manifest(r.CURRENT_CATALOG, c.FROZEN_MANIFEST.standalone_names)
+    assert r.CURRENT_MANIFEST.company_requirements == c.FROZEN_MANIFEST.company_requirements
+    assert r.CURRENT_MANIFEST.registered_requirements == c.FROZEN_MANIFEST.registered_requirements
 
 
 def test_real_os_agent_binding_epoch_refresh_and_no_admin(path):
