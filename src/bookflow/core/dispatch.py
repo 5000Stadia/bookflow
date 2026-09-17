@@ -174,7 +174,8 @@ def _open_hub(s: Session, writable: bool, ctx: Context, skip_head_check: bool = 
     if not path.exists():
         raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(s.data_root)})
     if not writable:
-        s._hub_cm = open_database(path, False)
+        from .permission_package import open_read_hub
+        s._hub_cm = open_read_hub(path)
         s.hub = s._hub_cm.__enter__()
     # Unknown writable databases must be refused before changing any pragma.
     rev = current_revision_raw(path) if writable else current_revision_open(s.hub)

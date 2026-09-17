@@ -56,6 +56,16 @@ class PublicationMiddleware:
         denied, started = False, False
 
         def check():
+            from bookflow.core.permission_package import read_package
+            if self.host is None or not hasattr(self.host, "data_root"):
+                # Admission-only transports need no database package.
+                return check_guards()
+            # Actual release never inherits the execution snapshot, including
+            # retries and subsequent bounded frames.
+            with read_package(self.host, fresh=True):
+                return check_guards()
+
+        def check_guards():
             covered = {document.credential.token_id for document, _ in guards if not isinstance(document, AuthenticationGuard)}
             for document, original in guards:
                 if isinstance(document, AuthenticationGuard) and document.credential.token_id in covered:

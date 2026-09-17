@@ -317,7 +317,9 @@ class BoundReader:
     def observe(self):
         identity = self.authenticate()
         if self._observation is None:
-            self._observation = runtime.observe_current(self._tx)
+            from .permission_package import owns_observation
+            self._observation = (runtime._operation_observation(self._tx) if owns_observation(self._tx)
+                                 else runtime.observe_current(self._tx))
         self.authenticate()
         return AuthenticatedObservation(identity, self._observation, self)
 

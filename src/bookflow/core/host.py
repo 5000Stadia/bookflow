@@ -79,6 +79,7 @@ class Host:
         self._refresh_pending: set[str] = set()
         self._refresh_lock = threading.Lock()
         self._readers_attached = 0
+        self._permission_snapshots = 0  # hub-only handles; never pin company folders
         self._transfers: set[TransferLease] = set()
         self._owned_resources: list[Any] = []
         self._readers_lock = threading.Condition()
@@ -114,7 +115,7 @@ class Host:
         # lock until admitted readers have actually closed their handles.
         with self._readers_lock:
             if not self._readers_lock.wait_for(
-                    lambda: self._readers_attached == 0 and not self._transfers,
+                    lambda: self._readers_attached == 0 and self._permission_snapshots == 0 and not self._transfers,
                     timeout=self.shutdown_wait_seconds):
                 raise BookflowError("E_DB_BUSY", message="Host readers or transfers are still closing; retry shutdown.")
         if not self._jobs_closed:
@@ -141,6 +142,8 @@ class Host:
     def submit(self, fn: Callable[[], Any], timeout: float | None = None, *, _during_shutdown: bool = False,
                _maintenance: bool = False, resource: TransferLease | None = None) -> Any:
         """Run on the writer; an accepted job owns its resource beyond caller timeout."""
+        from .permission_package import before_write
+        before_write(self)
         if resource is not None:
             with self._readers_lock:
                 if not isinstance(resource, TransferLease) or resource not in self._transfers:
@@ -345,6 +348,20 @@ class Host:
             raise
         return s
 
+    def permission_snapshot_started(self):
+        """Register a hub-only snapshot for shutdown, not company folder drains."""
+        with self._readers_lock:
+            if self._stopping:
+                raise BookflowError("E_DB_BUSY", message="The host is stopping.")
+            self._permission_snapshots += 1
+
+    def permission_snapshot_done(self):
+        with self._readers_lock:
+            if self._permission_snapshots <= 0:
+                raise RuntimeError("Permission snapshot ownership is unbalanced")
+            self._permission_snapshots -= 1
+            self._readers_lock.notify_all()
+
     def reader_started(self) -> None:
         with self._readers_lock:
             if self._stopping:
@@ -520,7 +537,7 @@ class Host:
         while not self._timer_stop.wait(tick):
             now = time.monotonic()
             with self._readers_lock:
-                no_readers = self._readers_attached == 0
+                no_readers = self._readers_attached == 0 and self._permission_snapshots == 0
             if (no_readers and self._last_write > self._checkpointed_write
                     and now - self._last_write >= self.idle_checkpoint_seconds):
                 self._checkpointed_write = self._last_write
