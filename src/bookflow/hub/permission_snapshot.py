@@ -460,7 +460,7 @@ def _load_root(tx: Database, *, catalog: CatalogBundle) -> RootFacts:
     # Separate materialization from the independently captured default keys.
     defaults = tuple(c.DefaultEntry(role,c.Requirement(capability,threshold)) for role,capability,threshold in raw.execute('SELECT role,capability,required_role FROM main.role_capabilities'))
     try:
-        actual = c._normal_catalog(replace(catalog.descriptor, defaults=defaults))
+        actual = c._with_defaults(catalog.descriptor, defaults)
     except c.PolicyInputError:
         _fail('legacy_policy_invalid','defaults')
     rows = (*rows, actual.defaults)
@@ -491,7 +491,7 @@ def _validated_root(root, bundle, *, activated=True):
     # A legacy root stores no catalog copy, so its stamp digest must be absent;
     # an activated root's must be the digest of the catalog in force.
     expected_sha = c.catalog_manifest(root.catalog).descriptor_sha256 if root.stamp.mode=='policy_v1' else None
-    if _rows_digest(rows) != root.stamp.authority_rows_digest or root.catalog != c._normal_catalog(replace(bundle.descriptor,defaults=root.role_defaults)) or expected_sha != root.stamp.catalog_sha256:
+    if _rows_digest(rows) != root.stamp.authority_rows_digest or root.catalog != c._with_defaults(bundle.descriptor, root.role_defaults) or expected_sha != root.stamp.catalog_sha256:
         _fail('source_incomplete','root')
 
 def _patch_rows(original, changes, *, field, key, immutable=(), insert=False):

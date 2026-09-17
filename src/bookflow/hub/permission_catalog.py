@@ -366,6 +366,21 @@ def _normal_catalog_uncached(catalog):
         conditional_sources=tuple(replace(s,call_sites=tuple(sorted(s.call_sites)),requirements=tuple(sorted(s.requirements,key=_req_key))) for s in sorted(sources.values(),key=lambda x:x.owner)))
 
 
+def _with_defaults(catalog, defaults):
+    """Normalize fresh defaults without cloning an unchanged immutable descriptor.
+
+    Validate before equality (including exact native types), and retain duplicates
+    for the full validator to reject. No authority rows or admissions are cached.
+    """
+    base = _normal_catalog(catalog)
+    _check(defaults, tuple[DefaultEntry, ...], 'defaults')
+    ordered = tuple(sorted(defaults, key=lambda x: ((*ROLES, 'hub_admin').index(x.role),
+                                                   *_req_key(x.requirement))))
+    if ordered == base.defaults:
+        return base
+    return _normal_catalog(replace(catalog, defaults=defaults))
+
+
 def catalog_manifest(catalog: Catalog, standalone_names: tuple[str, ...] = ()) -> CatalogManifest:
     """Build a descriptor, not attest that this catalog represents a real root."""
     c = _normal_catalog(catalog)
