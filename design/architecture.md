@@ -3633,8 +3633,11 @@ then swapped for an `AuthenticationGuard`, because `PublicationMiddleware` re-ru
 every guard at send time and the uncertifiable permit would otherwise overwrite that
 answer with the generic denial; what remains provable about releasing an
 `E_UNAUTHENTICATED` body is that the credential still resolves, which is that guard's
-whole question. `PublicationPermit.check` refuses a public deposit permit that holds
-no proof before it reaches any comparison, with `reason: unfinished_certificate`. Its
+whole question. Public-deposit execution placeholders explicitly require a reader proof;
+`PublicationPermit.check` refuses these when unfinished, before any comparison, with
+`reason: unfinished_certificate`. MCP preparation permits retain their ordinary authority
+checks and do not require an execution proof before execution. The phase flag survives
+internal receipt retention. An execution placeholder’s
 generic membership comparison is not a predicate about such a request at all -- the
 hosted branch builds that permit with an empty membership frozenset and no company,
 so the comparison denied whenever the caller held any membership and passed whenever

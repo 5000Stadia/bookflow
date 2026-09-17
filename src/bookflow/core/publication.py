@@ -143,6 +143,7 @@ class PublicationPermit:
     projection: dict = field(default_factory=dict)
     input_error: dict | None = None
     deposit_proof: object | None = field(default=None, repr=False)
+    requires_deposit_proof: bool = False
 
     def retained(self):
         """Only owned values enter the bounded receipt cache, never host/registry handles."""
@@ -300,20 +301,10 @@ class PublicationPermit:
         return True
 
     def check(self, host, cred, *, original_response=False):
-        from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
-        if self.deposit_proof is None and self.cmd.name in DEPOSIT_COMMANDS:
-            # A public deposit read is released by its execution proof and by nothing
-            # else. The hosted branch builds this permit before execution with an empty
-            # membership frozenset and no company, so the generic comparison in _check
-            # is not a predicate about this request at all: it denies whenever the
-            # caller holds any membership and PASSES whenever they hold none -- a hub
-            # administrator with no membership rows would have released an uncertified
-            # original error through a check that proved nothing. An execution that
-            # failed before its proof existed leaves an unfinished certificate; saying
-            # so is the honest answer, it is refused rather than released, and it no
-            # longer depends on how many memberships the caller happens to have. It is
-            # raised here rather than inside _check because _deny() below would relabel
-            # it `authority_changed`, which is the revocation this never proved.
+        if self.requires_deposit_proof and self.deposit_proof is None:
+            # Execution placeholders need their completed reader proof. MCP input
+            # preparation has a separate, fully captured authority permit and must
+            # still run its ordinary checks before execution has produced a proof.
             raise BookflowError("E_PERMISSION", details={"stage": "publication",
                                 "reason": "unfinished_certificate", "outcome": "unknown"})
         try:

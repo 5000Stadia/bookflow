@@ -23,18 +23,10 @@ goes through.
 undeposited and eligible, and the trial balance -- read back through `report trial-balance` over
 the same transport -- shows the bank at nothing and Undeposited Funds holding the full 160.00.
 
-**The history stays** -- on the two surfaces that can still read it. The deposit is gone from an
-ordinary `deposit query` and from `deposit show`, readable through `include_deleted`, and its
-deletion entry carries the reason and the interface it arrived over. The general ledger still
-sums both of its immutable effects, because hiding a document does not change the report math.
+**The history stays on all four surfaces.** The deposit is absent from ordinary lists,
+readable with include_deleted, and its deletion reason and interface remain attributed.
+The register omits it while the ledger retains the balanced original and reversal.
 
-KNOWN DEFECT, found by this witness and reported 2026-09-16: those retained reads are taken on
-Python and the CLI only, because `deposit query`, `show`, `items` and `history` are refused
-`E_PERMISSION` over HTTP and MCP from the moment `permission activate` runs -- and activation is
-the required step before any explicit family Delete grant, so a deleted deposit cannot be read
-back over those two surfaces at all. Confirmed against the live demo's own data: the workbench
-Deposits pages answer 403 with a raw JSON body. The refusal is NOT asserted here as if it were
-intended; when the permit is fixed those reads belong in the loop with everything else.
 """
 import asyncio
 from pathlib import Path
@@ -175,50 +167,37 @@ def test_deposit_deletion_crosses_all_four_actual_transports(books, tmp_path):
                 assert mismatch['code'] == 'E_IDEMPOTENCY_MISMATCH', surface
                 assert database(path) == after, surface
 
-                # The retained reads are taken only where the product can serve them.
-                #
-                # KNOWN DEFECT, reported 2026-09-16, not asserted here as if it were intended.
-                # The four reader-bound deposit reads -- `deposit query`, `show`, `items` and
-                # `history`, the ones `publication_inventory.policy()` hard-names
-                # `reader_bound_public_detail_proof` -- are refused E_PERMISSION over HTTP and
-                # MCP from the moment `permission activate` runs, carrying only
-                # `{'stage': 'publication', 'outcome': 'unknown'}`. Activation is the required
-                # step before any explicit family Delete grant, so on those two surfaces a
-                # deleted deposit cannot be read back at all. Everything above this line runs on
-                # all four; when the defect is fixed these reads move back into the loop with
-                # the rest and this branch goes away.
-                if surface in ('python', 'cli'):
-                    ordinary = await call('deposit query', {})
-                    assert posted['id'] not in {row['selected']['pin']['deposit_id']
-                                                for row in ordinary['items']}, surface
-                    with_deleted = await call('deposit query', {'include_deleted': True})
-                    retained = {row['selected']['pin']['deposit_id']: row
-                                for row in with_deleted['items']}
-                    assert retained[posted['id']]['current']['status'] == 'deleted', surface
-                    hidden = await call('deposit show', {'deposit': posted['id']}, rejected=True)
-                    assert hidden['code'] == 'E_RECORD_NOT_FOUND', surface
-                    shown = await call('deposit show', {'deposit': posted['id'],
-                                                        'include_deleted': True})
-                    assert shown['current']['status'] == 'deleted', surface
-                    assert shown['selected']['number'] == posted['number'], surface
-                    history = await call('deposit history', {'deposit': posted['id'],
-                                                             'include_deleted': True})
-                    entry = next(row for row in history['items'] if row['kind'] == 'deleted')
-                    assert entry['reason'] == 'Registry parity', surface
-                    assert entry['interface'] == surface, surface
+                ordinary = await call('deposit query', {})
+                assert posted['id'] not in {row['selected']['pin']['deposit_id']
+                                            for row in ordinary['items']}, surface
+                with_deleted = await call('deposit query', {'include_deleted': True})
+                retained = {row['selected']['pin']['deposit_id']: row
+                            for row in with_deleted['items']}
+                assert retained[posted['id']]['current']['status'] == 'deleted', surface
+                hidden = await call('deposit show', {'deposit': posted['id']}, rejected=True)
+                assert hidden['code'] == 'E_RECORD_NOT_FOUND', surface
+                shown = await call('deposit show', {'deposit': posted['id'],
+                                                    'include_deleted': True})
+                assert shown['current']['status'] == 'deleted', surface
+                assert shown['selected']['number'] == posted['number'], surface
+                history = await call('deposit history', {'deposit': posted['id'],
+                                                         'include_deleted': True})
+                entry = next(row for row in history['items'] if row['kind'] == 'deleted')
+                assert entry['reason'] == 'Registry parity', surface
+                assert entry['interface'] == surface, surface
 
-                    # Hiding the document has not changed the report math: the register omits it,
-                    # and the general ledger still carries every posting line of both its immutable
-                    # effects -- the original and its exact reversal -- which net to nothing.
-                    register = await call('register query', window)
-                    ledger = await call('report general-ledger', window)
-                    assert posted['id'] not in {row['transaction_id'] for row in register['rows']
-                                                if row['transaction_id']}, surface
-                    both = [row for row in ledger['rows'] if row['transaction_id'] == posted['id']]
-                    assert len(both) == 2 * len(original), surface
-                    assert sum(row['debit']['minor_units'] - row['credit']['minor_units']
-                               for row in both) == 0, surface
-                    assert register['ledger_totals'] == ledger['totals'], surface
+                # Hiding the document has not changed the report math: the register omits it,
+                # and the general ledger still carries every posting line of both its immutable
+                # effects -- the original and its exact reversal -- which net to nothing.
+                register = await call('register query', window)
+                ledger = await call('report general-ledger', window)
+                assert posted['id'] not in {row['transaction_id'] for row in register['rows']
+                                            if row['transaction_id']}, surface
+                both = [row for row in ledger['rows'] if row['transaction_id'] == posted['id']]
+                assert len(both) == 2 * len(original), surface
+                assert sum(row['debit']['minor_units'] - row['credit']['minor_units']
+                           for row in both) == 0, surface
+                assert register['ledger_totals'] == ledger['totals'], surface
 
                 with sqlite3.connect(path) as db:
                     assert db.execute(

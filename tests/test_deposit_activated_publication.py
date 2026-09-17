@@ -25,6 +25,7 @@ reach the other 436 company commands: `run_hosted` sets `session.credential` its
 below as the control that separates "the surface broke" from "these commands broke".
 """
 import asyncio
+from datetime import datetime
 import json
 import logging
 
@@ -55,8 +56,9 @@ def test_public_deposit_reads_answer_identically_on_four_surfaces_after_activati
 
     Each surface works on its own copy of one seeded baseline, so the deposit, its
     revision and its continuation digests are the same values on all four; only the
-    transport differs. The documents are therefore compared for exact equality rather
-    than normalized, and the only write any surface performs is its own activation.
+    transport differs. Compare business documents exactly, except the validated
+    observation timestamp produced by each separate read. The only write each
+    surface performs is its own activation.
     """
     pytest.importorskip('mcp')
     answers = {}
@@ -101,6 +103,14 @@ def test_public_deposit_reads_answer_identically_on_four_surfaces_after_activati
     asyncio.run(witness())
 
     assert set(answers) == set(SURFACES)
+    # Show/items stamp the instant of the read, not a stored business fact.
+    # Validate that timestamp and normalize only this named top-level field;
+    # stored dates, histories, identities and monetary values remain exact.
+    for documents in answers.values():
+        for name in ('deposit show', 'deposit items'):
+            stamp = documents[name]['current_observed_at']
+            assert datetime.fromisoformat(stamp).tzinfo is not None
+            documents[name] = {**documents[name], 'current_observed_at': '<read-time>'}
     reference = answers['python']
     for surface in ('cli', 'http', 'mcp'):
         for name in (*READS, CONTROL):
@@ -160,3 +170,30 @@ def test_a_proven_authentication_loss_crosses_the_publication_boundary_as_itself
         assert token['secret'] not in diagnostic[0]
     finally:
         handle.stop()
+
+
+@pytest.mark.parametrize('memberships', [frozenset(), frozenset({('member',)})])
+def test_preparation_and_execution_permits_have_distinct_proof_requirements(monkeypatch, memberships):
+    from bookflow.core import registry
+    from bookflow.core.context import Context
+    from bookflow.core.errors import BookflowError
+    from bookflow.core.publication import PublicationPermit
+
+    registry.load_all()
+    cmd = registry.get('deposit query')
+    permit = PublicationPermit(cmd, cmd.input_model.model_validate({}),
+        Context.new('mcp', 'Permit phase regression'), ('actor', 'human', False),
+        memberships, None, None)
+    checked = []
+    # Isolate only the phase gate; the real four-surface witness above exercises
+    # the unchanged authorization implementation used by preparation permits.
+    monkeypatch.setattr(PublicationPermit, '_check', lambda *a, **kw: checked.append(True))
+    permit.check(None, None)
+    assert checked == [True]
+    permit.requires_deposit_proof = True
+    restored = PublicationPermit.from_retained(permit.retained())
+    assert restored.requires_deposit_proof is True
+    with pytest.raises(BookflowError) as error:
+        restored.check(None, None)
+    assert error.value.details['reason'] == 'unfinished_certificate'
+    assert checked == [True]

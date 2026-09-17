@@ -113,7 +113,7 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
                     request = prepare_deposit(reader, audience, cmd, raw, ctx, selector, source, dry_run)
                     permit = PublicationPermit(cmd, None, ctx,
                         (identity.actor, identity.actor_kind, identity.hub_admin),
-                        frozenset(), None, None)
+                        frozenset(), None, None, requires_deposit_proof=True)
                     result, proof = publication_deposit.execute_detail(reader, request, cred, ctx=ctx)
                     finish(session, succeeded=proof.failure is None, result=result, deposit_proof=proof)
                     if proof.failure is not None:
