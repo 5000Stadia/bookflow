@@ -81,7 +81,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -862,7 +862,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -1595,7 +1595,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -2517,7 +2517,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
-| `items[].kind` | literal["proposal", "estimate", "work_order"] | yes | no | — | — |
+| `items[].kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].status` | string | yes | no | — | — |
 | `items[].active` | boolean | yes | no | — | — |
@@ -2650,7 +2650,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -3415,7 +3415,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |

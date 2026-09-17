@@ -1252,7 +1252,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -3370,7 +3370,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -4525,7 +4525,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |

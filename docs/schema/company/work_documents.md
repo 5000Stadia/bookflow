@@ -16,7 +16,7 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
-| `kind` | VARCHAR(16) | no | — | unique with kind + number | — | — | Document kind: proposal, estimate or work_order. |
+| `kind` | VARCHAR(16) | no | — | unique with kind + number | — | — | Document kind: proposal, estimate, work_order or time_activity. |
 | `number` | VARCHAR(64) | no | — | unique with kind + number | — | — | Visible number unique within kind. |
 | `current_revision_id` | VARCHAR(26) | no | — | — | — | work_revisions.id | Current immutable revision owned by this document. |
 | `status` | VARCHAR(16) | no | — | — | — | — | Current commercial decision or operational state. |
