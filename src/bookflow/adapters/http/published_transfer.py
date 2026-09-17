@@ -8,11 +8,20 @@ from .publication import protect
 
 
 class PublishedTransfer(HostedTransfer):
-    def __init__(self, *args, credential, before_execute=None, **kwargs):
+    def __init__(self, *args, credential, before_execute=None, authorize_session=None, **kwargs):
         self.credential = credential
         self.before_execute = before_execute
         self._publication_document = None
-        super().__init__(*args, **kwargs)
+
+        def authenticated(session):
+            credential.revalidate(session.hub)
+            # Preparation authorizes before _execute captures its publication permit.
+            # Bind every fresh session, including recovery and output chunk checks.
+            session.credential = credential
+            if authorize_session is not None:
+                authorize_session(session)
+
+        super().__init__(*args, authorize_session=authenticated, **kwargs)
 
     def finish_input(self):
         try:

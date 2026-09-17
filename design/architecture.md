@@ -390,6 +390,11 @@ to standalone execution after transmission begins. Browser downloads verify actu
 size and SHA-256 before handing a file to the browser; local HTTP uses the bundled
 SHA-256 fallback when SubtleCrypto is unavailable.
 
+PublishedTransfer revalidates and attaches the admitted credential to every fresh
+session before its caller authorization callback and shared transfer preparation.
+HTTP cookie/bearer, MCP preparation and retained-download reopening, and local
+forwarding use this same handoff; execution and output-chunk checks still revalidate.
+
 Company compact is owner/admin-only, processes at most200 bodies and retains all
 attachment/link/audit history. Root-wide filesystem exclusion drains existing
 readers and transfers before candidate selection. A bounded durable intent commits

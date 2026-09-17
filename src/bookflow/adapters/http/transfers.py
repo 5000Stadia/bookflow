@@ -128,8 +128,8 @@ def install(app, host, *, credential, lookup, selector_of, make_context, secret_
                 if row["id"] != cred.token_id or row["user_id"] != cred.user_id or row.get("on_behalf_of") != cred.on_behalf_of:
                     raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential changed"})
             transfer = guard(lambda: HostedTransfer(host, cmd, raw, make_context(request, cred),
-                         cred.user_id, cred.login, selector, source, dry_run, recheck,
-                         credential=cred), cred.hub_admin)
+                         cred.user_id, cred.login, selector, source, dry_run,
+                         authorize_session=recheck, credential=cred), cred.hub_admin)
             owner.adopt(transfer)
             return transfer
 
