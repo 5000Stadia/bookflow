@@ -57,6 +57,27 @@ def open_selected(reader, audience, company, ctx):
     from bookflow.core.dispatch import resolve_company, open_company
     audience.require(company)
     session = reader.session
+    # The private financial owners below reach `hub.access.require_resource`, whose
+    # activated branch admits through `identity_admin_binding.session_operation` --
+    # and that owner takes its producer from `session.credential`, deriving one from
+    # the session's OS login only when it is unset. Every other session in the
+    # product is handed its admitted credential (adapters/http/execution.run_hosted,
+    # PublicationPermit.capture and _check, publication_reader); this reader's
+    # session is built inside identity_admin_binding and was the one that was not,
+    # so the fallback ran. A hosted token reader has no OS login to derive from,
+    # which made the four public deposit reads fail closed with E_UNAUTHENTICATED
+    # the moment a company activated its permission catalog; an offline reader has
+    # one, which is why the same read survived in-process and over the CLI while
+    # dying over HTTP and MCP.
+    #
+    # `audience.binding()` is the genuine producer execution already holds, and it
+    # is exactly the OSBinding or HTTP Credential that owner accepts:
+    # `deposit_public_authority._agree` has proved it is this reader's own -- actor,
+    # actor kind, principal, token id, credential kind and root -- and
+    # `BoundOperation._binding` revalidates it in full on every use. So the
+    # requirement is evaluated against the producer that actually asked, principal
+    # included, instead of against a re-derived OS identity that drops it.
+    session.credential = audience.binding()
     session.company_row = resolve_company(session, company, 'option')
     open_company(session, ctx, False)
     reader.authenticate()

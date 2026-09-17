@@ -3585,8 +3585,26 @@ capture consults company permissions fails inside that finish under an activated
 policy, and answers the refusal that finish raised. The deposit commands pass it as
 the binding, so `deposit_dependency_history.execution_binding` revalidates the
 actual bearer or session cookie instead of deriving an OS login the host does not
-have. A local session leaves it None and the private layer builds its `OSBinding`
-as before.
+have. A local session on the ordinary dispatch path leaves it None, and the private
+layer builds its `OSBinding` from the session as before.
+
+The four public deposit reads do not run on that path: they execute under the
+`BoundReader` that `identity_admin_binding.hosted_reader` or `offline_reader`
+constructs, whose session is built inside that module and is not the one
+`run_hosted` hands a credential to. `deposit_public_reads.open_selected` therefore
+sets `Session.credential` itself, to the audience's own retained producer --
+`deposit_public_authority.DepositAudience.binding()`, the `OSBinding` or HTTP
+`Credential` execution already holds, which `_agree` has proved is this reader's own
+by actor, actor kind, principal, token id, credential kind and root and which
+`BoundOperation._binding` revalidates in full on every use. Without it the fallback
+ran, and a hosted token reader has os_login `''` and nothing to derive from: under an
+activated policy all four reads failed closed with `E_UNAUTHENTICATED` over HTTP and
+MCP while continuing to answer in process and over the CLI, where an OS login existed
+to fall back on. That fallback was also principal-blind here, because
+`permission_access.require` synthesizes its own `Context` when a session carries no
+`_permission_context` and that context has no `on_behalf_of`; the retained binding
+carries the principal, so the private resource gates evaluate the same
+actor-and-principal intersection the audience does.
 
 `run_hosted.finish` is the publication boundary's error policy. A `BookflowError`
 raised by `PublicationPermit.finish` is answered as itself: it is already the public
@@ -3603,6 +3621,27 @@ while working in process, and the person was told their disk had failed. The sym
 named the wrong subsystem, which is why the defect was invisible until a journey
 suite ran the act end to end. `adapters/http/published_transfer` still carries the
 older undifferentiated catch on its own finish.
+
+A release refusal after a failed execution answers with the publication denial's own
+code and `{stage: publication, outcome: unknown}`, never the original error, because
+a denial must not describe what it could not verify -- an `E_INTERNAL` naming a field
+stays behind it, and so does a not-found that would confirm a record in a company the
+caller may have lost. One code crosses as itself: `E_UNAUTHENTICATED`. It is proven
+about the caller's own credential, describes no company fact and no other principal's
+authority, and is the only answer a caller can act on. The registered rejection is
+then swapped for an `AuthenticationGuard`, because `PublicationMiddleware` re-runs
+every guard at send time and the uncertifiable permit would otherwise overwrite that
+answer with the generic denial; what remains provable about releasing an
+`E_UNAUTHENTICATED` body is that the credential still resolves, which is that guard's
+whole question. `PublicationPermit.check` refuses a public deposit permit that holds
+no proof before it reaches any comparison, with `reason: unfinished_certificate`. Its
+generic membership comparison is not a predicate about such a request at all -- the
+hosted branch builds that permit with an empty membership frozenset and no company,
+so the comparison denied whenever the caller held any membership and passed whenever
+they held none, which would have released an uncertified original error to a hub
+administrator with no membership rows. The diagnostic log line carries the original
+code, the publication code, that reason and whether a proof existed, and nothing
+else: no credential, no input, no company data, never the protected error's details.
 
 Publication roots resolve the settlement contract, not one of its two types.
 `publication_payment.capture`'s `transaction()` resolves an `invoice` field against
