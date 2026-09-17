@@ -9,6 +9,8 @@ The default layouts here are the supplied basic templates named by
 [print templates and form editor](print-templates.md). Choosing among layouts, editing
 one, template groups, paper profiles and batch printing remain future roadmap work.
 
+Full filtered accounting reports use the separate [report printing view](report-printing.md).
+
 ## Where a document prints from
 
 | Document | Print route | Opened from |
