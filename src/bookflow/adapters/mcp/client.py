@@ -177,11 +177,11 @@ class Client:
                         elif state['state'] not in {'preparing', 'ready', 'receiving', 'queued', 'started', 'delivering'}:
                             raise invalid('recovery_unavailable')
                     except BookflowError as exc:
-                        # Folder-changing writers temporarily block all readers,
-                        # including status authentication/publication. Retry only
-                        # that observation failure, under this same deadline.
+                        # Folder-changing writers block readers, and lifecycle
+                        # results await their final authority certificate. Retry
+                        # only these named observations under the same deadline.
                         # Framed business rejections return above, never raise here.
-                        if exc.code != 'E_DB_BUSY' or exc.details.get('operation') != 'filesystem_change':
+                        if exc.code != 'E_DB_BUSY' or exc.details.get('operation') not in {'filesystem_change', 'publication_pending'}:
                             raise
                     await anyio.sleep(delay)
                     delay = min(delay * 2, RECOVERY_MAX_DELAY)

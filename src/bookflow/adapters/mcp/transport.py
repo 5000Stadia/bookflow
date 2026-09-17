@@ -30,7 +30,10 @@ class IntentGuard:
         return getattr(self.intent, "transfer", None)
 
     def check(self, **_kwargs):
-        if self.permit is not None:
+        from bookflow.core.publication import MEMBERSHIP_EFFECTS
+        if self.intent.header["command"] in MEMBERSHIP_EFFECTS:
+            self.runtime.check_intent_authority(self.intent, self.credential)
+        elif self.permit is not None:
             self.permit.check(self.runtime.host, self.credential)
         else:
             self.runtime._header_authority(self.intent, self.credential)
