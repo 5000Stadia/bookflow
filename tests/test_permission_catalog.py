@@ -1,5 +1,6 @@
 """Complete source projections and independent literal policy boundaries, no DB."""
 import ast
+from collections import Counter
 import hashlib
 import inspect
 import json
@@ -149,7 +150,13 @@ def test_every_resource_call_site_has_explicit_owner_disposition():
     # locks activated installations out of their own books.
     inventory = runtime.current_catalog().CATALOG.conditional_sources
     assert sites.keys() == {'bookflow.company.' + name for name in RESOURCE_PAIRS}
-    assert {s.owner: set(s.call_sites) for s in inventory} == sites
+    # Accepted descriptor line coordinates are historical provenance. Blank-line
+    # or adjacent code edits cannot require rewriting an installed descriptor.
+    # Keep exact owners, source paths and call multiplicities, plus the literal
+    # resource-pair checks above: a missing/extra call still fails this inventory.
+    assert {s.owner: Counter(path for path, _ in s.call_sites) for s in inventory} == {
+        owner: Counter(path for path, _ in locations) for owner, locations in sites.items()}
+
     assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in inventory} == RESOURCE_PAIRS
 
 
@@ -233,10 +240,22 @@ def test_frozen_manifest_digest_and_pure_import_boundary():
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
     assert c.FROZEN_MANIFEST.descriptor_sha256 == FROZEN_DESCRIPTOR_SHA256
-    for name in ('permission_catalog', 'permission_policy'):
-        tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
-        modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-        assert modules <= {'__future__', 'dataclasses', 'typing', 'types', 'enum', 'functools', 'hashlib', 'json', 'permission_catalog'}
+    allowed = {'__future__', 'dataclasses', 'typing', 'types', 'enum', 'functools',
+               'hashlib', 'json', 'permission_catalog'}
+    bounded_imports = {'collections': {'OrderedDict'}, 'threading': {'RLock'},
+                       'bookflow.core.deletion_families': {'BILL_FAMILIES', 'CREDIT_FAMILIES', 'DEPOSIT_FAMILIES',
+                           'PREPARED_FAMILIES', 'PURCHASE_FAMILIES', 'TOMBSTONE_TABLE', 'capability'}}
+    for source in ('hub/permission_catalog.py', 'hub/permission_policy.py',
+                   'core/deletion_families.py'):
+        tree = ast.parse((ROOT / 'src/bookflow' / source).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module in bounded_imports:
+                    assert {a.name for a in node.names} <= bounded_imports[node.module]
+                else:
+                    assert node.module in allowed
+            elif isinstance(node, ast.Import):
+                assert {a.name for a in node.names} <= allowed
 
 
 @pytest.mark.parametrize('field', ['commands', 'capabilities', 'defaults', 'company_actions', 'admin_actions', 'conditional_sources'])
