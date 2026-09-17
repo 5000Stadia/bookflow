@@ -594,15 +594,25 @@ def _membership_out(row: dict[str, Any], user: dict[str, Any], scope: Scope, *, 
                          denies=json.loads(row.get('denies') or '[]'))
 
 
+def _prepared_membership_row(prepared, user, scope):
+    """Project the unique user/scope row without exposing a prospective identity."""
+    from dataclasses import asdict
+    row = asdict(next(x for x in prepared.final.root.memberships
+                     if (x.user_id, x.scope_type, x.scope_id) ==
+                     (user['id'], scope.scope_type, scope.scope_id)))
+    # The owner deliberately has no persistent target ID for an absent preview.
+    row['id'] = prepared.visible.target_id or ''
+    return row
+
+
 def _grant(s: Session, ctx: Context, user: dict[str, Any], scope: Scope, role: str,
            existing: dict[str, Any] | None) -> tuple[dict[str, Any], Touched | None]:
     """The one place a membership is written. `user add` and `membership grant` share it."""
     from bookflow.hub.permission_access import activated
     if activated(s):
         from bookflow.hub import permission_setup as setup
-        from dataclasses import asdict
         prepared = setup.edit(s,ctx,setup.membership_intent(user,scope,existing,role))
-        row = asdict(next(x for x in prepared.final.root.memberships if x.id == prepared.visible.target_id))
+        row = _prepared_membership_row(prepared, user, scope)
         return row, None if not prepared.visible.changed else Touched('membership',row['id'],
             'create' if existing is None else 'update',existing['version'] if existing else None,row['version'],row,before=existing)
     at = now_iso()
@@ -778,8 +788,7 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
             raise BookflowError('E_VALIDATION',message='Supply expected_version when changing grants or denies; use 0 for an absent membership.')
         intent = setup.membership_intent(user,scope,existing,inp.role,inp.grants,inp.denies,inp.expected_version)
         prepared = setup.edit(s,ctx,intent,preview=True)
-        from dataclasses import asdict
-        row = asdict(next(x for x in prepared.final.root.memberships if x.id == prepared.visible.target_id))
+        row = _prepared_membership_row(prepared, user, scope)
         out = _membership_out(row,user,scope,changed=prepared.visible.changed)
         return Plan(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,inp.role,out.changed)),
                     data={'input':inp,'intent':intent,'user':user,'scope':scope})
@@ -804,10 +813,9 @@ def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool)
 def apply_membership_grant(plan: Plan, ctx: Context, s: Session) -> Applied:
     if 'intent' in plan.data:
         from bookflow.hub import permission_setup as setup
-        from dataclasses import asdict
         prepared = setup.edit(s,ctx,plan.data['intent'])
-        row = asdict(next(x for x in prepared.final.root.memberships if x.id == prepared.visible.target_id))
         user,scope = plan.data['user'],plan.data['scope']
+        row = _prepared_membership_row(prepared, user, scope)
         out = _membership_out(row,user,scope,changed=prepared.visible.changed)
         return Applied(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,row['role'],out.changed)),
                        [],'Updated company permissions.',audited=out.changed)
