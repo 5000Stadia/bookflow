@@ -3889,8 +3889,10 @@ checks each complete connected aggregate, loads existing financial facts once fo
 the admitted set, projects governed headers/received-from references, then filters,
 sorts and pages. Whole-match totals reuse deposit_queries.query_totals; no posting,
 draft or financial-validation algorithm changes. An explicitly denied graph is
-omitted; unclassified missing/permission evidence fails the complete query instead
-of publishing partial counts/totals. Bank reference redaction preserves admitted
+omitted; the binding-graph owner marks only evaluated resource denials internally,
+so activated capability denial remains distinguishable from unresolved stored evidence.
+Unclassified missing/permission evidence fails the complete query instead of publishing
+partial counts/totals. Exact-read error behavior remains unchanged. Bank reference redaction preserves admitted
 amounts, while an explicit bank filter requires reference admission before lookup.
 Public query cursors bind every non-page input including defaults, sort/direction,
 and the complete projected relation; page-size changes follow the existing offset

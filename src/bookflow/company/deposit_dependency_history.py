@@ -47,6 +47,21 @@ def execution_binding(s, binding):
     return binding.user_id, binding.actor_kind, binding.on_behalf_of, epoch
 
 
+class ResourceRequirementDenied(BookflowError):
+    """Internal evidence of a evaluated resource denial, not missing stored history."""
+
+    def __init__(self):
+        super().__init__('E_PERMISSION')
+
+
+def _resource_denial(error):
+    if error.code != 'E_PERMISSION':
+        return False
+    details = error.details or {}
+    return (details == {'reason': 'unavailable_target', 'field': 'scope'} or
+            set(details) == {'capability', 'required_role', 'role'})
+
+
 def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write=False):
     """Run existing resource rules for actor AND its validated fixed human.
 
@@ -72,6 +87,8 @@ def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write
             if event_ids:
                 authorize_events(view, event_ids)
         except BookflowError as error:
+            if _resource_denial(error):
+                raise ResourceRequirementDenied() from None
             if error.code in ('E_PERMISSION', 'E_COMPANY_NOT_FOUND'):
                 raise BookflowError('E_PERMISSION') from None
             raise

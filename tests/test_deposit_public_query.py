@@ -81,11 +81,19 @@ def test_actual_reference_redaction_and_connected_denial_are_distinct(world):
                 with pytest.raises(BookflowError) as error:reads.query(s,m.QueryInput(deposit_to=selector),audience=a)
                 assert error.value.code=='E_PERMISSION'
     finally:set_denies(world,())
+    assert original.next_cursor is None
+    expected = tuple(row for row in original.items if row.current.deposit_id != world['deposit'])
+    assert len(expected) == original.total_count - 1
     set_denies(world,('customer-work',))
     try:
         with reading(world) as (s,a,b):
-            denied=reads.query(s,m.QueryInput(page=m.PageInput(limit=1)),audience=a)
-            assert denied.total_count==0 and denied.items==() and denied.totals.bank_total.minor_units==0
+            denied=reads.query(s,m.QueryInput(page=m.PageInput(limit=200)),audience=a)
+            assert denied.next_cursor is None
+            assert {row.current.deposit_id for row in denied.items} == {row.current.deposit_id for row in expected}
+            assert denied.total_count == len(expected)
+            for field in type(denied.totals).model_fields:
+                assert getattr(denied.totals, field).minor_units == sum(
+                    getattr(row.totals, field).minor_units for row in expected)
     finally:set_denies(world,())
 
 
@@ -238,3 +246,20 @@ def test_execution_failing_before_its_proof_is_denied_without_leaking_why(books,
         assert 'proof=absent' in diagnostic[0]
         assert token['secret'] not in diagnostic[0]
     finally:handle.stop()
+
+
+@pytest.mark.timeout(60)
+def test_unresolved_graph_permission_is_not_a_resource_denial(books, monkeypatch):
+    from bookflow.company import deposit_dependencies
+    saved = post(books, 'query-unresolved-graph')
+    original = deposit_dependencies.authorize
+
+    def unresolved(session, deposit=None, sources=(), *, write=False):
+        if saved['deposit']['id'] in sources:
+            raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+        return original(session, deposit, sources, write=write)
+
+    monkeypatch.setattr(deposit_dependencies, 'authorize', unresolved)
+    with pytest.raises(BookflowError) as error:
+        query(books, number='Does not match')
+    assert error.value.code == 'E_DEPOSIT_SOURCE_INVALID'

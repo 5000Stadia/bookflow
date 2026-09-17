@@ -579,6 +579,8 @@ def _query_admitted(s, identity, audience, binding):
     try:
         evidence = authority.admit(s, [identity], binding=binding)
         requirements = graph_requirements(s, evidence)
+    except history_owner.ResourceRequirementDenied:
+        return False
     except BookflowError as error:
         if error.code in ('E_PERMISSION', 'E_RECORD_NOT_FOUND'):
             raise BookflowError('E_DEPOSIT_SOURCE_INVALID') from None
