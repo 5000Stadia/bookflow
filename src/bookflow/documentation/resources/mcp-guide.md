@@ -70,12 +70,14 @@ run/execute read timeout, the launcher polls the same reference for up to 30 sec
 with 100 ms exponential backoff capped at 1 second, including requests and receipt
 retrieval within that deadline. A completed state with an available receipt permits
 retrieving the original verified result under current authority. Temporary
-E_DB_BUSY filesystem_change responses while checking status or retrieving the
-receipt retry within that same deadline; other failures and original business
+E_DB_BUSY filesystem_change or publication_pending responses while checking
+status or retrieving the receipt retry within that same deadline; other failures and original business
 rejections do not receive that retry. Status alone is
 not command success. Failed recovery returns unknown outcome with the reference
 and guidance to use action=status; do not resubmit the business command. Caller
-cancellation stops client recovery without claiming server cancellation. No
+cancellation stops client recovery without claiming server cancellation. Completed JSON results up to the existing receipt cap are reserved before the
+first socket send, so losing that send does not lose their recovery certificate.
+Larger results retain the existing streaming and unavailable-receipt behavior. No
 automatic write retry occurs. A lost one-time secret is not reconstructed:
 identify/revoke that credential and deliberately replace it under current permissions.
 

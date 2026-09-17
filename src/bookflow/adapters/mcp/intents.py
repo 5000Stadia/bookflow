@@ -71,6 +71,7 @@ class Intent:
     abandoned: bool = False
     receipt: bytes | None = None
     publication: object = None
+    publication_pending: bool = False
     completed: float | None = None
     retained_bytes: int = 0
     reason: str | None = None
@@ -187,6 +188,7 @@ class Intents:
             if intent.state != "queued":
                 raise BookflowError("E_USAGE", details={"reason": "intent_not_queued"})
             intent.state = "started"
+            intent.publication_pending = True
             frozen = intent.frozen
             intent.frozen, intent.prepared_bytes = None, 0
             return frozen
@@ -290,6 +292,7 @@ class Intents:
             intent.progress = self.clock()
             intent.receipt = receipt if isinstance(receipt, bytes) and len(receipt) <= MIB and not intent.abandoned else None
             intent.publication = publication
+            intent.publication_pending = False
             # Include record fields/strings/metadata, not merely serialized JSON.
             try:
                 intent.retained_bytes = retained_size(intent)

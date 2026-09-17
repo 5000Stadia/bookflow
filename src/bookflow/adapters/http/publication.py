@@ -118,8 +118,12 @@ class PublicationMiddleware:
                         # without a complete body is an interrupted result.
                         raise ConnectionAbortedError("Publication authority changed") from None
                     denied = True
+                    details = {"stage": "publication", "outcome": "unknown"}
+                    if exc.code == "E_DB_BUSY" and exc.details.get("operation") == "publication_pending":
+                        # This server-generated phase marker carries no protected data.
+                        details["operation"] = "publication_pending"
                     document = (exc.to_dict() if getattr(exc, "publication_auth_only", False) else
-                                BookflowError(exc.code, details={"stage": "publication", "outcome": "unknown"}).to_dict())
+                                BookflowError(exc.code, details=details).to_dict())
                     response = JSONResponse(document, status_code=401 if exc.code == "E_UNAUTHENTICATED" else 403,
                         headers={"Cache-Control": "no-store", **({"X-Bookflow-MCP-Version": str(BRIDGE_VERSION)} if scope["path"].startswith("/adapters/mcp") else {})})
                     async def safe_send(part):

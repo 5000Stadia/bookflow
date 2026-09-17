@@ -111,11 +111,24 @@ class Runtime:
         intent = self.intents.observe(reference, owner(credential))
         if intent is None:
             raise unknown()
-        if intent.publication is not None:
-            PublicationPermit.from_retained(intent.publication).check(self.host, credential)
+        self.check_intent_authority(intent, credential)
+        return intent
+
+    def check_intent_authority(self, intent, credential):
+        from bookflow.core.publication import MEMBERSHIP_EFFECTS
+        with self.intents.lock:
+            pending = intent.publication_pending and intent.header["command"] in MEMBERSHIP_EFFECTS
+            publication = intent.publication
+        if pending:
+            # The command can replace its own membership. Its preparation
+            # certificate cannot authorize observations of its completed effects.
+            with publication_reader(self.host, credential) as session:
+                credential.revalidate(session.hub)
+            raise BookflowError("E_DB_BUSY", details={"operation": "publication_pending"})
+        if publication is not None:
+            PublicationPermit.from_retained(publication).check(self.host, credential)
         else:
             self._header_authority(intent, credential)
-        return intent
 
     def input_permit(self, intent, raw, credential):
         """Shared preparation yields guarded command rejections, not protocol errors."""
