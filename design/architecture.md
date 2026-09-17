@@ -4822,8 +4822,10 @@ multiple request connections or replace publication freshness checks.
 host/thread scope. Workbench GET endpoints open a composite scope; hosted read
 commands open or borrow one. Each command still owns a distinct Session, actor,
 company handle and authorization decision. Only idle hub snapshots are retained,
-not global company-folder reader pins. Active command owners retain their existing
-reader admission. Nested readers use independent handles to preserve savepoint
+not global company-folder reader pins. A separate retained-hub counter participates
+in bounded shutdown and idle checkpoint scheduling; it never participates in company
+folder drain. Acquisition refuses shutdown and owner-thread closure decrements this
+counter. Active command owners retain their existing reader admission. Nested readers use independent handles to preserve savepoint
 ownership. Generation changes discard idle snapshots; changed active generations
 refuse nested borrowing. `Host.submit` discards idle package facts before queueing
 writes and refuses an active borrow instead of waiting for its own reader.

@@ -12,10 +12,13 @@ from tests.test_permission_snapshots import path
 
 @pytest.fixture
 def host(path):
-    state = SimpleNamespace(data_root=path.parent, publication_admission=Admission(), pins=0)
+    state = SimpleNamespace(data_root=path.parent, publication_admission=Admission(), pins=0, snapshots=0)
     def started(): state.pins += 1
     def done(): state.pins -= 1
     state.reader_started, state.reader_done = started, done
+    def snapshot_started(): state.snapshots += 1
+    def snapshot_done(): state.snapshots -= 1
+    state.permission_snapshot_started, state.permission_snapshot_done = snapshot_started, snapshot_done
     return state
 
 
@@ -31,7 +34,7 @@ def test_sequential_borrows_share_hub_fresh_phase_does_not(host, path):
                 assert publication is not first
                 assert host.pins == 0
         assert publication._closed and host.pins == 0
-    assert first._closed and host.pins == 0
+    assert first._closed and host.pins == 0 and host.snapshots == 0
 
 
 def test_nested_readers_keep_independent_savepoints(host, path):
@@ -60,7 +63,7 @@ def test_copied_context_never_borrows_or_closes_another_threads_handle(host, pat
         with ThreadPoolExecutor(max_workers=1) as pool:
             assert pool.submit(context.run, worker).result(timeout=5)
         assert not first._closed and host.pins == 0
-    assert first._closed and host.pins == 0
+    assert first._closed and host.pins == 0 and host.snapshots == 0
 
 
 def test_before_write_releases_idle_pin_and_refuses_active_borrow(host, path):
@@ -70,7 +73,7 @@ def test_before_write_releases_idle_pin_and_refuses_active_borrow(host, path):
                 before_write(host)
             assert failure.value.code == 'E_DB_BUSY'
         before_write(host)
-        assert first._closed and host.pins == 0
+        assert first._closed and host.pins == 0 and host.snapshots == 0
         with open_read_hub(path) as later:
             assert later is not first
     assert later._closed and host.pins == 0
@@ -132,3 +135,43 @@ def test_real_host_sessions_do_not_share_identity_or_company_and_writer_discards
 
 
 from tests.test_row3_host import hosted
+
+
+def test_shutdown_retains_root_until_idle_package_owner_closes(hosted):
+    import threading
+    from bookflow.core.config import Config, os_login
+    from bookflow.core.dispatch import _close
+    host = hosted.handle.host
+    uid = Config.load(hosted.root / 'config.toml').user_table(os_login())['user_id']
+    ready, release = threading.Event(), threading.Event()
+    retained = []
+    def worker():
+        with read_package(host):
+            session = host.reader_session(uid, hosted.login)
+            retained.append(session.hub)
+            _close(session)
+            host.reader_done()
+            ready.set()
+            assert release.wait(10)
+        assert retained[0]._closed
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        task = pool.submit(worker)
+        try:
+            assert ready.wait(5)
+            assert host._readers_attached == 0 and host._permission_snapshots == 1
+            host.shutdown_wait_seconds = 0.05
+            with pytest.raises(BookflowError) as failure:
+                host.stop()
+            assert failure.value.code == 'E_DB_BUSY'
+            assert 'readers or transfers' in failure.value.message
+            assert host._lock is not None and host._lock._fh is not None
+            assert not retained[0]._closed
+            with pytest.raises(BookflowError):
+                host.permission_snapshot_started()
+        finally:
+            release.set()
+        task.result(timeout=5)
+    assert retained[0]._closed and host._permission_snapshots == 0
+    host.shutdown_wait_seconds = 10
+    host.stop()
+    assert host._lock is None

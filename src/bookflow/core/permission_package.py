@@ -37,16 +37,21 @@ class _Package:
         manager, self.manager = self.manager, None
         self.db = self.generation = None
         if manager is not None:
-            manager.__exit__(None, None, None)
+            try:
+                manager.__exit__(None, None, None)
+            finally:
+                self.host.permission_snapshot_done()
 
     def database(self):
+        if getattr(self.host, "_stopping", False):
+            raise BookflowError("E_DB_BUSY", message="The host is stopping.")
         if self.db is not None:
             try:
                 self.host.publication_admission.check_generation(self.generation)
             except AdmissionCancelled:
                 self.discard()
         if self.db is None:
-            self.host.reader_started()
+            self.host.permission_snapshot_started()
             manager = open_database(self.root / 'hub.db', False)
             entered = False
             try:
@@ -59,9 +64,8 @@ class _Package:
                     if entered:
                         manager.__exit__(None, None, None)
                 finally:
-                    self.host.reader_done()
+                    self.host.permission_snapshot_done()
                 raise
-            self.host.reader_done()
             self.db, self.manager, self.generation = db, manager, generation
         return self.db
 
