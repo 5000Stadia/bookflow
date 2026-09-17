@@ -259,3 +259,53 @@ class CustomerRefundPageOutput(_Input):
     has_more: bool
     next_cursor: str | None
     audit_watermark: int
+
+
+class CustomerRefundHistoryInput(_Input):
+    refund: _Selector
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=8192)
+
+
+class CustomerRefundHistoryEventOutput(_Input):
+    """Stored attribution; labels use the company's retained principal directory."""
+
+    id: str
+    seq: int
+    at: str
+    command: str
+    actor_id: str | None
+    actor_name: str | None
+    actor_kind: str | None
+    on_behalf_of: str | None
+    on_behalf_of_name: str | None
+    interface: str
+    client_name: str
+    reason: str | None
+    directive_id: str | None
+    directive_code: str | None
+    source_ref: str | None
+
+
+class CustomerRefundHistoryRevisionOutput(CustomerRefundRevisionOutput):
+    consumptions: list[CustomerRefundConsumptionOutput]
+    events: list[CustomerRefundHistoryEventOutput]
+
+
+class CustomerRefundHistoryOutput(_Input):
+    """Oldest-first immutable revisions with the current header and retained effects."""
+
+    id: str
+    version: int
+    current_revision_id: str
+    number: str
+    status: Literal['posted', 'voided']
+    voided_at: str | None
+    voided_by: str | None
+    void_reason: str | None
+    void_posting_batch_id: str | None
+    items: list[CustomerRefundHistoryRevisionOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int

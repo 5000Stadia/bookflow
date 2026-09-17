@@ -106,7 +106,7 @@ def _links(company_id, noun, record, preview):
     if revision['id'] != record['current_revision_id']:
         links += [('Next revision', url + '?revision_number=' + str(number + 1)),
                   ('Current revision', url)]
-    if noun in ('credit-memo', 'vendor-credit'):
+    if noun in ('credit-memo', 'vendor-credit', 'customer-refund'):
         links.append(('History', url + '/history'))
     return links
 
@@ -408,6 +408,23 @@ def mount(app, *, render, run, credential, page_error, role_allows):
     from bookflow.core.errors import BookflowError
 
     INVOICE_PAGE = 50
+
+    @app.get('/c/{company_id}/customer-refund/{refund_id}/history')
+    def refund_history(request: Request, company_id: str, refund_id: str):
+        url = _url(company_id, 'customer-refund', refund_id)
+        try:
+            limit = int(request.query_params.get('limit', '50'))
+            result = run(request, 'customer-refund history', dict(refund=refund_id, limit=limit,
+                cursor=request.query_params.get('cursor')), company_id)
+            next_url = _url(company_id, 'customer-refund', refund_id, 'history',
+                limit=limit, cursor=result['next_cursor']) if result['next_cursor'] else None
+            return render('customer_refund_history.html', request, company_id=company_id,
+                          history=result, refund_url=url, next_url=next_url)
+        except ValueError:
+            return page_error(request, BookflowError('E_VALIDATION', details={'fields': [
+                {'field': 'limit', 'problem': 'must be an integer'}]}), company_id=company_id)
+        except BookflowError as exc:
+            return page_error(request, exc, company_id=company_id, restart_url=request.url.path)
 
     def _state(request, company_id, credit_id):
         credit = run(request, 'credit-memo show', {'credit_memo': credit_id}, company_id)

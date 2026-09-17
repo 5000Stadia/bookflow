@@ -4778,3 +4778,15 @@ item-owning purchases; their check/card commands coordinate correction and void.
 Generated forms provide Items/Expenses grids and advisory live allocation using the
 shared exact numeric parser; the server enforces equality. Direct item entry means
 new goods received now, not settlement of existing bills or unbilled receipts.
+
+Customer-refund history uses the shared read command `customer-refund history` and
+the optional History link on a refund. It pages immutable revisions oldest first
+with the current header, captured profiles, each revision's posting/reversal batches,
+source consumptions/releases and company audit attribution. Correction releases stay
+with the consumed revision; void effects accompany the final revision without adding
+a revision. Company audit principals supply display labels; event IDs and attribution
+remain stored facts. Reads use one command snapshot and existing watermark-bound
+cursors, and dispatch rechecks authority on every page. Show remains current by default.
+The command is added by the customer-refund-history-v1 permission delta; accepted
+ancestor descriptors remain unchanged. The browser history has revision/current links,
+paging and stale restart, and uses the same command without posting financial effects.

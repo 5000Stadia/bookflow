@@ -2,6 +2,276 @@
 
 # `customer-refund` commands
 
+## `customer-refund history`
+
+Page retained customer-refund revisions oldest first, with current document status. Each revision includes captured facts, posting/reversal batches, source consumptions/releases and audit attribution, including correction and void reasons. A void adds effects to the last revision, not a new revision. Actor labels use the company principal directory. Consumption source numbers are current labels; the revision profile retains captured source facts. Writes invalidate cursors; restart without cursor. Show still defaults to the current revision.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer-refund.history` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer-refund history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `refund` | `REFUND` | string | yes | no | — | minimum length 1 |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer-refund.history`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `current_revision_id` | string | yes | no | — | — |
+| `number` | string | yes | no | — | — |
+| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `voided_at` | string \| null | yes | yes | — | — |
+| `voided_by` | string \| null | yes | yes | — | — |
+| `void_reason` | string \| null | yes | yes | — | — |
+| `void_posting_batch_id` | string \| null | yes | yes | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].id` | string | yes | no | — | — |
+| `items[].created_at` | string | yes | no | — | — |
+| `items[].created_by` | string | yes | no | — | — |
+| `items[].created_via` | string | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].revision_number` | integer | yes | no | — | — |
+| `items[].supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].number` | string | yes | no | — | — |
+| `items[].name_type` | literal["customer"] | yes | no | — | — |
+| `items[].name_id` | string | yes | no | — | — |
+| `items[].memo` | string \| null | yes | yes | — | — |
+| `items[].total` | object | yes | no | — | — |
+| `items[].total.amount` | string | yes | no | — | — |
+| `items[].total.currency` | string | yes | no | — | — |
+| `items[].total.minor_units` | integer | yes | no | — | — |
+| `items[].total_minor_units` | integer | yes | no | — | — |
+| `items[].currency` | string | yes | no | — | — |
+| `items[].audit_event_id` | string | yes | no | — | — |
+| `items[].profile` | object | yes | no | — | — |
+| `items[].profile.customer` | object | yes | no | — | — |
+| `items[].profile.customer.id` | string | yes | no | — | — |
+| `items[].profile.customer.label` | string | yes | no | — | — |
+| `items[].profile.customer.version` | integer | yes | no | — | — |
+| `items[].profile.customer.company_name` | string \| null | no | yes | null | — |
+| `items[].profile.customer.email` | string \| null | no | yes | null | — |
+| `items[].profile.customer.phone` | string \| null | no | yes | null | — |
+| `items[].profile.customer.account_number` | string \| null | no | yes | null | — |
+| `items[].profile.ar_account` | object | yes | no | — | — |
+| `items[].profile.ar_account.id` | string | yes | no | — | — |
+| `items[].profile.ar_account.name` | string | yes | no | — | — |
+| `items[].profile.ar_account.full_name` | string | yes | no | — | — |
+| `items[].profile.ar_account.number` | string \| null | yes | yes | — | — |
+| `items[].profile.ar_account.type` | string | yes | no | — | — |
+| `items[].profile.ar_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].profile.funding_account` | object | yes | no | — | — |
+| `items[].profile.funding_account.id` | string | yes | no | — | — |
+| `items[].profile.funding_account.name` | string | yes | no | — | — |
+| `items[].profile.funding_account.full_name` | string | yes | no | — | — |
+| `items[].profile.funding_account.number` | string \| null | yes | yes | — | — |
+| `items[].profile.funding_account.type` | string | yes | no | — | — |
+| `items[].profile.funding_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].profile.payment_method` | object | yes | no | — | — |
+| `items[].profile.payment_method.id` | string | yes | no | — | — |
+| `items[].profile.payment_method.label` | string | yes | no | — | — |
+| `items[].profile.payment_method.version` | integer | yes | no | — | — |
+| `items[].profile.payment_method.kind` | string | yes | no | — | — |
+| `items[].profile.check_number` | string \| null | no | yes | null | — |
+| `items[].profile.reference` | string \| null | no | yes | null | — |
+| `items[].profile.amount_minor_units` | integer | yes | no | — | — |
+| `items[].profile.currency` | string | yes | no | — | — |
+| `items[].profile.sources` | array[object] | yes | no | — | — |
+| `items[].profile.sources[].credit_memo_id` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].credit_memo_number` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].credit_memo_date` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].credit_source_key_id` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].payment_id` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].payment_number` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].payment_date` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].payment_source_key_id` | string \| null | no | yes | null | — |
+| `items[].profile.sources[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].profile.sources[].available_minor_units` | integer | yes | no | — | — |
+| `items[].profile.origins` | object[string, object] | no | no | {} | — |
+| `items[].issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
+| `items[].lines` | array[object] | yes | no | — | — |
+| `items[].lines[].id` | string | yes | no | — | — |
+| `items[].lines[].created_at` | string | yes | no | — | — |
+| `items[].lines[].created_by` | string | yes | no | — | — |
+| `items[].lines[].created_via` | string | yes | no | — | — |
+| `items[].lines[].transaction_id` | string | yes | no | — | — |
+| `items[].lines[].revision_id` | string | yes | no | — | — |
+| `items[].lines[].line_id` | string | yes | no | — | — |
+| `items[].lines[].position` | integer | yes | no | — | — |
+| `items[].lines[].kind` | literal["refund"] | yes | no | — | — |
+| `items[].lines[].customer_id` | string | yes | no | — | — |
+| `items[].lines[].customer_name` | string | yes | no | — | — |
+| `items[].lines[].amount` | object | yes | no | — | — |
+| `items[].lines[].amount.amount` | string | yes | no | — | — |
+| `items[].lines[].amount.currency` | string | yes | no | — | — |
+| `items[].lines[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].lines[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].lines[].currency` | string | yes | no | — | — |
+| `items[].lines[].class_id` | string \| null | yes | yes | — | — |
+| `items[].lines[].class_name` | string \| null | yes | yes | — | — |
+| `items[].lines[].description` | string \| null | yes | yes | — | — |
+| `items[].batches` | array[object] | yes | no | — | — |
+| `items[].batches[].id` | string | yes | no | — | — |
+| `items[].batches[].created_at` | string | yes | no | — | — |
+| `items[].batches[].created_by` | string | yes | no | — | — |
+| `items[].batches[].created_via` | string | yes | no | — | — |
+| `items[].batches[].total` | object | yes | no | — | — |
+| `items[].batches[].total.amount` | string | yes | no | — | — |
+| `items[].batches[].total.currency` | string | yes | no | — | — |
+| `items[].batches[].total.minor_units` | integer | yes | no | — | — |
+| `items[].batches[].transaction_id` | string | yes | no | — | — |
+| `items[].batches[].revision_id` | string | yes | no | — | — |
+| `items[].batches[].kind` | literal["original", "replacement", "reversal"] | yes | no | — | — |
+| `items[].batches[].effective_date` | string | yes | no | — | — |
+| `items[].batches[].reverses_batch_id` | string \| null | yes | yes | — | — |
+| `items[].batches[].replaces_batch_id` | string \| null | yes | yes | — | — |
+| `items[].batches[].audit_event_id` | string | yes | no | — | — |
+| `items[].batches[].debit_total` | object | yes | no | — | — |
+| `items[].batches[].debit_total.amount` | string | yes | no | — | — |
+| `items[].batches[].debit_total.currency` | string | yes | no | — | — |
+| `items[].batches[].debit_total.minor_units` | integer | yes | no | — | — |
+| `items[].batches[].credit_total` | object | yes | no | — | — |
+| `items[].batches[].credit_total.amount` | string | yes | no | — | — |
+| `items[].batches[].credit_total.currency` | string | yes | no | — | — |
+| `items[].batches[].credit_total.minor_units` | integer | yes | no | — | — |
+| `items[].batches[].debit_minor_units` | integer | yes | no | — | — |
+| `items[].batches[].credit_minor_units` | integer | yes | no | — | — |
+| `items[].batches[].currency` | string | yes | no | — | — |
+| `items[].batches[].line_count` | integer | yes | no | — | — |
+| `items[].consumptions` | array[object] | yes | no | — | — |
+| `items[].consumptions[].id` | string | yes | no | — | — |
+| `items[].consumptions[].created_at` | string | yes | no | — | — |
+| `items[].consumptions[].created_by` | string | yes | no | — | — |
+| `items[].consumptions[].created_via` | string | yes | no | — | — |
+| `items[].consumptions[].kind` | literal["consume", "release"] | yes | no | — | — |
+| `items[].consumptions[].reverses_consumption_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].transaction_id` | string | yes | no | — | — |
+| `items[].consumptions[].revision_id` | string | yes | no | — | — |
+| `items[].consumptions[].credit_memo_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].credit_memo_number` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].credit_source_key_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].credit_source_component_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].payment_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].payment_number` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].payment_source_key_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].payment_source_component_id` | string \| null | yes | yes | — | — |
+| `items[].consumptions[].amount` | object | yes | no | — | — |
+| `items[].consumptions[].amount.amount` | string | yes | no | — | — |
+| `items[].consumptions[].amount.currency` | string | yes | no | — | — |
+| `items[].consumptions[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].consumptions[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].consumptions[].currency` | string | yes | no | — | — |
+| `items[].consumptions[].effective_date` | string | yes | no | — | — |
+| `items[].events` | array[object] | yes | no | — | — |
+| `items[].events[].id` | string | yes | no | — | — |
+| `items[].events[].seq` | integer | yes | no | — | — |
+| `items[].events[].at` | string | yes | no | — | — |
+| `items[].events[].command` | string | yes | no | — | — |
+| `items[].events[].actor_id` | string \| null | yes | yes | — | — |
+| `items[].events[].actor_name` | string \| null | yes | yes | — | — |
+| `items[].events[].actor_kind` | string \| null | yes | yes | — | — |
+| `items[].events[].on_behalf_of` | string \| null | yes | yes | — | — |
+| `items[].events[].on_behalf_of_name` | string \| null | yes | yes | — | — |
+| `items[].events[].interface` | string | yes | no | — | — |
+| `items[].events[].client_name` | string | yes | no | — | — |
+| `items[].events[].reason` | string \| null | yes | yes | — | — |
+| `items[].events[].directive_id` | string \| null | yes | yes | — | — |
+| `items[].events[].directive_code` | string \| null | yes | yes | — | — |
+| `items[].events[].source_ref` | string \| null | yes | yes | — | — |
+| `count` | integer | yes | no | — | — |
+| `has_more` | boolean | yes | no | — | — |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `audit_watermark` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "audit_watermark": 1,
+  "count": 0,
+  "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "has_more": false,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "next_cursor": null,
+  "number": "value",
+  "status": "posted",
+  "version": 1,
+  "void_posting_batch_id": null,
+  "void_reason": null,
+  "voided_at": null,
+  "voided_by": null
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `customer-refund post`
 
 Pay a customer back. The refund debits Accounts Receivable and credits the bank account the money left, and posts nothing else: a credit memo already took the income and the sales tax back down and an overpayment never recognised any, so a refund that touched either would move revenue it is not entitled to move. Name what is being paid out in `sources`: each source is a `credit_memo` or a `payment`, never both. A payment source pays back the cash on that receipt which settled no invoice -- the 50.00 left standing when a 150.00 cheque met a 100.00 invoice -- and that overage stops being available the moment it is refunded. Leave an amount out and the whole of that source is refunded. Money that has been refunded cannot then be applied to an invoice, and money that has been applied cannot be refunded beyond what is left -- either way the refund is refused and nothing is written. One refund pays back one customer on one receivable account in one currency, taken from the sources themselves; `customer` is an optional guard rather than a choice. `check_number` is the number on the paper check and is accepted only when the method is a check.
