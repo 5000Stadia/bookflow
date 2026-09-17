@@ -2,7 +2,8 @@
 import ast
 from bookflow.core import registry
 from bookflow.hub import permission_catalog as c, permission_activation_catalog as build, permission_runtime as runtime
-from tests.test_permission_catalog import ROOT, R, owner, RESOURCE_PAIRS, FROZEN_DESCRIPTOR_SHA256
+from tests.test_permission_catalog import ROOT, R, owner, FROZEN_DESCRIPTOR_SHA256
+from tests.test_permission_catalog import test_every_resource_call_site_has_explicit_owner_disposition as _assert_resource_owners
 
 
 def test_complete_unfiltered_registry_descriptors_and_action_owners():
@@ -45,37 +46,8 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 
 
 def test_every_resource_call_site_has_explicit_owner_disposition():
-    sites = {}
-    for folder in ('commands', 'company'):
-        for path in sorted((ROOT / 'src/bookflow' / folder).rglob('*.py')):
-            tree = ast.parse(path.read_text())
-            parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom):
-                    assert all(a.name != 'require_resource' or a.asname in (None, 'require_resource') for a in node.names), 'new alias needs inventory disposition'
-                if not isinstance(node, ast.Call):
-                    continue
-                fn = node.func
-                if not ((isinstance(fn, ast.Name) and fn.id == 'require_resource') or (isinstance(fn, ast.Attribute) and fn.attr == 'require_resource')):
-                    continue
-                ancestor = node
-                names = []
-                while ancestor in parents:
-                    ancestor = parents[ancestor]
-                    if isinstance(ancestor, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                        names.append(ancestor.name)
-                module = '.'.join(path.relative_to(ROOT / 'src').with_suffix('').parts)
-                key = module + '.' + '.'.join(reversed(names))
-                sites.setdefault(key, set()).add((str(path.relative_to(ROOT)), node.lineno))
-                expected = RESOURCE_PAIRS[key.removeprefix('bookflow.company.')]
-                if len(node.args) >= 3 and all(isinstance(a, ast.Constant) for a in node.args[1:3]):
-                    assert tuple(a.value for a in node.args[1:3]) in expected
-    assert sites.keys() == {'bookflow.company.' + name for name in RESOURCE_PAIRS}
-    # The tip's inventory, for the same reason: build.CURRENT_SOURCES was frozen when
-    # this delta was accepted and cannot carry a site a later delta introduced.
-    inventory = runtime.current_catalog().CATALOG.conditional_sources
-    assert {s.owner: set(s.call_sites) for s in inventory} == sites
-    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in inventory} == RESOURCE_PAIRS
+    # Keep one executable inventory owner; accepted line coordinates are provenance.
+    _assert_resource_owners()
 
 
 def test_literal_delta_keeps_old_descriptors_and_unavailable_contracts():
