@@ -213,3 +213,161 @@ def test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books
             await matrix.close()
 
     asyncio.run(witness())
+
+
+@pytest.mark.timeout(180)
+def test_activated_agent_deletes_for_bound_human_once_over_mcp(books, tmp_path):
+    """Real agent bearer, active Delete grant, retained principal, fresh-session retry.
+
+    Authority assignment uses the credential tests' fixture (there is no public
+    assignment command); permission activation, grants and token issue are real.
+    No transport idempotency key is supplied: retry exercises the permanent
+    business operation_key through a new MCP session, not a cached MCP receipt.
+    """
+    import anyio
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core import clock
+    from bookflow.core.context import client_version
+    from bookflow.hub import schema as h
+    from tests import provenance
+    from tests.test_row3_host import Hosted, live
+    from tests.test_row7_credentials import writer
+    from tests.conftest import make_actor
+
+    client, company, run = books['client'], books['company'], books['run']
+    root = Path(client.data_root)
+    payment = run('payment receive', dict(customer=books['customer'],
+        date='2017-01-03', amount='25.00', operation_key='agent-receipt',
+        payment_method=books['methods']['Cash'], deposit_to=books['bank']),
+        reason='Duplicate receipt to remove')
+    original = run('payment show', {'payment': payment['id']})
+    receivable = _receivable(books)
+    principal = client.user.add(username='deletion-human', display_name='Deletion human')['user_id']
+    agent = make_actor(root, 'deletion-agent', kind='agent', owner_user_id=principal)
+    with writer(root) as db:
+        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1))
+    for user in (principal, agent):
+        client.membership.grant(user=user, company=company, role='standard')
+    state = client.permission.show()
+    activated = client.permission.activate(expected_generation=state['generation'],
+        expected_catalog_sha256=state['catalog_sha256'])
+    assert activated['mode'] == 'policy_v1'
+    members = client.membership.list(company=company)['items']
+    for user in (principal, agent):
+        member = next(row for row in members if row['user_id'] == user)
+        client.membership.grant(user=user, company=company, role='standard',
+            expected_version=member['version'],
+            grants=['transaction.payment.delete'], denies=['ledger.post'])
+    with writer(root) as db:
+        # Fixture authorization follows completed policy setup, just as credential
+        # fixtures bind authority before issue; no public agent-authorize verb exists.
+        db.conn.execute(h.agent_authority.update().where(
+            h.agent_authority.c.agent_user_id == agent).values(
+                suspended_at=None, suspension_reason=None))
+        epoch = db.raw.execute('SELECT epoch FROM agent_authority WHERE agent_user_id=?',
+                               (agent,)).fetchone()[0]
+        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,
+            principal_user_id=principal, assigned_by=principal, assigned_at=clock.now_iso()))
+    issued = client.token.issue(user=agent, principal=principal, label='Agent delete witness')
+    with sqlite3.connect(root / 'hub.db') as db:
+        assert db.execute('SELECT user_id,on_behalf_of,authority_epoch FROM api_tokens '
+                          'WHERE id=?', (issued['token_id'],)).fetchone() == (agent, principal, epoch)
+    path = Path(client.company.show(company=company)['path']) / 'company.db'
+    before = database(path)
+    with sqlite3.connect(path) as db:
+        original_postings = db.execute('SELECT * FROM posting_lines ORDER BY id').fetchall()
+    reason = 'Remove the duplicate receipt for the customer'
+    raw = dict(payment=payment['id'], expected_version=1, operation_key='agent-delete-once')
+    handle = start_serving(root, client_version(), bind='127.0.0.1:8765',
+                           secure_cookies=False, publish_descriptor=False)
+    hosted = Hosted(handle, root, '', company, issued, '', {})
+    server = live.__wrapped__(hosted)
+    try:
+        url = next(server)
+
+        async def witness():
+            params = StdioServerParameters(command=provenance.launcher(),
+                args=['mcp', '--url', url, '--client-name', 'agent-delete-witness'],
+                cwd=str(tmp_path), env=provenance.child_env(BOOKFLOW_TOKEN=issued['secret'],
+                    BOOKFLOW_COMPANY=company, BOOKFLOW_DATA_ROOT=str(tmp_path / 'absent')))
+            after = None
+            for retry in (False, True):
+                async with stdio_client(params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        with anyio.fail_after(provenance.HANDSHAKE_SECONDS):
+                            await session.discover()
+
+                        async def call(command, data, *, rejected=False, **options):
+                            reply = await session.call_tool('bookflow_run', dict(
+                                command=command, input=data,
+                                **({'reason': reason} if command in ('payment delete', 'payment void') else {}),
+                                **options))
+                            assert bool(reply.is_error) == rejected, reply
+                            return reply.structured_content
+
+                        async def ledger():
+                            report = await call('report general-ledger', dict(
+                                date_from='2017-01-01', date_to='2017-12-31', limit=200))
+                            net = {}
+                            for row in report['rows']:
+                                if row['kind'] == 'posting':
+                                    account = row['account_id']
+                                    net[account] = net.get(account, 0) + (
+                                        row['debit']['minor_units'] - row['credit']['minor_units'])
+                            return {account: value for account, value in net.items() if value}
+
+                        if not retry:
+                            assert await ledger() == {books['bank']: 2500, receivable: -2500}
+                            preview = await call('payment delete', raw, dry_run=True)
+                            assert preview['dry_run'] and preview['cancelled_posting_lines'] == 2
+                            denied = await call('payment void', raw, rejected=True)
+                            assert denied['code'] == 'E_PERMISSION'
+                            assert database(path) == before
+                        deleted = await call('payment delete', raw)
+                        assert deleted['status'] == 'deleted' and deleted['version'] == 2
+                        assert deleted['idempotent_replay'] is retry
+                        assert deleted['changed'] is not retry
+                        assert deleted['cancelled_posting_lines'] == 2
+                        assert await ledger() == {}
+                        if retry:
+                            assert database(path) == after
+                        else:
+                            after = database(path)
+                        shown = await call('payment show', dict(payment=payment['id'],
+                                                               include_deleted=True))
+                        assert shown['revision'] == original['revision']
+                        assert shown['number'] == original['number']
+                        deletion = shown['deletion']
+                        assert deletion['created_by'] == agent
+                        assert deletion['principal_id'] == principal
+                        assert deletion['created_via'] == 'mcp'
+                        assert deletion['reason'] == reason
+            assert not (tmp_path / 'absent').exists()
+
+        asyncio.run(witness())
+        with sqlite3.connect(path) as db:
+            assert db.execute('SELECT count(*) FROM payment_deletions').fetchone() == (1,)
+            assert db.execute("SELECT count(*) FROM posting_batches WHERE transaction_id=? "
+                              "AND kind='reversal'", (payment['id'],)).fetchone() == (1,)
+            assert db.execute("SELECT actor_id,on_behalf_of,interface,reason FROM audit_events "
+                              "WHERE command='payment delete'").fetchall() == [
+                                  (agent, principal, 'mcp', reason)]
+            assert db.execute('SELECT * FROM posting_lines WHERE reversed_line_id IS NULL '
+                              'ORDER BY id').fetchall() == original_postings
+            assert db.execute("SELECT o.account_id,r.account_id,o.debit_minor_units,r.credit_minor_units,"
+                              "o.credit_minor_units,r.debit_minor_units FROM posting_lines r "
+                              "JOIN posting_lines o ON r.reversed_line_id=o.id ORDER BY o.account_id").fetchall() == [
+                                  (row[0], row[0], row[1], row[1], row[2], row[2])
+                                  for row in db.execute(
+                                      'SELECT account_id,debit_minor_units,credit_minor_units '
+                                      'FROM posting_lines WHERE reversed_line_id IS NULL ORDER BY account_id')]
+            assert db.execute('PRAGMA foreign_key_check').fetchall() == []
+        after = database(path)
+        for table in ('transaction_revisions', 'document_lines'):
+            assert after['tables'][table] == before['tables'][table]
+    finally:
+        server.close()
+        hosted.api.close()
+        handle.stop()
