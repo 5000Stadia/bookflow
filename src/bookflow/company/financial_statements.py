@@ -1,5 +1,9 @@
-"""Bounded accrual statements of the immutable journal effects actually entered."""
+"""Financial statements of immutable effects with an optional cash projection."""
 from __future__ import annotations
+
+from bookflow.company.cash_report_view import reporting_connection
+
+from bookflow.company.report_basis import Basis, basis_field
 
 from typing import Literal
 
@@ -10,6 +14,7 @@ from bookflow.company import ledger_reports as ledger
 
 
 class ProfitAndLossInput(ledger.TrialBalanceInput):
+    basis: Basis | None = basis_field()
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
     date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     include_zero: bool = Field(default=False, description="Include zero period nets, including inactive and never-posted income and expense accounts.")
@@ -24,7 +29,7 @@ class ProfitAndLossInput(ledger.TrialBalanceInput):
 
 
 class BalanceSheetInput(ledger.TrialBalanceInput):
-    pass
+    basis: Basis | None = basis_field()
 
 
 class StatementRow(ledger.StrictModel):
@@ -160,7 +165,7 @@ def _statement(inp, s, *, profit_and_loss, principal_id):
         ledger.register_ledger_functions(s.company)
         kind = "profit-and-loss" if profit_and_loss else "balance-sheet"
         state, offset = ledger._state(s, inp, kind, principal_id, None)
-        raw, currency = s.company.raw, state.metadata.currency
+        raw, currency = reporting_connection(s.company, state.metadata.basis), state.metadata.currency
         month, numbers, lowest = raw.execute("""SELECT fiscal_year_start_month,
             use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone()
         year = int(inp.date_to[:4]) - (int(inp.date_to[5:7]) < month)

@@ -21,7 +21,7 @@ def test_statement_errors_match_http_browser_python_and_cli(hosted,root):
     version=h.info()['info_version']
     h.ok('company.update',{'phone':'555-0109','expected_version':version},company=cid)
     cases=[('balance-sheet',{**base,'cursor':first['next_cursor']},'E_QUERY_STALE'),
-           ('balance-sheet',{'date_to':'2026-12-31','basis':'cash'},'E_VALIDATION'),
+           ('balance-sheet',{'date_to':'2026-12-31','basis':'unsupported'},'E_VALIDATION'),
            ('profit-and-loss',{'date_from':'2026-12-31','date_to':'2026-01-01'},'E_VALIDATION')]
     for _ in range(2):
         h.ok('journal.post',{'date':'2026-02-01','lines':[

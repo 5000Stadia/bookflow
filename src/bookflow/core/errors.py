@@ -116,6 +116,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_HIERARCHY_DEPTH": "The requested hierarchy would exceed the maximum depth.",
     "E_SYSTEM_RECORD": "That operation would change a protected system record.",
     "E_LIST_FILTER": "The requested list filter or sort field is not supported.",
+    "E_CASH_BASIS_EVIDENCE": "Cash reporting cannot reconcile the retained settlement evidence.",
     "E_QUERY_STALE": "The company changed since this query began; restart without a cursor.",
     "E_TYPE_CHANGE": "That record type cannot be changed directly.",
     "E_VALUE_RANGE": "The value is outside its allowed range or storage bounds.",

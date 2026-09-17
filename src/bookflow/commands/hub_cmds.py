@@ -399,7 +399,7 @@ class CompanyNewInput(BaseModel):
     website: str | None = Field(None, max_length=254, description="Website")
     fiscal_year_start_month: int = Field(1, ge=1, le=12, description="First month of the fiscal year, 1 to 12")
     tax_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the tax year; defaults to fiscal_year_start_month")
-    report_basis: Literal["accrual", "cash"] = Field("accrual", description="Default basis for reports")
+    report_basis: Literal["accrual", "cash"] = Field("accrual", description="Company default for compatible financial reports: cash or accrual. Individual reports may override it. Does not change posted transactions or sales-tax liability timing.")
     timezone: str | None = Field(None, description="IANA zone; defaults to the machine's zone")
     recent_activity_window_seconds: int = Field(60, ge=0, description="Window for the recent-activity warning on blind writes")
     use_account_numbers: bool = Field(True, description="Show account numbers in forms, tables, and pickers")

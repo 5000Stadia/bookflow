@@ -357,6 +357,10 @@ MATRIX['report expenses-by-vendor'] = {
     'E_VALUE_RANGE': 'public expense for a vendor or the summary total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'a class filter that names nothing',
 }
+for _report in ('profit-and-loss', 'balance-sheet', 'profit-and-loss-by-job',
+                'profit-and-loss-by-class', 'cash-flows', 'income-tax-summary',
+                'sales-by-customer', 'sales-by-item', 'sales-by-rep', 'expenses-by-vendor'):
+    MATRIX['report ' + _report]['E_CASH_BASIS_EVIDENCE'] = 'retained commercial or settlement evidence cannot reconcile for cash reporting'
 MATRIX['report statement'] = {
     'E_QUERY_STALE': 'posting, settlement or customer display facts changed between statement pages',
     'E_VALUE_RANGE': 'public statement amount, running balance or statement total exceeds signed 64-bit range',

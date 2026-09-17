@@ -61,7 +61,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |

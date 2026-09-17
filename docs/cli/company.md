@@ -493,7 +493,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `website` | `--website` | string \| null | no | yes | null | Website |
 | `fiscal_year_start_month` | `--fiscal-year-start-month` | integer | no | no | 1 | First month of the fiscal year, 1 to 12; minimum 1; maximum 12 |
 | `tax_year_start_month` | `--tax-year-start-month` | integer \| null | no | yes | null | First month of the tax year; defaults to fiscal_year_start_month |
-| `report_basis` | `--report-basis` | literal["accrual", "cash"] | no | no | "accrual" | Default basis for reports |
+| `report_basis` | `--report-basis` | literal["accrual", "cash"] | no | no | "accrual" | Company default for compatible financial reports: cash or accrual. Individual reports may override it. Does not change posted transactions or sales-tax liability timing. |
 | `timezone` | `--timezone` | string \| null | no | yes | null | IANA zone; defaults to the machine's zone |
 | `recent_activity_window_seconds` | `--recent-activity-window-seconds` | integer | no | no | 60 | Window for the recent-activity warning on blind writes; minimum 0 |
 | `use_account_numbers` | `--use-account-numbers` | boolean | no | no | true | Show account numbers in forms, tables, and pickers |
@@ -911,7 +911,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `website` | `--website` | string \| null | no | yes | null | Website |
 | `fiscal_year_start_month` | `--fiscal-year-start-month` | integer \| null | no | yes | null | First month of the fiscal year |
 | `tax_year_start_month` | `--tax-year-start-month` | integer \| null | no | yes | null | First month of the tax year |
-| `report_basis` | `--report-basis` | literal["accrual", "cash"] \| null | no | yes | null | Default basis for reports |
+| `report_basis` | `--report-basis` | literal["accrual", "cash"] \| null | no | yes | null | Company default for compatible financial reports: cash or accrual. Individual reports may override it. Does not change posted transactions or sales-tax liability timing. |
 | `timezone` | `--timezone` | string \| null | no | yes | null | IANA zone |
 | `closing_date` | `--closing-date` | string \| null | no | yes | null | Books closed through this date, YYYY-MM-DD |
 | `recent_activity_window_seconds` | `--recent-activity-window-seconds` | integer \| null | no | yes | null | Window for the recent-activity warning |

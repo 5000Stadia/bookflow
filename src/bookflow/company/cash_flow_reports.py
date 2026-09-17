@@ -60,6 +60,10 @@ depreciation expense rather than moving anything.
 """
 from __future__ import annotations
 
+from bookflow.company.cash_report_view import reporting_connection
+
+from bookflow.company.report_basis import Basis, basis_field
+
 from typing import get_args
 
 from pydantic import Field, field_validator, model_validator
@@ -111,6 +115,7 @@ SECTION_ORDER = "CASE section " + " ".join(
 
 
 class CashFlowsInput(ledger.TrialBalanceInput):
+    basis: Basis | None = basis_field()
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
     date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     include_zero: bool = Field(default=False, description="Include accounts whose balance did not change over the period, including inactive and never-posted balance-sheet accounts.")
@@ -183,7 +188,7 @@ def cash_flows(inp: CashFlowsInput, s, *, principal_id=None) -> CashFlowsOutput:
     with ledger._snapshot(s.company):
         ledger.register_ledger_functions(s.company)
         state, offset = ledger._state(s, inp, "cash-flows", principal_id, None)
-        raw, currency = s.company.raw, state.metadata.currency
+        raw, currency = reporting_connection(s.company, state.metadata.basis), state.metadata.currency
         numbers, lowest = raw.execute(
             "SELECT use_account_numbers, show_lowest_subaccount_only FROM company_info").fetchone()
         params = {"date_from": inp.date_from, "date_to": inp.date_to,

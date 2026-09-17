@@ -51,7 +51,7 @@ def ledger(tmp_path):
         for table in ("posting_lines", "posting_batches", "transaction_revisions", "posting_line_sources"):
             for operation in ("UPDATE", "DELETE"):
                 db.raw.execute(f"CREATE TRIGGER immutable_{table}_{operation} BEFORE {operation} ON {table} BEGIN SELECT RAISE(ABORT, 'immutable'); END")
-        session = SimpleNamespace(company=db, company_row={"id": "company", "organization_id": "org"},
+        session = SimpleNamespace(company=db, hub=None, company_row={"id": "company", "organization_id": "org"},
             actor=SimpleNamespace(id="actor"), is_hub_admin=True, memberships=[])
         oracle = []
         serial = 0

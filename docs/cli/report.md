@@ -4,7 +4,7 @@
 
 ## `report ap-aging`
 
-Accrual payables aged by bill due date as of as_of, one row per vendor, in Current, 1-30, 31-60, 61-90 and Over 90 columns. A bill due exactly 30 days before as_of is 1-30. Bills carry what is still owed on them after what bill payments have settled against them; an unapplied bill payment, a vendor credit and a payable journal entry age by accounting date, so the aging total equals Accounts Payable on the balance sheet for the same date. Paid bills, voided bills and all-zero vendors are omitted; totals cover every vendor and rows are paged.
+Accrual payables aged by bill due date as of as_of, one row per vendor, in Current, 1-30, 31-60, 61-90 and Over 90 columns. A bill due exactly 30 days before as_of is 1-30. Bills carry what is still owed on them after what bill payments have settled against them; an unapplied bill payment, a vendor credit and a payable journal entry age by accounting date, so the aging total equals Accounts Payable on the accrual balance sheet for the same date. Paid bills, voided bills and all-zero vendors are omitted; totals cover every vendor and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -60,7 +60,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -265,7 +265,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -416,7 +416,7 @@ Example JSON output:
 
 ## `report balance-sheet`
 
-Accrual assets, liabilities and equity as of date_to, with posted equity, derived prior earnings and current fiscal-year income shown separately. Own-account rows are paged; totals cover the whole statement.
+Uses the company cash/accrual report preference unless basis is supplied. Assets, liabilities and equity as of date_to, with posted equity, derived prior earnings and current fiscal-year income shown separately. Own-account rows are paged; totals cover the whole statement.
 
 | Contract | Value |
 |---|---|
@@ -437,7 +437,7 @@ Accrual assets, liabilities and equity as of date_to, with posted equity, derive
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero ending balances, including inactive and never-posted accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -473,7 +473,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -600,6 +600,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -627,7 +628,7 @@ Example JSON output:
 
 ## `report cash-flows`
 
-Indirect accrual statement of cash flows for inclusive accounting dates: net income for the period, then the period change in every other balance-sheet account, classified into operating, investing and financing. An increase in an asset is a use of cash and shows negative; an increase in a liability or in equity is a source and shows positive. Operating carries receivables, payables, inventory and the other current assets and current liabilities, including credit cards; investing carries fixed and other assets; financing carries long-term liabilities and equity, so owner draws and contributions appear there. Net income for the same two dates is the figure report profit-and-loss reports, and net income plus the three subtotals plus opening cash is closing cash, which is the sum of the bank accounts report balance-sheet shows for the same date_to; totals.difference publishes that reconciliation and is zero for books that balance. Classification is the section the account declares in cash_flow_section, falling back to the one its type gives, so a depreciation add-back reaches the statement through the change in the fixed-asset account it was credited to and lands in operating when that account declares operating and in investing when it declares nothing. Closing cash is the same figure either way. Own-account rows are paged; totals cover every account.
+Uses the company cash/accrual report preference unless basis is supplied. Indirect selected-basis statement of cash flows for inclusive accounting dates: net income for the period, then the period change in every other balance-sheet account, classified into operating, investing and financing. An increase in an asset is a use of cash and shows negative; an increase in a liability or in equity is a source and shows positive. Operating carries receivables, payables, inventory and the other current assets and current liabilities, including credit cards; investing carries fixed and other assets; financing carries long-term liabilities and equity, so owner draws and contributions appear there. Net income for the same two dates is the figure report profit-and-loss reports, and net income plus the three subtotals plus opening cash is closing cash, which is the sum of the bank accounts report balance-sheet shows for the same date_to; totals.difference publishes that reconciliation and is zero for books that balance. Classification is the section the account declares in cash_flow_section, falling back to the one its type gives, so a depreciation add-back reaches the statement through the change in the fixed-asset account it was credited to and lands in operating when that account declares operating and in investing when it declares nothing. Closing cash is the same figure either way. Own-account rows are paged; totals cover every account.
 
 | Contract | Value |
 |---|---|
@@ -648,7 +649,7 @@ Indirect accrual statement of cash flows for inclusive accounting dates: net inc
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include accounts whose balance did not change over the period, including inactive and never-posted balance-sheet accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -685,7 +686,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -827,6 +828,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -911,7 +913,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -1114,7 +1116,7 @@ Example JSON output:
 
 ## `report expenses-by-vendor`
 
-Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer or job filter: a bill posts its vendor onto every leg including the expense ones, so the customer typed in a bill's Customer:Job column never reaches the posting line and a job-filtered expense report would silently omit every bill. Under a filter the total is the expense the filter admits, and scope states the whole period and what was kept out of it, so the total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every vendor the filter admits and rows are paged.
+Uses the company cash/accrual report preference unless basis is supplied. Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer or job filter: a bill posts its vendor onto every leg including the expense ones, so the customer typed in a bill's Customer:Job column never reaches the posting line and a job-filtered expense report would silently omit every bill. Under a filter the total is the expense the filter admits, and scope states the whole period and what was kept out of it, so the total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every vendor the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -1134,9 +1136,9 @@ Expense between date_from and date_to grouped by vendor, with each vendor's shar
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -1172,7 +1174,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -1260,6 +1262,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -1346,7 +1349,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -1485,7 +1488,7 @@ Example JSON output:
 
 ## `report income-tax-summary`
 
-Income and expense account activity for inclusive accounting dates, grouped by the tax line each account is assigned, with a group for the accounts that have none. Each group shows its own total and then the accounts that make it up, so every figure can be traced to the accounts behind it. Amounts are on each account's normal side, so revenue is positive on an income line and a cost is positive on a deduction line, exactly as report profit-and-loss prints them. Totals cover every income and expense account whatever the filter shows, so net income here is the figure report profit-and-loss reports for the same two dates. Rows are paged and a group total covers the whole group even when its accounts fall on the next page.
+Uses the company cash/accrual report preference unless basis is supplied. Income and expense account activity for inclusive accounting dates, grouped by the tax line each account is assigned, with a group for the accounts that have none. Each group shows its own total and then the accounts that make it up, so every figure can be traced to the accounts behind it. Amounts are on each account's normal side, so revenue is positive on an income line and a cost is positive on a deduction line, exactly as report profit-and-loss prints them. Totals cover every income and expense account whatever the filter shows, so net income here is the figure report profit-and-loss reports for the same two dates. Rows are paged and a group total covers the whole group even when its accounts fall on the next page.
 
 | Contract | Value |
 |---|---|
@@ -1506,7 +1509,7 @@ Income and expense account activity for inclusive accounting dates, grouped by t
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include income and expense accounts with no period activity, including inactive and never-posted ones. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -1543,7 +1546,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -1626,6 +1629,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -1709,7 +1713,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -1855,7 +1859,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -2060,7 +2064,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -2180,7 +2184,7 @@ Example JSON output:
 
 ## `report profit-and-loss`
 
-Accrual income, costs and net profit for inclusive accounting dates. Own-account rows are paged; statement totals cover all accounts. Ordinary journal transfers affect income exactly as entered.
+Uses the company cash/accrual report preference unless basis is supplied. Income, costs and net profit for inclusive accounting dates. Own-account rows are paged; statement totals cover all accounts. Ordinary journal transfers affect income exactly as entered.
 
 | Contract | Value |
 |---|---|
@@ -2201,7 +2205,7 @@ Accrual income, costs and net profit for inclusive accounting dates. Own-account
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2238,7 +2242,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -2363,6 +2367,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -2390,7 +2395,7 @@ Example JSON output:
 
 ## `report profit-and-loss-by-class`
 
-The profit and loss for inclusive accounting dates with one column per class, one row per income or expense account, and a total column. Every posting line carries the class it was entered under, so a column is one class and a cell is that account's net within it. A line entered under no class is in the explicit Unclassified column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the classes with posting activity in the period, in hierarchy order, so a subclass reads under its parent; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.
+Uses the company cash/accrual report preference unless basis is supplied. The profit and loss for inclusive accounting dates with one column per class, one row per income or expense account, and a total column. Every posting line carries the class it was entered under, so a column is one class and a cell is that account's net within it. A line entered under no class is in the explicit Unclassified column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the classes with posting activity in the period, in hierarchy order, so a subclass reads under its parent; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.
 
 | Contract | Value |
 |---|---|
@@ -2411,7 +2416,7 @@ The profit and loss for inclusive accounting dates with one column per class, on
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2449,7 +2454,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -2622,6 +2627,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -2649,7 +2655,7 @@ Example JSON output:
 
 ## `report profit-and-loss-by-job`
 
-The profit and loss for inclusive accounting dates with one column per customer or job, one row per income or expense account, and a total column. Every posting line carries the party it names, so a column is one customer or job and a cell is that account's net within it. A line that names no party, and a line whose party is a vendor, an employee or an other name rather than a customer, is in the explicit Unassigned column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the customers and jobs with posting activity in the period, in hierarchy order, so a job reads under the customer it is named beneath; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.
+Uses the company cash/accrual report preference unless basis is supplied. The profit and loss for inclusive accounting dates with one column per customer or job, one row per income or expense account, and a total column. Every posting line carries the party it names, so a column is one customer or job and a cell is that account's net within it. A line that names no party, and a line whose party is a vendor, an employee or an other name rather than a customer, is in the explicit Unassigned column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the customers and jobs with posting activity in the period, in hierarchy order, so a job reads under the customer it is named beneath; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.
 
 | Contract | Value |
 |---|---|
@@ -2670,7 +2676,7 @@ The profit and loss for inclusive accounting dates with one column per customer 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2708,7 +2714,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -2881,6 +2887,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -2908,7 +2915,7 @@ Example JSON output:
 
 ## `report sales-by-customer`
 
-Income between date_from and date_to grouped by the customer or job each sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to, with what that customer's share of the period came to as a percentage. A job's income is its own and is never rolled into its parent's figure; every row names its parent so the two can be added deliberately. Every income effect is counted whatever document posted it, including an income journal entry, and income posted against no customer -- or against a name from another list -- is the one row called No name rather than something dropped. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer filter, because these rows already are the customer cut and one would only hide rows a reader can see anyway. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing on the period are omitted because they are worth nothing, not because a status was filtered; totals cover every customer the filter admits and rows are paged.
+Uses the company cash/accrual report preference unless basis is supplied. Income between date_from and date_to grouped by the customer or job each sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to, with what that customer's share of the period came to as a percentage. A job's income is its own and is never rolled into its parent's figure; every row names its parent so the two can be added deliberately. Every income effect is counted whatever document posted it, including an income journal entry, and income posted against no customer -- or against a name from another list -- is the one row called No name rather than something dropped. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer filter, because these rows already are the customer cut and one would only hide rows a reader can see anyway. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing on the period are omitted because they are worth nothing, not because a status was filtered; totals cover every customer the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -2928,9 +2935,9 @@ Income between date_from and date_to grouped by the customer or job each sale wa
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -2966,7 +2973,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -3059,6 +3066,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -3087,7 +3095,7 @@ Example JSON output:
 
 ## `report sales-by-item`
 
-The same period's income grouped by the item sold, each row with the quantity in the item's own base unit, the income, the average price that quantity fetched and the item's share of the period as a percentage. Quantity and income both come from the posting the sale made, so a correction, a void and a credit memo take the units and the money back off the row they were added to. Every sales line names an item, so income with no item is income no sale line posted -- an income journal entry, or a deposit taken straight to an income account: that is the row called No item, and no_item_income on the totals says what it came to, so item income plus no-item income is the income total report profit-and-loss shows for the same dates. Average price is income divided by quantity rounded to the cent for reading, and is omitted for a row whose quantity is unknown because a line was priced by allocation. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. customer narrows it to one customer or job; a job is its own customer and is not included with its parent. Under a filter the totals are what the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every item the filter admits and rows are paged.
+Uses the company cash/accrual report preference unless basis is supplied. The same period's income grouped by the item sold, each row with the quantity in the item's own base unit, the income, the average price that quantity fetched and the item's share of the period as a percentage. Quantity and income both come from the posting the sale made, so a correction, a void and a credit memo take the units and the money back off the row they were added to. Every sales line names an item, so income with no item is income no sale line posted -- an income journal entry, or a deposit taken straight to an income account: that is the row called No item, and no_item_income on the totals says what it came to, so item income plus no-item income is the income total report profit-and-loss shows for the same dates. Average price is income divided by quantity rounded to the cent for reading, and is omitted for a row whose quantity is unknown because a line was priced by allocation. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. customer narrows it to one customer or job; a job is its own customer and is not included with its parent. Under a filter the totals are what the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every item the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -3107,9 +3115,9 @@ The same period's income grouped by the item sold, each row with the quantity in
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -3146,7 +3154,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -3262,6 +3270,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -3290,7 +3299,7 @@ Example JSON output:
 
 ## `report sales-by-rep`
 
-The same period's income grouped by the sales representative the sale itself captured, with each representative's share of the period as a percentage. The rep is read from the exact document revision that posted the effect, never from the customer's current sales representative, so reassigning a customer today does not move last year's sales and a correction that changes the rep moves only what it reposted. Income from a document that captured no representative, and income no sales document posted at all, is the one row called Unassigned. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. customer narrows it to one customer or job; a job is its own customer and is not included with its parent. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing are omitted; totals cover every representative the filter admits and rows are paged.
+Uses the company cash/accrual report preference unless basis is supplied. The same period's income grouped by the sales representative the sale itself captured, with each representative's share of the period as a percentage. The rep is read from the exact document revision that posted the effect, never from the customer's current sales representative, so reassigning a customer today does not move last year's sales and a correction that changes the rep moves only what it reposted. Income from a document that captured no representative, and income no sales document posted at all, is the one row called Unassigned. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. customer narrows it to one customer or job; a job is its own customer and is not included with its parent. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing are omitted; totals cover every representative the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -3310,9 +3319,9 @@ The same period's income grouped by the sales representative the sale itself cap
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -3349,7 +3358,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -3438,6 +3447,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -3466,7 +3476,7 @@ Example JSON output:
 
 ## `report statement`
 
-What a customer's account did between date_from and date_to: an opening balance, then every invoice, payment, credit and receivable adjustment in date order with a running balance, then the closing balance, with the A/R aging columns for the same customers as of date_to at the foot. One customer with customer, or every customer with a balance or with activity in the period. A voided document has no row because it is worth nothing on its own date, not because a status was filtered; applying a receipt to that same customer's invoice changes nothing the customer owes and has no row. New cash is owned by the party whose invoice it settles, so a parent's receipt that pays a job's invoice appears on the job's statement for the settled part and on the parent's for the rest. A closing balance is the same figure report ar-aging shows for that customer, and the closing total is Accounts Receivable on the balance sheet for date_to. Totals cover the whole filter and rows are paged; a page never breaks the running balance because it is computed over the whole customer first.
+What a customer's account did between date_from and date_to: an opening balance, then every invoice, payment, credit and receivable adjustment in date order with a running balance, then the closing balance, with the A/R aging columns for the same customers as of date_to at the foot. One customer with customer, or every customer with a balance or with activity in the period. A voided document has no row because it is worth nothing on its own date, not because a status was filtered; applying a receipt to that same customer's invoice changes nothing the customer owes and has no row. New cash is owned by the party whose invoice it settles, so a parent's receipt that pays a job's invoice appears on the job's statement for the settled part and on the parent's for the rest. A closing balance is the same figure report ar-aging shows for that customer, and the closing total is Accounts Receivable on the accrual balance sheet for date_to. Totals cover the whole filter and rows are paged; a page never breaks the running balance because it is computed over the whole customer first.
 
 | Contract | Value |
 |---|---|
@@ -3524,7 +3534,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -3764,7 +3774,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -3920,7 +3930,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -4117,7 +4127,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -4285,7 +4295,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |
@@ -4460,7 +4470,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `metadata.period` | object | yes | no | — | — |
 | `metadata.period.date_from` | string \| null | yes | yes | — | — |
 | `metadata.period.date_to` | string | yes | no | — | — |
-| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
 | `metadata.report_version` | string | yes | no | — | — |
 | `metadata.schema_revision` | string | yes | no | — | — |
 | `metadata.generation_time` | string | yes | no | — | — |

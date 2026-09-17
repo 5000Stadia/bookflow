@@ -38,7 +38,7 @@ _LIMITS = (
     ' and nothing here guesses one -- name `source_invoice` and `source_line` to return it, or'
     ' credit the money with a service or non-stock item and bring the quantity back with'
     ' `inventory adjust`, which takes the value you say it is worth; a credit from one customer'
-    ' settling another customer or job; cash-basis treatment, since every report is accrual'
+    ' settling another customer or job; cash-basis tax filing treatment'
     ' today; and printing, which the document print work owns.'
 )
 _NUMBERING = (

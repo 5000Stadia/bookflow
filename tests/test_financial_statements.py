@@ -157,7 +157,7 @@ def test_overflow_on_later_page_is_not_hidden(financial_ledger,call,account):
 
 
 @pytest.mark.parametrize("model",[fs.ProfitAndLossInput,fs.BalanceSheetInput])
-@pytest.mark.parametrize("change",[{"basis":"cash"},{"date_to":"2026-02-30"},{"limit":1.0},{"include_zero":1},{"unexpected":True}])
+@pytest.mark.parametrize("change",[{"basis":"unsupported"},{"date_to":"2026-02-30"},{"limit":1.0},{"include_zero":1},{"unexpected":True}])
 def test_strict_report_inputs(model,change):
     fields={"date_to":"2026-12-31"}
     if model is fs.ProfitAndLossInput: fields["date_from"]="2026-01-01"

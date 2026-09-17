@@ -388,3 +388,24 @@ The total-rounding proposal continues through `DEMO-TAX-EST` to `DEMO-TAX-WO`.
 `DEMO-TAX-WORK-INV` bills one service for six cents; five cents of net work remain,
 with one cent forecast tax if billed together. Physical completion leaves that
 remaining billing scope intact. Reference Plumbing Co has matching `REF-` examples.
+
+## Cash and accrual financial reports
+
+Company settings → Report basis sets the default for compatible financial reports.
+Choose Cash or Accrual on an individual report to override it for that run; leaving
+Company default selected follows the company setting. This preference belongs to
+one company and never rewrites posted transactions.
+
+Profit and loss, balance sheet, their job/class breakdowns, income-tax summary,
+sales/expense summaries and cash flows use the selected basis. Cash views defer
+unsettled commercial income and expense using current payment matching. A later
+match, unmatch or correction can therefore change an earlier period's cash report.
+Inventory, tax, capital purchases and unapplied payments can leave AR/AP balances.
+These are management reports, not a claim of statutory cash-tax compliance.
+
+Trial balance, general ledger and transaction-detail remain accrual book-ledger
+views. A ledger link from a cash report opens the original entries, not a cash
+projection. Aging, statements, inventory and sales-tax liability retain their
+operational meaning; financial report basis does not change sales-tax timing.
+Cash sales-by-item quantities describe physical activity; average selling price
+is omitted because cash receipts and physical sales may fall in different periods.

@@ -78,6 +78,10 @@ report refuses to print figures that do not.
 """
 from __future__ import annotations
 
+from bookflow.company.cash_report_view import reporting_connection
+
+from bookflow.company.report_basis import Basis, basis_field
+
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -149,9 +153,9 @@ _CAPTURED_REPS = "\n UNION ALL ".join(
 
 
 class PeriodInput(StrictModel):
+    basis: Basis | None = basis_field()
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
     date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
-    basis: Literal["accrual"] = "accrual"
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
 
@@ -576,7 +580,7 @@ def sales_by_customer(inp: SalesByCustomerInput, s, *, principal_id=None) -> Sal
         found = _selected(inp, s)
         state, offset = ledger._state(s, inp, "sales-by-customer", principal_id, None,
             account_scoped=False, filter_ids={field: [value] for field, value in found.items()} or None)
-        raw, currency = s.company.raw, state.metadata.currency
+        raw, currency = reporting_connection(s.company, state.metadata.basis), state.metadata.currency
         params = _bindings(inp, found)
         # Two independent sums of the same money: every income line the filter admits, and
         # the grouped rows this report prints. A grouping that lost or duplicated a line
@@ -615,7 +619,7 @@ def sales_by_item(inp: SalesByItemInput, s, *, principal_id=None) -> SalesByItem
         found = _selected(inp, s)
         state, offset = ledger._state(s, inp, "sales-by-item", principal_id, None,
             account_scoped=False, filter_ids={field: [value] for field, value in found.items()} or None)
-        raw, currency = s.company.raw, state.metadata.currency
+        raw, currency = reporting_connection(s.company, state.metadata.basis), state.metadata.currency
         params = _bindings(inp, found)
         income = _INCOME_BY_PARTY + "SELECT amount FROM income_lines"
         grand = _total(raw, currency, income, params)
@@ -639,7 +643,7 @@ def sales_by_item(inp: SalesByItemInput, s, *, principal_id=None) -> SalesByItem
             # from the two exact figures printed beside it and nothing sums it, so it
             # is a display of this row rather than an amount the books carry.
             average = (money(round_ratio_half_even(amount.minor_units * 10 ** 6, quantity), currency)
-                       if quantity and complete else None)
+                       if quantity and complete and state.metadata.basis == "accrual" else None)
             rows.append(SalesByItemRow(
                 item_id=row["item_id"], current_item_label=row["full_name"],
                 current_item_name=row["name"],
@@ -662,7 +666,7 @@ def sales_by_rep(inp: SalesByRepInput, s, *, principal_id=None) -> SalesByRepOut
         found = _selected(inp, s)
         state, offset = ledger._state(s, inp, "sales-by-rep", principal_id, None,
             account_scoped=False, filter_ids={field: [value] for field, value in found.items()} or None)
-        raw, currency = s.company.raw, state.metadata.currency
+        raw, currency = reporting_connection(s.company, state.metadata.basis), state.metadata.currency
         params = _bindings(inp, found)
         income = _INCOME_BY_PARTY + "SELECT amount FROM income_lines"
         grand = _total(raw, currency, income, params)
@@ -696,7 +700,7 @@ def expenses_by_vendor(inp: ExpensesByVendorInput, s, *, principal_id=None) -> E
         found = _selected(inp, s)
         state, offset = ledger._state(s, inp, "expenses-by-vendor", principal_id, None,
             account_scoped=False, filter_ids={field: [value] for field, value in found.items()} or None)
-        raw, currency = s.company.raw, state.metadata.currency
+        raw, currency = reporting_connection(s.company, state.metadata.basis), state.metadata.currency
         params = _bindings(inp, found)
         expense = _EXPENSE + "SELECT amount FROM expense_lines"
         grand = _total(raw, currency, expense, params)

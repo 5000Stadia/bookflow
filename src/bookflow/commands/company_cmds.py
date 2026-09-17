@@ -193,7 +193,7 @@ class CompanyUpdateInput(BaseModel):
     website: str | None = Field(None, max_length=254, description="Website")
     fiscal_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the fiscal year")
     tax_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the tax year")
-    report_basis: Literal["accrual", "cash"] | None = Field(None, description="Default basis for reports")
+    report_basis: Literal["accrual", "cash"] | None = Field(None, description="Company default for compatible financial reports: cash or accrual. Individual reports may override it. Does not change posted transactions or sales-tax liability timing.")
     timezone: str | None = Field(None, description="IANA zone")
     closing_date: str | None = Field(None, description="Books closed through this date, YYYY-MM-DD")
     recent_activity_window_seconds: int | None = Field(None, ge=0, description="Window for the recent-activity warning")

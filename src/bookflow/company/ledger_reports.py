@@ -39,8 +39,8 @@ MANY_SPLITS = "-SPLIT-"
 # Bumped when the shape or the row order of a report page changes, so a
 # continuation minted by an earlier version restarts instead of paging into a
 # different order.  "2": rows read in account-number order and trial-balance
-# rows carry the account number.
-REPORT_VERSION = "2"
+# rows carry the account number. "3": company defaults and cash projections.
+REPORT_VERSION = "3"
 
 
 # Which continuation family a report belongs to. A family decides what a cursor is
@@ -182,7 +182,7 @@ class ReportPeriod(StrictModel):
 class ReportMetadata(StrictModel):
     company_id: str
     period: ReportPeriod
-    basis: Literal["accrual"] = "accrual"
+    basis: Literal["accrual", "cash"] = "accrual"
     report_version: str
     schema_revision: str
     generation_time: str
@@ -576,6 +576,11 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, fil
         # audit event, so any settlement stales a continuation minted before it
         # instead of letting it page into a different set of rows.
         extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
+    from bookflow.company.report_basis import FINANCIAL_VIEWS, resolve
+    resolved_basis = resolve(s.company, inp, report)
+    if report in FINANCIAL_VIEWS:
+        extra_state = [extra_state, raw.execute("SELECT report_basis FROM company_info").fetchone()[0],
+                       raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     parts = [tuple(effect), labels.hexdigest(), currency, revision]
     if extra_state is not None:
         parts.append(extra_state)
@@ -602,7 +607,7 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, fil
         return previous, previous.offset
     audit = raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]
     metadata = ReportMetadata(company_id=company, period=ReportPeriod(date_from=getattr(inp, "date_from", None), date_to=inp.date_to),
-        report_version=REPORT_VERSION, schema_revision=revision, generation_time=now_iso(), audit_watermark=audit, currency=currency)
+        basis=resolved_basis, report_version=REPORT_VERSION, schema_revision=revision, generation_time=now_iso(), audit_watermark=audit, currency=currency)
     return ReportCursor(company=company, account_id=account_id, filter_ids=filter_ids, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
 
 

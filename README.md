@@ -95,4 +95,5 @@ Only fixed diagnostic labels and numeric identifiers are captured—not SQL, val
 
 - `design/blueprint.md` — what every part is and how it works
 - `design/intention.md` — the spec list, in build order
+- [V2 and beyond](design/V2-ROADMAP.md) — future functional roadmap, beginning with human-directed UI improvements
 - `docs/index.md` — generated command and schema references plus the agent guide
