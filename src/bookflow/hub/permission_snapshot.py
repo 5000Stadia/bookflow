@@ -696,7 +696,10 @@ def _observe_pair(old, proposed, *, old_catalog, new_catalog, visibility,
             root.catalog.version in c.SCOPED_POLICY_VERSIONS else 'prepared_v1' for root in (old, proposed))
     if not activated and not activation and old is not proposed:
         _fail('legacy_comparison_unavailable', 'mode')
-    for root, bundle in ((old, old_catalog), (proposed, new_catalog)):
+    # Identity only: equal externally supplied roots/bundles retain both validations.
+    same_root = old is proposed and old_catalog is new_catalog
+    pairs = ((old, old_catalog),) if same_root else ((old, old_catalog), (proposed, new_catalog))
+    for root, bundle in pairs:
         _validated_root(root, bundle, activated=activated)
     if visibility is None or not callable(getattr(visibility, 'facts', None)):
         _fail('visibility_unresolved', 'visibility')
@@ -708,12 +711,14 @@ def _observe_pair(old, proposed, *, old_catalog, new_catalog, visibility,
         *(c.ScopeKey('organization', x) for x in raw_orgs),
         *(c.ScopeKey('future_company', x) for x in raw_orgs),
         *(c.ScopeKey('company', x) for x in raw_companies)), key=c._scope_key))
-    observations = tuple(_observe(root, raw_scopes, subjects) for root in (old, proposed))
+    observations = (_observe(old, raw_scopes, subjects),)
+    observations += observations if same_root else (_observe(proposed, raw_scopes, subjects),)
     orgs = sorted({x for obs in observations for x in obs.live_organizations})
     companies = sorted({x[0] for obs in observations for x in obs.live_companies})
     scopes = {c.ScopeKey('hub', 'root'), *(c.ScopeKey('organization', x) for x in orgs),
               *(c.ScopeKey('future_company', x) for x in orgs), *(c.ScopeKey('company', x) for x in companies)}
     manifests = []; phases = []; revisions = []
+    first_visibility = None
     for root, bundle, obs, semantics in zip((old, proposed), (old_catalog, new_catalog), observations, phase_semantics, strict=True):
         supplied = visibility.facts(root, raw_scopes, subjects)
         if (type(supplied) is not VisibilityFacts or type(supplied.policy_revision) is not str
@@ -727,6 +732,14 @@ def _observe_pair(old, proposed, *, old_catalog, new_catalog, visibility,
         if any(x.visible and (x.subject not in root.keys.users or x.scope not in present) for x in supplied.rows):
             _fail('visibility_unresolved', 'visibility')
         revisions.append(supplied.policy_revision)
+        # Providers are still called and fully checked twice, even for self-observation.
+        # Only identical validated phase inputs permit reusing immutable materialization.
+        if same_root and phases and supplied == first_visibility and semantics == phase_semantics[0]:
+            manifests.append(manifests[0])
+            phases.append(phases[0])
+            continue
+        if not phases:
+            first_visibility = supplied
         manifests.append(a.PhaseManifest(obs.live_organizations, obs.live_companies,
             tuple((x.id, x.kind) for x in root.users), c.catalog_manifest(root.catalog, bundle.exclusions)))
         uu = {x.id: x for x in root.users}; cc = dict(obs.live_companies); aa = {x.agent_user_id: x for x in root.authorities}
