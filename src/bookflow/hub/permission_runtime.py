@@ -253,6 +253,23 @@ def observe_current(tx) -> s.ObservedPair:
         _translate_snapshot(exc)
 
 
+def _operation_observation(tx):
+    """Reuse facts only while the exact tracked database snapshot is unchanged.
+
+    Administrative callers keep using observe_current for independent evidence.
+    Authentication and policy evaluation are deliberately outside this cache.
+    """
+    key = tx.authority_snapshot_key()
+    cached = getattr(tx, '_permission_observation', None)
+    if key is not None and cached is not None and cached[0] == key:
+        return cached[1]
+    tx._permission_observation = None
+    observed = observe_current(tx)
+    if key is not None and tx.authority_snapshot_key() == key:
+        tx._permission_observation = (key, observed)
+    return observed
+
+
 def require_company(tx, *, actor: str, principal: str | None, company: str,
                     requirement: c.Requirement) -> a.ExecutionResult:
     """Current actor/human intersection; not a credential or graph certificate.
@@ -260,7 +277,7 @@ def require_company(tx, *, actor: str, principal: str | None, company: str,
     The binding producer authenticates immediately before calling this function.
     No stored output of this function can authorize a later transaction.
     """
-    observed = observe_current(tx)
+    observed = _operation_observation(tx)
     scope = c.ScopeKey('company', company)
     comparison = observed.snapshot.comparison
     if actor not in comparison.subjects or scope not in comparison.scopes:

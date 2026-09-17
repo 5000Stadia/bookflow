@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
 from bookflow.core import performance
+from bookflow.storage.snapshot_sqlite import Connection as SnapshotConnection
 
 
 def sqlite_uri(path: Path, mode: str) -> str:
@@ -43,7 +44,7 @@ def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
             conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None, factory=Connection)
             conn.trace_database = category(path)
         else:
-            conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None)
+            conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None, factory=SnapshotConnection)
     except sqlite3.Error as e:
         raise io_error("open", e, path)
     try:
@@ -90,6 +91,12 @@ class Database:
                 # connection. Preserve the original opening failure.
                 pass
             raise
+
+    def authority_snapshot_key(self):
+        """Exact tracked live transaction, or None when reuse cannot be proven."""
+        if self._closed or not isinstance(self.raw, SnapshotConnection):
+            return None
+        return self.raw.snapshot_key()
 
     @property
     def write_transaction(self) -> bool:

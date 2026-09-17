@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from bookflow.core import performance
+from bookflow.storage import snapshot_sqlite
 
 
 _TOKEN = re.compile(r"\A([A-Za-z_]+)")
@@ -49,7 +50,7 @@ def _phase(sql: object) -> str:
     return "sql.execute"
 
 
-class Cursor(sqlite3.Cursor):
+class Cursor(snapshot_sqlite.Cursor):
     """A native cursor retaining SQLite's rows, defaults and iteration behavior."""
 
     def execute(self, *args, **kwargs):
@@ -103,7 +104,7 @@ class Cursor(sqlite3.Cursor):
         raise StopIteration
 
 
-class Connection(sqlite3.Connection):
+class Connection(snapshot_sqlite.Connection):
     """Native connection using traced cursors only when no factory was supplied."""
 
     trace_database = "other"
@@ -111,7 +112,7 @@ class Connection(sqlite3.Connection):
     def cursor(self, *args, **kwargs):
         if args or kwargs:
             return super().cursor(*args, **kwargs)
-        return super().cursor(factory=Cursor)
+        return sqlite3.Connection.cursor(self, factory=Cursor)
 
     def execute(self, *args, **kwargs):
         return self.cursor().execute(*args, **kwargs)
