@@ -137,3 +137,24 @@ def test_partial_failure_invalidates(db, script):
             db.raw.executemany('INSERT INTO facts VALUES(?)', [(2,), (2,)])
     assert token(db) != before
     assert db.raw.execute('SELECT count(*) FROM facts').fetchone() == (2,)
+
+
+def test_long_whitespace_and_truncated_prefix_cannot_stall_driver():
+    # Isolate execution: the prior regex backtracked exponentially on this valid
+    # SQL before SQLite saw it. A regression must fail rather than hang pytest.
+    import os
+    import subprocess
+    import sys
+    script = '''
+import sqlite3
+from bookflow.storage.snapshot_sqlite import Connection
+c = sqlite3.connect(':memory:', factory=Connection, isolation_level=None)
+c.execute('BEGIN')
+for sql in (' ' * 1024, ' ' * 1024 + 'SELECT 1', '/*' + 'x' * 1024 + '*/ SELECT 1'):
+    before = c.snapshot_key()
+    c.execute(sql).fetchall()
+    assert c.snapshot_key() != before
+c.close()
+'''
+    subprocess.run([sys.executable, '-c', script], env=os.environ.copy(),
+                   check=True, timeout=5, capture_output=True)

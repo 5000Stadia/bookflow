@@ -3,18 +3,35 @@
 This is not a permission decision or a trace callback. Unknown SQL invalidates;
 only ordinary SELECT and nested savepoint bookkeeping preserve a live token.
 """
-import re
 import sqlite3
-
-
-_PREFIX = re.compile(r'\A(?:\s+|--[^\n]*(?:\n|$)|/\*.*?\*/)*([A-Za-z]+)', re.S)
 
 
 def _read_or_savepoint(sql):
     if type(sql) is not str:
         return False
-    match = _PREFIX.match(sql[:1024])
-    return match is not None and match[1].upper() in {'SELECT', 'SAVEPOINT', 'RELEASE'}
+    prefix = sql[:1024]
+    i, end = 0, len(prefix)
+    while i < end:
+        if prefix[i].isspace():
+            i += 1
+        elif prefix.startswith('--', i):
+            newline = prefix.find('\n', i + 2)
+            if newline < 0:
+                return False
+            i = newline + 1
+        elif prefix.startswith('/*', i):
+            close = prefix.find('*/', i + 2)
+            if close < 0:
+                return False
+            i = close + 2
+        else:
+            break
+    start = i
+    while i < end and ('a' <= prefix[i] <= 'z' or 'A' <= prefix[i] <= 'Z'):
+        i += 1
+    if i == end and len(sql) > end:
+        return False  # truncated token; conservative invalidation
+    return prefix[start:i].upper() in {'SELECT', 'SAVEPOINT', 'RELEASE'}
 
 
 class Cursor(sqlite3.Cursor):
