@@ -26,6 +26,6 @@ Mileage/trips; automatic depreciation/loan schedules; finance-charge assessment;
 
 ## Current exception
 
-**Company-wide cash/accrual reporting choice is current authorized implementation, not deferred to V2.** The existing company `report_basis` preference must actually drive applicable report defaults and correct recognition. Merely displaying a setting or relabeling accrual totals is insufficient. Preserve historical books and allow intentional report-level basis selection; operational reports retain meaningful semantics and explicit labels. Implementation and acceptance are tracked in the cash-basis specification.
+**Company-wide cash/accrual reporting is implemented, not deferred to V2.** Company settings controls compatible report defaults with per-report overrides and actual cash recognition. Historical postings remain unchanged; operational reports retain their existing meaning. See [implementation and acceptance](specs/cash-basis-company-reporting.md).
 
 This roadmap supersedes older absence claims when a feature has since shipped. It does not undo current invoices, purchasing/receiving, deposits, reconciliation, credits/refunds, recurring templates, statements, exports or printing.

@@ -1,6 +1,6 @@
 # Company-wide cash/accrual reporting
 
-Status: current human-authorized implementation; plan independently approved; implementation under verification. Future features are in ../V2-ROADMAP.md. No posting method or stored history changes.
+Status: implemented and independently reviewed, 2026-09-17. Engine and integrated report/browser checks passed. Future features are in ../V2-ROADMAP.md. No posting method or stored history changes.
 
 ## User outcome
 
