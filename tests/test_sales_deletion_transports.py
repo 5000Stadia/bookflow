@@ -56,7 +56,10 @@ def test_cli_and_source_bound_mcp_delete_preview_refusal_replay_and_history(book
                     replay=await call(noun+' delete',raw)
                     assert replay['idempotent_replay'] and not replay['changed']
                     stale=await call(noun+' delete',{**raw,'operation_key':'losing-'+noun},rejected=True)
-                    assert stale['code']=='E_VERSION_CONFLICT'
+                    # A new operation against a deleted record is terminal; live stale versions above still conflict.
+                    assert stale['code']=='E_VALIDATION'
+                    assert stale['details']['fields'][0]['problem']=='This sale was already deleted and cannot be deleted again.'
+                    assert database(path)==after
                     assert (await call(noun+' show',{selector:post['id']},rejected=True))['code']=='E_RECORD_NOT_FOUND'
                     shown=await call(noun+' show',{selector:post['id'],'include_deleted':True})
                     assert shown['status']=='deleted'
