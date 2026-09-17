@@ -30,6 +30,17 @@ class PublishedDocument(dict):
 
 
 def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None):
+    from bookflow.core.permission_package import read_package, before_write
+    if cmd.is_write and not dry_run or cmd.kind == "advisory":
+        before_write(host)
+        return _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run,
+                           before_execute=before_execute)
+    with read_package(host):
+        return _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run,
+                           before_execute=before_execute)
+
+
+def _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None):
     normalize_options(cmd, company=selector, reason=ctx.reason,
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)

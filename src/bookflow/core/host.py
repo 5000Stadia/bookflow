@@ -141,6 +141,8 @@ class Host:
     def submit(self, fn: Callable[[], Any], timeout: float | None = None, *, _during_shutdown: bool = False,
                _maintenance: bool = False, resource: TransferLease | None = None) -> Any:
         """Run on the writer; an accepted job owns its resource beyond caller timeout."""
+        from .permission_package import before_write
+        before_write(self)
         if resource is not None:
             with self._readers_lock:
                 if not isinstance(resource, TransferLease) or resource not in self._transfers:

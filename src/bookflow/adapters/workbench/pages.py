@@ -34,6 +34,7 @@ from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
 from bookflow.adapters.workbench import home as Home
+from bookflow.core.permission_package import read_endpoint as permission_read_package
 from bookflow.core.money import Money
 from bookflow.adapters.workbench import bills as Bills
 from bookflow.adapters.workbench import credits as Credits
@@ -675,6 +676,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                   role_allows=_role_allows)
 
     @app.get("/static/{name}")
+    @permission_read_package(host)
     def static(name: str):
         p = HERE / "static" / name
         if not p.exists() or "/" in name:
@@ -683,11 +685,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return Response(p.read_bytes(), media_type=media, headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/login", response_class=HTMLResponse)
+    @permission_read_package(host)
     def login_page(request: Request):
         nxt = safe_workbench_destination(request.query_params.get("next"))
         return render("login.html", request, error=None, next=nxt)
 
     @app.get("/", response_class=HTMLResponse)
+    @permission_read_package(host)
     def home(request: Request):
         """Land in a company: the only one you can see, else the one this browser used last, else the picker."""
         try:
@@ -704,6 +708,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return render("picker.html", request, companies=items, columns=list_columns(items), schema_head=migrate.HEADS["company"])
 
     @app.get("/companies", response_class=HTMLResponse)
+    @permission_read_package(host)
     def picker(request: Request):
         try:
             out = run(request, "company list", {}, None)
@@ -712,6 +717,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return render("picker.html", request, companies=out["items"], columns=list_columns(out["items"]), schema_head=migrate.HEADS["company"])
 
     @app.get("/hub/", response_class=HTMLResponse)
+    @permission_read_package(host)
     def hub_index(request: Request):
         try:
             cred = credential(request)
@@ -734,6 +740,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return [(n, [cmd for cmd in _verbs(n, "company") if permits(cmd)]) for n in _nouns("company")]
 
     @app.get("/c/{company_id}/", response_class=HTMLResponse)
+    @permission_read_package(host)
     def company_index(company_id: str, request: Request):
         """The home window: the flow board, resolved from the map against the registry."""
         try:
@@ -751,6 +758,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return resp
 
     @app.get("/c/{company_id}/_all", response_class=HTMLResponse)
+    @permission_read_package(host)
     def company_all_commands(company_id: str, request: Request):
         """Every noun and verb the registry offers: the machine index the home window used to be."""
         try:
@@ -767,6 +775,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         )
 
     @app.get("/c/{company_id}/_group/{slug}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def company_group(company_id: str, slug: str, request: Request):
         """One menu group: the same grouped-noun rendering, filtered to that group."""
         entry = Home.MENU_BY_SLUG.get(slug)
@@ -791,6 +800,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         )
 
     @app.get("/c/{company_id}/_planned", response_class=HTMLResponse)
+    @permission_read_package(host)
     def planned_index(company_id: str, request: Request):
         try:
             show = run(request, "company show", {}, company_id)
@@ -801,6 +811,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       step=None, panel=None)
 
     @app.get("/c/{company_id}/_planned/{step_id}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def planned_step(company_id: str, step_id: str, request: Request):
         """What a dimmed step will do and what it waits on; a step that has gone live redirects to it."""
         try:
@@ -818,6 +829,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       panels=panels, step=found, panel=owner)
 
     @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def reference_suggestions(
         company_id: str,
         owner_noun: str,
@@ -990,6 +1002,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
 
     @app.get('/c/{company_id}/_browse/{noun}/{kind}')
+    @permission_read_package(host)
     def browse_options(company_id: str, noun: str, kind: str, request: Request):
         from bookflow.company.query_catalog import filter_descriptors
         noun = Routing.noun(noun)
@@ -1021,6 +1034,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return JSONResponse(err.to_dict(), status_code=STATUS.get(err.code, 400))
 
     @app.get('/c/{company_id}/_recent/{noun}', response_class=HTMLResponse)
+    @permission_read_package(host)
     def recent_documents(company_id: str, noun: str, request: Request):
         """The last few documents of a type, fetched after the new-document form renders."""
         noun = Routing.noun(noun)
@@ -1186,10 +1200,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         )
 
     @app.get("/c/{company_id}/{noun}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def company_noun(company_id: str, noun: str, request: Request):
         return noun_page(request, company_id, Routing.noun(noun))
 
     @app.get("/hub/{noun}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def hub_noun(noun: str, request: Request):
         return noun_page(request, None, Routing.noun(noun))
 
@@ -1424,6 +1440,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       editing=(out.get("editing_by") or []) if _may_publish_presence(role_view, hub_admin=cred.hub_admin) else [])
 
     @app.get("/c/{company_id}/{noun}/{record_id}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def company_record(company_id: str, noun: str, record_id: str, request: Request):
         noun = Routing.noun(noun)
         if registry.get(f"{noun} {record_id}") is not None:  # a verb, not a record
@@ -1431,6 +1448,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return record_page(request, company_id, noun, record_id)
 
     @app.get("/hub/{noun}/{record_id}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def hub_record(noun: str, record_id: str, request: Request):
         noun = Routing.noun(noun)
         if registry.get(f"{noun} {record_id}") is not None:
@@ -2129,10 +2147,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     ReportPrint.install(app, run=run, page_error=page_error, form_page=form_page)
 
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
         return form_page(request, None, Routing.noun(noun), verb, record_id)
 
     @app.get("/c/{company_id}/work-source/{record_id}/open")
+    @permission_read_package(host)
     def billing_source(request: Request, company_id: str, record_id: str):
         for source_noun in ('estimate', 'work-order'):
             try:
@@ -2167,6 +2187,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return page_error(request, BookflowError('E_RECORD_NOT_FOUND'))
 
     @app.get("/c/{company_id}/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
+    @permission_read_package(host)
     def company_record_form(company_id: str, noun: str, record_id: str, verb: str, request: Request):
         noun = Routing.noun(noun)
         if verb == "copy-contact":
@@ -2337,10 +2358,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return Response(status_code=204)
 
     @app.get("/c/{company_id}/audit", response_class=HTMLResponse)
+    @permission_read_package(host)
     def audit_page(company_id: str, request: Request):
         return audit_common(request, company_id)
 
     @app.get("/hub/audit", response_class=HTMLResponse)
+    @permission_read_package(host)
     def hub_audit_page(request: Request):
         return audit_common(request, None)
 

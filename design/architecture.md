@@ -4815,3 +4815,22 @@ evaluates every actor/principal/company/requirement independently. Authenticated
 and expiry checks still precede evaluation. `observe_current` remains explicitly fresh
 for administration and other independent evidence. This mechanism does not group
 multiple request connections or replace publication freshness checks.
+
+### Finite permission read packages
+
+`core.permission_package` groups read-only hub snapshots within one synchronous
+host/thread scope. Workbench GET endpoints open a composite scope; hosted read
+commands open or borrow one. Each command still owns a distinct Session, actor,
+company handle and authorization decision. Only idle hub snapshots are retained,
+not global company-folder reader pins. Active command owners retain their existing
+reader admission. Nested readers use independent handles to preserve savepoint
+ownership. Generation changes discard idle snapshots; changed active generations
+refuse nested borrowing. `Host.submit` discards idle package facts before queueing
+writes and refuses an active borrow instead of waiting for its own reader.
+
+HTTP publication checks create a fresh scope for each actual validation attempt,
+including each bounded frame. All guards in that attempt share unchanged hub
+facts, retaining ordered checks and family-specific proofs. This does not cache an
+allow across frames or turn multiple company databases into one atomic snapshot.
+Copied async contexts cannot borrow or close another thread's handles. Exceptions
+and outer scope exit close the owned hub snapshot.
