@@ -99,6 +99,7 @@
 <template data-collection-template data-index-token="__INDEX0__">{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":__INDEX0__", {}, none, grid) }}</template>
 <button type="button" data-collection-add class="line-add">Add a line</button>
 </div>
+<details class="field-help"><summary>About {{ grid.title|lower }}</summary><dl>{% for column in grid.columns if column.hint %}<dt>{{ column.label }}</dt><dd>{{ column.hint }}</dd>{% endfor %}</dl></details>
 </div>
 {% endfor %}
 </section>
