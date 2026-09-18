@@ -58,6 +58,27 @@ def test_mobile_workspace_keyboard_and_single_current_route(register_browser):
     _key(b, 'Escape')
     _menu(b, False)
     assert b.evaluate(f'document.activeElement.matches({json.dumps(TRIGGER)})')
+    # Crossing the sidebar breakpoint must not leave focus on a hidden control.
+    # The mobile summary has focus after Escape; desktop restores the current section.
+    b.viewport(1440, 1000)
+    _menu(b, True)
+    b.wait_for('document.activeElement.matches("#workspace-navigation [data-section=customers]")')
+    assert b.evaluate('document.activeElement.getClientRects().length > 0')
+    assert b.evaluate(f'getComputedStyle(document.querySelector({json.dumps(TRIGGER)})).display') == 'none'
+    _current(b, '/_group/customers')
+    # A noncurrent sidebar link also transfers back to the mobile trigger.
+    _tab_to(b, '#workspace-navigation [data-section=banking]')
+    b.viewport(390, 844)
+    _menu(b, False)
+    b.wait_for(f'document.activeElement.matches({json.dumps(TRIGGER)})')
+    assert b.evaluate('document.activeElement.getClientRects().length > 0')
+    _key(b, 'Enter')
+    _menu(b, True)
+    _key(b, 'Tab')
+    assert b.evaluate('document.activeElement.matches("#workspace-navigation [data-home-link]")')
+    _key(b, 'Escape')
+    _menu(b, False)
+    assert b.evaluate(f'document.activeElement.matches({json.dumps(TRIGGER)})')
     b.navigate(base + '/invoice/post')
     _current(b, '/_group/customers')
     assert b.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
