@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from bookflow.adapters.mcp import catalog
-from bookflow.adapters.workbench import home
+from bookflow.adapters.workbench import home, naming
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 
@@ -32,7 +32,7 @@ def _browser(hosted) -> TestClient:
 
 
 def _main(text: str) -> str:
-    return text.split("<main>", 1)[-1].split("</main>", 1)[0]
+    return re.split(r"<main(?:\s[^>]*)?>", text, maxsplit=1)[-1].split("</main>", 1)[0]
 
 
 def _tiles(html: str) -> dict[str, tuple[str, str]]:
@@ -164,31 +164,23 @@ def test_the_home_window_runs_no_business_command_while_rendering(hosted, monkey
 
 # ---------------------------------------------------------------- the placeholder half
 
-def test_a_step_that_is_not_offered_renders_an_inert_placeholder(hosted):
-    """A planned tile is inert, says why, and never hides a mismatch between map and registry.
-
-    A tile is planned for one of two honest reasons: its commands do not exist yet, or it
-    declares no destination because the errand cannot be finished by a person even though the
-    commands work. `reconcile` is the second kind -- four registered, routed, proven commands an
-    agent can drive to a certificate, with no way yet for a bookkeeper to see and tick what
-    cleared. What must never happen is the third case: registered commands AND a declared
-    destination, still rendering planned, which would mean the map and the registry disagree.
-    """
-    page = _browser(hosted).get(f"/c/{hosted.company_id}/")
+def test_unavailable_steps_stay_off_daily_home_and_remain_in_future_features(hosted):
+    """Daily navigation offers usable actions; the separate roadmap retains honest status."""
+    browser = _browser(hosted)
+    page = browser.get(f"/c/{hosted.company_id}/")
     tiles = _tiles(page.text)
-    planned = [item for panel in resolved(hosted.company_id) for item in panel.steps if not item.live]
-    assert planned, "the map declares nothing planned; the placeholder half is untested"
-    for item in planned:
-        for name in item.step.action.commands:
-            assert registry.get(name) is None or item.step.action.destination is None, (
-                item.step.id, name,
-                "registered, routed and pointed somewhere, yet rendered planned: the map and the "
-                "registry disagree")
-        element, markup = tiles[item.step.title]
-        assert element == "div", (item.step.id, "a placeholder must not be an anchor")
-        assert 'aria-disabled="true"' in markup, item.step.id
-        assert "href=" not in markup, (item.step.id, "a placeholder must not link anywhere")
-        assert item.reason.split(".")[0][:40] in markup, (item.step.id, "a placeholder must say what it waits on")
+    board = resolved(hosted.company_id)
+    for panel in board:
+        for item in panel.steps:
+            if item.live:
+                element, markup = tiles[item.step.action.label]
+                assert element == "a" and f'href="{item.href}"' in markup
+            else:
+                assert item.step.action.label not in tiles
+                for name in item.step.action.commands:
+                    assert registry.get(name) is None or item.step.action.destination is None
+    assert 'aria-disabled="true"' not in _main(page.text)
+    assert f'href="/c/{hosted.company_id}/_planned"' in page.text
 
 
 def test_the_planned_page_states_what_each_step_needs(hosted):
@@ -302,7 +294,7 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
     navigate_witness(browser, real, "invoice")
 
     page = browser.get(f"/c/{hosted.company_id}/").text
-    assert _tiles(page)["Invoice"][0] == "a"
+    assert _tiles(page)[invoice.action.label][0] == "a"
     # The other half of the pair is whichever tile is still planned, taken from the board rather
     # than named here: naming one meant this test had to be edited the day that tile went live,
     # which is the one moment its assertion was worth reading.
@@ -312,7 +304,7 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
         "Every tile on the board is live, so this half of the flip has no example left. That is "
         "good news and not a test to patch: retire the assertion deliberately and record that "
         "the board filled up, rather than reintroducing a planned tile to keep it meaningful.")
-    assert _tiles(page)[planned[0].step.title][0] == "div"
+    assert planned[0].step.action.label not in _tiles(page)
 
 
 def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):
@@ -418,7 +410,7 @@ def test_every_menu_group_lands_on_a_page_of_that_group(hosted):
         for group in entry.groups:
             assert f"<h2>{group}</h2>" in page.text, (entry.slug, group)
         for noun in entry.nouns:
-            assert f"<h3>{noun}</h3>" in page.text, (entry.slug, noun)
+            assert f"<h3>{naming.words(noun)}</h3>" in page.text, (entry.slug, noun)
     assert browser.get(f"/c/{hosted.company_id}/_group/nope").status_code == 400
 
 
