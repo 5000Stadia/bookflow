@@ -10,8 +10,13 @@
   const trigger = navigation.querySelector('summary');
   const desktop = window.matchMedia('(min-width: 1100px)');
   const sync = () => {
+    const focused = document.activeElement;
+    const leavingLinks = !desktop.matches && navigation.querySelector('nav').contains(focused);
+    const leavingTrigger = desktop.matches && focused === trigger;
     navigation.open = desktop.matches;
     trigger.setAttribute('aria-expanded', String(navigation.open));
+    if (leavingLinks) trigger.focus();
+    if (leavingTrigger) (navigation.querySelector('a[aria-current]') || navigation.querySelector('a')).focus();
   };
   navigation.addEventListener('toggle', () => trigger.setAttribute('aria-expanded', String(navigation.open)));
   desktop.addEventListener('change', sync);

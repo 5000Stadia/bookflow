@@ -89,3 +89,10 @@ body.workbench{font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe U
 .workbench button[name=action][value=preview]{background:white;color:var(--ink);border-color:#bac8ce}
 .workbench .form-submit{border-top:1px solid var(--line);background:transparent;padding:16px 0!important;margin-top:16px}
 .workbench .form-submit button+button{margin-left:8px}
+@media(max-width:600px){
+ .workbench .reference-actions a,.workbench .pagination a,.workbench .document-print a,.workbench .statement-print{display:inline-flex;align-items:center;min-height:44px}
+ .workbench .reference-actions a{font-size:12px}
+ .workbench details>summary{min-height:44px;padding-top:10px;padding-bottom:10px}
+ .workbench .account-menu summary{padding:10px}
+ .workbench .form-section>summary{margin-top:-6px;margin-bottom:4px}
+}
