@@ -861,7 +861,7 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     else:
         totals = sale_totals(figures, noun == 'invoice')
         reconciliation, reconciled = None, None
-        empty = 'Preview to see the subtotal, tax and total the server computes.'
+        empty = 'Preview to calculate totals.'
 
     return dict(layout(noun, leaves),
                 noun=noun, verb=verb, title=TITLES[noun],

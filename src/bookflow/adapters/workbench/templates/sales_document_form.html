@@ -35,8 +35,8 @@
 {% for column in grid.columns %}
 {% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("amount:" ~ path)).replace(':', '-').replace('.', '-') %}
 <div class="line-cell" data-line-column="{{ column.name }}"{% if column.hint %} title="{{ column.hint }}"{% endif %}>
-{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span>{% if column.hint %}<small class="line-cell-hint"> — {{ column.hint }}</small>{% endif %}</span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
-{% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}"><span class="line-cell-name">{{ column.label }}</span>{% if column.hint %}<small class="line-cell-hint"> — {{ column.hint }}</small>{% endif %}</label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
+{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span></span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
+{% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}"><span class="line-cell-name">{{ column.label }}</span></label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
 {% endif %}
 </div>
 {% endfor %}
@@ -59,8 +59,8 @@
 {% set extra = namespace(leaves=[], populated=false) %}
 {% for l in d.primary + d.terms %}{% if l.path in optional_paths and not l.required %}{% set _ = extra.leaves.append(l) %}{% if band_value(l)|trim %}{% set extra.populated = true %}{% endif %}{% endif %}{% endfor %}
 <section class="document-band" aria-label="{{ d.title }} header">
-<div class="document-row">{% for l in d.primary %}{% if l not in extra.leaves %}{{ field(l, l.index) }}{% endif %}{% endfor %}</div>
-{% if d.terms %}<div class="document-row">{% for l in d.terms %}{% if l not in extra.leaves %}{{ field(l, l.index) }}{% endif %}{% endfor %}</div>{% endif %}
+<div class="document-row">{% for l in d.primary + d.terms %}{% if l not in extra.leaves %}{{ field(l, l.index) }}{% endif %}{% endfor %}</div>
+
 {% if extra.leaves or d.addresses %}
 <details class="document-additional"{% if error or (not d.creating and extra.populated) %} open{% endif %}><summary>Additional details</summary>
 <div class="document-row">{% for l in extra.leaves %}{{ field(l, l.index) }}{% endfor %}</div>
@@ -94,7 +94,7 @@
 <h2 class="band-title{% if d.tabs %} band-title-tabbed{% endif %}">{{ grid.title }}</h2>
 <div class="line-grid" data-collection data-collection-path="{{ grid.lines.path }}" style="--line-columns: {{ grid.grid_template }}; --line-width: {{ grid.grid_width }}">
 <input type="hidden" name="collection:{{ grid.lines.path }}" value="1">
-<div class="line-head" aria-hidden="true">{% for column in grid.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}{% if column.hint %}<small class="line-head-hint">{{ column.hint }}</small>{% endif %}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
+<div class="line-head" aria-hidden="true">{% for column in grid.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
 <div class="line-body" data-collection-items>{% for value in grid.lines.collection["values"] %}{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":" ~ loop.index0, value, d.line_amount(value.get('line_id') if value is mapping else none, loop.index0), grid) }}{% endfor %}</div>
 <template data-collection-template data-index-token="__INDEX0__">{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":__INDEX0__", {}, none, grid) }}</template>
 <button type="button" data-collection-add class="line-add">Add a line</button>
@@ -104,7 +104,7 @@
 </section>
 {% endif %}
 
-<section class="document-band document-footer" aria-label="{{ d.title }} footer"><h2 class="band-title">Footer</h2>
+<section class="document-band document-footer" aria-label="{{ d.title }} footer"><h2 class="band-title">Notes and totals</h2>
 <div class="footer-inputs">{% for l in d.footer %}{{ field(l, l.index) }}{% endfor %}</div>
 <div class="footer-totals" aria-label="Computed totals">
 {% if d.totals %}<dl class="totals-list">
