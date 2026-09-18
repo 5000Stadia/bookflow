@@ -740,7 +740,7 @@
     $('save').textContent=mode==='delete'?'Delete payment':'Save & Close';
     for(const id of ['number','method','destination','memo','reference']) $(id).disabled=!edit;
     $('customer').disabled=mode!=='receive';$('find-customer').hidden=mode!=='receive';$('ar').disabled=mode!=='receive';
-    $('date').value=payment?.revision.date||BookflowDates.range('today')[0];
+    $('date').value=payment?.revision.date||(config.today || BookflowDates.range('today')[0]);
     if(payment) {
       await chooseCustomer(payment.revision.profile.payer.id);
       for(const [id,fact] of [['method',payment.revision.profile.payment_method],['destination',payment.revision.profile.deposit_account]]) {
@@ -757,7 +757,7 @@
     if(mode==='delete') {await drawRecord(payment,true);note('Enter a reason, preview the cancellation, confirm it, then Delete payment. Nothing is recorded until then.');}
   }
   async function initialize() {
-    $('date').value=BookflowDates.range('today')[0];
+    $('date').value=(config.today || BookflowDates.range('today')[0]);
     $('amount').dataset.mathCurrency=config.currency;
     const methods=await command('payment-method list',{}),accounts=await command('account list',{}),defs=await command('custom-field list',{filter:['target_type=payment']});
     for(const row of methods.items) $('method').append(new Option(row.name,row.id));

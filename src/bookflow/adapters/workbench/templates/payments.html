@@ -9,7 +9,7 @@
 <nav class="payment-actions"><a href="/c/{{ company_id }}/payment">Find payments</a><a href="/c/{{ company_id }}/payment-drafts">Saved selections</a><a href="/c/{{ company_id }}/company/self/update">Payment preferences</a></nav>
 <h1 id="payment-title">Receive customer payment</h1>
 <p id="payment-message" role="status" aria-live="polite"></p>
-<section id="payment-error" role="alert" hidden><h2>Review before continuing</h2><p></p><div data-comparisons></div><button type="button" id="payment-review">Review current amounts</button><button type="button" id="payment-retry" hidden>Recover exact submitted payment</button></section>
+
 <section id="payment-record" hidden></section>
 <form id="payment-form">
 <fieldset id="payment-header"><legend>Receipt details</legend>
@@ -32,6 +32,7 @@
 </fieldset>
 <section id="payment-balances" aria-label="Current customer balances" hidden><h2>Current net accounts receivable</h2><p><strong id="payment-payer-balance"></strong> — selected customer/job only</p><p><strong id="payment-family-balance"></strong> — selected customer/job and descendants</p><p class="muted">Includes unapplied credit. Selected invoice totals are shown below.</p></section>
 <section id="payment-selection"><h2 id="payment-selection-title">Invoices and statement charges to settle</h2><p id="payment-selection-status"></p>
+
 <div class="payment-actions"><button type="button" id="payment-auto">Auto Apply</button><button type="button" id="payment-calculate">Calculate selected amounts</button><button type="button" id="payment-clear">Clear draft selections</button><button type="button" id="payment-refresh-draft">Reload shared selection</button></div>
 <div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / document</th><th>Original</th><th>Current</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
 <button type="button" id="payment-more" hidden>Next page</button>
@@ -39,6 +40,7 @@
 </section>
 <label id="payment-reason-label">Reason for correction / unapply / void / deletion (required)<input id="payment-reason" maxlength="140"></label>
 <section id="payment-deletion-notice" hidden aria-label="Delete this payment"><h2>Cancel this payment and retain its history</h2><p>Deletion cancels this receipt’s cash and receivable postings at their original dates. Unapply every recorded application first.</p><p>The payment will leave normal lists and registers. Its original details, revisions, number and audit history remain readable. There is no restore action.</p><label><input type="checkbox" id="payment-confirm"> I confirm cancellation of this payment.</label></section>
+<section id="payment-error" role="alert" hidden><h2>Review before continuing</h2><p></p><div data-comparisons></div><button type="button" id="payment-review">Review current amounts</button><button type="button" id="payment-retry" hidden>Recover exact submitted payment</button></section>
 <div class="payment-actions"><button type="button" id="payment-preview">Preview payment</button><button type="button" id="payment-save" disabled>Save &amp; Close</button><button type="button" id="payment-save-new" disabled>Save &amp; New</button></div>
 </form>
 <section id="payment-preview-result" hidden aria-label="Payment preview"></section>

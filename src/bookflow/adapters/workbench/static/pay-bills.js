@@ -344,7 +344,7 @@
   }
 
   async function initialize() {
-    $('date').value = BookflowDates.range('today')[0];
+    $('date').value = (config.today || BookflowDates.range('today')[0]);
     const [accountPage, methodPage] = await Promise.all([
       command('account list', {}), command('payment-method list', {})]);
     for (const row of accountPage.items) {

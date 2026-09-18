@@ -1,0 +1,6 @@
+{% if error %}<section class="error submit-error" role="alert" tabindex="-1" data-submit-error>
+<strong>Review before continuing</strong><p>{{ error.message }}</p>
+{% for f in (error.details or {}).get('fields', []) %}<p>{{ f.field }}: {{ f.problem }}</p>{% endfor %}
+{% if error.details and error.details.problem %}<p>{{ error.details.problem }}</p>{% endif %}
+{% if error.details and error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions|join(', ') }}</p>{% endif %}
+</section>{% endif %}

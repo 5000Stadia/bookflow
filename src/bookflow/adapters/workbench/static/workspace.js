@@ -5,6 +5,31 @@
     let section = event.target.closest('details');
     while (section) { section.open = true; section = section.parentElement.closest('details'); }
   }, true);
+  const phone = window.matchMedia('(max-width: 700px), (max-height: 500px) and (max-width: 1099px)');
+  const errorSummary = document.querySelector('[data-submit-error]');
+  if (errorSummary && phone.matches) requestAnimationFrame(() => {
+    errorSummary.focus({preventScroll:true});
+    errorSummary.scrollIntoView({block:'center'});
+  });
+  // A lost response is not evidence that a write failed. Never resubmit here.
+  if (window.bookflowSubmitFeedback) window.bookflowSubmitFeedback.abort();
+  const feedback = new AbortController();
+  window.bookflowSubmitFeedback = feedback;
+  const connectionError = event => {
+    const form = event.detail?.elt?.closest('form');
+    if (!form || !form.isConnected) return;
+    let box = form.querySelector('[data-connection-error]');
+    if (!box) {
+      box = document.createElement('section'); box.className = 'error';
+      box.dataset.connectionError = ''; box.setAttribute('role','alert');
+      box.tabIndex = -1;
+      const actions = form.querySelector('.document-actions, .form-submit, .actions');
+      if (actions) actions.before(box); else form.append(box);
+    }
+    box.textContent = 'The response could not be confirmed. Your entries are retained. A save may have completed; check the record before trying again.';
+    if (phone.matches) { box.focus({preventScroll:true}); box.scrollIntoView({block:'center'}); }
+  };
+  for (const name of ['htmx:sendError', 'htmx:timeout', 'htmx:responseError']) document.addEventListener(name, connectionError, {signal:feedback.signal});
   const navigation = document.getElementById('workspace-navigation');
   if (!navigation) return;
   const trigger = navigation.querySelector('summary');

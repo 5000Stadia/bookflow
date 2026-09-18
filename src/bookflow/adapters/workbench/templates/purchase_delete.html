@@ -7,13 +7,13 @@
 {% if record.status == 'voided' %}<p>This purchase is already voided. Deletion adds no further money or stock reversal.</p>
 {% else %}<p>Deletion cancels this purchase’s accounting and received stock at their original dates. Any required inventory cost corrections keep their own dates.</p>{% endif %}
 <p>The purchase will leave normal lists and registers. Its original details, revisions{% if noun == 'check' %}, check number{% endif %} and audit history remain available. There is no restore action.</p>
-{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
 {% if result %}<div role="status" class="notice">Preview only — nothing saved. {{ result.cancelled_stock_movements }} stock movement(s) will be reversed. The purchase will be marked deleted at version {{ result.version }}.</div>{% endif %}
 <form method="post" hx-post="/c/{{ company_id }}/{{ noun }}/{{ record.id }}/delete" hx-target="#purchase-deletion" hx-select="#purchase-deletion" hx-swap="outerHTML" data-purchase-delete>
 <input type="hidden" name="expected_version" value="{{ values.expected_version }}">
 <input type="hidden" name="operation_key" value="{{ values.operation_key }}">
 <label for="delete-reason">Reason for deletion</label><textarea id="delete-reason" name="reason" required maxlength="140" rows="3">{{ values.reason }}</textarea>
 <label style="display:block;padding:1rem 0"><input type="checkbox" name="confirmed" value="yes" {% if values.get('confirmed') == 'yes' %}checked{% endif %}> I confirm cancellation of this purchase.</label>
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
 <div class="actions"><button name="action" value="preview">Preview cancellation</button><button name="action" value="delete">Delete purchase</button><a href="/c/{{ company_id }}/{{ noun }}/{{ record.id }}">Cancel</a></div>
 {% if error and error.code == 'E_VERSION_CONFLICT' %}<p>Your reason and retry key are retained. <button name="action" value="refresh" formnovalidate>Reload current purchase</button> to review its new version before trying again.</p>{% endif %}
 </form></section>

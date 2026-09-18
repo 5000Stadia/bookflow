@@ -4,7 +4,7 @@
 <h1>Credit memo {{ a.credit.number }} — apply to invoices</h1>
 <p data-credit-available>{{ a.credit.customer_name }} · Written for {{ a.credit.total.amount }} · Applied {{ a.source.applied.amount }} · <strong>Still available {{ a.source.available.amount }} {{ a.currency }}</strong></p>
 <p class="muted">Applying a credit posts nothing and moves no money. The credit memo already took the receivable and the income down; this only decides which invoices it answers. Each invoice's saved version travels with its row, so nothing here asks you to find a version number.</p>
-{% if error %}<section class="error" role="alert"><h2>Nothing was applied</h2><p>{{ error.message }}</p>
+{% if error %}<section class="error" role="alert" data-submit-error-top><h2>Nothing was applied</h2><p>{{ error.message }}</p>
 {% for field in (error.details or {}).get('fields', []) %}<p>{{ field.field }}: {{ field.problem }}</p>{% endfor %}
 {% if error.code %}<p class="muted">{{ error.code }}</p>{% endif %}</section>{% endif %}
 
@@ -31,7 +31,7 @@
 {% else %}<p class="muted" data-credit-no-invoices>This customer has no posted invoice still owing anything in {{ a.currency }} on this receivable account.</p>{% endif %}
 </section>
 <div class="row form-field"><label for="credit-apply-reason">Reason<small>Recorded with this change in the audit trail.</small></label><div class="control-stack"><input id="credit-apply-reason" name="reason" maxlength="140" value=""></div><span></span></div>
-<div class="document-actions"><button id="credit-apply-save" class="primary-action" name="action" value="submit">Apply this credit</button><a class="cancel-action" href="{{ a.credit_url }}">Cancel</a></div>
+{% if not request.url.path.endswith("/unapply") %}{% include "submit_error.html" %}{% endif %}<div class="document-actions"><button id="credit-apply-save" class="primary-action" name="action" value="submit">Apply this credit</button><a class="cancel-action" href="{{ a.credit_url }}">Cancel</a></div>
 </form>
 {% endif %}
 
@@ -48,7 +48,7 @@
 </tr>{% endfor %}
 </tbody></table></div>
 <div class="row form-field"><label for="credit-unapply-reason">Reason<small>Recorded with this change in the audit trail.</small></label><div class="control-stack"><input id="credit-unapply-reason" name="reason" maxlength="140" value=""></div><span></span></div>
-<div class="document-actions"><button id="credit-unapply-save" name="action" value="submit">Take the selected applications off</button></div>
+{% if request.url.path.endswith("/unapply") %}{% include "submit_error.html" %}{% endif %}<div class="document-actions"><button id="credit-unapply-save" name="action" value="submit">Take the selected applications off</button></div>
 <p class="muted">Taking an application back off is dated on that application's own date, never today, so the period it happened in has to still be open.</p>
 </form>
 {% elif a.standing %}<p class="muted">This credit answers {{ a.standing | length }} invoice(s). Your role does not allow taking an application back off.</p>

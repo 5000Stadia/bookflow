@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}Bookflow{% endblock %}</title>
 <link rel="stylesheet" href="{{ static_urls['style.css'] }}"><link rel="stylesheet" href="{{ static_urls['report-print.css'] }}"><script src="{{ static_urls['htmx.min.js'] }}"></script><script src="{{ static_urls['numeric-context.js'] }}" defer></script><script src="{{ static_urls['numeric-entry.js'] }}" defer></script><script src="{{ static_urls['dates.js'] }}" defer></script><script src="{{ static_urls['workflow.js'] }}" defer></script></head>
-<body class="workbench" hx-headers='{"X-Bookflow-Workbench": "1"}' data-math-company-currency="{{ math_company_currency }}"{% if report_page %} data-report-page="1"{% endif %}{% if report_full %} data-report-full="1"{% endif %}>
+<body data-company-today="{{ company_today }}" class="workbench" hx-headers='{"X-Bookflow-Workbench": "1"}' data-math-company-currency="{{ math_company_currency }}"{% if report_page %} data-report-page="1"{% endif %}{% if report_full %} data-report-full="1"{% endif %}>
 <script type="application/json" id="math-currencies">{{ math_currencies | tojson }}</script>
 <link rel="stylesheet" href="{{ static_urls['sales.css'] }}">
 <link rel="stylesheet" href="{{ static_urls['document-detail.css'] }}"><script src="{{ static_urls['sales.js'] }}" defer></script><script src="{{ static_urls['purchase-allocation.js'] }}" defer></script>

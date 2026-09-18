@@ -9,7 +9,7 @@
 <nav class="pay-bills-actions" aria-label="Payables"><a href="/c/{{ company_id }}/bill-payment">Find bill payments</a><a href="/c/{{ company_id }}/bill">Find a bill</a><a href="/c/{{ company_id }}/bill/post">Enter a bill</a><a href="/c/{{ company_id }}/report/unpaid-bills">Unpaid bills report</a></nav>
 <h1>Pay bills</h1>
 <p id="pay-bills-message" role="status" aria-live="polite"></p>
-<section id="pay-bills-error" role="alert" hidden><h2>Nothing was paid</h2><p></p><div data-problems></div><button type="button" id="pay-bills-reload">Reload the open bills</button></section>
+
 <form id="pay-bills-form">
 <fieldset id="pay-bills-header"><legend>Payment details</legend>
 <div class="pay-bills-grid">
@@ -21,6 +21,7 @@
 <label for="pay-bills-vendor">Show bills for one vendor (optional)<input id="pay-bills-vendor" autocomplete="off" placeholder="Search vendor"></label>
 <label for="pay-bills-memo">Memo<textarea id="pay-bills-memo" maxlength="2000"></textarea></label>
 </div>
+
 <div class="pay-bills-actions"><button type="button" id="pay-bills-find-vendor">Find vendor</button><button type="button" id="pay-bills-all-vendors">Every vendor</button><button type="button" id="pay-bills-load">Show open bills</button></div>
 <div id="pay-bills-vendor-results" aria-live="polite"></div>
 <p id="pay-bills-vendor-chosen" class="muted"></p>
@@ -36,6 +37,7 @@
 <ul id="pay-bills-group-list"></ul>
 <p class="muted">A separate payment is created for each payee.</p><details class="field-help"><summary>How bills are grouped</summary><p>Bills are grouped by vendor, payable account, currency, funding account and payment method.</p></details>
 </section>
+<section id="pay-bills-error" role="alert" hidden><h2>Nothing was paid</h2><p></p><div data-problems></div><button type="button" id="pay-bills-reload">Reload the open bills</button></section>
 <div class="pay-bills-actions"><button type="button" id="pay-bills-save" disabled>Save &amp; pay bills</button></div>
 </form>
 <section id="pay-bills-result" hidden aria-label="Bill payments written"></section>
