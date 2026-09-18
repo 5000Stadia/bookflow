@@ -225,7 +225,7 @@
 </div>
 {% endmacro %}
 
-{% if noun == "report" and not report_full %}<section class="form-section report-tools" aria-label="Report filters"><h2>Report filters</h2>{% endif %}
+{% if noun == "report" and not report_full %}<details class="form-section report-tools" aria-label="Report filters"{% if not result or error %} open{% endif %}><summary>Report filters</summary>{% endif %}
 <form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form{% if sales_form %} data-sales-form data-sales-scope="{{ sales_scope }}"{% endif %}>
 {% if noun == 'invoice' and verb == 'update' %}
 <input type="hidden" name="f:operation_key" value="{{ attempted.get('f:operation_key', '') }}">
@@ -275,6 +275,6 @@
 {% if document %}<div class="document-actions"><button name="action" value="preview">Preview</button><button name="action" value="submit" class="primary-action">Save</button>{% if document.creating %}<button name="action" value="submit-new">Save &amp; New</button>{% endif %}<a class="cancel-action" href="{{ (base ~ '/' ~ record_id) if record_id else base }}">Cancel</a></div>
 {% else %}<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ ('Complete work' if verb == 'complete' else 'Create copy' if verb == 'copy' else 'Create estimate' if verb == 'estimate' else 'Create work order' if verb == 'work-order' else 'Create invoice' if verb == 'invoice' else 'Create sales receipt' if verb == 'sales-receipt' else 'Save' if cmd.is_write else 'Find work') if work_form else 'Run report' if noun == 'report' else ('Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Save deposit' if noun == 'deposit' and verb == 'post' else 'Submit') }}</button></span></div>{% endif %}</form>
 
-{% if noun == "report" %}{% if not report_full %}</section>{% endif %}{{ result_presentation }}{% endif %}
+{% if noun == "report" %}{% if not report_full %}</details>{% endif %}{{ result_presentation }}{% endif %}
 {% include "annotations.html" %}
 {% endblock %}

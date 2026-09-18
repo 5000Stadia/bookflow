@@ -117,3 +117,4 @@ body.workbench{font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe U
  .workbench .section-nav a{min-height:44px;display:inline-flex;align-items:center}
 }
 @media print{.master-mobile-results{display:none!important}.master-desktop-results{display:block!important}.workbench .section-nav{display:none}}
+@media(min-width:900px){.workbench .report-tools form[data-generated-form]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 20px}.workbench .report-tools form .row{grid-template-columns:minmax(0,1fr);align-content:start}.workbench .report-tools .form-submit,.workbench .report-tools .date-range-tools{grid-column:1/-1}.workbench .report-tools .row>span:empty{display:none}}
