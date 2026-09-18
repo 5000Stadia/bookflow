@@ -1,6 +1,6 @@
 # Human-directed UI overhaul
 
-Status: authorized 2026-09-18; independent plan review passed; implementation and browser verification underway.
+Status: implemented 2026-09-18; independent code and bounded visual review passed. Human visual acceptance remains the next step.
 
 Inventory: `design/UI-INVENTORY.md`. Optional visual preference unanswered; proceeding with modern layout and Desktop-style efficiency.
 

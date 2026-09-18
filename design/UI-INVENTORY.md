@@ -23,3 +23,11 @@ Scope: existing V1 functions, September 18, 2026. This inventory covers 72 templ
 - Desktop tables retain comparable columns. Phone entry uses existing stacked line cards; wide comparison tables stay inside their own scroll containers. No forced orientation.
 - Use consistent typography, borders, spacing, button hierarchy and focus indicators. No external fonts or decorative assets are required.
 - Human visual acceptance remains necessary; reference comparison is a design input, not a claim of objective superiority.
+
+## Verification of this increment
+
+Independent plan, code and bounded visual review passed. Verification includes actual live-action/menu destinations; 41 generated-form/runtime checks; nine existing browser checks for line entry and dates; company reporting defaults/export/full printing and actual phone invoice saving; keyboard navigation and unsaved invoice rotation; and four desktop/phone list journeys using visible controls. The latter covers exact amounts, selected columns, sorting, filters, pagination and stale recovery.
+
+Representative visual inspection includes desktop, portrait desktop, 320/390px phones and 844px landscape. Screens include overview, lists, invoice entry/detail, report output, register, deposits and settings, with additional representative workflow captures. This is scoped UI evidence, not a claim that every accounting state or the entire repository test suite was exercised. No accounting, storage, schema or permission policy was changed.
+
+The next acceptance step is a human walkthrough on desktop and phone. Record visual preferences and specific workflow friction as follow-up items; the QuickBooks references do not substitute for that judgment.
