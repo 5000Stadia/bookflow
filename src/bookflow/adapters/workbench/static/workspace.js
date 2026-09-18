@@ -11,6 +11,19 @@
     errorSummary.focus({preventScroll:true});
     errorSummary.scrollIntoView({block:'center'});
   });
+  for (const box of document.querySelectorAll('#payment-error, #pay-bills-error')) {
+    box.tabIndex = -1;
+    const reveal = () => {
+      if (box.hidden || !phone.matches) return;
+      requestAnimationFrame(() => {
+        if (!box.isConnected || box.hidden) return;
+        box.focus({preventScroll:true});
+        box.scrollIntoView({block:'center'});
+      });
+    };
+    new MutationObserver(reveal).observe(box, {attributes:true, attributeFilter:['hidden']});
+    reveal();
+  }
   // A lost response is not evidence that a write failed. Never resubmit here.
   if (window.bookflowSubmitFeedback) window.bookflowSubmitFeedback.abort();
   const feedback = new AbortController();
