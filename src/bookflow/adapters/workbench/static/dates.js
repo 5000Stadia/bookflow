@@ -9,7 +9,14 @@
     const [y,m,d] = value.split('-').map(Number);
     return y > 0 && iso(local(y,m-1,d)) === value;
   }
-  function range(kind, today = new Date()) {
+  function companyDay() {
+    // Server-rendered company day; never parse an ISO day as a UTC timestamp.
+    const day = typeof document !== 'undefined' ? document.body?.dataset.companyToday : null;
+    if (day && valid(day)) { const [y,m,d] = day.split('-').map(Number); return local(y,m-1,d); }
+    // Rootless calendar consumers have no company context and keep local behavior.
+    return new Date();
+  }
+  function range(kind, today = companyDay()) {
     const y=today.getFullYear(), m=today.getMonth(), d=today.getDate(), q=Math.floor(m/3)*3;
     const day=local(y,m,d);
     const pairs = {

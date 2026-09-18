@@ -1,4 +1,6 @@
 """Payment workspace shell; all facts and actions use the shared commands."""
+from bookflow.adapters.workbench.date_defaults import company_today
+
 from fastapi import Request
 
 from bookflow.adapters.workbench.transaction_detail import document_noun
@@ -133,7 +135,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             draft = run(request, 'payment selection show', {'selection': selection}, company_id) if selection else None
             if draft and draft['context']['payment_id'] and not initial:
                 initial = run(request, 'payment show', {'payment': draft['context']['payment_id'], 'include_deleted': True}, company_id)
-            config = dict(company=company_id, actor=cred.user_id, allowed=allowed, initial=initial, draft=draft,
+            config = dict(company=company_id, actor=cred.user_id, allowed=allowed, initial=initial, draft=draft, today=company_today(company),
                 preferences=company.get('info', {}), currency=company.get('home_currency', 'USD'),
                 customer=request.query_params.get('customer'), invoice=request.query_params.get('invoice'),
                 operation=request.query_params.get('operation'),

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bookflow.adapters.workbench import date_defaults as DateDefaults
+
 import json
 import hashlib
 import secrets
@@ -566,6 +568,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if not ctx.get("company_id") and request.cookies.get(LAST_COMPANY):
             ctx.setdefault("header_company_id", request.cookies.get(LAST_COMPANY))  # hub pages keep the company links
         company_view = getattr(request.state, "workbench_company", None)
+        ctx['company_today'] = DateDefaults.company_today(company_view) if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
         ctx['math_currencies'] = {code: value[0] for code, value in CURRENCIES.items()}
         ctx['math_company_currency'] = (company_view or {}).get('home_currency', '') if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
         if company_view and company_view["company_id"] == (ctx.get("company_id") or ctx.get("header_company_id")):
@@ -1512,6 +1515,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, err, restart_url=request.url.path + '?' + urlencode({'title': source_title}))
             return render('billing_pick_source.html', request, company_id=company_id,
                 noun=noun, verb=verb, sources=sources, source_title=source_title)
+        initial_date_get = (request.method == 'GET' and attempted is None
+                            and result is None and error is None and record_id is None
+                            and report_full is None)
         attempted = attempted or {}
         source_report_watermark = _source_watermark(request, attempted)
         if noun == "report" and not cmd.is_write and not attempted:
@@ -1791,6 +1797,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         definition = meta.get("definition")
         if definition is not None and definition.custom_fields:
             originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
+        if authorized_company:
+            DateDefaults.seed(cmd.name, DateDefaults.company_today(authorized_company),
+                initial_get=initial_date_get, query=request.query_params,
+                originals=originals, attempted=attempted)
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
         if noun == 'invoice' and verb == 'update':
             described = [leaf for leaf in described if leaf['path'] not in ('operation_key', 'settlement_guard', 'settlement_versions')]

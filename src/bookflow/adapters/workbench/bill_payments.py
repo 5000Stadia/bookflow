@@ -17,6 +17,8 @@ reads a literal zero for what has been applied, so a bill it lists as open may a
 ``bill query`` carries each bill's own ``settlement_current``, which is what a settlement wrote,
 so that is what the window selects from.
 """
+from bookflow.adapters.workbench.date_defaults import company_today
+
 from copy import deepcopy
 from urllib.parse import quote, urlencode
 
@@ -88,7 +90,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             cred = credential(request)
             allowed = [name for name in ('bill pay', 'bill payment show', 'bill payment query')
                        if role_allows(registry.get(name), company, hub_admin=cred.hub_admin)]
-            config = dict(company=company_id, actor=cred.user_id, allowed=allowed,
+            config = dict(company=company_id, actor=cred.user_id, allowed=allowed, today=company_today(company),
                           currency=company.get('home_currency', 'USD'),
                           vendor=request.query_params.get('vendor'),
                           group_fields=list(GROUP_FIELDS))

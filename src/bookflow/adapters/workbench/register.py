@@ -1,10 +1,10 @@
 """Account-register presentation. All reads and writes use shared commands."""
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
-from zoneinfo import ZoneInfo
+
+from bookflow.adapters.workbench.date_defaults import company_today
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -78,7 +78,7 @@ def install(app: FastAPI, *, render, run, credential, page_error) -> None:
             may_write = supported and account["active"] and account["currency"] == info["home_currency"]
             may_write = bool(may_write and (cmd := registry.get("register post"))
                              and _role_allows(cmd, company, hub_admin=cred.hub_admin))
-            today = datetime.now(ZoneInfo(info["timezone"])).date().isoformat()
+            today = company_today(company)
             edit = None
             if request.query_params.get("edit") and may_write:
                 journal = run(request, "journal show", {"journal": request.query_params["edit"]}, company_id)
