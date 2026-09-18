@@ -96,3 +96,24 @@ body.workbench{font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe U
  .workbench .account-menu summary{padding:10px}
  .workbench .form-section>summary{margin-top:-6px;margin-bottom:4px}
 }
+.master-mobile-results{display:none}
+.workbench .section-nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
+.workbench .section-nav a{padding:8px 12px;background:white;border:1px solid var(--line);border-radius:6px;text-decoration:none}
+.workbench [id^=settings-]{scroll-margin-top:80px}
+.workbench .field-help{font-size:12px;font-weight:400;color:var(--muted);margin:5px 0}
+.workbench .field-help summary{font-size:11px;color:#526b60;font-weight:400}
+.workbench .field-help>div{padding:8px 0;max-width:65ch}
+.workbench .document-additional{border-top:1px solid var(--line);margin-top:16px;padding-top:10px}
+.workbench .document-additional>summary{padding:8px 0;color:var(--muted)}
+.workbench .result-fields{margin:0}.workbench .result-fields .field{border-bottom:1px solid #e8edeb;padding:10px 0}.workbench .result-fields dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.workbench .report-tools{margin-bottom:24px}.workbench .report-tools>h2{margin-top:0}
+@media(max-width:700px){
+ .master-desktop-results{display:none}.master-mobile-results{display:block}
+ .workbench .master-mobile-record{margin:12px 0;padding:16px}.workbench .master-mobile-record h2{margin:0 0 8px;font-size:17px}.workbench .master-mobile-record h2 a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none}
+ .workbench .master-mobile-record p{margin:6px 0;font-variant-numeric:tabular-nums}
+ .workbench .master-mobile-record details{border-top:1px solid var(--line);margin-top:10px;padding-top:4px}
+ .workbench .master-mobile-record dt{font-size:12px;color:var(--muted)}.workbench .master-mobile-record dd{margin:2px 0 10px}
+ .workbench .master-mobile-sort{padding:0 4px}.workbench .master-mobile-sort button{margin:4px}
+ .workbench .section-nav a{min-height:44px;display:inline-flex;align-items:center}
+}
+@media print{.master-mobile-results{display:none!important}.master-desktop-results{display:block!important}.workbench .section-nav{display:none}}
