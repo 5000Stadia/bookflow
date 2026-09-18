@@ -7,7 +7,7 @@
 <div id="register-workspace">
 <nav aria-label="Context"><a href="/c/{{ company_id }}/account">Chart of accounts</a> / <a href="/c/{{ company_id }}/account/{{ account.id }}">{{ account_label }}</a></nav>
 <h1>{{ account_label }} register</h1>
-<p>{{ account.type.replace('_', ' ') | title }} · {{ account.currency }} · Own account balance, excluding descendants</p>
+<p>{{ account.type.replace('_', ' ') | title }} · {{ account.currency }} · This account only</p>
 <p><a href="{{ gl_url }}">Account general ledger</a></p>
 <div id="register-account-chooser"></div>
 {% if not config.supported %}<p>{% if account.type == 'non_posting' %}This is a non-posting account and accepts no entry.{% else %}Use the account general ledger for income and expense activity.{% endif %}</p>{% endif %}
@@ -16,7 +16,7 @@
 {% if config.writable %}
 <section aria-label="Register entry">
 <h2 id="register-entry-title">{{ 'Edit journal' if config.edit else 'New journal entry' }}</h2>
-<p class="muted">Journal numbering applies. T = company today; + / − = adjacent day. Only Record posts an entry.</p>
+<p class="muted">Only Record saves an entry. Date shortcuts: T = today; + / − = next / previous day.</p>
 <form id="register-form" novalidate data-math-company-currency="{{ config.currency }}">
 <fieldset id="register-fields">
 <div class="register-entry-grid">

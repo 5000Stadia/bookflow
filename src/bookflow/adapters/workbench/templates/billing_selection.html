@@ -4,7 +4,7 @@
 {% if not progress_enabled %}<p>Progress billing is disabled. Bill all remaining work, complete remaining selected lines, or the exact bounded recovery recommendation. Ordinary partial quantities, amounts, percentages and exact rebills require enabling progress billing.</p>{% endif %}
 {% if progress_enabled or attempted.get('billing-selection') in ('percent','partial') %}
 <label>Original-scope percentage for all eligible lines<input name="billing-percent" inputmode="decimal" data-math-scale="6" data-math-active='[{"name":"billing-selection","values":["percent"]}]' placeholder="25" value="{{ attempted.get('billing-percent', '') }}"></label>
-<p>Percentages always use the original quoted scope, not the remaining balance. Enter positive decimals with up to six places. Net amounts exclude tax. Exact quantity fractions below are read-only; they are never rounded into an ordinary quantity input.</p>
+<p>Percentages use the original quote, not the remaining balance. Net amounts exclude tax. Enter positive values with up to six decimal places; exact quantity fractions are read-only.</p>
 {% endif %}
 <p>For selected remaining or per-line billing, check each requested line. Per-line values apply only in per-line mode. Zero-charge physical scope can accompany a positive bill; it is not unpaid debt.</p>
 {% if billing.rebill_bill %}
@@ -23,5 +23,5 @@
 <label>Quantity, net amount or scope percent<input name="billing-value:{{ line.line_id }}" inputmode="decimal" data-math-scale="6" data-math-currency="{{ billing.currency }}" data-math-mode-field="billing-mode:{{ line.line_id }}" data-math-active='{{ [{"name": "billing-selection", "values": ["partial"]}, {"name": "billing-line:" ~ line.line_id, "checked": true}, {"name": "billing-mode:" ~ line.line_id, "values": ["quantity", "net_amount", "percent"]}] | tojson }}' value="{{ attempted.get('billing-value:' ~ line.line_id, '') }}"></label>
 {% if line.rebill_options %}<label>Earlier allocation<select name="billing-rebill:{{ line.line_id }}">{% for source in line.rebill_options %}<option value="{{ source.id }}"{% if attempted.get('billing-rebill:' ~ line.line_id) == source.id %} selected{% endif %}>{{ billing.rebill_bill.revision.number }} · revision {{ billing.rebill_bill.revision.revision_number }} · {{ source.facts_snapshot.line.description or 'Quoted line' }}</option>{% endfor %}</select></label>{% else %}<p>For exact rebilling, open the earlier bill's revision and choose “Rebill exact scope from this revision”.</p>{% endif %}</div>
 {% endif %}</fieldset>{% endfor %}
-<p>Extra charges need an independent ordinary sale line. After posting, choose <strong>Add an unlinked line</strong> in the saved bill. This opens a separate correction with its own preview and version check. If no chargeable scope remains, open an existing bill or create an ordinary invoice.</p>
+<p>For extra charges, choose <strong>Add an unlinked line</strong> on the saved bill and preview the correction. If no chargeable work remains, use an existing bill or a new invoice.</p>
 </fieldset>

@@ -1,0 +1,13 @@
+{# Generic commands retain every result field; document-specific views remain preferred. #}
+{% macro fields(value) %}
+{% if value is none %}<span class="muted">Not set</span>
+{% elif value is sameas true %}Yes{% elif value is sameas false %}No
+{% elif value is mapping %}
+{% if value.amount is defined and value.currency is defined and value|length == 2 %}{{ value.amount }} {{ value.currency }}
+{% else %}<dl class="result-fields">{% for key, part in value.items() %}
+<div class="field"><dt>{{ key.replace('_', ' ')|capitalize }}</dt><dd>{{ fields(part) }}</dd></div>
+{% endfor %}</dl>{% endif %}
+{% elif value is sequence and value is not string %}
+{% if value %}<ol>{% for part in value %}<li>{{ fields(part) }}</li>{% endfor %}</ol>{% else %}<span class="muted">No entries</span>{% endif %}
+{% else %}{{ value }}{% endif %}
+{% endmacro %}

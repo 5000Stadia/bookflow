@@ -72,7 +72,6 @@ PHRASES = {
     'history': 'History of this {subject}',
     'void': 'Void this {subject}', 'copy': 'Copy this {subject}',
     'delete': 'Delete this {subject}',
-    'delete': 'Take this {subject} off the list',
     'enter': 'Enter this {subject} now', 'process': 'Enter every {subject} that is due',
     'retry': 'Try this {subject} again', 'skip': 'Set this {subject} aside',
     'activate': 'Make this {subject} active again',

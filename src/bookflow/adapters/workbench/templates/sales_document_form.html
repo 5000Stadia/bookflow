@@ -43,36 +43,43 @@
 {{ row_actions() }}
 {% if grid.line_extras or d.line_pricing %}<details class="line-extras"><summary>More on this line</summary><div class="line-extra-fields">
 {% if d.line_pricing %}{% set mode_id = ("price-mode:" ~ path).replace(':', '-').replace('.', '-') %}
-<div class="collection-field"><label for="{{ mode_id }}">{{ d.line_pricing.label }}<small>{{ d.line_pricing.description }}</small></label>{{ price_mode(path, mode_id) }}</div>{% endif %}
+<div class="collection-field"><label for="{{ mode_id }}">{{ d.line_pricing.label }}</label>{{ price_mode(path, mode_id) }}{{ field_help(d.line_pricing.description, mode_id ~ "-help", d.line_pricing.label) }}</div>{% endif %}
 {% for child in grid.line_extras %}
 {% set child_name = "c:" ~ path ~ ":" ~ child.name %}
-<div class="collection-field"><label for="{{ child_name.replace(':', '-').replace('.', '-') }}">{{ child.label or child.name }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{{ line_child(child, path, value.get(child.name) if value is mapping else none) }}</div>
+<div class="collection-field"><label for="{{ child_name.replace(':', '-').replace('.', '-') }}">{{ child.label or child.name }}{% if child.required %} *{% endif %}</label>{{ line_child(child, path, value.get(child.name) if value is mapping else none) }}</div>
 {% endfor %}
 </div></details>{% endif %}
 {% endif %}
 </div>
 {% endmacro %}
 
+{# Optional commercial metadata belongs behind one disclosure; required controls
+   always remain in the header. Reopen populated edits and any rejected draft. #}
+{% set optional_paths = ('class_id', 'customer_purchase_order', 'terms', 'ar_account', 'sales_rep', 'ship_date', 'ship_method') %}
+{% set extra = namespace(leaves=[], populated=false) %}
+{% for l in d.primary + d.terms %}{% if l.path in optional_paths and not l.required %}{% set _ = extra.leaves.append(l) %}{% if band_value(l)|trim %}{% set extra.populated = true %}{% endif %}{% endif %}{% endfor %}
 <section class="document-band" aria-label="{{ d.title }} header">
-<div class="document-row">{% for l in d.primary %}{{ field(l, l.index) }}{% endfor %}</div>
+<div class="document-row">{% for l in d.primary %}{% if l not in extra.leaves %}{{ field(l, l.index) }}{% endif %}{% endfor %}</div>
+{% if d.terms %}<div class="document-row">{% for l in d.terms %}{% if l not in extra.leaves %}{{ field(l, l.index) }}{% endif %}{% endfor %}</div>{% endif %}
+{% if extra.leaves or d.addresses %}
+<details class="document-additional"{% if error or (not d.creating and extra.populated) %} open{% endif %}><summary>Additional details</summary>
+<div class="document-row">{% for l in extra.leaves %}{{ field(l, l.index) }}{% endfor %}</div>
 {% if d.addresses %}<div class="document-addresses">
 {% for group in d.addresses %}
 {% set parts = [] %}
-{% for l in group.leaves %}{% set part = band_value(l) | trim %}{% if part %}{% set _ = parts.append(part) %}{% endif %}{% endfor %}
+{% for l in group.leaves %}{% set part = band_value(l)|trim %}{% if part %}{% set _ = parts.append(part) %}{% endif %}{% endfor %}
 <details class="address-block"{% if error %} open{% endif %}>
-<summary><span class="address-title">{{ group.title }}</span> <span class="address-summary">{{ parts | join(', ') if parts else 'Not entered — the customer record supplies it' }}</span></summary>
+<summary><span class="address-title">{{ group.title }}</span> <span class="address-summary">{{ parts|join(', ') if parts else 'From the customer record' }}</span></summary>
 <div class="address-fields">{% for l in group.leaves %}{{ field(l, l.index) }}{% endfor %}</div>
-</details>
-{% endfor %}
-</div>{% endif %}
-{% if d.terms %}<div class="document-row">{% for l in d.terms %}{{ field(l, l.index) }}{% endfor %}</div>{% endif %}
+</details>{% endfor %}</div>{% endif %}
+</details>{% endif %}
 </section>
 
 {% if d.scope %}<section class="document-band" aria-label="Scope"><h2 class="band-title">Scope</h2>
 <div class="document-row document-row-wide">{% for l in d.scope %}{{ field(l, l.index) }}{% endfor %}</div></section>{% endif %}
 
 {% if d.noun in ('check', 'card-charge') %}
-<p>Items record a new purchase received now. For goods already received, <a href="/c/{{ company_id }}/bill/post">enter a bill from receipts</a>, then use Pay Bills. To pay an existing bill, use Pay Bills.</p>
+<p>Use Items for goods received now. For goods already received, <a href="/c/{{ company_id }}/bill/post">enter a bill from receipts</a>. Use Pay Bills to pay an existing bill.</p>
 <div data-purchase-allocation role="status" aria-live="polite">Enter an amount and allocate it to items or expenses.</div>
 {% endif %}
 {% if d.grids %}
@@ -104,7 +111,7 @@
 {% for row in d.totals %}<dt>{{ row.label }}</dt><dd>{% if row.strong %}<strong>{{ row.value }}</strong>{% else %}{{ row.value }}{% endif %}</dd>{% endfor %}
 </dl>
 {% if d.reconciliation %}<p class="{{ 'muted' if d.reconciled else 'warn' }}" data-reconciliation>{{ d.reconciliation }}</p>{% endif %}
-<p class="muted">Computed by the server from {{ d.origin }}. Nothing on this page is calculated in the browser.</p>
+
 {% else %}<p class="muted">{{ d.totals_empty }}</p>{% endif %}
 </div>
 </section>

@@ -1,8 +1,8 @@
 <section class="document-detail" aria-label="Received goods">
 <h2>Received goods</h2>
 <p>{{ record.profile.vendor.label }} · {{ record.date }} · {{ record.total.amount }} {{ record.total.currency }}</p>
-<p>Current receipt liability awaiting bills: {{ record.receipt_liability_current.amount }} {{ record.receipt_liability_current.currency }}</p>
-<p>Inventory received; vendor bill entered separately. This receipt is not a payment candidate.</p>
+<p>Awaiting vendor bills: {{ record.receipt_liability_current.amount }} {{ record.receipt_liability_current.currency }}</p>
+<p>Enter the vendor bill before paying for these received goods.</p>
 {% if record.reference %}<p>Supplier reference: {{ record.reference }}</p>{% endif %}
 {% if record.memo %}<p>{{ record.memo }}</p>{% endif %}
 {% set received = record %}{% include 'receipt_costs.html' %}

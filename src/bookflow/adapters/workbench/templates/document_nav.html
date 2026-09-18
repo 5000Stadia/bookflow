@@ -12,7 +12,7 @@
 {% else %}<span class="document-step is-unavailable" aria-disabled="true"><span class="document-step-name">Next {{ n.singular }} →</span><small>{{ 'This is the latest ' ~ n.singular ~ '.' if n.at_end else 'Not available here.' }}</small></span>{% endif %}
 </span>{% endif %}
 {% if n.position %}<span class="document-nav-position">{{ n.position }} of {{ n.total }}</span>{% endif %}
-{% if n.steps %}<span class="document-nav-order">{{ n.order }}</span>{% endif %}
+
 {% if n.unavailable %}<span class="document-nav-order">{{ n.unavailable }}</span>{% endif %}
 {% if n.recent_url %}<div class="document-recent" hx-get="{{ n.recent_url }}" hx-trigger="load" hx-swap="innerHTML"><span class="muted">Recent {{ n.plural | lower }}…</span></div>{% endif %}
 </nav>

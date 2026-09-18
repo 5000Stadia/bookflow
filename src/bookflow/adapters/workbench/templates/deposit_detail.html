@@ -17,7 +17,7 @@
 
 <section class="deposit-card" aria-label="Revision selection">
 <h2>Which revision you are reading</h2>
-{% if detail.selected_is_current %}<p>Captured revision {{ detail.selected.pin.revision_number }}, which is also the current revision.</p>
+{% if detail.selected_is_current %}<p>Revision {{ detail.selected.pin.revision_number }} · current</p>
 {% else %}<p class="warn">You are reading captured revision {{ detail.selected.pin.revision_number }}. The current record is at version {{ detail.current.version }}.</p>{% endif %}
 <ul class="deposit-revisions">{% for revision in detail.revisions %}<li><a href="{{ revision.url }}"{% if revision.selected %} aria-current="true" class="deposit-selected-revision"{% endif %}>Revision {{ revision.revision_number }}</a>{% if revision.current %} <span class="muted">current</span>{% endif %}{% if revision.selected %} <span class="muted">reading now</span>{% endif %}</li>{% endfor %}</ul>
 </section>
@@ -25,7 +25,7 @@
 <div class="deposit-grid">
 <section class="deposit-card" aria-label="Captured on this revision">
 <h2>Captured on this revision</h2>
-<p class="muted">Exactly what this immutable revision recorded. These values never change.</p>
+
 <div class="deposit-fields">
 <div><b>Deposit number</b><span>{{ detail.selected.number }}</span></div>
 <div><b>Deposit date</b><span>{{ detail.selected.date }}</span></div>
@@ -36,12 +36,12 @@
 </div>
 <h3>Custom fields (captured)</h3>
 {% if detail.selected.custom_fields %}<ul class="deposit-custom">{% for field in detail.selected.custom_fields %}<li>{% if field.redacted %}<span class="deposit-redacted">{{ redacted_text }}</span>{% else %}<b>{{ field.name }}</b>: {{ field.canonical_text if field.canonical_text is not none else field.value }}{% endif %}</li>{% endfor %}</ul>
-{% else %}<p class="muted">No custom values were captured on this revision.</p>{% endif %}
+{% else %}<p class="muted">No custom fields on this revision.</p>{% endif %}
 </section>
 
 <section class="deposit-card" aria-label="Current record">
 <h2>Current record</h2>
-<p class="muted">Freshly observed at {{ detail.current_observed_at }}. Separate from the captured revision above.</p>
+<p class="muted">Current status as of {{ detail.current_observed_at }}.</p>
 <div class="deposit-fields">
 <div><b>Current status</b><span>{{ detail.current.status }}</span></div>
 <div><b>Current version</b><span>{{ detail.current.version }}</span></div>
@@ -68,7 +68,7 @@
 
 <section class="deposit-card" aria-label="Composition">
 <h2>Composition</h2>
-<p>{{ detail.counts.sources }} contributing receipts · {{ detail.counts.additional }} additional cash rows · {{ detail.counts.cash_allocations }} cash allocations across {{ detail.counts.components }} components. The rows themselves are on their own pages.</p>
+<p>{{ detail.counts.sources }} contributing receipts · {{ detail.counts.additional }} additional cash rows · {{ detail.counts.cash_allocations }} cash allocations across {{ detail.counts.components }} components. Open a group below to view its rows.</p>
 <p class="deposit-kinds">{% for link in item_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}</p>
 </section>
 
