@@ -100,12 +100,15 @@
         if(paired.get(start)?.end===end) {paired.get(start).select.disabled=start.disabled||end.disabled;continue;}
         paired.get(start)?.wrapper.remove();
         const wrapper=document.createElement('label'); wrapper.className='date-range-presets';
-        wrapper.append(title+' · ');
+        const bar=start.closest('.list-tools>label');
+        wrapper.append(bar ? title : title+' · ');
         const select=document.createElement('select'); select.setAttribute('aria-label',title+' preset');
         for(const [value,text] of presets) select.add(new Option(text,value));
         const optional=i=>i.dataset.dateOptional ? i.dataset.dateOptional==='true' : !i.required;
         if(optional(start)&&optional(end)) select.add(new Option('Clear dates','clear'));
-        wrapper.append(select); controls.get(start).tools.after(wrapper);
+        wrapper.append(select);
+        // In a filter bar the preset leads its pair as its own field, not nested in the From label.
+        if(bar) bar.before(wrapper); else controls.get(start).tools.after(wrapper);
         let setting=false;
         select.addEventListener('change',()=>{
           const values=range(select.value); if(!values) return;

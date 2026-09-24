@@ -25,7 +25,7 @@ from tests.test_row5_browser_acceptance import CHROME, _Cdp, browser_site  # noq
 from tests.test_row8_register_browser import _command
 
 FROM, TO = "2026-06-01", "2026-06-30"
-LINK = re.compile(r'<a[^>]+class="(?:primary-action|statement-print)"[^>]+href="([^"]+)"[^>]*>'
+LINK = re.compile(r'<a[^>]+href="([^"]+)"[^>]*>'
                   r'\s*Print / save PDF\s*</a>')
 
 

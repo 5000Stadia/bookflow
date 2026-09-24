@@ -35,6 +35,6 @@
 {% for name, value in customer_statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
 {% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 <button name="action" value="submit">Next statement page</button></form>{% endif %}
-<p class="muted">Generated {{ customer_statement.metadata.generation_time }} · Audit watermark {{ customer_statement.metadata.audit_watermark }}. Any audited company change requires starting the statement again. Change the filters below to run a new one.</p>
+<p class="muted">Generated {{ customer_statement.metadata.generation_time }} · Audit watermark {{ customer_statement.metadata.audit_watermark }}. If anyone changes the books, run the statement again before paging further.</p>
 <details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
 </section>

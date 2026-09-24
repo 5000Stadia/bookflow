@@ -56,6 +56,33 @@
     if (leavingLinks) trigger.focus();
     if (leavingTrigger) (navigation.querySelector('a[aria-current]') || navigation.querySelector('a')).focus();
   };
+  // Desktop menu layout: collapsed to icons and/or moved to a top bar, remembered on this device.
+  const body = document.body;
+  const collapse = navigation.querySelector('[data-nav-collapse]');
+  const top = navigation.querySelector('[data-nav-top]');
+  const layout = () => {
+    const collapsed = 'menuCollapsed' in body.dataset, onTop = 'menuTop' in body.dataset;
+    collapse.setAttribute('aria-pressed', String(collapsed));
+    collapse.querySelector('.nav-label').textContent = collapsed ? 'Expand menu' : 'Collapse menu';
+    collapse.querySelector('use').setAttribute('href', collapsed ? '#i-expand' : '#i-collapse');
+    top.setAttribute('aria-pressed', String(onTop));
+    top.querySelector('.nav-label').textContent = onTop ? 'Move menu to side' : 'Move menu to top';
+    top.querySelector('use').setAttribute('href', onTop ? '#i-layout-side' : '#i-layout-top');
+    // A collapsed menu shows icons only, so each one names itself on hover.
+    for (const control of navigation.querySelectorAll('a[data-tip], .nav-controls button')) {
+      const tip = control.dataset.tip || control.querySelector('.nav-label').textContent;
+      const iconOnly = collapsed || control.tagName === 'BUTTON';
+      if (iconOnly && desktop.matches) control.title = tip; else control.removeAttribute('title');
+    }
+    try { localStorage.setItem('bookflow.menu', JSON.stringify({collapsed, top: onTop})); } catch (e) {}
+  };
+  const flip = (key, control) => control.addEventListener('click', () => {
+    if (key in body.dataset) delete body.dataset[key]; else body.dataset[key] = '';
+    layout();
+  });
+  flip('menuCollapsed', collapse); flip('menuTop', top);
+  desktop.addEventListener('change', layout);
+  layout();
   navigation.addEventListener('toggle', () => trigger.setAttribute('aria-expanded', String(navigation.open)));
   desktop.addEventListener('change', sync);
   sync();

@@ -49,7 +49,7 @@ from urllib.parse import quote, urlencode
 
 from bookflow.core.money import Money
 # One home for the order an address reads in, shared with the printed documents.
-from bookflow.documents.model import address_lines
+from bookflow.documents.model import address_block
 
 # The three documents, by the route segment they live under.
 NOUNS = ('credit-memo', 'customer-refund', 'vendor-credit')
@@ -113,7 +113,7 @@ def _links(company_id, noun, record, preview):
 
 def _issuer(revision):
     issuer = revision.get('issuer_snapshot') or {}
-    return issuer, address_lines({key.removeprefix('address_'): value
+    return issuer, address_block({key.removeprefix('address_'): value
                                   for key, value in issuer.items()
                                   if key.startswith('address_')})
 

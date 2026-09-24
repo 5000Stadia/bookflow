@@ -39,7 +39,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
         b.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})['data']))
     _contained(b, width)
     _click(b, 'submit'); invoice = _saved(b, 'invoice')
-    assert 'Linked work sources' in b.evaluate('document.body.innerText')
+    assert 'Billed from work' in b.evaluate('document.body.innerText')
     assert run('invoice.show', dict(invoice=invoice))['total_minor_units'] == 1001
     source_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "Open captured source revision").href')
     b.call('Page.navigate', {'url': source_link})
@@ -99,7 +99,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     snapshots_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "Read internal snapshots for sales revision 1").href')
     b.navigate(snapshots_link)
     b.wait_for('!!document.querySelector(".sales-document")')
-    assert 'Original internal scope' in b.evaluate("""document.querySelector('[aria-label="Linked work sources"]').textContent""")
+    assert 'Original internal scope' in b.evaluate("""document.querySelector('[aria-label="Billed from work"]').textContent""")
     _contained(b, width)
     # Both read commands render bounded billing pages.
     for noun, identity in [('estimate', source['id']), ('work-order', order['id'])]:

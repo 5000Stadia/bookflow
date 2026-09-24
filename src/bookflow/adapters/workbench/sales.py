@@ -11,7 +11,7 @@ from bookflow.core.money import Money
 
 from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
 # One home for the order an address reads in: the printed document uses the same one.
-from bookflow.documents.model import address_lines
+from bookflow.documents.model import address_block
 # One home for the print route's shape, shared with the estimate and the statement.
 from bookflow.adapters.workbench.document_print import document_url
 # One home for turning a stored transaction type into the segment its page lives at.
@@ -155,6 +155,6 @@ def detail_context(record, company_id, *, preview=False):
                 settlement_url='/c/' + quote(str(company_id), safe='') + '/invoice/'
                                + quote(str(record['id']), safe='') + '/settlement',
                 title=registry.noun_meta(noun)['singular_label'], links=links,
-                issuer=issuer, billing=address_lines(revision['profile'].get('billing_address')),
-                shipping=address_lines(revision['profile'].get('shipping_address')),
-                issuer_address=address_lines({k.removeprefix('address_'): v for k, v in issuer.items() if k.startswith('address_')}))
+                issuer=issuer, billing=address_block(revision['profile'].get('billing_address')),
+                shipping=address_block(revision['profile'].get('shipping_address')),
+                issuer_address=address_block({k.removeprefix('address_'): v for k, v in issuer.items() if k.startswith('address_')}))

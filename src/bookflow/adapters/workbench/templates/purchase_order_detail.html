@@ -1,0 +1,29 @@
+{# The purchase order as a buyer reads it: who, when, what was ordered and what has arrived. #}
+{% set r = record.revision %}{% set p = r.profile %}
+{% set received = {} %}{% for line in record.receiving or [] %}{% set _ = received.update({line.order_line_id: line}) %}{% endfor %}
+{% macro quantity(micro) %}{{ '%g' % (micro / 1000000) }}{% endmacro %}
+<section class="workspace-card sales-document" aria-label="Purchase order">
+<p><strong>{{ ui_words(record.status) }}</strong> · {{ record.date }}{% if r.revision_number > 1 %} · Revised (revision {{ r.revision_number }}){% endif %} · {{ record.currency }}</p>
+{% if record.void_reason %}<p class="warn">Voided: {{ record.void_reason }}</p>{% endif %}
+{% if record.status in ('open', 'partly_received') %}<p class="actions"><a class="primary-action" href="/c/{{ company_id }}/item-receipt/post?purchase_order={{ record.id }}">Receive items</a></p>{% endif %}
+{% if record.bill_id %}<p>Billed: <a href="/c/{{ company_id }}/bill/{{ record.bill_id }}">open the bill</a></p>{% endif %}
+<div class="sales-parties">
+<div><h3>Vendor</h3><p><a href="/c/{{ company_id }}/vendor/{{ record.vendor_id }}">{{ p.vendor.label if p and p.vendor else record.vendor_name }}</a></p>{% if p and p.vendor and p.vendor.company_name %}<p>{{ p.vendor.company_name }}</p>{% endif %}{% if p and p.vendor and p.vendor.account_number %}<p class="muted">Account no. {{ p.vendor.account_number }}</p>{% endif %}</div>
+<div><h3>Ship to</h3>{% if r.ship_to %}<p>{{ r.ship_to }}</p>{% else %}<p class="muted">No shipping address</p>{% endif %}</div>
+</div>
+<dl class="sales-facts">
+<dt>Expected</dt><dd>{{ record.expected_date or '—' }}</dd>
+<dt>Terms</dt><dd>{{ p.terms.label if p and p.terms else 'No terms' }}</dd>
+{% if record.reference %}<dt>Vendor reference</dt><dd>{{ record.reference }}</dd>{% endif %}
+</dl>
+<div class="table-wrap"><table class="ledger-table sales-lines"><thead><tr><th>Item / description</th><th>Ordered</th><th>Received</th><th>Rate</th><th>Amount</th></tr></thead><tbody>
+{% for line in r.lines %}{% set got = received.get(line.line_id) %}<tr>
+<td data-label="Item / description"><span class="sales-cell-label" aria-hidden="true">Item / description</span>{% if line.line_snapshot.item %}{{ line.line_snapshot.item.label }}{% elif line.line_snapshot.account %}{{ line.line_snapshot.account.full_name }}{% endif %}{% if line.description %}<div>{{ line.description }}</div>{% endif %}</td>
+<td data-label="Ordered"><span class="sales-cell-label" aria-hidden="true">Ordered</span>{{ line.quantity if line.quantity is not none else "—" }}</td>
+<td data-label="Received"><span class="sales-cell-label" aria-hidden="true">Received</span>{{ quantity(got.received_quantity_microunits) if got else '—' }}</td>
+<td data-label="Rate"><span class="sales-cell-label" aria-hidden="true">Rate</span>{{ line.rate.amount if line.rate else '—' }}</td>
+<td data-label="Amount"><span class="sales-cell-label" aria-hidden="true">Amount</span>{{ line.amount.amount }}</td></tr>{% endfor %}
+</tbody><tfoot><tr><th colspan="4">Total ({{ record.currency }})</th><th>{{ record.total.amount }}</th></tr></tfoot></table></div>
+{% if record.memo %}<p>Memo: {{ record.memo }}</p>{% endif %}
+<p><a href="/c/{{ company_id }}/purchase-order/{{ record.id }}/history">Order history</a></p>
+</section>

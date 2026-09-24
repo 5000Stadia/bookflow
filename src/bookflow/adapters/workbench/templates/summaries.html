@@ -42,6 +42,6 @@
 {% else %}<tr><td colspan="5">Nothing was posted to these accounts between {{ summaries.date_from }} and {{ summaries.date_to }}.</td></tr>{% endfor %}
 </tbody></table></div>
 {% if summaries.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="summary-next-page">{% for name, value in summaries.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
-<p class="muted">Generated {{ summaries.metadata.generation_time }} · Audit watermark {{ summaries.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<p class="muted">Generated {{ summaries.metadata.generation_time }} · Audit watermark {{ summaries.metadata.audit_watermark }}. If anyone changes the books, run the report again before paging further.</p>
 <details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
 </section>

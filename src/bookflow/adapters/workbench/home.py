@@ -357,23 +357,15 @@ PANELS: tuple[Panel, ...] = (
             ),
             Step(
                 id="memorized-due",
-                title="Enter what is due",
+                title="Enter memorized transactions",
                 summary="Enter every memorized transaction whose date has arrived, each at its own date.",
-                action=Action("Enter what is due", WRITE, ("memorized process",), "/memorized/process"),
+                action=Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             ),
             Step(
                 id="audit",
                 title="Audit trail",
                 summary="Who changed what, through which interface, and why.",
                 action=Action("Open the audit trail", READ, ("audit list",), "/audit"),
-            ),
-            Step(
-                id="time-tracking",
-                title="Time tracking",
-                summary="Record time against a job and carry billable hours through to customer billing.",
-                action=Action("Track time", WRITE),
-                waits_on="implementation of job time entry and billing; payroll processing is excluded",
-                aside=True,
             ),
         ),
     ),
@@ -404,11 +396,6 @@ class ResolvedStep:
     reason: str  # empty when live; otherwise what the tile is waiting on
     offered: bool = True  # False when the commands exist but this company or role does not offer them
 
-    @property
-    def planned(self) -> bool:
-        """A step the product has not built yet, as opposed to one this credential may not use."""
-        return not self.live and self.offered
-
 
 @dataclass(frozen=True)
 class ResolvedPanel:
@@ -422,10 +409,6 @@ class ResolvedPanel:
     @property
     def asides(self) -> tuple[ResolvedStep, ...]:
         return tuple(item for item in self.steps if item.step.aside)
-
-    @property
-    def planned(self) -> tuple[ResolvedStep, ...]:
-        return tuple(item for item in self.steps if item.planned)
 
 
 def _availability(step: Step, commands: dict[str, registry.Command | None], routed: set[str],

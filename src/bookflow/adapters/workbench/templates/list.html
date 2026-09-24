@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}{{ heading }}{% endblock %}{% block body %}
 {% set base = noun_base(company_id or None, noun) %}
 <h1>{{ heading }}</h1>
+<p class="actions list-actions">{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}"{% if loop.first %} class="primary-action"{% endif %}>{{ ui_heading(noun, v.verb, meta) }}</a>{% endfor %}
+{% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "Hide" if include else "Include" }} inactive records</a>{% endif %}</p>
 {% if deletable | default(false) %}
 {% if request.query_params.get('deleted') %}<p role="status">{{ deleted_label }} deleted. <a href="{{ base }}/{{ request.query_params.get('deleted') }}?include_deleted=1&history=1">View retained record and history</a></p>{% endif %}
 {# The list command reads this flag through the typed translator, which spells a flag
@@ -33,16 +35,14 @@
 <label>Original currency<input name="from_currency" value="{{ rate_filters.get('from_currency', '') }}" maxlength="3" placeholder="JPY"></label>
 <label>Page size<input name="limit" inputmode="numeric" data-math-scale="0" value="{{ rate_filters.get('limit', 50) }}"></label>
 <button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
-<p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
-{% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
 {% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
 <label>Filters{% for filter in filters %}<input name="filter" value="{{ filter }}" placeholder="field=value">{% endfor %}<input name="filter" value="" placeholder="field=value"></label>
 <label>Sort<select name="sort"><option value="">Default</option>{% for sort in meta.definition.sorts %}<option value="{{ sort }}" {% if selected_sort == sort %}selected{% endif %}>{{ sort }}</option>{% endfor %}</select></label>
 <label>Direction<select name="direction"><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Ascending</option><option value="desc" {% if selected_direction == 'desc' %}selected{% endif %}>Descending</option></select></label>
 <label>Columns<small>Comma-separated, in display order</small><input name="columns" value="{{ selected_columns }}"></label>
 {% if include %}<input type="hidden" name="include_inactive" value="1">{% endif %}<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
-<div class="table-wrap"><table><tr>{% for c in columns or [] %}<th>{{ c | label }}</th>{% endfor %}{% if noun == "account" %}<th>Activity</th>{% endif %}</tr>
-{% for it in items %}<tr>{% for c in columns %}{% set value = it.get(c) %}{% if value is mapping and "amount" in value and "currency" in value %}{% set value = value.amount ~ " " ~ value.currency %}{% endif %}<td>{% if loop.first and has_show and meta.identifier and it.get(meta.identifier) %}<a href="{{ base }}/{{ it[meta.identifier] }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% elif loop.first and noun == "company" and it.get("company_id") %}<a href="/c/{{ it.company_id }}/company/self">{{ value if value is not none else "" }}</a>{% elif loop.first and has_show and it.get("id") %}<a href="{{ base }}/{{ it.id }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% else %}{{ value if value is not none else "" }}{% endif %}</td>{% endfor %}{% if noun == "account" %}<td>{% if it.type in ("income", "other_income", "expense", "other_expense", "cost_of_goods_sold") %}<a href="/c/{{ company_id }}/report/general-ledger?account={{ it.id }}">Ledger</a>{% elif it.type != "non_posting" %}<a href="{{ base }}/{{ it.id }}/register">Register</a>{% endif %}</td>{% endif %}</tr>{% endfor %}</table>
+<div class="table-wrap"><table class="list-table"><tr>{% for c in columns or [] %}<th>{{ c | label }}</th>{% endfor %}{% if noun == "account" %}<th>Activity</th>{% endif %}</tr>
+{% for it in items %}<tr>{% for c in columns %}{% set value = it.get(c) %}{% set money = value is mapping and "amount" in value and "currency" in value %}{% if money %}{% set value = value.amount ~ " " ~ value.currency %}{% elif c == "status" and value is string %}{% set value = ui_words(value) %}{% endif %}<td data-label="{{ c | label }}"{% if money %} class="num"{% endif %}>{% if loop.first and has_show and meta.identifier and it.get(meta.identifier) %}<a href="{{ base }}/{{ it[meta.identifier] }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% elif loop.first and noun == "company" and it.get("company_id") %}<a href="/c/{{ it.company_id }}/company/self">{{ value if value is not none else "" }}</a>{% elif loop.first and has_show and it.get("id") %}<a href="{{ base }}/{{ it.id }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% else %}{{ value if value is not none else "" }}{% endif %}</td>{% endfor %}{% if noun == "account" %}<td data-label="Activity">{% if it.type in ("income", "other_income", "expense", "other_expense", "cost_of_goods_sold") %}<a href="/c/{{ company_id }}/report/general-ledger?account={{ it.id }}">Ledger</a>{% elif it.type != "non_posting" %}<a href="{{ base }}/{{ it.id }}/register">Register</a>{% endif %}</td>{% endif %}</tr>{% endfor %}</table>
 </div>
 {% if not items %}<p>No matching records. Try a different search or include inactive records.</p>{% endif %}
 {% if paging.previous_url or paging.next_url %}<nav class="pagination" aria-label="Results pages">
@@ -50,4 +50,4 @@
 {% if paging.first_url and paging.page > 2 %}<a href="{{ paging.first_url }}">First page</a>{% endif %}
 <span class="pagination-place">Page {{ paging.page }}</span>
 {% if paging.next_url %}<a href="{{ paging.next_url }}" rel="next">Next page →</a>{% endif %}</nav>{% endif %}
-<p class="muted">{% for k, v in extra.items() %}{{ k }}={{ v }} {% endfor %}</p>{% endblock %}
+{% if extra.note %}<p class="muted">This area has no list. Use the actions above.</p>{% elif extra.count is defined and items %}<p class="muted list-count">Showing {{ extra.count }} {{ 'record' if extra.count == 1 else 'records' }}{% if extra.has_more %} on this page{% endif %}.</p>{% endif %}{% endblock %}

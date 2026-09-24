@@ -18,6 +18,8 @@ Only a name a person would not recognise from its own field gets an entry, and t
 entries are read from the maps already written for the sales document window and for
 the master lists rather than started again here.
 """
+from datetime import datetime
+
 from bookflow.adapters.workbench import document_form as Document
 from bookflow.company.query_catalog import LABELS as CATALOG_LABELS
 
@@ -57,6 +59,8 @@ PAGES = {
     'inventory adjust': 'Adjust inventory',
     'inventory void': 'Void an inventory adjustment',
     'inventory show': 'Inventory adjustment',
+    'item-receipt post': 'Receive items',
+    'bill pay': 'Pay bills',
 }
 
 # The verbs a page is opened by, phrased as the work rather than as the instruction.
@@ -108,6 +112,14 @@ SUFFIXES = ('_minor_units', '_micro_units', '_millionths', '_id', '_label')
 def words(value):
     """The general fix: separators become spaces and the first letter is a capital."""
     return str(value).replace('_', ' ').replace('-', ' ').strip().capitalize()
+
+
+def when(value):
+    """A recorded instant as a person reads it: date and minute, without seconds or offset."""
+    try:
+        return datetime.fromisoformat(str(value)).strftime('%Y-%m-%d %H:%M')
+    except ValueError:
+        return value
 
 
 def subject(noun, meta=None, plural=False):

@@ -1,9 +1,9 @@
 {% extends "base.html" %}{% block title %}Log in{% endblock %}{% block body %}
 <div class="login-card"><p class="page-eyebrow">Your books, together</p><h1>Welcome back</h1>{% if error %}<div class="error">{{ error }}</div>{% endif %}
-<form hx-post="/login" hx-swap="none" hx-on::after-request="if(!event.detail.successful){document.getElementById('err').textContent='Login failed.'}">
+<form hx-post="/login" hx-swap="none" hx-on::before-request="document.getElementById('err').textContent=''" hx-on::after-request="const s=event.detail.xhr.status; if(s===0||s>=400){document.getElementById('err').textContent=s===0?'Bookflow could not be reached. Check your connection and try again.':'That username and password did not match. Try again.'}">
 <input type="hidden" name="next" value="{{ next }}">
 <div class="row"><label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus></div>
 <div class="row"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password"></div>
-<div class="row"><span></span><button>Log in</button></div></form><div id="err" class="muted"></div>
+<div class="row"><span></span><button>Log in</button></div></form><div id="err" class="error login-error" role="alert"></div>
 <p class="muted">Already signed in? <a href="/hub/user/set-password">Change your password</a>. If you cannot sign in, ask your administrator for help.</p>
 </div>{% endblock %}

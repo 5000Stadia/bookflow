@@ -44,7 +44,6 @@
 <p class="muted">Current status as of {{ detail.current_observed_at }}.</p>
 <div class="deposit-fields">
 <div><b>Current status</b><span>{{ detail.current.status }}</span></div>
-<div><b>Current version</b><span>{{ detail.current.version }}</span></div>
 <div><b>Current number</b><span>{{ detail.current.number }}</span></div>
 <div><b>Current date</b><span>{{ detail.current.revision_date }}</span></div>
 <div><b>Current bank total</b><span class="deposit-amount{% if detail.current.revision_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.revision_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.revision_bank_total.label }}</span></div>

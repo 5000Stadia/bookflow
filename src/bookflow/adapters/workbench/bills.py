@@ -13,7 +13,7 @@ from copy import deepcopy
 from urllib.parse import quote
 
 # One home for the order an address reads in, shared with the printed documents.
-from bookflow.documents.model import address_lines
+from bookflow.documents.model import address_block
 
 
 def _id(value):
@@ -119,6 +119,6 @@ def detail_context(record, company_id, *, preview=False):
                 settlement=record.get('settlement_current'),
                 duplicates=record.get('duplicate_references') or [],
                 issuer=issuer,
-                issuer_address=address_lines({key.removeprefix('address_'): value
+                issuer_address=address_block({key.removeprefix('address_'): value
                                               for key, value in issuer.items()
                                               if key.startswith('address_')}))

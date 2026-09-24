@@ -72,7 +72,8 @@
     }
     function attribution(container, actor, at) {
       const line = el('p', (actor || 'Unknown actor') + ' · ', 'muted');
-      const time = el('time', at || ''); if (at) time.dateTime = at;
+      // Read to the minute; the exact instant stays on the element for the audit trail.
+      const time = el('time', at ? at.slice(0, 16).replace('T', ' ') : ''); if (at) { time.dateTime = at; time.title = at; }
       line.append(time); container.append(line);
     }
     function noteEntry(note) {

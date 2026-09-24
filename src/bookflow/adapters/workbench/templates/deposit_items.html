@@ -35,7 +35,6 @@
 <h3>Current receipt</h3>
 <div class="deposit-fields">
 <div><b>Current status</b><span>{{ row.current.status }}</span></div>
-<div><b>Current version</b><span>{{ row.current.version }}</span></div>
 <div><b>Claimed by a deposit</b><span>{{ 'yes' if row.current.claimed else 'no' }}{% if row.current.claimed %} · {{ 'by this deposit' if row.current.claimed_by_this_deposit else 'by another deposit' }}{% endif %}</span></div>
 <div><b>Current payment method type</b><span>{{ row.current.payment_method_type if row.current.payment_method_type else '—' }}</span></div>
 </div>

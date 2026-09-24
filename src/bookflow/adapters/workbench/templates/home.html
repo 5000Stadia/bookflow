@@ -1,4 +1,5 @@
 {% extends "base.html" %}{% block title %}Overview · {{ company.display_name }}{% endblock %}{% block body %}
+{% from "icons.html" import icon %}
 {% macro tile(item) %}<a class="flow-tile" href="{{ item.href }}"><span class="flow-tile-title">{{ item.step.action.label }}</span></a>{% endmacro %}
 <p class="page-eyebrow">{{ company.display_name }}</p><h1>Overview</h1>
 <section class="quick-actions" aria-labelledby="quick-actions-title"><h2 id="quick-actions-title">Start a transaction</h2><div class="quick-action-grid">
@@ -6,10 +7,10 @@
 </div></section>
 <div class="flow-board">
 {% for row in panels %}<section class="nav-group flow-panel" aria-labelledby="flow-panel-{{ row.panel.id }}">
-<h2 id="flow-panel-{{ row.panel.id }}">{{ row.panel.title }}</h2>
+<div class="flow-panel-head">{{ icon(row.panel.id) }}<h2 id="flow-panel-{{ row.panel.id }}">{{ row.panel.title }}</h2></div>
 <ul class="flow-steps">{% for item in row.chain if item.live %}<li class="flow-step">{{ tile(item) }}</li>{% endfor %}</ul>
 {% if row.asides | selectattr('live') | list %}<ul class="flow-asides">{% for item in row.asides if item.live %}<li>{{ tile(item) }}</li>{% endfor %}</ul>{% endif %}
 </section>{% endfor %}
 </div>
-<p class="workspace-footer"><a href="/c/{{ company_id }}/_all">Advanced tools</a> <span aria-hidden="true">·</span> <a href="/c/{{ company_id }}/_planned">Future features</a></p>
+<p class="workspace-footer"><a href="/c/{{ company_id }}/_all">Advanced tools</a></p>
 {% endblock %}

@@ -50,6 +50,6 @@
 </tbody></table></div>
 {% endif %}
 {% if receivables.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="receivables-next-page">{% for name, value in receivables.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
-<p class="muted">Generated {{ receivables.metadata.generation_time }} · Audit watermark {{ receivables.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<p class="muted">Generated {{ receivables.metadata.generation_time }} · Audit watermark {{ receivables.metadata.audit_watermark }}. If anyone changes the books, run the report again before paging further.</p>
 <details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
 </section>

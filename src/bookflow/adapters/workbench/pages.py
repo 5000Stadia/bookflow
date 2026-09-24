@@ -63,6 +63,7 @@ env.filters["segment"] = Routing.segment
 env.globals["noun_base"] = Routing.base
 env.globals["ui_heading"] = Naming.heading
 env.globals["ui_words"] = Naming.words
+env.filters["when"] = Naming.when
 # Whether a noun's show command is about one record or about the whole thing, so the
 # navigation grid sends each to the page that can actually open. Registered after the
 # function it calls; see `_record_selector`.
@@ -804,35 +805,6 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             groups=selected,
         )
 
-    @app.get("/c/{company_id}/_planned", response_class=HTMLResponse)
-    @permission_read_package(host)
-    def planned_index(company_id: str, request: Request):
-        try:
-            show = run(request, "company show", {}, company_id)
-        except BookflowError as e:
-            return page_error(request, e)
-        return render("planned.html", request, company=show, company_id=show["company_id"],
-                      panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
-                      step=None, panel=None)
-
-    @app.get("/c/{company_id}/_planned/{step_id}", response_class=HTMLResponse)
-    @permission_read_package(host)
-    def planned_step(company_id: str, step_id: str, request: Request):
-        """What a dimmed step will do and what it waits on; a step that has gone live redirects to it."""
-        try:
-            show = run(request, "company show", {}, company_id)
-        except BookflowError as e:
-            return page_error(request, e)
-        panels = Home.resolve(show["company_id"], permits=company_permits(request, show))
-        found = Home.find(panels, step_id)
-        if found is None:
-            return page_error(request, BookflowError("E_USAGE", message=f"no such step `{step_id}`"), company_id=company_id)
-        if found.live:
-            return RedirectResponse(found.href, status_code=303)
-        owner = next(panel for panel in panels if found in panel.steps)
-        return render("planned.html", request, company=show, company_id=show["company_id"],
-                      panels=panels, step=found, panel=owner)
-
     @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)
     @permission_read_package(host)
     def reference_suggestions(
@@ -1251,7 +1223,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, e, restart_url=restart)
             return page_error(request, e)
         verbs = [c for c in _verbs(command_noun, "company" if company_id else "hub")
-                 if c.verb not in ("list", "show", "new", "create") and _role_allows(c, role_view, hub_admin=cred.hub_admin)]
+                 if c.verb not in ("list", "show", "new", "create") and _role_allows(c, role_view, hub_admin=cred.hub_admin)
+                 # A post that names no record makes a new one; it belongs on the list, not here.
+                 and not (c.verb == "post" and not c.positional
+                          and command_noun.replace("-", "_") not in c.input_model.model_fields)]
         if company_id and not company_view.get('info', {}).get('estimates_enabled', True):
             verbs = [cmd for cmd in verbs if cmd.name not in ('estimate copy', 'proposal estimate')]
         if command_noun == "customer":
@@ -1344,7 +1319,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             post_bits = [x for x in effective['permissions'] if x['requirement']=={'capability':'ledger.post','threshold':'standard'}]
             verbs = [v for v in verbs if v.verb!='delete' and not (purchase_noun in ('invoice','sales-receipt') and v.verb=='post') and not (v.verb in ('post','update','void') and
                 (purchase_record.get('deletion') or (effective['mode']=='policy_v1' and not any(x['admitted'] for x in post_bits))))]
-            if Purchases.delete_allowed(lambda *a,**kw: run(request,*a,**kw), company_id, purchase_noun, purchase_record):
+            # A transfer has no Delete of its own; only a document that does is asked.
+            if registry.get(purchase_noun+' delete') is not None and Purchases.delete_allowed(
+                    lambda *a,**kw: run(request,*a,**kw), company_id, purchase_noun, purchase_record):
                 verbs.append(registry.get(purchase_noun+' delete'))
             if request.query_params.get('history')=='1':
                 try:

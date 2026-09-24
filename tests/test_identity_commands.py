@@ -690,7 +690,7 @@ def test_the_workbench_renders_both_listings(office):
     add_jordan(office)
     people = office.installer.get("/hub/user")
     assert people.status_code == 200 and "jordan" in people.text
-    assert 'href="/hub/user/add"' in people.text and "include inactive" in people.text
+    assert 'href="/hub/user/add"' in people.text and "Include inactive records" in people.text
 
     members = office.installer.get("/hub/membership")
     assert members.status_code == 200

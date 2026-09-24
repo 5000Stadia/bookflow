@@ -104,7 +104,7 @@ def details(request, noun, company_id, record, run):
             if request.query_params.get('collection') == key and request.query_params.get('child_cursor'):
                 raw['cursor'] = request.query_params['child_cursor']
             page = run(noun + ' query children', raw, company_id)
-            fields = list(dict.fromkeys(k for row in page['items'] for k in row if k not in ('id', 'position')
+            fields = list(dict.fromkeys(k for row in page['items'] for k in row if k not in ('id', 'position', 'version', noun.replace('-', '_') + '_id')
                 and not (k.endswith('_id') and (k.removesuffix('_id') in row or k.removesuffix('_id') + '_name' in row))))
             pairs = [('collection', key), ('child_cursor', page['next_cursor'])]
             collections.append({'key': key, 'label': title(key), 'page': page, 'fields': fields,
@@ -114,5 +114,67 @@ def details(request, noun, company_id, record, run):
         # Companion readable names already represent these IDs. Keep IDs in technical details.
         if key.endswith('_id') and key.removesuffix('_id') in record:
             continue
-        groups[group].append((title(key), value))
-    return {'groups': [{'title': key, 'fields': fields} for key, fields in groups.items() if fields], 'collections': collections}
+        groups[group].append((key, value))
+    owner = noun.replace('-', '_') + '_id'
+    named = _names([value for fields in groups.values() for value in fields]
+                   + [(key, row.get(key)) for collection in collections for row in collection['page']['items'] for key in collection['fields']],
+                   company_id, run)
+    for collection in collections:
+        collection['page'] = dict(collection['page'], items=[{key: _named(key, value, named, owner) for key, value in row.items()}
+                                                             for row in collection['page']['items']])
+    return {'groups': [{'title': key, 'fields': [(title(name), _named(name, value, named, owner)) for name, value in fields]}
+                       for key, fields in groups.items() if fields], 'collections': collections}
+
+
+# A reference field names its record by what the key ends with; a person reads the name, not the ID.
+REFERENCE_SUFFIXES = (('account_id', 'account'), ('customer_id', 'customer'), ('vendor_id', 'vendor'), ('item_id', 'item'))
+
+
+def _target(key):
+    single = key.removesuffix('_ids') + '_id' if key.endswith('_ids') else key
+    return next((noun for suffix, noun in REFERENCE_SUFFIXES if single.endswith(suffix)), None)
+
+
+def _references(key, value):
+    # Nested groups (a vendor's customer links, an item's vendor profiles) name records too.
+    if isinstance(value, dict):
+        for inner, part in value.items():
+            yield from _references(inner, part)
+    elif isinstance(value, list):
+        for part in value:
+            if isinstance(part, (dict, list)):
+                yield from _references(key, part)
+            elif isinstance(part, str) and _target(key):
+                yield _target(key), part
+    elif isinstance(value, str) and _target(key):
+        yield _target(key), value
+
+
+def _names(pairs, company_id, run):
+    wanted = {}
+    for key, value in pairs:
+        for noun, one in _references(key, value):
+            wanted.setdefault(noun, set()).add(one)
+    named = {}
+    for noun, ids in wanted.items():
+        ordered = sorted(ids)
+        for offset in range(0, len(ordered), 64):
+            try:
+                page = run(noun + ' query', {'ids': ordered[offset:offset + 64],
+                    'projection': 'reference', 'include_inactive': True, 'limit': 64}, company_id)
+            except BookflowError:
+                break
+            named.update({(noun, item['id']): dict(item, noun=noun) for item in page['items']})
+    return named
+
+
+def _named(key, value, named, owner=None):
+    if isinstance(value, dict) and not ('label' in value and 'id' in value):
+        return {inner: _named(inner, part, named, owner) for inner, part in value.items()
+                if inner != 'version' and inner != owner}
+    noun = _target(key)
+    if isinstance(value, list):
+        return [_named(key, one, named, owner) for one in value]
+    if noun is None or not isinstance(value, str):
+        return value
+    return named.get((noun, value), value)

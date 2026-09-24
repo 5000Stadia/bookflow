@@ -11,6 +11,6 @@
 {% for row in statement.rows %}<tr><td>{{ row.section.replace('_', ' ')|capitalize }}</td><td title="{{ row.current_account_label }}">{{ row.display_account_label }}{% if not row.active %} (inactive){% endif %}</td><td><a href="{{ row.ledger_url }}">{{ row.amount.amount }}</a></td></tr>{% else %}<tr><td colspan="3">No matching account balances.</td></tr>{% endfor %}
 </tbody></table></div>
 {% if statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">{% for name, value in statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next account page</button></form>{% endif %}
-<p class="muted">Generated {{ statement.metadata.generation_time }} · Audit watermark {{ statement.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<p class="muted">Generated {{ statement.metadata.generation_time }} · Audit watermark {{ statement.metadata.audit_watermark }}. If anyone changes the books, run the report again before paging further.</p>
 <details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
 </section>

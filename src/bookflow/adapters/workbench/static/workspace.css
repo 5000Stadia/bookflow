@@ -121,3 +121,70 @@ body.workbench{font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe U
 @media(min-width:650px){.workbench #register-account-chooser{display:flex;align-items:end;gap:10px;margin:14px 0}.workbench #register-account-chooser>div{display:flex;align-items:end;gap:8px;flex:1;position:relative}.workbench #register-account-chooser label{flex:1}.workbench #register-account-chooser small:empty{display:none}.workbench #register-account-chooser .register-options{position:absolute;top:100%;left:0;right:0;z-index:20}}
 .submit-error{display:none}
 @media(max-width:700px),(max-height:500px) and (max-width:1099px){.submit-error{display:block;margin:12px 0}.workbench:has([data-submit-error]) [data-submit-error-top]{display:none}.submit-error p{margin:6px 0}}
+/* List filters wrap as a row of fields; a date field keeps its calendar button beside it. */
+.workbench .list-tools{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 12px}
+.workbench .list-tools>label{flex:1 1 11rem;min-width:0}
+.workbench .list-tools>label:has(input[data-date]){flex:1 1 13rem}
+.workbench .list-tools>label:has(input[data-date]){position:relative}
+.workbench .list-tools>label:has(input[data-date]) input[data-date]{width:100%;padding-right:5.5rem}
+.workbench .list-tools>label>.date-tools{position:absolute;right:4px;bottom:4px}
+.workbench .list-tools>label>.date-tools .date-calendar{min-height:0;padding:3px 8px;font-size:12px}
+.workbench .list-tools .date-range-presets{flex:1 1 11rem;margin:0}
+.workbench .list-tools>button,.workbench .list-tools>a{flex:0 0 auto}
+.workbench td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.workbench .list-actions{margin:4px 0 14px}
+@media(max-width:600px){.workbench .list-tools>label,.workbench .list-tools .date-range-presets{flex-basis:100%}}
+/* A document's page heading already names it; the in-card title is for its printed form. */
+@media screen{.workbench .sales-document-title{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+.workbench .record-actions:empty{display:none}
+/* Notes and files reload themselves after each change; a manual reload stays quiet. */
+.workbench .annotations [data-list-status]{font-size:13px;color:var(--muted)}
+.workbench .annotations [data-refresh],.workbench .annotations [data-more]{background:none;border:0;padding:4px 0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer}
+/* The first thing a page is for reads as its one filled button. */
+.workbench .actions a.primary-action{background:var(--accent);border-color:var(--accent);color:#fff}
+.workbench .actions a.primary-action:hover{filter:brightness(1.08)}
+/* On a phone each list row reads as a small card of labelled values, never a squeezed grid. */
+@media(max-width:600px){.workbench .table-wrap:has(.list-table){border:0;background:none;overflow:visible}.workbench .list-table,.workbench .list-table tbody{display:block}.workbench .list-table tr:first-child:has(th){display:none}.workbench .list-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:12px 14px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}.workbench .list-table td{display:block;padding:0;border:0;min-width:0;overflow-wrap:anywhere}.workbench .list-table td:first-child{grid-column:1/-1;font-weight:600}.workbench .list-table td::before{content:attr(data-label);display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.workbench .list-table td:first-child::before{display:none}.workbench .list-table td:empty{display:none}}
+.workbench .login-error:empty{display:none}
+/* Section icons: one stroke set that takes the text colour of wherever it sits. */
+.workbench .icon{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.workbench .group-menu a{display:flex;align-items:center;gap:10px}
+.workbench .nav-controls{display:none}
+.workbench .flow-panel-head{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--line);color:var(--accent)}
+.workbench .flow-panel-head h2{margin:0;padding:0;border:0;color:var(--ink)}
+.workbench .flow-panel-head .icon{width:24px;height:24px}
+@media(min-width:1100px){
+ .workbench:not([data-menu-top]) .group-menu{flex-wrap:nowrap}.workbench:not([data-menu-top]) .group-menu>*{flex:none}
+ .workbench .nav-controls{display:flex;flex-direction:row;gap:2px;margin:-8px 0 6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+ .workbench:not([data-menu-collapsed]):not([data-menu-top]) .group-menu a{padding:7px 14px}
+ .workbench[data-menu-collapsed]:not([data-menu-top]) .nav-controls{flex-direction:column}
+ .workbench .nav-controls button{display:flex;align-items:center;gap:10px;background:none;border:0;border-radius:7px;padding:8px 14px;min-height:0;font-size:13px;font-weight:500;color:var(--muted);text-align:left;cursor:pointer}
+ .workbench .nav-controls button:hover{background:#edf1f2;color:var(--ink)}
+ .workbench[data-menu-collapsed] .group-menu .nav-label,.workbench .nav-controls .nav-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ /* Side rail, collapsed to icons. */
+ .workbench[data-menu-collapsed]:not([data-menu-top]) .group-menu{width:68px;padding:16px 10px}
+ .workbench[data-menu-collapsed]:not([data-menu-top]):has(.workspace-navigation) main{margin-left:68px;max-width:calc(100% - 68px)}
+ .workbench[data-menu-collapsed]:not([data-menu-top]):has(.workspace-navigation)>.save-feedback{margin-left:100px}
+ .workbench[data-menu-collapsed]:not([data-menu-top]) .group-menu a,.workbench[data-menu-collapsed]:not([data-menu-top]) .nav-controls button{justify-content:center;padding:10px 0}
+ .workbench[data-menu-collapsed]:not([data-menu-top]) .nav-caption{font-size:0;height:1px;padding:0;margin:8px 6px;background:var(--line)}
+ /* Top bar: the sections run across under the header and the page takes the full width. */
+ .workbench[data-menu-top] .workspace-navigation{position:sticky;top:64px;z-index:35}
+ .workbench[data-menu-top] .group-menu{position:static;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:2px 4px;padding:8px 24px;border-right:0;border-bottom:1px solid var(--line);overflow:visible}
+ .workbench[data-menu-top]:has(.workspace-navigation) main{margin-left:0;max-width:none}
+ .workbench[data-menu-top]:has(.workspace-navigation)>.save-feedback{margin-left:28px}
+ .workbench[data-menu-top] .nav-caption{display:none}
+ .workbench[data-menu-top] .nav-caption~.nav-caption{display:block;font-size:0;width:1px;height:22px;padding:0;margin:0 8px;background:var(--line)}
+ .workbench[data-menu-top] .group-menu a{padding:7px 10px;gap:7px;font-size:13.5px}
+ .workbench[data-menu-top] .group-menu a[aria-current]{box-shadow:inset 0 -2px var(--accent)}
+ .workbench[data-menu-top][data-menu-collapsed] .group-menu a{padding:8px 11px}
+ .workbench[data-menu-top] .nav-controls{order:99;flex-direction:row;margin:0 0 0 auto;padding:0;border:0}
+ .workbench[data-menu-top] .nav-controls button{padding:7px 8px}
+}
+/* Tablet and phone: the menu opens as a grid of icon tiles, big enough for a thumb. */
+@media(max-width:1099px){
+ .workbench .group-menu{gap:8px}
+ .workbench .group-menu a{flex-direction:column;justify-content:center;gap:6px;min-height:68px;padding:10px 6px;text-align:center;font-size:13px;line-height:1.25;background:white;border:1px solid var(--line)}
+ .workbench .group-menu a .icon{width:24px;height:24px;color:var(--accent)}
+ .workbench .group-menu a[aria-current]{box-shadow:none;border-color:var(--accent)}
+}
+@media(max-width:600px){.workbench .group-menu{grid-template-columns:repeat(3,minmax(0,1fr))}}

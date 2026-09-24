@@ -23,7 +23,7 @@ from copy import deepcopy
 from urllib.parse import quote, urlencode
 
 # One home for the order an address reads in, shared with the printed documents.
-from bookflow.documents.model import address_lines
+from bookflow.documents.model import address_block
 
 # What splits one ``bill pay`` into several payments once the window's own single funding
 # account, method and currency are held constant. Asked of the rows rather than assumed.
@@ -72,7 +72,7 @@ def detail_context(record, company_id):
                 list_url=_url(company_id, 'bill-payment'),
                 pay_url=_url(company_id, 'pay-bills'),
                 issuer=issuer,
-                issuer_address=address_lines({key.removeprefix('address_'): value
+                issuer_address=address_block({key.removeprefix('address_'): value
                                               for key, value in issuer.items()
                                               if key.startswith('address_')}))
 

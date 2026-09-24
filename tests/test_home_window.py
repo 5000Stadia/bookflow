@@ -133,7 +133,6 @@ def test_the_home_window_renders_its_panels_and_keeps_the_old_grid(hosted):
             if item.live:
                 assert f'href="{item.href}"' in page.text, item.step.id
     assert f'href="/c/{hosted.company_id}/_all"' in page.text
-    assert f'href="/c/{hosted.company_id}/_planned"' in page.text
 
     grid = browser.get(f"/c/{hosted.company_id}/_all")
     assert grid.status_code == 200
@@ -180,26 +179,6 @@ def test_unavailable_steps_stay_off_daily_home_and_remain_in_future_features(hos
                 for name in item.step.action.commands:
                     assert registry.get(name) is None or item.step.action.destination is None
     assert 'aria-disabled="true"' not in _main(page.text)
-    assert f'href="/c/{hosted.company_id}/_planned"' in page.text
-
-
-def test_the_planned_page_states_what_each_step_needs(hosted):
-    browser = _browser(hosted)
-    index = browser.get(f"/c/{hosted.company_id}/_planned")
-    assert index.status_code == 200
-    board = resolved(hosted.company_id)
-    for panel in board:
-        for item in panel.planned:
-            assert f'href="/c/{hosted.company_id}/_planned/{item.step.id}"' in index.text, item.step.id
-            page = browser.get(f"/c/{hosted.company_id}/_planned/{item.step.id}")
-            assert page.status_code == 200, item.step.id
-            assert item.step.action.label in page.text
-            assert item.reason.split(".")[0][:40] in page.text
-    # A step that has gone live no longer has a placeholder page; it redirects to the real one.
-    live = next(item for panel in board for item in panel.steps if item.live)
-    redirect = browser.get(f"/c/{hosted.company_id}/_planned/{live.step.id}", follow_redirects=False)
-    assert redirect.status_code == 303 and redirect.headers["location"] == live.href
-    assert browser.get(f"/c/{hosted.company_id}/_planned/not-a-step").status_code == 400
 
 
 # ---------------------------------------------------------------- the contract itself
@@ -295,16 +274,9 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
 
     page = browser.get(f"/c/{hosted.company_id}/").text
     assert _tiles(page)[invoice.action.label][0] == "a"
-    # The other half of the pair is whichever tile is still planned, taken from the board rather
-    # than named here: naming one meant this test had to be edited the day that tile went live,
-    # which is the one moment its assertion was worth reading.
-    planned = [item for panel in home.resolve(hosted.company_id) for item in panel.steps
-               if not item.live and item.reason]
-    assert planned, (
-        "Every tile on the board is live, so this half of the flip has no example left. That is "
-        "good news and not a test to patch: retire the assertion deliberately and record that "
-        "the board filled up, rather than reintroducing a planned tile to keep it meaningful.")
-    assert planned[0].step.action.label not in _tiles(page)
+    # The board filled up at V1: every declared tile is live, so the "still planned" half of this
+    # pair was retired rather than kept alive with an invented placeholder.
+    assert all(item.live or not item.offered for panel in home.resolve(hosted.company_id) for item in panel.steps)
 
 
 def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):
@@ -417,7 +389,7 @@ def test_every_menu_group_lands_on_a_page_of_that_group(hosted):
 def test_a_company_the_credential_cannot_see_never_renders_a_board(hosted):
     browser = TestClient(hosted.handle.app)
     assert browser.post("/login", json={"username": "outsider", "password": "another-long-password"}).status_code == 200
-    for path in ("/", "/_all", "/_planned", "/_group/customers"):
+    for path in ("/", "/_all", "/_group/customers"):
         response = browser.get(f"/c/{hosted.company_id}{path}", follow_redirects=False)
         assert response.status_code in (303, 403, 404), (path, response.status_code)
         assert "flow-tile" not in response.text
