@@ -52,10 +52,17 @@ def test_listener_reads_fragmented_header_and_body(monkeypatch, tmp_path):
     payload = json.dumps(envelope).encode("utf-8")
     conn = _FragmentedConnection(len(payload).to_bytes(4, "big") + payload)
     seen = []
+    class Published(dict):
+        """What the real handler returns: a published document that can re-check itself before
+        its reply is written. A plain dict has no `check`, and the listener -- which now binds
+        that check as the reply guard -- reported the stub as an internal host failure."""
+        def check(self):
+            return None
+
     listener = local.LocalListener(
         None,
         tmp_path / "unused.sock",
-        lambda login, received: seen.append((login, received)) or {"accepted": True},
+        lambda login, received: seen.append((login, received)) or Published(accepted=True),
     )
     monkeypatch.setattr(local, "peer_login", lambda _conn: "local-user")
 
