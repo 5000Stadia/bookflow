@@ -34,7 +34,7 @@ def validate_delete(s, ctx, prepared, *, binding=None):
         ids = [r.values()['id'] for r in rows] + [provenance.event_id,provenance.operation_id]
         f.require(len(set(ids)) == len(ids) and all(is_ulid(i) for i in ids))
         # Check IDs in their actual owner namespaces, including reserved event
-        # and operation identities. No persisted Delete namespace exists yet.
+        # and operation identities.
         for table in (c.posting_batches,c.posting_lines,c.posting_line_sources,c.audit_events,
                       c.payment_operations,c.deposit_operations):
             for start in range(0,len(ids),200):

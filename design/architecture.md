@@ -334,8 +334,8 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
-Record notes use a company table and target/id index. Bodies are at most65,536
-UTF-8bytes; pages contain at most200 notes and262,144 body bytes. Edits preserve
+Record notes use a company table and target/id index. Bodies are at most 65,536
+UTF-8 bytes; pages contain at most 200 notes and 262,144 body bytes. Edits preserve
 original attribution and immutable audit history. Notes and attachment links do
 not change their target's version or prevent soft retirement. The workbench's
 shared Notes, files and activity panel appears on record details and existing
@@ -349,13 +349,13 @@ Attachment commands share registry TransferDescriptor metadata and one binary
 resource outside JSON. Authorization-only preparation validates company, target,
 role, reason/directive and company limit before consuming bytes; final execution
 rechecks authority and binds actual digest/size to idempotency. The company limit
-is configurable through company update, default25,000,000bytes, maximum100,000,000.
+is configurable through company update, default 25,000,000 bytes, maximum100,000,000.
 Uploads retain first-upload metadata for duplicate bytes; active links are unique
 per attachment/target, and unlink/relink preserves separate historical occurrences.
 No-op writes retain successful retry results without extra audit events.
 
 `OwnedStage` registers retryable cleanup before initialization or reading.
-Incremental writes are at most65,536bytes. Dry runs hash without creating a stage.
+Incremental writes are at most 65,536 bytes. Dry runs hash without creating a stage.
 Publication reverifies, fsyncs and closes the staging writer before a no-replace
 hard link, then synchronizes shard/store directories. Existing digest paths are
 verified and synchronized too. Rollback removes only the invocation's temporary;
@@ -364,7 +364,7 @@ file descriptor after exact digest/size verification. Symlinks and non-regular
 bodies are refused; unsupported hard-link filesystems fail closed.
 
 Hosts admit eight transfers globally and two per principal, with a300-second
-absolute lifetime and30-second transport inactivity limit. Leases hold no database
+absolute lifetime and 30-second transport inactivity limit. Leases hold no database
 connection. Preparation reserves a lease while its authorized reader is still
 admitted, then closes the snapshot. Downloads use short authorization rechecks
 between chunks. Accepted writer jobs own their staged resources through database
@@ -384,7 +384,7 @@ and publishes verified downloads through a private temporary and no-replace fina
 link. HTTP transfers use raw authenticated bodies and bounded X-Bookflow-Input
 base64url metadata; output includes no-store/nosniff, disposition, size, SHA-256 and
 X-Bookflow-Output typed metadata. Local forwarding validates kernel identity and
-metadata before ready, frames chunks at65,536bytes and requires successful final
+metadata before ready, frames chunks at 65,536 bytes and requires successful final
 JSON after the terminal body frame. Interrupted forwarded writes never fall back
 to standalone execution after transmission begins. Browser downloads verify actual
 size and SHA-256 before handing a file to the browser; local HTTP uses the bundled
@@ -395,14 +395,14 @@ session before its caller authorization callback and shared transfer preparation
 HTTP cookie/bearer, MCP preparation and retained-download reopening, and local
 forwarding use this same handoff; execution and output-chunk checks still revalidate.
 
-Company compact is owner/admin-only, processes at most200 bodies and retains all
+Company compact is owner/admin-only, processes at most 200 bodies and retains all
 attachment/link/audit history. Root-wide filesystem exclusion drains existing
 readers and transfers before candidate selection. A bounded durable intent commits
 before body removal; completion synchronizes directories, marks metadata collected,
 writes one original-context audit/idempotency result and clears intent atomically.
 Recovery precedes new attachment write admission and never runs while owning a
 transfer lease. Dry runs never recover or delete; pending recovery is E_DB_BUSY.
-Orphan discovery examines at most512 directory entries per invocation, with a
+Orphan discovery examines at most 512 directory entries per invocation, with a
 continuation in completion audit snapshots. Directory-cookie discovery is supported
 on64-bit Linux; other platforms report incomplete discovery. Cookies are local
 filesystem continuation hints; directory replacement restarts discovery and a
@@ -1927,7 +1927,7 @@ provenance, estimate-entry gates and exact bounded-recovery eligibility. Creatio
 controls leave existing source history, financial billing and work orders available.
 
 Disabled progress permits remaining work, selected complete remaining lines and
-net-only recovery of the exact current recommendation for roots with more than200
+net-only recovery of the exact current recommendation for roots with more than 200
 free spans. Recovery output is current guidance, never a reservation. A failed
 net-only recovery with a fingerprint returns E_PREVIEW_STALE before range resolution;
 without one it returns E_FEATURE_DISABLED. Other partial modes reject disabled
@@ -2003,7 +2003,7 @@ their existing contracts.
 The optional official SDK owns protocol framing and the three tools; catalog,
 help and input/output schemas come from the command registry. Help bridge v2
 uses usage/input_schema/output_schema/full, with complete input constraints in
-usage and a catalog page default of20. Mixed bridge versions reject explicitly.
+usage and a catalog page default of 20. Mixed bridge versions reject explicitly.
 `core/context_options.py` normalizes inactive/unsupported context across adapters;
 `core/company_selection.py` applies caller-owned explicit/environment/configuration
 precedence. Process sessions and client labels are provenance, not authority.
@@ -2042,7 +2042,7 @@ assembling scalars, keys, numeric lexemes or object paths. Validation holds one
 decoded record, eight token-prefix characters, three error-field markers and a
 stack proportional to JSON nesting depth. Inline result assembly and an explicitly
 requested inspection item remain separate from this syntax-validation memory.
-`BOOKFLOW_MCP_JSON_SECONDS` configures JSON delivery between30 and86400seconds;
+`BOOKFLOW_MCP_JSON_SECONDS` configures JSON delivery between 30 and 86400 seconds;
 preparation, retained-result and binary lease deadlines remain independently owned.
 
 `core/publication.py` retains a value-only authority certificate and rechecks the
@@ -2266,7 +2266,7 @@ command identities to the explicit MCP execution ledger. The per-master witness
 compares Python, CLI, HTTP and actual SDK replies, complete reference/metadata/child
 pages and unchanged company data. Selected default columns cover their first page;
 this is not a blind-agent or complete custom-filter interaction claim. The six-way
-custom-filter schema group links dedicated text/date chooser cases at1280/390
+custom-filter schema group links dedicated text/date chooser cases at 1280/390
 while retaining untested operators, malformed-date interactions and generated-form
 branch cases.
 
@@ -2338,7 +2338,7 @@ unchanged. SQL-growth and compatibility evidence accompany this increment; the
 original 34-case under-100ms performance gate remains separate and open.
 
 The empty/no-operation 201-selection HTTP witness recorded82 statements/64 SELECTs
-at both limits10 and200, versus190/172 and2470/2452 with the frozen scalar checker.
+at both limits10 and 200, versus190/172 and 2470/2452 with the frozen scalar checker.
 Every response retained its three fresh publication checks. This SQL-count result
 is not a measured under-100ms performance pass.
 
@@ -2929,7 +2929,7 @@ Closing the private gate invalidates all pending generations in constant work;
 writer acknowledgment requires neither event-loop progress nor response cleanup.
 Accepted transport prefixes cannot be recalled. Rollback does not revive canceled
 frames. A canceled response is aborted without a successful body terminator.
-Header serialization is limited to65536 bytes (including fixed framing allowance);
+Header serialization is limited to 65536 bytes (including fixed framing allowance);
 large bodies are segmented without introducing a business-result size cap. Fixed
 protocol100/400/500/503 messages contain no business data. Empty finals and chunk
 terminators belonging to a business response remain guarded.
@@ -3207,7 +3207,7 @@ versions and original selector/default choices. Opaque recipes bind the exact
 original input/context, relevant immutable endpoint and existing actor/principal
 execution binding using the database-owned report key. No global audit position
 is serialized. Every capture/issue/reconstruction/comparison/page rechecks current
-resource admission; pages follow complete comparison, default50/max200. Ordinary
+resource admission; pages follow complete comparison, default 50/max200. Ordinary
 owner-version errors use the same proven history and an explicit inspection recipe.
 New-post issuer names use the authorized selected hub company row with its latest
 name-changing/create entry in one read snapshot; corrections retain their original

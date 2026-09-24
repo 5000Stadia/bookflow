@@ -16,7 +16,7 @@ def _positive_decimal(value, *, percent=False):
         raise ValueError('use a positive decimal string with at most six fractional places')
     parsed = parse_percentage_millionths(value) if percent else parse_quantity_micro_units(value)
     if parsed <= 0 or (percent and parsed > 100_000_000):
-        raise ValueError('use a positive percentage no greater than100' if percent else 'quantity must be positive')
+        raise ValueError('use a positive percentage no greater than 100' if percent else 'quantity must be positive')
     return value
 
 

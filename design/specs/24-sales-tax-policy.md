@@ -1,10 +1,10 @@
 # Row 24 — captured sales-tax calculation policies
 
-Status: revision5 retains revision4 independently PLAN PASSED at1e5654c;
+Status: revision5 retains revision4 independently PLAN PASSED at 1e5654c;
 F1–F16 resolved at plan level. The bounded allocation-storage exception below
-is independently PLAN PASSED; implementation preservation evidence remains required. Pure arithmetic independently artifact PASSED at5b81dee and integrated
+is independently PLAN PASSED; implementation preservation evidence remains required. Pure arithmetic independently artifact PASSED at 5b81dee and integrated
 at a0292a3; no sales/work runtime integration yet. Parent owns this plan. Customer
-payments core co14/sales changes are independently reviewed and integrated at15cb601; payment GUI work remains in flight. The pure arithmetic piece can be
+payments core co14/sales changes are independently reviewed and integrated at 15cb601; payment GUI work remains in flight. The pure arithmetic piece can be
 built in isolation after plan PASS; schema and integration start from the reviewed
 payment base. Full closure includes the payment and actual MCP witnesses below.
 
@@ -245,7 +245,7 @@ inspection still succeeds and exposes the existing recommended_net_amount recove
 for a fragmented root or fewer-line selection for the total limit. Do not relax
 limits, silently split posting or create a descriptor falsely promising one bill.
 With progress disabled, retain the existing exact recommended-net exception for
-a root with more than200 spans and complete-line subset recovery for the2000 limit.
+a root with more than 200 spans and complete-line subset recovery for the2000 limit.
 Test both limits, meaningful forecasts, readable guidance, successful bounded
 recovery and eventual complete positive-net billing under combined tax.
 Reordering or selecting different scope changes the forecast, requiring a fresh
@@ -366,7 +366,7 @@ Independent hand-fixed examples, with ordinary posted USD values:
 | Two 5-cent lines at 10% | Legacy 0; line-combined 2 cents; invoice-combined 1 cent assigned to ordinal1. |
 | Two 10-cent lines, two 5% rules A/Z | Invoice-combined 2 cents: ordinal1/A1, ordinal1/Z1, ordinal2/A0, ordinal2/Z0 under the stated global cell rule. |
 | Reorder those lines or A/Z display order | Captured ordinals/IDs govern ties; assigned cents do not move. |
-| Two5-cent lines at10%, same economic rule but different captured labels/versions | One invoice bucket,1cent total. Provenance differences alone cannot charge2cents. |
+| Two5-cent lines at 10%, same economic rule but different captured labels/versions | One invoice bucket,1cent total. Provenance differences alone cannot charge2cents. |
 
 Cover just below/at/above half-cent; differing rates/agencies/accounts with equal
 total percentage; exemption and disabled tax; zero net/rates; maximum rule/line
@@ -449,4 +449,4 @@ goal. No federal rule is presented as universal state sales-tax authority.
 | F13 | Retain existing conditional receipt confirmation/omission predicates, including linked history after removal and same-gross edits. |
 | F14 | Mathematical all-remaining forecast is separate from executable selection; explicit eligibility and existing bounded recovery remain readable at both limits, including progress disabled. |
 | F15 | Rebill aggregate versus cell/agency reproduction distinguished; net5/net10 A10%/Z5% ordering oracle and public explanation required. |
-| F16 | The ordering-dependent2cent/A2Z0-versus-A1Z1 oracle is explicitly invoice_combined_half_up; line_combined_half_up is3cents/A2Z1 in either order. |
+| F16 | The ordering-dependent2cent/A2Z0-versus-A1Z1 oracle is explicitly invoice_combined_half_up; line_combined_half_up is 3cents/A2Z1 in either order. |

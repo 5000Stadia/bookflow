@@ -55,7 +55,7 @@ read, with typed column/filter/sort descriptors and default column order. Descri
 include stable key, user label, value kind, nullable/read-only facts, reference noun
 where applicable, allowed operators and sort eligibility. Dynamic custom descriptors
 use column key `custom:<definition-id>`, definition ID, label, kind, active state and
-owner target. Discovery is paged default50/max200 with stable key ordering and the
+owner target. Discovery is paged default 50/max200 with stable key ordering and the
 existing snapshot/cursor discipline; complete defaults are identified independently
 of a metadata page. No metadata read writes a key, audit entry or cache. Reuse shared
 registry/help/schema generation; don't add an MCP transport tool or a second policy.
@@ -69,7 +69,7 @@ with exact canonical decimal-string value; date same comparisons with ISO date;
 bool eq/ne with strict boolean; choice eq/ne with stable choice ID. A separate
 presence variant uses is_missing/is_present with no value. Number comparison must
 be numeric, not lexical. ne excludes missing values; is_missing selects absence.
-Empty text is a present stored value. false and0 are distinct from absence. Choice
+Empty text is a present stored value. false and 0 are distinct from absence. Choice
 labels are display only; renames cannot change matches. Unknown operator/kind/value
 returns a structured validation error with the offending definition/field.
 

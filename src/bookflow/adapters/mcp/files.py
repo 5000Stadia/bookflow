@@ -54,7 +54,7 @@ class Directories:
     def __init__(self, paths):
         self.roots = []
         if len(paths) > 16:
-            raise BookflowError("E_USAGE", message="At most16 directories may be configured per file direction.")
+            raise BookflowError("E_USAGE", message="At most 16 directories may be configured per file direction.")
         if paths and (os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd):
             raise BookflowError("E_USAGE", message="File capabilities require supported POSIX directory handles; use Linux, macOS or WSL.")
         try:

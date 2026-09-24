@@ -108,7 +108,7 @@ def check_selection(s, inp, source, rev, lines, identities):
                                                work.line_facts(line), rev['currency'], work.facts(rev).profile.sales_tax_calculation)
         if not (needed and recommendation and money(entry.net_amount, rev['currency']).minor_units == recommendation['minor_units']):
             details = dict(line_id=entry.line_id, recommended_net_amount=recommendation,
-                problem='Disabled progress billing permits only net-only recovery of the exact current recommendation on a root with more than200 free spans.')
+                problem='Disabled progress billing permits only net-only recovery of the exact current recommendation on a root with more than 200 free spans.')
             if inp.expected_facts_fingerprint:
                 raise BookflowError('E_PREVIEW_STALE', details=dict(**details,
                     consumption_changes=query.latest_consumption_changes(s, roots),

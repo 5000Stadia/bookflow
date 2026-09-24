@@ -55,7 +55,7 @@ and inclusive minimum/maximum net amount. It orders by date then stable id in th
 direction asked for (`asc` default, `desc` for the most recent first),
 limits50/default,200/max, and uses the existing scope/permission-hash-checked audit-watermark continuation,
 which a changed direction invalidates like any other changed argument.
-History is revision-number ordered and bounded. Show includes at most200 source
+History is revision-number ordered and bounded. Show includes at most 200 source
 links and an explicit next_links_cursor; passing links_cursor to show traverses
 them under the same company/permission/audit-watermark checks. Links expose both
 source birth revision and current destination state; the cursor grants no authority. Query summaries do not materialize
@@ -84,7 +84,7 @@ must be unique within kind and do not advance the automatic sequence. Date is IS
 calendar date. Renumbering is versioned and preserves document identity.
 
 All three kinds capture memo/internal note (2000), scope, inclusions, exclusions,
-timing and commercial_terms (each10000), customer/job contact and billing/shipping
+timing and commercial_terms (each 10000), customer/job contact and billing/shipping
 address, owned shipping-address selection, customer PO, terms, ship method/date,
 sales rep, class, customer tax code/tax selection, price level, customer message,
 typed custom fields and origins. Addresses and ordinary commercial fields retain
@@ -162,12 +162,12 @@ Direct update to complete requires those completed quantities to be supplied or
 already saved; only the complete command fills the remainder.
 
 Work-order lines capture completed_quantity (exact nonnegative decimal,6places,
-default0, at most ordered quantity). Proposal/estimate lines reject this input.
+default 0, at most ordered quantity). Proposal/estimate lines reject this input.
 Operational edits may record partial completion; this is a Bookflow extension, not
 a sales-order fulfillment parity claim. The explicit complete command sets remaining
 line quantities to ordered quantities in its preview and committed revision. Zero
 priced lines still require actual_start/end to complete the scope. Reopening retains
-completed quantities until explicitly revised. Copy/conversion resets them to0.
+completed quantities until explicitly revised. Copy/conversion resets them to 0.
 Completion, billable eligibility and later billed consumption are independent.
 
 ## Recorded time
@@ -241,7 +241,7 @@ One selling-price mode is authoritative:
 
 - Catalog/default: use the existing selected price-level or standard-price calculation.
 - Manual unit price: explicit unit_price; net is half-even(quantity_micro*price/1e6).
-- Cost markup: explicit markup_percent in [-100,1000000] with at most6decimal
+- Cost markup: explicit markup_percent in [-100,1000000] with at most 6decimal
   places; require a known cost. Rate is half-even(cost_minor*(100e6+percent_micro)/100e6),
   then extend the quantity as above. Zero cost produces zero price, without division.
 - Amount: explicit net_amount, nonnegative home Money. Quantity remains descriptive,
@@ -282,7 +282,7 @@ up; invoice_combined_half_up rounds compatible document buckets half up, allocat
 exact cents by immutable tax ordinal and stable rule ID. Exempt/disabled tax remains explicit.
 Zero taxes can be captured; there are no zero posting legs because there are no
 posting legs at all. Examples: qty2, cost4.00, markup25 => rate5.00/net10.00;
-qty2, explicit net10.01 => blank rate/net10.01; at8%tax =>0.80, gross10.81.
+qty2, explicit net10.01 => blank rate/net10.01; at 8% tax =>0.80, gross10.81.
 A quote grand total never represents cash received or an actual receivable.
 
 ## Alternatives, copies and operational conversion
@@ -420,7 +420,7 @@ work_cmds registry adapters implement the contract. Shared-commercial factoring 
 fact/default resolution; ordinary sale persistence/validation stays independent.
 Browser navigation adds a customer-work section, searchable lists, readable detail/
 history/source links and forms for all21commands. Price/cost modes, draft/acceptance,
-operational state and explicit conversion preview are readable at1280and390pixels.
+operational state and explicit conversion preview are readable at 1280 and 390 pixels.
 Forms preserve entered values on conflict/stale errors, use cryptorandom retry keys,
 and never call a financial or delivery command as a side effect of Save/Complete.
 
@@ -430,8 +430,8 @@ CW01–08,10,12–18,28,31,44–45 are covered to the exact boundary above. CW05
 cost/markup/catalog/amount pricing; CW08 includes alternative selection and separate
 availability. Financial behavior within CW19–27 is defined by [linked work billing](work-billing.md)
 and [progress billing](progress-billing.md); print suppression and formal change-order
-approval remain staged. CW29–30 and32–41 retain their payment/cost/report dependencies;
-CW11 and42 require templates. CW43 is partly met: an estimate renders and prints as a
+approval remain staged. CW29–30 and 32–41 retain their payment/cost/report dependencies;
+CW11 and 42 require templates. CW43 is partly met: an estimate renders and prints as a
 PDF from its own page, per [printed documents](printed-documents.md), while queued
 printing, export options and delivery remain staged. CW46–48 require inventory,
 special sales lines and source capture.

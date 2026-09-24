@@ -1,17 +1,40 @@
 # Bookflow
 
-A multi-company accounting system for small businesses, under development. A Python library with a CLI, an HTTP host, and a browser workbench over the same commands, so people and AI agents work with the same books. Company setup, supporting lists, double-entry journals, manual exchange rates and foreign-tagged posting, corrections, voiding, account registers, typed journal custom fields with revision history, accrual ledger, profit-and-loss and balance-sheet reports, service invoices and sales receipts, and linked proposals, estimates and work orders are available. Accepted estimates and work orders can become invoices or paid sales receipts using remaining work, quantities, net amounts or percentages of original scope. Progress previews show previous, current, cumulative and remaining work with exact fractional quantities. Invoices, sales receipts, estimates and customer statements produce a PDF from their own page, which the browser prints or saves; sending one by email is not available. Work completion remains separate; invoice settlement remains planned. An MCP adapter remains planned.
+A multi-company accounting system for small businesses. It is one set of commands reached four ways — a Python library, a CLI, an HTTP host with a browser workbench, and an MCP adapter — so people and AI agents work with the same books under the same rules and permissions.
+
+What it does today:
+
+- **Setup and lists** — organizations and companies, chart of accounts, customers and jobs, vendors, items (service, inventory, assembly), employees, terms, tax codes, price levels, classes and typed custom fields.
+- **Sales** — proposals, estimates and work orders that become invoices or sales receipts by remaining work, quantity or percentage; statement charges; batch invoicing; customer statements.
+- **Receivables** — receive payments and apply them to invoices and statement charges, credit memos (including stocked returns that restore inventory at the cost the unit left with), customer refunds of credits and overpayments, and deposits from Undeposited Funds.
+- **Payables** — purchase orders, item receipts, bills, vendor credits, bill payments, cheques and card charges.
+- **Banking and ledger** — journal entries, transfers, account registers, reconciliation, memorized transactions and sales-tax remittance.
+- **Inventory** — weighted-average costing with dated corrections when a purchase is backdated, adjustments, valuation and stock status.
+- **Reports** — profit and loss (also by class and job), balance sheet, cash flows, trial balance, general ledger, transaction detail, A/R and A/P aging, open invoices, unpaid bills, collections, sales by customer/item/rep, expenses by vendor, inventory valuation, stock status, missing cheques and more; accrual or cash basis, CSV export and whole-report printing.
+- **Corrections** — revise, void, or delete (nine document families) with retained history, under per-user permissions.
+
+Invoices, sales receipts, estimates and statements produce a PDF from their own page. Not yet available: emailing documents, payroll, bank feeds, budgets and multi-currency ledgers — see [V2 and beyond](design/V2-ROADMAP.md).
 
 The Python distribution is `bookflow-core`; the import package and command are both `bookflow`.
 
 ## Quick start
 
+You need Python 3.12 or newer and [uv](https://docs.astral.sh/uv/). This takes you from a clean checkout to the demo company in a browser:
+
 ```
+git clone https://github.com/5000Stadia/bookflow.git && cd bookflow
 uv venv && uv pip install -e ".[dev]"
-uv run bookflow init
-uv run bookflow demo reset
-uv run bookflow company list
+uv run bookflow init                     # creates your data root and you as its owner
+uv run bookflow demo reset               # a sample plumbing company with a year of books
+uv run bookflow user set-password "$USER"  # prompts twice; run it in a terminal
+uv run bookflow serve                    # then open http://127.0.0.1:8765/ and log in
 ```
+
+Where to go next:
+
+- **Using it** — the browser workbench covers every workflow above; `uv run bookflow --help` lists the same commands for the CLI.
+- **Automating it or connecting an AI agent** — the [agent guide](docs/agent-guide.md) and the [MCP guide](docs/mcp-guide.md).
+- **Working on it** — `design/blueprint.md` explains every part, and `design/intention.md` the order it was built in.
 
 Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
 

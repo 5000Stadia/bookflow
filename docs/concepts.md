@@ -195,7 +195,7 @@ Leading/trailing insignificant zeros normalize away. Floats, booleans, null, zer
 negative numbers and exponent notation are invalid. Conversion uses integer
 intermediates and one ties-to-even rounding at home precision. Each original and
 converted amount must be positive and fit signed64-bit storage; a conversion
-rounding to zero is rejected. JPY2345 at0.0068 becomes USD15.95. JPY125 at0.0002
+rounding to zero is rejected. JPY2345 at 0.0068 becomes USD15.95. JPY125 at 0.0002
 becomes USD0.02; JPY175 at that rate becomes USD0.04. Debit/credit home totals
 must balance without an automatic rounding or exchange-gain/loss line.
 
@@ -223,9 +223,9 @@ line identities. Saved conversion details are available beside the explicit rate
 controls. The bank/card register reads foreign entries in home amounts and opens
 them in the journal editor; its row composer remains home-currency entry.
 
-The demo's DEMO-JPY captures JPY2345 at0.0068 as USD15.95. Its current table quote
-is then changed to0.007 without changing that saved journal. Demo Checking is
-624895minor units; trial balance totals are690195 each, including the separate
+The demo's DEMO-JPY captures JPY2345 at 0.0068 as USD15.95. Its current table quote
+is then changed to 0.007 without changing that saved journal. Demo Checking is
+624895 minor units; trial balance totals are 690195 each, including the separate
 domestic invoice and sales-receipt examples. Rate fetching, automatic fetching and foreign
 settlement accounting are not implemented; these manual commands send no data
 outside the machine.
@@ -290,10 +290,10 @@ with E_FEATURE_DISABLED. Existing estimate reads, history, acceptance, correctio
 availability, work-order conversion and billing retain their usual authority.
 Disabling progress permits all remaining work or complete remaining selected line_ids.
 It rejects ordinary quantity, amount, percentage and exact rebill selections. For a
-root with more than200 free spans, billing reads expose requires_bounded_recovery
+root with more than 200 free spans, billing reads expose requires_bounded_recovery
 and a positive recommended_net_amount. A net-only selection of that exact current
 recommendation is the explicit bounded recovery exception; additional bills may be
-needed. Each selection remains bounded to200spans and each conversion to2,000.
+needed. Each selection remains bounded to 200 spans and each conversion to 2,000.
 
 Automatic closure is effective only with progress disabled and the saved close setting
 true. A direct estimate invoice or paid receipt consuming the final positive billable

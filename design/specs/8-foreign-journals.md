@@ -23,8 +23,8 @@ positive signed 64-bit integers. A positive conversion rounding to zero is
 E_VALUE_RANGE. Each line converts independently. Converted debit and credit totals
 must balance exactly; there is no automatic rounding line or gain/loss plug.
 
-Examples: JPY2345 at0.0068 into USD gives1595 cents. JPY125 at0.0002 gives2 cents;
-JPY175 at0.0002 gives4 cents. USD0.03 at50 into JPY gives2 yen. Public amount input
+Examples: JPY2345 at 0.0068 into USD gives1595 cents. JPY125 at 0.0002 gives2 cents;
+JPY175 at 0.0002 gives4 cents. USD0.03 at 50 into JPY gives2 yen. Public amount input
 remains a decimal string with optional currency (`"2345 JPY"`) or the existing
 strict integer Money object. Currency codes and original precision use the shipped
 currency table. Bare strings use company home currency.
@@ -35,7 +35,7 @@ All rate commands are company-scoped. `rate set` requires standard role and
 `ledger.post`; `rate show` and `rate query` require member role and `ledger.read`.
 They use ordinary context, previews, audit and shared command dispatch.
 
-`rate set` takes `date`, `from_currency`, `rate`, and `expected_version` (default0).
+`rate set` takes `date`, `from_currency`, `rate`, and `expected_version` (default 0).
 The company home currency supplies `to_currency`; callers cannot select another
 ledger currency. From currency must be a known non-home code. Version0 means
 create only. Updating an existing date/currency pair requires its current positive
@@ -48,7 +48,7 @@ increments its version by one. Request idempotency replays the committed receipt
 the selected row or E_RECORD_NOT_FOUND. Supplying both selector forms, an incomplete
 pair, or neither is E_VALIDATION. Stable-id selection supports a saved rate detail
 link; it does not change exact-date lookup during posting. `rate query` accepts optional inclusive date_from/date_to and
-from_currency filters, limit1–200 (default50), and cursor. It orders by date,
+from_currency filters, limit1–200 (default 50), and cursor. It orders by date,
 from_currency and stable id. Existing authenticated company query continuation
 binds actor, permission state, filters and watermark; a changed rate invalidates
 continuation with E_QUERY_STALE. No nearest-date fallback, inverse lookup or
@@ -147,10 +147,10 @@ read there with home balances, but are not editable through its restricted shape
 they link to the generated journal editor. Direct register.update rejects such a
 journal, and existing domestic register behavior remains unchanged.
 
-The ordinary demo sets the2026-07-15 JPY rate to0.0068, posts DEMO-JPY
+The ordinary demo sets the2026-07-15 JPY rate to 0.0068, posts DEMO-JPY
 (debit Checking2345JPY, credit Service Income15.95USD), then changes the table
-rate to0.007. The journal retains its original0.0068 conversion. Checking becomes
-612095minor units, Service Income161595 and trial balance664595 each; ten
+rate to 0.007. The journal retains its original0.0068 conversion. Checking becomes
+612095 minor units, Service Income161595 and trial balance664595 each; ten
 journal headers remain. The
 reference2026 source/oracles are unchanged. Existing fixed-count and balance
 demo tests are extended with explicit new expected totals. The preserved human

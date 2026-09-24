@@ -13,8 +13,8 @@ numbers, postal codes and dates remain text or date controls. Protected captured
 work economics remain read-only.
 
 Operators are +, -, *, / and parentheses with standard precedence and unary signs.
-Decimal literals accept a leading point. Postfix percent divides its operand by100;
-thus `100 + 10%` is100.1 and `100 * (1 + 10%)` is110. A percentage control stores
+Decimal literals accept a leading point. Postfix percent divides its operand by 100;
+thus `100 + 10%` is 100.1 and `100 * (1 + 10%)` is 110. A percentage control stores
 percentage points: entering `5 + 5` yields10 percent. Optional trailing equals and
 Enter evaluate the entry; Enter does not submit the form. Tab or leaving the field
 uses the result rounded to the field's supported precision. While typing, show the result

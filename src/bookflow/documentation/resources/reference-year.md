@@ -100,8 +100,8 @@ are December cumulative movements minus June cumulative movements. These
 arithmetic formulas do not use the production report implementation.
 
 From September, add the commercial effects above. Gross Checking and AR each
-add47200 debits and34400 credits; Service Income adds64000 debits and88000
-credits; Sales Tax Payable adds4800 debits and6400 credits. These include the
+add47200 debits and 34400 credits; Service Income adds64000 debits and 88000
+credits; Sales Tax Payable adds4800 debits and 6400 credits. These include the
 originals, both correction reversals/replacements and the final duplicate voids.
 
 From October, the active customer-payment examples add Payment Example Bank17000,
@@ -136,7 +136,7 @@ the profit-and-loss and balance-sheet commands. Aging remains unavailable.
 
 The ordinary demo retains its original ten journals and commercial history,
 and adds active invoices/payments with the same17000/1000/18000 net increments.
-Its trial balance is708234 on each side and Checking remains624895.
+Its trial balance is 708234 on each side and Checking remains 624895.
 Account show/list express balances on each account's normal
 side; reports use debit-minus-credit values. Both companies remain ordinary
 independent companies selectable through company show/list and the browser
@@ -170,11 +170,11 @@ The statement table shows home-currency totals, bounded account detail and
 links to the current general ledger with the same dates. A drill-down warns
 when the books have changed since the source statement.
 
-Annual P&L income is6967035, expense510000 and net income6457035 minor units.
-Balance-sheet assets are7478639, liabilities21604, posted equity1000000,
+Annual P&L income is 6967035, expense510000 and net income6457035 minor units.
+Balance-sheet assets are 7478639, liabilities21604, posted equity1000000,
 prior earnings0 and current-year income6457035. Total equity7457035 plus
 liabilities21604 equals assets7478639; difference0. In2027 with no new entries,
-those6457035 become prior earnings and current-year income is0.
+those6457035 become prior earnings and current-year income is 0.
 
 Both reports support **accrual only**; cash returns E_VALIDATION. P&L dates are
 inclusive; balance sheet includes all effects through its as-of date. Each account

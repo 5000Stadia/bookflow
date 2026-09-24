@@ -16,7 +16,7 @@ Conversion accepts one selection family:
 - selections contains 1–200 distinct current line identities, each with exactly
   one positive quantity, net_amount or percent, or rebill_allocation_id. Quantity uses the existing maximum
   six decimal places. Net amount is exact home-currency money, excluding tax.
-  Percent permits at most six decimal places and is at most100.
+  Percent permits at most six decimal places and is at most 100.
 - percent applies the same positive percentage to every eligible source line.
 
 Both percent forms refer to ORIGINAL source scope. They do not mean a percentage
@@ -46,7 +46,7 @@ including after their last linked line is removed. Metadata/no-op or same-gross
 edits can omit it; whenever supplied on a receipt update it must match exactly.
 Ordinary receipt corrections retain their existing omission contract. Examples
 show a fully billed quote plus an independently described extra charge; source
-consumption remains100%. Formal change-order approval remains separate future work.
+consumption remains 100%. Formal change-order approval remains separate future work.
 
 The paid-receipt amount_received equals the preview's gross including calculated
 tax. Changed preview facts reject before asking for a new received total. Payment
@@ -129,7 +129,7 @@ n net minor units. Zero-net portions carry no tax but still represent physical s
 Reject if the total requested net is unavailable.
 
 Canonical spans are positive-width, sorted, nonoverlapping, coalesced when adjacent,
-and bounded byD. At most200 spans belong to one destination line and2000 to a
+and bounded byD. At most 200 spans belong to one destination line and 2000 to a
 conversion. If a request would exceed either bound, return E_VALUE_RANGE with
 the source-line identity and recommended_net_amount equal to the sum of net
 capacities of its earliest at-most200 positive-capacity free intervals. A net
@@ -162,7 +162,7 @@ Two concurrent conversions cannot consume overlapping spans or incompatible base
 
 ## Truthful quantities and sale facts
 
-A one-microunit source priced at100c can allocate40c without pretending that its
+A one-microunit source priced at 100c can allocate40c without pretending that its
 billed quantity is one whole microunit. Amount-derived quantities can be smaller
 than six decimal places or nonterminating rationals. Preserve the original quoted
 quantity and rate separately from the allocated quantity.
@@ -211,7 +211,7 @@ Existing monetary/quantity values, snapshots, local columns, generated columns,
 constraints, indexes, views and triggers remain intact or migration fails atomically.
 Keep historical migration witnesses pinned to their own artifact heads.
 
-Allocation rows gain allocation_version(default1), source_basis_hash,
+Allocation rows gain allocation_version(default 1), source_basis_hash,
 denominator_hex and spans_json. Version1 rows keep all three new proof fields null
 and retain their original full-root meaning, including existing whole-line retry
 keys and immutable history. Version2 rows require the complete legacy proof;
@@ -257,7 +257,7 @@ Fingerprints include every current source root's consumption, not only selected
 lines, plus selected spans/basis, captured facts, current financial eligibility and
 custom/payment choices. Source edits yield E_VERSION_CONFLICT; changed resolved
 preview yields E_PREVIEW_STALE. Its details include facts_fingerprint and bounded
-consumption_changes (at most200, one latest attributed allocation-changing event
+consumption_changes (at most 200, one latest attributed allocation-changing event
 per source root): root_document_id, root_line_id, transaction_id, audit_event_id,
 updated_by, updated_via, seconds_since_update and changed_fields. The field list
 names billing_consumption and the changed allocation/revision or status. Derive
@@ -282,7 +282,7 @@ ordinary sale writes leave this projection empty; billing reads give current sta
 New conversion members are selections, percent. They are mutually exclusive with
 line_ids. Omitted members select existing remaining behavior; explicitly null
 selection families or selection values reject E_VALIDATION. selections is a
-nonempty list of up to200 unique line_id values. Each object has line_id and
+nonempty list of up to 200 unique line_id values. Each object has line_id and
 exactly one of quantity, net_amount, percent, rebill_allocation_id; extra members
 reject. line_id is the current stable work-line identity from BillingLineOutput,
 not its source_line_id revision row. rebill_allocation_id is the canonical ID from
@@ -297,7 +297,7 @@ remaining scope/net or fragmentation bounds use E_VALUE_RANGE with line_id and
 available quantity/net; unavailable or incompatible rebill proofs use E_WORK_DEPENDENCY.
 
 Rational objects are {numerator:"2",denominator:"5"}: reduced, nonnegative numerator
-and positive denominator, canonical decimal integer strings; zero is0/1. Ordinary
+and positive denominator, canonical decimal integer strings; zero is 0/1. Ordinary
 sales outputs retain quantity/base_quantity display strings and integer microunits.
 Allocated SalesLineOutput adds quantity_fraction and base_quantity_fraction and
 uses those for its quantity/base_quantity strings; nullable raw microunits are
@@ -307,7 +307,7 @@ allocated and quoted_quantity gives the full original quantity as a display stri
 The browser labels the rate Quoted rate. Work BillingLineOutput retains its quoted
 and completed quantity strings and adds billed_quantity_fraction,
 remaining_quantity_fraction, billed_scope_percent_fraction and billed_scope_percent.
-The latter is100*active_span_length/D, not net billed percent. All fractions use
+The latter is 100*active_span_length/D, not net billed percent. All fractions use
 the exact-display convention above. state gains partially_billed; no-charge and
 uncharged remaining physical scope are labelled separately from billed money.
 

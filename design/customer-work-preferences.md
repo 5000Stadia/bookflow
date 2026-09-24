@@ -65,7 +65,7 @@ partial quantity or percentage within a root.
 Explicit percent or ordinary selections reject E_FEATURE_DISABLED with feature=
 progress_billing, setting=progress_billing_enabled and enable_command=company update.
 The single exception is explicit bounded recovery: a selections entry with only
-line_id and net_amount is allowed when that source root currently has more than200
+line_id and net_amount is allowed when that source root currently has more than 200
 free spans and the requested positive net is EXACTLY the core's current
 recommended_net_amount (sum of the earliest at-most200 positive-capacity free spans).
 Every entry in such a disabled-progress selection must satisfy this rule. The core
@@ -147,7 +147,7 @@ replace it with a range/dependency error. Source version and current authority r
 their earlier precedence. A received-total
 mismatch is checked only after eligibility/version/preview facts.
 
-Both preference-caused errors carry preference_changes:list of at most3 objects:
+Both preference-caused errors carry preference_changes:list of at most 3 objects:
 {field:str,company_id:str,audit_event_id:str|null,updated_by:str,updated_via:str,
 on_behalf_of:str|null,seconds_since_update:int}. Include only the settings relevant
 to that operation's fingerprint/gate, deriving the latest actual edit of each field
@@ -225,7 +225,7 @@ admin/version/readonly/isolation; independent estimate/work-order choices; every
 command family and all available existing-history/correction paths; old/new-key retry
 after disable; source/proof preservation; required and forbidden automatic closure;
 atomic injected failures; source-version and preference-preview conflicts; closed dates;
-void then explicit reactivation and rebill; actual CLI/HTTP and1280/390 browser flows.
+void then explicit reactivation and rebill; actual CLI/HTTP and 1280/390 browser flows.
 Independent review covers schema, closure atomicity, accounting/source validation and
 authority.
 
@@ -234,7 +234,7 @@ authority.
 
 | CW09 control | Reference observation / chosen behavior | Completion evidence |
 |---|---|---|
-| Create estimates | Printed661: separate enable choice controls new-estimate entry. Compatibility defaulttrue; existing workflows remain accessible. Reference defaults are not established by the cited prose. | Settings and disabled/new/existing estimate screens compared at1280/390. |
+| Create estimates | Printed661: separate enable choice controls new-estimate entry. Compatibility defaulttrue; existing workflows remain accessible. Reference defaults are not established by the cited prose. | Settings and disabled/new/existing estimate screens compared at 1280/390. |
 | Progress invoicing | Printed661–662: separate enable choice for quantities/amounts/percentages. Compatibility defaulttrue. Selected remaining lines and bounded recovery retain existing exact-history completion. | Enabled/disabled forms compared; finite fragmented completion witness. |
 | Close after invoicing | Printed662: inactive after invoicing; control dormant while progress enabled. Compatibility defaultfalse; paid receipts extend the same rule, work orders do not close upstream estimates. | Preview/inactive result/reactivation and stored dormant setting compared. |
 | Duplicate numbers | Printed662: warning preference. Bookflow's uniqueness contract retains hard rejection and offers no bypass toggle. | Duplicate-number rejection from form and shared command. |

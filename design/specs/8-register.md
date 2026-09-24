@@ -1,7 +1,7 @@
 # Account register increment
 
 Target: the domestic entry and account-history portion of Row 8. Contract:
-blueprint10.4, journal storage in10.3, reports14 and browser18. The domestic
+blueprint10.4, journal storage in 10.3, reports14 and browser18. The domestic
 journal artifact remains a dependency. FX, journal custom-field values, full
 identity isolation, banking reconciliation and the wider register inventory are
 separate increments. Human register usability remains a later checkpoint.
@@ -44,7 +44,7 @@ movement. Offsets' own normal balances do not determine posting direction.
 Same-direction allocations minus reverse-direction allocations must equal the
 selected amount, with a positive net. Bank payment100 with expense120 and
 refund20 therefore posts Cr bank100, Dr expense120, Cr expense20. The balanced
-journal debit total is120; register movement is100. Each side fits signed i64.
+journal debit total is 120; register movement is 100. Each side fits signed i64.
 
 Calculate takes account, main direction and allocations and returns exact
 positive net Money, currency and direction without posting/reserving a number.
@@ -83,7 +83,7 @@ Post/update return the complete JournalWriteOutput plus a typed register receipt
 is not the current account balance. Query returns a separate all-entries balance snapshot, including future-dated
 postings. It is labeled All entries, not the selected period closing balance.
 
-Query takes account, inclusive date_from/date_to, limit1–200(default50), cursor.
+Query takes account, inclusive date_from/date_to, limit1–200(default 50), cursor.
 It uses the general-ledger read snapshot, exact integer aggregate and window,
 deterministic account/date/batch/line ordering and restart-on-change continuation.
 Do not release that snapshot between report computation and row enrichment.
@@ -150,7 +150,7 @@ E_PARTIAL_WRITE means committed-with-error: retry the exact key to retrieve its
 receipt, never allocate another key. Idempotency mismatch keeps the old intent
 for reconciliation rather than starting another save.
 
-Before sending, persist one bounded pending intent per browser tab (at most1MiB)
+Before sending, persist one bounded pending intent per browser tab (at most 1MiB)
 in sessionStorage: actor ID, company, account, command, exact typed payload,
 nonsecret attribution context, key and attempt time. Never store credentials.
 If storage fails, do not start a save whose recovery state cannot survive reload.

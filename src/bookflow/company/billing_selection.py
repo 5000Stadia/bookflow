@@ -110,7 +110,7 @@ def select(s, inp, source, revision, lines, identities):
         span_count += len(spans)
         if span_count > 2000:
             raise BookflowError('E_VALUE_RANGE', details=dict(line_id=key,
-                problem='conversion exceeds2000 allocation spans', recovery='select fewer source lines'))
+                problem='conversion exceeds 2000 allocation spans', recovery='select fewer source lines'))
         proof = None if spans == ((0,d),) and facts.schema_version==1 else alloc.make_proof(source, revision, line, root, facts, spans)
         selected.append(SelectedLine(line, root, facts, spans, proof))
     if not selected or sum(item.proof.net() if item.proof else item.facts.net_minor_units for item in selected) <= 0:

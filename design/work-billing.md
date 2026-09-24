@@ -150,7 +150,7 @@ The ordinary sale line output makes unit_price nullable and exposes pricing_basi
 and authoritative net; new amount facts are versioned. Old schema-version-one
 unit-price snapshots remain accepted and are not rewritten. No fake zero price or
 quantity-one substitution represents a quoted amount. Examples: quantity2/net10.01
-becomes rate blank, net10.01, tax0.80 at8%, gross10.81; ordinary quantity2/rate5.00
+becomes rate blank, net10.01, tax0.80 at 8%, gross10.81; ordinary quantity2/rate5.00
 remains net10.00, tax0.80, gross10.80.
 
 ## Corrections, voids and source edits

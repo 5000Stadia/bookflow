@@ -11,9 +11,9 @@ total per family and the revision's own total is their sum, so a bill entered wh
 tab stores a zero for the other rather than a special case.
 
 An item line debits the account captured from the item's own purchase profile, which is what
-makes it the same accounting as an expense line typed by hand -- and the reason an inventory
-item is refused here rather than admitted: receiving stock debits Inventory Asset and needs an
-owner that values it, which does not exist yet.
+makes it the same accounting as an expense line typed by hand. An inventory item debits its
+Inventory Asset account instead and puts the quantity on hand, valued by the inventory owner
+(``company/inventory_effects.py``) that receiving and item receipts share.
 
 **What is owed.** ``ap_obligation_keys`` is the payable itself: one stable row per bill,
 carrying the vendor, the AP account and the currency an application has to match exactly. It

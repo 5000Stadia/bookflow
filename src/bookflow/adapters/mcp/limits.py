@@ -15,5 +15,5 @@ def json_seconds():
             raise ValueError
         return value
     except (ValueError, TypeError):
-        raise BookflowError('E_CONFIG_INVALID', message='BOOKFLOW_MCP_JSON_SECONDS must be an integer from30 through86400 seconds.',
+        raise BookflowError('E_CONFIG_INVALID', message='BOOKFLOW_MCP_JSON_SECONDS must be an integer from 30 through 86400 seconds.',
                             details={'key': 'BOOKFLOW_MCP_JSON_SECONDS'}) from None

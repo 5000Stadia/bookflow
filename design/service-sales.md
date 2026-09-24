@@ -182,7 +182,7 @@ The preview identifies refreshed and dependent changed fields.
 Line replacement inputs omit optional defaultable leaves to preserve the matching
 current line's origins and facts. New lines resolve new defaults. The required item
 selector identifies the current item; omitted quantity retains the old quantity
-on a matched update line and defaults to1 only on a new line. An identical item
+on a matched update line and defaults to 1 only on a new line. An identical item
 selector is not a master refresh. Supplying the same selector/override does not
 implicitly reset sibling origins. Exempt-line snapshots retain resolved component rules when available; if no
 applicable tax item/group exists (or an unused inactive default cannot supply
@@ -284,7 +284,7 @@ or refreshed. Any factor used by any posted sale revision remains immutable,
 including voided/replaced history: unit update and undo both reject factor changes
 with `E_ACTIVE_DEPENDENTS`. Adding new units or deactivating unused ones remains
 possible. Selected-unit price rounding is an explicit commercial convention:
-base-price1minor times factor0.5 rounds to0; preview warns that a nonzero default
+base-price1 minor times factor0.5 rounds to 0; preview warns that a nonzero default
 rounded to zero and shows both facts. An explicit price resolves that case.
 
 With classes disabled, suppress new default classes and reject explicit non-null
@@ -319,7 +319,7 @@ ship-to collection; it is mutually exclusive with typed shipping_address overrid
 Memo/message/description max2000, purchase/payment reference max128, number max64.
 The document selector field is `invoice` or `sales_receipt` for its respective
 noun; `class_id` is the public class selector field, avoiding a Python keyword.
-Other master selectors are nonempty strings up to1004, resolved by existing list
+Other master selectors are nonempty strings up to 1004, resolved by existing list
 rules. Lines also accept price_level and price_basis_amount, with header fallback.
 `custom_field_kinds` retains the existing definition-id-to-expected-kind contract.
 
@@ -472,7 +472,7 @@ injected mid-write rollback, annotations/custom scopes and journal-id type fence
 Actual migration from populated co0008 preserves journals/custom/foreign facts,
 audit/idempotency/history and copied-company reopen; test failure rollback and
 direct update/delete guards. Public Python/CLI/HTTP results and error parity;
-actual Chrome entry/preview/post/history at1280/390; readonly and sibling-company
+actual Chrome entry/preview/post/history at 1280/390; readonly and sibling-company
 isolation. Existing focused journal/register/report checks stay green. Additional
 forms and conversions follow the customer-work-and-billing contract and their
 own detailed calculation and storage contracts.

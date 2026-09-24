@@ -3,7 +3,7 @@
 Install `bookflow-core[mcp]` in the launcher and host environments. A host missing
 the incremental parser rejects compatibility preflight with installation guidance
 before business submission.
-The optional SDK is pinned to2.1.1 and the incremental parser to3.5.1 in the initial
+The optional SDK is pinned to 2.1.1 and the incremental parser to 3.5.1 in the initial
 distribution. MCP wire framing belongs to that SDK. Both its legacy initialize
 and modern discover connections expose the same three tools.
 
@@ -42,7 +42,7 @@ prefix and follow next_cursor. `bookflow_help` defaults to concise usage with th
 complete input schema, context and errors. Select `view=input_schema`,
 `view=output_schema` or `view=full` for the other complete views. No schema or full
 help is truncated. A command without business fields still needs `input: {}`.
-Reason is a short trigger, at most140 characters. Reads accept inactive null
+Reason is a short trigger, at most 140 characters. Reads accept inactive null
 optional context and false dry_run; active unsupported context is an error.
 Preview does not save proposed IDs or posted status. Posting an invoice saves it
 to the books and does not send it to the customer.
@@ -81,19 +81,19 @@ Larger results retain the existing streaming and unavailable-receipt behavior. N
 automatic write retry occurs. A lost one-time secret is not reconstructed:
 identify/revoke that credential and deliberately replace it under current permissions.
 
-Initial host intent capacity is8 total/2 per effective principal, shared across
+Initial host intent capacity is 8 total/2 per effective principal, shared across
 tokens/companies. Unsubmitted work has30s idle/300s absolute deadlines. Prepared
 inputs/guards have64MiB global/8MiB principal retention budgets; direct ordinary
 execution does not require prepared retention. Completed recovery has128 entries
-global/16 principal,32MiB global/4MiB principal memory, with at most1MiB serialized
-receipt per entry and60s idle/300s absolute lifetime. A large result still delivers
+global/16 principal,32MiB global/4MiB principal memory, with at most 1MiB serialized
+receipt per entry and 60s idle/300s absolute lifetime. A large result still delivers
 in full; cache availability is separately reported. File mappings have32 entries,
-16MiB memory and60s idle/300s absolute lifetime. Eviction never deletes caller
+16MiB memory and 60s idle/300s absolute lifetime. Eviction never deletes caller
 output files. Started writers finish under the host; delivery cancellation does
 not undo them or free their resources while they run. EOF closes the launcher
 without a final command document. JSON delivery currently has30s inactivity and
 300s absolute timeout. Operators can set `BOOKFLOW_MCP_JSON_SECONDS` in both host
-and launcher environments to an integer from30 through86400 seconds for a slower
+and launcher environments to an integer from 30 through 86400 seconds for a slower
 complete JSON delivery. This does not extend preexecution/receipt lifetimes or
 binary leases, and imposes no byte/row cap. The host reports its value at preflight
 and in intent status; the two processes retain their own configured deadline.
