@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from urllib.parse import urlsplit, quote
 
 from bookflow.core.errors import BookflowError
+from bookflow.core.context import client_version
 from bookflow.core.ids import new_id
 
 from .envelopes import TOOLS, validate, tool_schema
@@ -42,7 +43,7 @@ async def serve(inp, origin, secret, inputs, outputs):
         "X-Bookflow-Client-Name": quote(inp.label, safe=""),
         "X-Bookflow-Context-Encoding": "percent-utf8",
         "X-Bookflow-Client-Host": socket.gethostname(),
-        "X-Bookflow-Client-Version": "0.0.1",
+        "X-Bookflow-Client-Version": client_version(),
         "X-Bookflow-Session-Id": new_id(),
     }
     async with httpx2.AsyncClient(base_url=origin, headers=headers, trust_env=False,
@@ -140,7 +141,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                 document = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True)
                 return types.CallToolResult(content=[types.TextContent(text=json.dumps(document))], structured_content=document, is_error=True)
 
-        server = Server("bookflow", version="0.0.1", on_list_tools=list_tools, on_call_tool=call_tool)
+        server = Server("bookflow", version=client_version(), on_list_tools=list_tools, on_call_tool=call_tool)
         from .stdio import eof_fenced_streams
         async with stdio_server() as (read, write):
             read, write = eof_fenced_streams(read, write)

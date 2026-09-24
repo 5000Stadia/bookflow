@@ -27,9 +27,16 @@ class ActorKind(StrEnum):
 
 
 def client_version() -> str:
+    """The installed Bookflow release, which a host and a forwarding client must agree on.
+
+    The distribution is `bookflow-core`; only the import package is `bookflow`. Asking for the
+    import name found nothing and fell back to "0" in every install, so every client and every
+    host reported the same "0" and the version-mismatch guard in core/forward.py could never
+    fire -- an upgraded CLI would forward to a host still running the previous release.
+    """
     try:
-        return pkg_version("bookflow")
-    except PackageNotFoundError:  # pragma: no cover
+        return pkg_version("bookflow-core")
+    except PackageNotFoundError:  # pragma: no cover -- running from an uninstalled source tree
         return "0"
 
 

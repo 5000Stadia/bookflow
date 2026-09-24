@@ -225,3 +225,17 @@ def test_listener_stop_wakes_accept_before_join(tmp_path):
 
     assert blocking.released.is_set()
     assert elapsed < 0.25
+
+
+def test_the_version_a_host_and_client_compare_is_the_installed_release():
+    """The mismatch guard above is only as good as the value it compares.
+
+    Every other test of it injects fake versions, which proves the comparison and not its input.
+    The input was broken: `client_version()` asked for the import name `bookflow` rather than the
+    distribution `bookflow-core`, found nothing, and returned "0" in every install -- so any two
+    releases agreed and the guard could never fire.
+    """
+    from importlib.metadata import version
+    from bookflow.core.context import client_version
+    assert client_version() == version("bookflow-core")
+    assert client_version() != "0"
