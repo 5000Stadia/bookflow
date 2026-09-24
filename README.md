@@ -23,7 +23,7 @@ You need Python 3.12 or newer and [uv](https://docs.astral.sh/uv/). This takes y
 
 ```
 git clone https://github.com/5000Stadia/bookflow.git && cd bookflow
-uv venv && uv pip install -e ".[dev]"
+uv sync --extra dev                      # installs the exact tested versions from uv.lock
 uv run bookflow init                     # creates your data root and you as its owner
 uv run bookflow demo reset               # a sample plumbing company with a year of books
 uv run bookflow user set-password "$USER"  # prompts twice; run it in a terminal
@@ -36,7 +36,7 @@ Where to go next:
 - **Automating it or connecting an AI agent** — the [agent guide](docs/agent-guide.md) and the [MCP guide](docs/mcp-guide.md).
 - **Working on it** — `design/blueprint.md` explains every part, and `design/intention.md` the order it was built in.
 
-Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
+Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. Add `--extra mcp` to the `uv sync` to use the MCP adapter. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
 
 Numeric fields in the browser accept calculations such as `12.5 * 3`, `1 / 3`,
 and `(20 + 5) / 2`. The result appears as you type; Enter, Tab, or leaving the
