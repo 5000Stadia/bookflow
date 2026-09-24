@@ -209,17 +209,43 @@ def inventory_valuation(inp: InventoryValuationInput, s, *, principal_id=None) -
         next_cursor=ledger._continuation(state, offset, len(rows), len(page) > inp.limit, s.company))
 
 
+def _on_order(s, as_of):
+    """Quantity still to arrive per item, from every live purchase order dated by `as_of`.
+
+    Read through `receiving.order_remaining`, the one owner of how much of an order line is still
+    coming, so a partial receipt reduces it exactly as the order's own page says. Closed and voided
+    orders contribute nothing. As in the anchor product's stock status, this is what is on order
+    now for orders placed by the report date; a line received beyond its ordered quantity is not
+    negative on order.
+    """
+    from bookflow.company import purchase_orders as orders, receiving, schema as c
+    import sqlalchemy as sa
+    t = c.purchase_orders
+    result = {}
+    for header in s.company.conn.execute(
+            sa.select(t).where(t.c.status.in_(("open", "partly_received")))).mappings():
+        rev = orders.revision(s, dict(header))
+        if rev["date"] > as_of:
+            continue
+        for line in receiving.order_remaining(s, dict(header), rev):
+            if line["remaining_quantity_microunits"] > 0:
+                result[line["item_id"]] = result.get(line["item_id"], 0) + line["remaining_quantity_microunits"]
+    return result
+
+
 def stock_status(inp: StockStatusInput, s, *, principal_id=None) -> StockStatusOutput:
     state, offset, page, currency, total, below = _run(inp, s, principal_id, "stock-status")
+    on_order = _on_order(s, inp.as_of)
     rows = []
     for row in page[:inp.limit]:
         quantity = int(row["quantity"])
         rows.append(StockStatusRow(
             **_shared(row, currency),
-            # Nothing commits or orders stock yet -- no sales order, purchase order or build
-            # exists -- so available is on hand and on order is nothing. Both are here because
-            # a reader needs the column, and both become real when those documents land.
-            quantity_available=_quantity(quantity), quantity_on_order="0",
+            # Nothing reserves stock yet -- no sales order or build commits it -- so available is
+            # on hand. On order is real: purchase orders shipped, and this column read "0" for
+            # every item until they were counted here.
+            quantity_available=_quantity(quantity),
+            quantity_on_order=_quantity(on_order.get(row["id"], 0)),
             reorder_point_min=None if row["reorder_min"] is None else _quantity(row["reorder_min"]),
             reorder_point_max=None if row["reorder_max"] is None else _quantity(row["reorder_max"]),
             below_reorder_point=_below(quantity, row["reorder_min"]),

@@ -29,6 +29,13 @@ def stocked(client):
     return valve, kit
 
 
+# The seeded demo company receives and sells stock of its own from 2026-11-12 onward -- the valve
+# this fixture adjusts among it. Read after that and every hand-computed figure here is the seed's
+# as well as the scenario's, and the seed's later sales are costed at an average these adjustments
+# changed. These tests assert exact figures, so they read the day before the seed's stock exists.
+BEFORE_SEED_STOCK = "2026-10-31"
+
+
 def inventory_asset(client, date):
     """What the balance sheet says the inventory asset is on this date."""
     sheet = client.run("report balance-sheet", {"date_to": date, "limit": 200,
@@ -62,7 +69,7 @@ def test_the_tie_survives_a_backdated_purchase_that_recosts_an_earlier_issue(cli
 
 
 def test_the_valuation_lists_each_item_with_its_quantity_average_cost_and_value(client, stocked):
-    report = client.run("report inventory-valuation", {"as_of": "2026-12-31", "limit": 200},
+    report = client.run("report inventory-valuation", {"as_of": BEFORE_SEED_STOCK, "limit": 200},
                         company=COMPANY)
     rows = {row["item_name"]: row for row in report["rows"]}
     assert rows[ITEM]["quantity_on_hand"] == "4"
@@ -70,9 +77,12 @@ def test_the_valuation_lists_each_item_with_its_quantity_average_cost_and_value(
     assert rows[ITEM]["asset_value"]["amount"] == "45.60"
     assert rows[KIT]["quantity_on_hand"] == "4" and rows[KIT]["asset_value"]["amount"] == "91.20"
     assert report["totals"]["asset_value"]["amount"] == "136.80"
-    assert report["metadata"]["period"]["date_to"] == "2026-12-31"
-    # Only stock-carrying items; a service or a non-inventory part has nothing to value.
-    assert set(rows) == {ITEM, KIT}
+    assert report["metadata"]["period"]["date_to"] == BEFORE_SEED_STOCK
+    # Only stock-carrying items; a service or a non-inventory part has nothing to value. The seeded
+    # company has other stock items of its own, so this is asserted of every row rather than as an
+    # exact set that names only this fixture's two.
+    assert {ITEM, KIT} <= set(rows)
+    assert all(row["item_type"] in ("inventory_part", "inventory_assembly") for row in report["rows"])
 
 
 def test_the_valuation_is_dated_not_merely_current(client, stocked):
@@ -88,7 +98,7 @@ def test_the_valuation_is_dated_not_merely_current(client, stocked):
 
 
 def test_stock_status_carries_the_reorder_point_and_the_flag(client, stocked):
-    report = client.run("report stock-status", {"as_of": "2026-12-31", "limit": 200}, company=COMPANY)
+    report = client.run("report stock-status", {"as_of": BEFORE_SEED_STOCK, "limit": 200}, company=COMPANY)
     rows = {row["item_name"]: row for row in report["rows"]}
     # The demo valve reorders at six and only four are left.
     assert rows[ITEM]["reorder_point_min"] == "6" and rows[ITEM]["reorder_point_max"] == "24"
@@ -101,18 +111,22 @@ def test_stock_status_carries_the_reorder_point_and_the_flag(client, stocked):
 
 
 def test_both_reports_page_without_moving_their_totals(client, stocked):
-    whole = client.run("report inventory-valuation", {"as_of": "2026-12-31", "limit": 200},
+    whole = client.run("report inventory-valuation", {"as_of": BEFORE_SEED_STOCK, "limit": 200},
                        company=COMPANY)
-    first = client.run("report inventory-valuation", {"as_of": "2026-12-31", "limit": 1},
-                       company=COMPANY)
-    assert first["count"] == 1 and first["next_cursor"]
-    assert first["totals"] == whole["totals"]
-    second = client.run("report inventory-valuation",
-                        {"as_of": "2026-12-31", "limit": 1, "cursor": first["next_cursor"]},
-                        company=COMPANY)
-    assert second["totals"] == whole["totals"]
-    assert [row["item_id"] for row in first["rows"] + second["rows"]] == \
-        [row["item_id"] for row in whole["rows"]]
+    # One row at a time to the end: every page carries the whole report's totals, and the pages
+    # together are the whole report in order -- however many stock items the company holds.
+    paged, cursor = [], None
+    while True:
+        page = client.run("report inventory-valuation",
+                          {"as_of": BEFORE_SEED_STOCK, "limit": 1, **({"cursor": cursor} if cursor else {})},
+                          company=COMPANY)
+        assert page["count"] <= 1 and page["totals"] == whole["totals"]
+        paged += page["rows"]
+        cursor = page["next_cursor"]
+        if not cursor:
+            break
+    assert len(paged) > 1
+    assert [row["item_id"] for row in paged] == [row["item_id"] for row in whole["rows"]]
 
 
 def test_a_company_change_stales_a_continuation_rather_than_paging_into_other_rows(client, stocked):

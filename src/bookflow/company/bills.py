@@ -1293,6 +1293,12 @@ def prepare(s, ctx, inp, operation):
                              semantic=resolved['semantic'] if resolved else None, received=received))
     if received:
         receipt_billing.attach(s, ctx, plan, received)
+    if operation != 'void' and not pending['document_lines']:
+        # The same rule `bill post` states in its input model, checked here because an update
+        # can reach it without saying so: emptying one grid of a bill whose other grid is already
+        # empty. Left to the aggregate check below, a person saw an internal error for a bill
+        # they had simply left with no lines.
+        raise _invalid('items', 'a bill needs at least one expense line or item line')
     from bookflow.company.bill_validation import validate
     validate(plan, s, ctx)
     return plan

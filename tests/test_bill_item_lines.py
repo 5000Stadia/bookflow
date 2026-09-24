@@ -513,6 +513,19 @@ def test_a_bill_cannot_be_left_with_nothing_on_either_grid(books):
         books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-03'),
                      reason='A bill with no lines')
 
+    # The same bill emptied one grid at a time. The second step sends only `expenses=[]`, which the
+    # input model cannot judge -- it cannot see that the saved bill has no items left -- and until
+    # this was checked in the owner it reached the aggregate guard and a person saw E_INTERNAL.
+    only_expenses = books['run']('bill post', dict(_bill(books), supplier_reference='INV-7743', items=[]),
+                                 reason='Expenses only')
+    before = _net(books)
+    with pytest.raises(BookflowError) as raised:
+        books['run']('bill update', dict(bill=only_expenses['id'], expected_version=only_expenses['version'],
+                                         expenses=[]), reason='Empty the only grid')
+    assert raised.value.code == 'E_VALIDATION'
+    assert 'at least one expense line or item line' in raised.value.details['fields'][0]['problem']
+    assert _net(books) == before
+
 
 def test_a_line_identity_cannot_cross_from_one_grid_to_the_other(books):
     posted = books['run']('bill post', _bill(books), reason='Enter the March bill')

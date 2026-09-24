@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 from bookflow.core.errors import BookflowError
 from tests.test_bill_item_lines import books, _inventory_part, _inventory_asset, _net
-from tests.payment_raw_evidence import database
+from tests.payment_raw_evidence import database, preserved
 
 
 def path(books):
@@ -242,42 +242,75 @@ def test_same_writer_claim_race_and_late_failure_leave_exact_state(books, monkey
     assert run('bill post',remaining,reason='Injected atomic rollback',idempotency_key='late-failure')['total_minor_units']==final_total
 
 
-def test_co46_populated_commercial_and_movement_history_is_preserved(tmp_path,monkeypatch):
-    import importlib
-    from bookflow.storage.migrate import HEADS,migrate_to_head
+# The last commit whose migration chain ended at co0046. The populated database below is written by
+# THAT code, not by today's code under a patched HEADS: today's code writes today's columns, so once
+# a later migration widened inventory_movements (co0057 added returns_movement_id) the patched
+# approach could no longer produce a co0046 database at all, and this witness stopped running.
+CO46_BASE = '7ad388c'
+
+
+def test_co46_populated_commercial_and_movement_history_is_preserved(tmp_path):
+    import importlib, io, json, subprocess, sys, tarfile
+    import bookflow
+    from bookflow.storage.migrate import HEADS, migrate_to_head
     from bookflow.storage.engine import open_database
     from tests.payment_raw_evidence import table
-    current=HEADS['company']
-    monkeypatch.setitem(HEADS,'company','co0046')
-    old=books.__wrapped__(tmp_path,monkeypatch);run=old['run'];item=_inventory_part(old)
-    bill=run('bill post',dict(date='2017-01-01',vendor=old['vendor'],items=[dict(item=item,quantity='2',unit_cost='10.00')]),reason='Populated old purchase')
-    run('invoice post',dict(date='2017-01-02',customer=old['customer'],lines=[dict(item=item,quantity='1',unit_price='15.00')]),reason='Populated old sale')
-    po=run('purchase-order post',dict(date='2017-01-01',vendor=old['vendor'],lines=[dict(item=item,quantity='3',rate='12.00')]),reason='Legacy order')
-    run('bill post',dict(date='2017-01-03',purchase_order=po['id']),reason='Legacy whole-order bill')
-    dbpath=path(old)
-    before=database(dbpath)
-    assert before['tables']['inventory_movements']['count']==3
-    assert before['tables']['purchase_order_conversions']['count']==1
-    monkeypatch.setitem(HEADS,'company',current)
-    migration=importlib.import_module('bookflow.storage.company_migrations.versions.0047_receiving')
-    with open_database(dbpath,writable=True) as db:
-        assert migrate_to_head(db,'company',tmp_path/'owned-backups')==('co0046',current)
-        for name,snapshot in before['tables'].items():
-            if name!='alembic_version':
-                assert table(db.raw,name)==snapshot,name
-        assert set(before['ddl'])<=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
-        assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
-        for guard in migration.GUARDS:
-            assert db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?',(guard.split()[2],)).fetchone()==(guard,)
-    assert run('bill show',dict(bill=bill['id']))['total_minor_units']==2000
-    legacy=run('purchase-order show',dict(purchase_order=po['id']))
+    from tests import provenance
+    repo = Path(__file__).resolve().parents[1]
+    source = tmp_path / 'co46-source'; source.mkdir()
+    archive = subprocess.check_output(['git', 'archive', CO46_BASE, 'src', 'tests'], cwd=repo)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        tar.extractall(source, filter='data')
+    root = tmp_path / 'root'
+    code = """import json, sys, pytest
+from tests.test_bill_item_lines import books, _inventory_part
+patch = pytest.MonkeyPatch()
+class P:
+    def __truediv__(self, other): return __import__('pathlib').Path(sys.argv[1])
+old = books.__wrapped__(P(), patch); run = old['run']; item = _inventory_part(old)
+bill = run('bill post', dict(date='2017-01-01', vendor=old['vendor'], items=[dict(item=item, quantity='2', unit_cost='10.00')]), reason='Populated old purchase')
+run('invoice post', dict(date='2017-01-02', customer=old['customer'], lines=[dict(item=item, quantity='1', unit_price='15.00')]), reason='Populated old sale')
+po = run('purchase-order post', dict(date='2017-01-01', vendor=old['vendor'], lines=[dict(item=item, quantity='3', rate='12.00')]), reason='Legacy order')
+run('bill post', dict(date='2017-01-03', purchase_order=po['id']), reason='Legacy whole-order bill')
+path = old['client'].company.show(company=old['company'])['path']
+print(json.dumps(dict(company=old['company'], vendor=old['vendor'], item=item, bill=bill['id'], po=po['id'], path=path)))
+"""
+    made = subprocess.run([sys.executable, '-c', code, str(root)], cwd=source, capture_output=True, text=True,
+                          env=provenance.child_env(str(source / 'src') + ':' + str(source), BOOKFLOW_DATA_ROOT=str(root)))
+    assert made.returncode == 0, made.stderr[-3000:]
+    ids = json.loads(made.stdout.strip().splitlines()[-1])
+    dbpath = Path(ids['path']) / 'company.db'
+    before = database(dbpath)
+    assert before['tables']['alembic_version']['count'] == 1
+    assert before['tables']['inventory_movements']['count'] == 3
+    assert before['tables']['purchase_order_conversions']['count'] == 1
+    migration = importlib.import_module('bookflow.storage.company_migrations.versions.0047_receiving')
+    with open_database(dbpath, writable=True) as db:
+        assert migrate_to_head(db, 'company', tmp_path / 'owned-backups') == ('co0046', HEADS['company'])
+        for name, snapshot in before['tables'].items():
+            if name != 'alembic_version':
+                # Read through the columns co0046 had; later migrations may widen a table.
+                assert preserved(db.raw, name, snapshot) == snapshot, name
+        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+        # Every guard co0047 installed is still in force at the head. Its exact text is co0047's
+        # claim, made at co0047; a later migration may rewrite a guard's body -- co0057 taught
+        # receipt_cost_correction_dimensions about returns -- but may not drop it.
+        present = {row[0] for row in db.raw.execute("SELECT name FROM sqlite_schema WHERE type='trigger'")}
+        assert {guard.split()[2] for guard in migration.GUARDS} <= present
+    client = bookflow.connect(data_root=str(root))
+    run = lambda name, raw, **ctx: client.run(name, raw, company=ids['company'], **ctx)
+    assert run('bill show', dict(bill=ids['bill']))['total_minor_units'] == 2000
+    legacy = run('purchase-order show', dict(purchase_order=ids['po']))
     assert legacy['consumed'] is True
-    assert legacy['receiving'][0]['remaining_quantity_microunits']==0
-    before=database(path(old))
+    assert legacy['receiving'][0]['remaining_quantity_microunits'] == 0
+    before = database(dbpath)
     with pytest.raises(BookflowError) as exc:
-        run('item-receipt post',dict(date='2017-01-05',vendor=old['vendor'],purchase_order=po['id'],purchase_order_version=legacy['version'],items=[dict(item=item,order_line_id=legacy['revision']['lines'][0]['line_id'],quantity='1',unit_cost='12.00')]),reason='Refuse reopened legacy capacity')
-    assert exc.value.code=='E_WORK_DEPENDENCY'
-    assert database(path(old))==before
+        run('item-receipt post', dict(date='2017-01-05', vendor=ids['vendor'], purchase_order=ids['po'],
+            purchase_order_version=legacy['version'], items=[dict(item=ids['item'],
+            order_line_id=legacy['revision']['lines'][0]['line_id'], quantity='1', unit_cost='12.00')]),
+            reason='Refuse reopened legacy capacity')
+    assert exc.value.code == 'E_WORK_DEPENDENCY'
+    assert database(dbpath) == before
 
 
 def test_linked_bill_header_edit_preserves_closed_cost_dates_and_payment_never_receives(books):
@@ -330,3 +363,41 @@ def test_zero_receipt_reprices_original_zero_issue_and_returns_to_zero(books):
     assert _net(books) == {}
     shown = run('item-receipt show', dict(receipt=receipt['id']))
     assert shown['items'][0]['unbilled_quantity_microunits'] == 6000000
+
+
+def test_stock_status_reports_what_open_purchase_orders_still_owe(books):
+    """On order is what live purchase orders placed by the report date have not yet delivered.
+
+    This column printed a literal "0" for every item after purchase orders shipped, because the
+    report was written before they existed and said it would count them once they did. It is
+    derived from the same remaining quantity the order's own page shows, so a partial receipt
+    lowers it exactly as that page does.
+    """
+    run = books['run']; item = _inventory_part(books)
+
+    def on_order(as_of):
+        rows = run('report stock-status', dict(as_of=as_of, limit=200))['rows']
+        return next(r['quantity_on_order'] for r in rows if r['item_id'] == item)
+
+    baseline = on_order('2017-12-31')
+    po = run('purchase-order post', dict(date='2017-01-01', vendor=books['vendor'],
+        lines=[dict(item=item, quantity='10', rate='10.00')]), reason='Order ten')
+    assert _micro(on_order('2017-12-31')) == _micro(baseline) + 10000000
+    line = po['revision']['lines'][0]['line_id']
+    run('item-receipt post', dict(date='2017-01-05', vendor=books['vendor'], purchase_order=po['id'],
+        purchase_order_version=1, items=[dict(item=item, order_line_id=line, quantity='6', unit_cost='10.00')]),
+        reason='Receive six')
+    remaining = run('purchase-order show', dict(purchase_order=po['id']))['receiving'][0]['remaining_quantity_microunits']
+    assert remaining == 4000000
+    assert _micro(on_order('2017-12-31')) == _micro(baseline) + remaining
+
+    # An order placed after the report date is not yet on order as of that date.
+    run('purchase-order post', dict(date='2018-02-01', vendor=books['vendor'],
+        lines=[dict(item=item, quantity='5', rate='10.00')]), reason='Later order')
+    assert _micro(on_order('2017-12-31')) == _micro(baseline) + remaining
+    assert _micro(on_order('2018-12-31')) == _micro(baseline) + remaining + 5000000
+
+
+def _micro(text):
+    from decimal import Decimal
+    return int(Decimal(text) * 1000000)
