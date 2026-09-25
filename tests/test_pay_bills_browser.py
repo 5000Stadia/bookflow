@@ -17,6 +17,7 @@ import pytest
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _contained
+from tests.home_tiles import tile as home_tile
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
 
@@ -105,8 +106,7 @@ def _open_window(b, env, books, *, click_tile=False):
     if click_tile:
         b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/')
         b.wait_for('!!document.querySelector("a.flow-tile")')
-        tile = '''[...document.querySelectorAll("a.flow-tile")].find(
-            a => a.querySelector(".flow-tile-title")?.textContent.trim() === "Pay bills")'''
+        tile = home_tile("Pay bills")
         assert b.evaluate(f'!!{tile}'), 'the Pay bills tile is not a link on the home board'
         assert b.evaluate(f'{tile}.getAttribute("href")') == f'/c/{env.site.company_id}/pay-bills'
         b.evaluate(f'{tile}.click()')
@@ -137,7 +137,8 @@ def test_the_pay_bills_tile_pays_two_bills_and_each_open_balance_falls_by_what_w
     second = _bill(books, vendor, '2026-03-09', '100.00', 'SUP-2')
 
     _open_window(b, env, books, click_tile=True)
-    b.wait_for(f'document.querySelectorAll("#pay-bills-rows tr").length === 2')
+    # The demo company has open bills of its own; wait on this test's bills, not a row count.
+    b.wait_for(f'!!{_row(first["id"])} && !!{_row(second["id"])}')
 
     # The window shows what the bill itself reports: due date, original amount, open balance.
     assert _cell(b, first['id'], 'Due date') == '2026-03-04'
@@ -188,7 +189,7 @@ def test_the_pay_bills_tile_pays_two_bills_and_each_open_balance_falls_by_what_w
 
     # And the window reloaded itself on what is open now: the settled bill is gone from the
     # list, and the partly paid one stands at its remainder.
-    b.wait_for('document.querySelectorAll("#pay-bills-rows tr").length === 1')
+    b.wait_for(f'!{_row(second["id"])} && !!{_row(first["id"])}')
     assert _cell(b, first['id'], 'Open balance') == '100.00'
     assert b.evaluate(f'!{_row(second["id"])}')
 
@@ -204,7 +205,7 @@ def test_two_vendors_say_two_payments_before_the_save_and_one_save_writes_both(r
     third = _bill(books, two, '2026-03-06', '70.00')
 
     _open_window(b, env, books)
-    b.wait_for('document.querySelectorAll("#pay-bills-rows tr").length === 3')
+    b.wait_for(f'!!{_row(first["id"])} && !!{_row(second["id"])} && !!{_row(third["id"])}')
     for bill in (first, second, third):
         _select_bill(b, bill['id'])
 
@@ -252,7 +253,7 @@ def test_the_check_number_is_offered_only_for_a_check_drawn_on_a_bank_account(re
     bill = _bill(books, vendor, '2026-03-04', '60.00')
 
     _open_window(b, env, books)
-    b.wait_for('document.querySelectorAll("#pay-bills-rows tr").length === 1')
+    b.wait_for(f'!!{_row(bill["id"])}')
     assert b.evaluate('!document.querySelector("#pay-bills-check-label").hidden')
 
     # A credit card carries no paper check, whatever the method says.
@@ -348,10 +349,10 @@ def test_the_pay_bills_window_has_nothing_to_scroll_sideways_at_phone_width(regi
     books = _books(b, env.site, 'Phone')
     vendor = _vendor(books, 'Phone supply and equipment company')
     first = _bill(books, vendor, '2026-03-04', '1184.60', 'A-LONG-SUPPLIER-REFERENCE-0001')
-    _bill(books, vendor, '2026-03-09', '100.00')
+    second = _bill(books, vendor, '2026-03-09', '100.00')
 
     _open_window(b, env, books)
-    b.wait_for('document.querySelectorAll("#pay-bills-rows tr").length === 2')
+    b.wait_for(f'!!{_row(first["id"])} && !!{_row(second["id"])}')
     _select_bill(b, first['id'])
 
     _contained(b, 390)

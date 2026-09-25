@@ -84,7 +84,7 @@ def test_record_correct_and_bill_time_in_the_browser(register_browser, width, tm
     b.wait_for('!!document.querySelector("table")')
     listing = b.evaluate('document.body.innerText')
     assert 'Time entries' in listing and 'Time — Dana Fitter' in listing
-    assert '18.51' in listing and 'recorded' in listing
+    assert '18.51' in listing and 'Recorded' in listing
     # The status filter offers the states recorded time actually holds.
     assert b.evaluate('Array.from(document.querySelector("select[name=status]").options).map(o=>o.value)') == [
         '', 'recorded', 'voided']

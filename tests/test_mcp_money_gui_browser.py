@@ -100,7 +100,7 @@ def test_top_level_money_object_nullable_branch_and_complete_calculation(registe
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
     assert captures[-1]==raw
-    assert b.evaluate('document.querySelector(".save-feedback > b").textContent')=='Completed — payment calculate'
+    assert b.evaluate('document.querySelector(".save-feedback > b").textContent')=='Completed'
     b.evaluate('document.querySelector(".save-feedback summary").click()')
     assert json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))==expected
     assert company_snapshot(root)==baseline

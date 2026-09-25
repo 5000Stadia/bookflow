@@ -130,7 +130,8 @@ def test_running_a_stock_report_in_the_workbench_renders_the_money(workbench):
 
 def test_posting_an_adjustment_through_the_workbench_form_moves_the_stock(workbench):
     browser, company_id, run = workbench
-    item = run("item show", {"item": ITEM})["id"]
+    shown = run("item show", {"item": ITEM})
+    item, before = shown["id"], int(shown["quantity_on_hand"])
     page = browser.post(
         f"/c/{company_id}/inventory/adjust",
         data={"f:item": item, "f:date": "2026-04-01",
@@ -140,7 +141,7 @@ def test_posting_an_adjustment_through_the_workbench_form_moves_the_stock(workbe
     assert page.status_code == 200, page.text[:600]
     body = page.text.split("<main>", 1)[-1].split("</main>", 1)[0]
     assert 'class="error"' not in body, body[:600]
-    assert run("item show", {"item": ITEM})["quantity_on_hand"] == "3"
+    assert run("item show", {"item": ITEM})["quantity_on_hand"] == str(before - 2)
 
 
 def test_every_registered_inventory_command_is_discoverable_through_mcp():

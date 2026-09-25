@@ -161,4 +161,4 @@ def test_a_desktop_still_gets_a_table_with_heads(register_browser):
         .map(e => e.textContent.trim())''')
     assert 'Pricing' not in heading, heading
     assert any(text.startswith('Unit of measure') for text in heading), heading
-    assert any('How many' in text for text in heading), heading
+    assert 'Quantity' in heading, heading

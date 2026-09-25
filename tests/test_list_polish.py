@@ -94,7 +94,7 @@ def test_a_list_that_is_not_a_document_list_keeps_the_order_it_had(hosted):
     """Only the documents a bookkeeper writes open on the newest one."""
     from bookflow.adapters.workbench import document_form as Document
     from bookflow.adapters.workbench import work as Work
-    assert set(Paging.NEWEST_FIRST) == set(Document.NOUNS) | set(Work.NOUNS)
+    assert set(Paging.NEWEST_FIRST) == set(Document.NOUNS) | set(Work.NOUNS) | set(Paging._GENERATED_FORM_DOCUMENTS)
 
     books = _books(hosted)
     for day in ('2026-04-01', '2026-04-02'):

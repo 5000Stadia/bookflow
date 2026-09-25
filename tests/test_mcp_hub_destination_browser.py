@@ -30,7 +30,7 @@ def test_hub_organization_and_company_new_attach_destinations_with_complete_rece
         before=state(root)
         stage(b)
         assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
-        out=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+        out=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
         assert out['dry_run'] and state(root)==before
         _contained(b,width)
         return out

@@ -105,7 +105,7 @@ def test_nullable_parent_object_clear_is_distinct_from_omission_and_child_patch(
     b.evaluate('document.getElementsByName("clear:legal_address")[0].click()')
     stage(b)
     assert captured[-1]['legal_address'] is None
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['dry_run'] and preview['changed_fields']==['legal_address']
     assert {key:_command(b,env.site,'company.show',{})['info']['legal_address_'+key] for key in original}==original
     _contained(b,width)
@@ -117,7 +117,7 @@ def test_nullable_parent_object_clear_is_distinct_from_omission_and_child_patch(
     _fill(b,'f:fax','Parent omission witness')
     stage(b)
     assert 'legal_address' not in captured[-1]
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['changed_fields']==['fax']
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['changed_fields']==['fax']
 
 
 @pytest.mark.parametrize('width',[1280,390])
@@ -152,7 +152,7 @@ def test_optional_nested_collection_order_empty_null_and_omission(register_brows
     b.evaluate(f'[...document.querySelectorAll({json.dumps(outer+" > [data-collection-item] > .collection-item-actions > [data-collection-remove]")})].forEach(button=>button.click())')
     stage(b)
     assert captures[-1][field]==[]
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['changed_fields']==[field]
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['changed_fields']==[field]
     _contained(b,width)
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && location.pathname.endsWith("/company/self")')
@@ -162,7 +162,7 @@ def test_optional_nested_collection_order_empty_null_and_omission(register_brows
     b.evaluate('document.getElementsByName("clear:expected_version")[0].click()')
     stage(b)
     assert field not in captures[-1] and captures[-1]['expected_version'] is None
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     root=Path(os.environ['BOOKFLOW_DATA_ROOT']);assert root.is_relative_to(tmp_path)
     before=company_snapshot(root)
     expected=_command(b,env.site,'company.update?dry_run=true',{'fax':'Empty collection stays omitted','expected_version':None})

@@ -103,7 +103,8 @@ def _contained(browser, width):
     assert browser.evaluate('document.documentElement.scrollWidth===document.documentElement.clientWidth')
     assert browser.evaluate('[document.querySelector("#deposit-list-lines"),document.querySelector(".deposit-list-wrap")]'
                             '.every(e=>e.scrollWidth===e.clientWidth)')
-    escaped = browser.evaluate("""[...document.querySelectorAll('#deposit-list-lines td, #deposit-list-lines th')]
+    # The header row is visually hidden on a phone (kept for screen readers), so only rows a person sees count.
+    escaped = browser.evaluate("""[...document.querySelectorAll('#deposit-list-lines tbody td, #deposit-list-lines tbody th, #deposit-list-lines tfoot td, #deposit-list-lines tfoot th')]
       .flatMap(cell => [...cell.getClientRects()])
       .filter(box => box.left < -0.5 || box.right > window.innerWidth + 0.5).length""")
     assert escaped == 0, f'{escaped} cells left the {width}px viewport'
@@ -126,6 +127,8 @@ def test_saved_deposit_list_totals_paging_filters_and_journey(register_browser, 
     run = lambda name, args: _command(b, env.site, name, args)
     base = f'{env.site.base_url}/c/{env.site.company_id}'
     timings = {}
+    # The demo company ships deposits of its own; this fixture's counts are on top of them.
+    seeded = run('deposit.query', dict(page=dict(limit=1)))['total_count']
 
     def follow(selector, ready):
         """Click a real control and wait for that exact destination to finish loading."""
@@ -254,13 +257,15 @@ def test_saved_deposit_list_totals_paging_filters_and_journey(register_browser, 
     b.wait_for(f'location.href === {listing} && document.readyState === "complete" '
                '&& !!document.querySelector("#deposit-list-lines")', timeout=30)
     whole = run('deposit.query', dict(page=dict(limit=25)))
-    assert whole['total_count'] == 28
+    assert whole['total_count'] == 28 + seeded
     assert _rendered_totals(b) == _labels(whole)
     count_text = b.evaluate('document.querySelector("#deposit-page-count").textContent')
-    assert '25 deposits on this page' in count_text and '28 matching deposits' in count_text
+    assert '25 deposits on this page' in count_text and f'{28 + seeded} matching deposits' in count_text
     # Date descending, and a same-date tie broken the same way the command broke it.
     assert [row['number'] for row in _rendered_rows(b)[:4]] == [
-        row['selected']['number'] for row in whole['items'][:4]] == ['SIG-008', 'SIG-007', 'SIG-006', 'SIG-005']
+        row['selected']['number'] for row in whole['items'][:4]]
+    assert [row['selected']['number'] for row in whole['items']
+            if row['selected']['number'].startswith('SIG-')][:4] == ['SIG-008', 'SIG-007', 'SIG-006', 'SIG-005']
     for width in (1280, 390):
         b.viewport(width, 900)
         _contained(b, width)
@@ -447,10 +452,11 @@ def test_saved_deposit_list_keeps_companies_separate(register_browser):
     assert bravo['total_count'] == 2 and bravo['totals']['bank_total']['minor_units'] == 166500
     bravo_deposit = bravo['items'][0]['current']['deposit_id']
 
-    alpha = run('deposit.query', dict(page=dict(limit=25)))
+    # This company's own two deposits, apart from the ones the demo company ships with.
+    alpha = run('deposit.query', dict(q='Alpha', page=dict(limit=25)))
     assert alpha['total_count'] == 2 and alpha['totals']['bank_total']['minor_units'] == 3300
     base = f'{env.site.base_url}/c/{env.site.company_id}'
-    b.navigate(base + '/deposit')
+    b.navigate(base + '/deposit?q=Alpha')
     b.wait_for('!!document.querySelector("#deposit-list-lines")', timeout=30)
     body = b.evaluate('document.body.innerText')
     assert _rendered_totals(b) == _labels(alpha)

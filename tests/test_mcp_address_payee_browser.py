@@ -28,7 +28,7 @@ def test_party_address_create_patch_clear_and_omission(register_browser,width,mo
     _fill(b,'f:billing_address.city','Original city')
     stage(b)
     assert captures[-1][1]['billing_address']=={'line1':'  Owned address  ','city':'Original city'}
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['billing_address']['line1']=='Owned address'
     _contained(b,width)
     _click(b,'submit')
@@ -41,7 +41,7 @@ def test_party_address_create_patch_clear_and_omission(register_browser,width,mo
     _fill(b,'f:billing_address.city','Changed city')
     stage(b)
     assert captures[-1][1]['billing_address']=={'city':'Changed city'}
-    partial=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    partial=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     # The owning party model decides whether child patches merge or replace.
     expected=_command(b,env.site,'customer.update?dry_run=true',captures[-1][1])
     assert partial['billing_address']==expected['billing_address']
@@ -49,7 +49,7 @@ def test_party_address_create_patch_clear_and_omission(register_browser,width,mo
     b.evaluate('document.getElementsByName("clear:billing_address")[0].click()')
     stage(b)
     assert captures[-1][1]['billing_address'] is None
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['billing_address'] is None
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['billing_address'] is None
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && !location.pathname.endsWith("/update")')
     assert _command(b,env.site,'customer.show',{'customer':saved['id']})['billing_address'] is None
@@ -63,7 +63,7 @@ def test_party_address_create_patch_clear_and_omission(register_browser,width,mo
     b.evaluate('document.getElementsByName("clear:billing_address")[0].click()')
     stage(b)
     assert captures[-1][1]['billing_address'] is None
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['billing_address'] is None
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['billing_address'] is None
 
 
 @pytest.mark.parametrize('width',[1280,390])
@@ -87,7 +87,7 @@ def test_top_level_register_payee_prefill_null_replacement_and_journal_destinati
     stage(b)
     assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
     assert captures[-1]['payee']=={'name_type':'customer','name_id':customer}
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     _contained(b,width)
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && location.pathname.includes("/journal/")')

@@ -22,6 +22,7 @@ import pytest
 from tests.test_row5_browser_acceptance import CHROME, PASSWORD, _Cdp, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command
 from tests.test_service_sales_browser import _choose, _click, _contained, _fill, _value
+from tests.home_tiles import tile as home_tile
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
 
@@ -48,8 +49,7 @@ def charge_browser(browser_site, tmp_path):
 
 
 def _tile(title):
-    return ('[...document.querySelectorAll("a.flow-tile")].find(a => '
-            f'a.querySelector(".flow-tile-title")?.textContent.trim() === {json.dumps(title)})')
+    return home_tile(title)
 
 
 def _follow_tile(b, site, title, destination):
@@ -125,7 +125,7 @@ def test_the_statement_charges_tile_opens_a_list_whose_rows_open_the_charge(char
     b.wait_for('!!document.querySelector("table")')
     assert b.evaluate('document.querySelector("h1").textContent').strip() == 'Statement charges'
     headers = b.evaluate('[...document.querySelectorAll("thead th")].map(e=>e.textContent.trim())')
-    assert headers[:6] == ['Number', 'Date', 'Customer name', 'Memo', 'Total', 'Status'], headers
+    assert headers[:6] == ['Number', 'Date', 'Customer', 'Memo', 'Total', 'Status'], headers
     row = b.evaluate('[...document.querySelectorAll("tbody tr")].map(e=>e.innerText)')
     assert any('LC-1' in text and 'Quarter hour' in text and '60.00' in text for text in row), row
     _contained(b, 1280)

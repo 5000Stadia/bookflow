@@ -28,7 +28,7 @@ def test_generated_own_detach_preview_redirect_and_full_receipt(register_browser
     _fill(b,'ctx:reason','Detach the owned browser fixture')
     stage(b)
     assert not b.evaluate('document.querySelector(".error")?.textContent')
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['dry_run'] and current()==before and original.is_file()
     _contained(b,width)
     _click(b,'submit')

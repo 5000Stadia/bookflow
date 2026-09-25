@@ -32,7 +32,7 @@ def test_definition_all_kinds_default_empty_null_omission_and_choice_visibility(
             _fill(b,'f:default','{"keep":"literal text"}')
             stage(b)
             assert captures[-1]['default']=='{"keep":"literal text"}'
-            assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['default']=='{"keep":"literal text"}'
+            assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['default']=='{"keep":"literal text"}'
             _fill(b,'f:default','')
         if value=='':
             # An explicit empty value must have an action distinct from blank/omit.
@@ -41,14 +41,14 @@ def test_definition_all_kinds_default_empty_null_omission_and_choice_visibility(
         stage(b)
         assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
         assert captures[-1]['default']==value
-        assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['default']==value
+        assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['default']==value
         assert _command(b,env.site,'custom-field.show',{'custom_field':saved['id']})['default']==initial
         _contained(b,width)
         if kind=='text':
             b.evaluate('document.getElementsByName("clear:default")[0].click()')
             stage(b)
             assert captures[-1]['default'] is None
-            assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['default'] is None
+            assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['default'] is None
             assert _command(b,env.site,'custom-field.show',{'custom_field':saved['id']})['default']==initial
             b.evaluate('document.getElementsByName("clear:default")[0].click()')
             stage(b)
@@ -61,11 +61,11 @@ def test_definition_all_kinds_default_empty_null_omission_and_choice_visibility(
         _fill(b,'f:position','11')
         stage(b)
         assert 'default' not in captures[-1]
-        assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['default']==value
+        assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['default']==value
         b.evaluate('document.getElementsByName("clear:default")[0].click()')
         stage(b)
         assert captures[-1]['default'] is None
-        assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['default'] is None
+        assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['default'] is None
         assert _command(b,env.site,'custom-field.show',{'custom_field':saved['id']})==current
         _contained(b,width)
     # A choice-only collection is omitted after changing the actual discriminator.
@@ -82,6 +82,6 @@ def test_definition_all_kinds_default_empty_null_omission_and_choice_visibility(
     _fill(b,name,'customer')
     stage(b)
     assert not b.evaluate('document.querySelector(".error")?.textContent')
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['kind']=='text' and preview['choices']==[]
     _contained(b,width)

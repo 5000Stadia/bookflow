@@ -65,7 +65,7 @@ def test_command_visibility_families_exclude_old_controls_and_save_to_exact_reco
         assert captures[-1][0]==noun+' create'
         assert raw[discriminator]==new
         assert not set(old_fields)&raw.keys()
-        preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+        preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
         assert preview[discriminator]==new
         if noun=='price-level':assert raw['items']==[] and preview['items']==[]
         _contained(b,width)
@@ -99,6 +99,6 @@ def test_command_visibility_families_exclude_old_controls_and_save_to_exact_reco
             stage(b)
             assert not b.evaluate('document.querySelector(".error")?.textContent')
             assert discriminator not in captures[-1][1]
-            assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))[discriminator]==new
+            assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))[discriminator]==new
             assert _command(b,env.site,noun+'.show',{noun.replace('-','_'):shown['id']})==shown
             _contained(b,width)

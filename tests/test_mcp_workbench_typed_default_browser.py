@@ -28,7 +28,7 @@ def test_generated_boolean_default_is_a_boolean_on_preview_and_save(register_bro
     _click(browser, 'preview')
     browser.wait_for('!window.beforeForm.isConnected')
     assert not browser.evaluate('document.querySelector(".error")?.textContent'), browser.evaluate('document.body.innerText')
-    preview = browser.evaluate('document.querySelector(".warn pre").textContent')
+    preview = browser.evaluate('document.querySelector(".technical-details pre").textContent')
     assert json.loads(preview)['default'] is False
     _click(browser, 'submit')
     browser.wait_for('!location.pathname.endsWith("/create")')
@@ -41,7 +41,7 @@ def test_generated_boolean_default_is_a_boolean_on_preview_and_save(register_bro
     _click(browser, 'preview')
     browser.wait_for('!window.beforeForm.isConnected')
     assert not browser.evaluate('document.querySelector(".error")?.textContent')
-    assert json.loads(browser.evaluate('document.querySelector(".warn pre").textContent'))['default'] is True
+    assert json.loads(browser.evaluate('document.querySelector(".technical-details pre").textContent'))['default'] is True
     _click(browser, 'submit')
     browser.wait_for('!location.pathname.endsWith("/update")')
     updated = _command(browser, env.site, 'custom-field.show', {'custom_field': saved['id']})

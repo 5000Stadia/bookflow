@@ -117,11 +117,11 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
         _set(b, 'f:'+key, value)
     _click(b, 'submit')
     b.wait_for("document.body.textContent.includes('audit_watermark')")
-    body = b.evaluate('document.body.textContent')
+    body = b.evaluate('document.querySelector("main").textContent')
     assert 'EUR' not in body and 'E_VALIDATION' not in body and 'E_USAGE' not in body
     b.navigate(base + '/rate?from_currency=JPY&date_from=2026-03-11&date_to=2026-03-12&limit=1')
     b.wait_for("!!document.querySelector('form.list-tools')")
-    body = b.evaluate('document.body.textContent')
+    body = b.evaluate('document.querySelector("main").textContent')
     assert DATE in body and 'EUR' not in body and '2026-03-12' not in body
     assert b.evaluate("document.querySelector('[name=from_currency]').value") == 'JPY'
     next_url = b.evaluate("document.querySelector('a[rel=next]').href")
@@ -133,5 +133,5 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
     _set(b, 'from_currency', 'EUR')
     b.evaluate("document.querySelector('form.list-tools').requestSubmit()")
     b.wait_for("!location.search.includes('cursor=') && document.body.textContent.includes('EUR')")
-    assert 'JPY' not in b.evaluate('document.body.textContent')
+    assert 'JPY' not in b.evaluate('document.querySelector("main").textContent')
     assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')

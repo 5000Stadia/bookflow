@@ -45,7 +45,7 @@ def test_generated_boolean_false_omission_and_null_encoding(register_browser,wid
     _contained(b,width)
     stage(b)
     assert not b.evaluate('document.querySelector(".error")?.textContent')
-    preview = json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview = json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['dry_run'] and preview['changed_fields'] == ['use_classes']
     assert parse_qs(b.evaluate('window.lastGeneratedBody'))['f:use_classes'] == ['false']
     assert _command(b,env.site,'company.show',{})['info']['use_classes'] is True
@@ -60,7 +60,7 @@ def test_generated_boolean_false_omission_and_null_encoding(register_browser,wid
     form(b,url)
     b.evaluate('document.getElementsByName("clear:use_classes")[0].checked=true')
     stage(b)
-    assert 'E_VALIDATION' in b.evaluate('document.body.innerText')
+    assert 'E_VALIDATION' in b.evaluate('document.body.textContent')
     assert b.evaluate('document.getElementsByName("clear:use_classes")[0].checked')
     unchanged = _command(b,env.site,'company.show',{})
     assert unchanged['info_version']==saved['info_version'] and unchanged['info']['use_classes'] is False
@@ -70,7 +70,7 @@ def test_generated_boolean_false_omission_and_null_encoding(register_browser,wid
     _fill(b,'f:use_classes','unset')
     _fill(b,'f:fax','Only the fax changes')
     stage(b)
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['changed_fields']==['fax']
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['changed_fields']==['fax']
     assert parse_qs(b.evaluate('window.lastGeneratedBody'))['f:use_classes']==['unset']
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && location.pathname.endsWith("/company/self")')
@@ -81,7 +81,7 @@ def test_generated_boolean_false_omission_and_null_encoding(register_browser,wid
     b.evaluate('document.getElementsByName("clear:fax")[0].checked=true')
     stage(b)
     assert parse_qs(b.evaluate('window.lastGeneratedBody'))['clear:fax']==['1']
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['changed_fields']==['fax']
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['changed_fields']==['fax']
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && location.pathname.endsWith("/company/self")')
     assert _command(b,env.site,'company.show',{})['info']['fax'] is None
@@ -106,13 +106,13 @@ def test_generated_password_error_preview_and_save_never_echo_secret(register_br
     _fill(b,'f:password',secret)
     _contained(b,width)
     stage(b)
-    assert 'E_USER_NOT_FOUND' in b.evaluate('document.body.innerText') and stored()==before
+    assert 'E_USER_NOT_FOUND' in b.evaluate('document.body.textContent') and stored()==before
     assert secret not in b.evaluate('document.documentElement.outerHTML')
     assert b.evaluate('document.getElementsByName("f:password")[0].value')==''
     _fill(b,'f:username',env.site.login)
     _fill(b,'f:password',secret)
     stage(b)
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['dry_run'] and preview['changed'] and stored()==before
     assert secret not in b.evaluate('document.documentElement.outerHTML')
     assert b.evaluate('document.getElementsByName("f:password")[0].value')==''

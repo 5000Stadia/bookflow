@@ -27,13 +27,15 @@ def test_installed_agent_journal_visible_in_browser_register_and_expanded_audit(
         browser.wait_for("!!document.querySelector('section[aria-label=\"Journal entry\"]')")
         _contained(browser,width)
         cells=browser.evaluate('''[...document.querySelectorAll('section[aria-label="Journal entry"] tbody tr')]
-            .map(row=>[...row.cells].map(cell=>cell.textContent.trim()))''')
+            .map(row=>[...row.cells].map(cell=>{const c=cell.cloneNode(true);
+                c.querySelectorAll('[aria-hidden="true"]').forEach(e=>e.remove());return c.textContent.trim();}))''')
         assert [(row[0],row[4],row[5]) for row in cells]==[
             ('MCP operating bank','12.34',''),('MCP labor income','','12.34')]
-        totals=browser.evaluate('''[...document.querySelectorAll('section[aria-label="Journal entry"] tfoot th')].map(x=>x.textContent.trim())''')
+        totals=browser.evaluate('''[...document.querySelectorAll('section[aria-label="Journal entry"] tfoot th')].map(x=>{const c=x.cloneNode(true);
+            c.querySelectorAll('[aria-hidden="true"]').forEach(e=>e.remove());return c.textContent.trim();})''')
         assert totals[-2:]==['12.34','12.34']
         event=result['event']
-        assert event['directive_code'] in browser.evaluate('document.body.innerText')
+        assert event['directive_code'] in browser.evaluate('document.body.textContent')
         browser.navigate(base+'/account/'+result['bank']+'/register')
         browser.wait_for('!document.querySelector("#register-current").textContent.includes("loading")')
         browser.evaluate('''(() => {const form=document.querySelector('#register-period');

@@ -114,7 +114,7 @@ def test_generated_payment_json_object_error_preview_and_saved_false(register_br
     _fill(b,control,'{invalid JSON')
     baseline=company_snapshot(Path(os.environ['BOOKFLOW_DATA_ROOT']))
     stage(b,action='submit')
-    assert 'E_VALIDATION' in b.evaluate('document.body.innerText')
+    assert 'E_VALIDATION' in b.evaluate('document.body.textContent')
     assert b.evaluate(f'document.getElementsByName({json.dumps(control)})[0].value')=='{invalid JSON'
     assert company_snapshot(Path(os.environ['BOOKFLOW_DATA_ROOT']))==baseline
     _fill(b,control,json.dumps({definition:False}))

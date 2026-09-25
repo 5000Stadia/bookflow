@@ -43,7 +43,8 @@ def _choose(browser, definition, label, operator, value, kind):
     else:
         browser.evaluate(f"document.querySelector('#filter-value').value={json.dumps(value)}")
         assert browser.evaluate("document.querySelector('#filter-value').value") == value
-    # The same actual Add and Apply controls are reachable using Tab/Enter.
+    # The same actual Add and Apply controls are reachable using Tab/Enter from the filter row.
+    browser.evaluate("(document.querySelector('#filter-value') || document.querySelector('#filter-operator')).focus()")
     _tab_to(browser, '#add-filter')
     _key(browser, 'Enter')
     assert not browser.evaluate("document.querySelector('#browse-error').textContent")

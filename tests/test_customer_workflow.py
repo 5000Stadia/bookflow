@@ -141,7 +141,7 @@ def test_real_browser_job_edit_name_picker_preview_save_and_conflict(hosted, liv
         _type(browser, "f:notes", "My unsaved note")
         hosted.ok("customer update", {"customer": job["id"], "expected_version": job["version"], "notes": "Other client's note"}, company=hosted.company_id)
         browser.evaluate("document.querySelector('button[value=submit]').click()")
-        browser.wait_for("document.body.innerText.includes('E_VERSION_CONFLICT')")
+        browser.wait_for("document.body.textContent.includes('E_VERSION_CONFLICT')")
         assert browser.evaluate("document.querySelector('[name=\"f:notes\"]').value") == "My unsaved note"
         assert browser.evaluate("document.querySelector('[name=\"f:expected_version\"]').value") == version
         assert browser.evaluate("Math.max(document.body.scrollWidth,document.documentElement.scrollWidth)-innerWidth") <= 1

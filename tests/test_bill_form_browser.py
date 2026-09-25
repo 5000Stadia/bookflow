@@ -19,6 +19,7 @@ import pytest
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _click, _contained, _fill, _value
+from tests.home_tiles import tile as home_tile
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
 
@@ -168,8 +169,7 @@ def test_the_enter_bill_tile_opens_a_window_that_posts_what_the_command_posts(re
 
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/')
     b.wait_for('!!document.querySelector("a.flow-tile")')
-    tile = '''[...document.querySelectorAll("a.flow-tile")].find(
-        a => a.querySelector(".flow-tile-title")?.textContent.trim() === "Enter bill")'''
+    tile = home_tile("Enter bill")
     assert b.evaluate(f'!!{tile}'), 'the Enter bill tile is not a link on the home board'
     assert b.evaluate(f'{tile}.getAttribute("href")') == \
         f'/c/{env.site.company_id}/bill/post'
@@ -224,7 +224,7 @@ def test_the_enter_bill_tile_opens_a_window_that_posts_what_the_command_posts(re
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(row => row[0] === {json.dumps(written["number"])})''')
     assert entered == [written['number'], '2026-03-04', 'Parity supply', '2026-04-03',
-                       f'{TOTAL} USD', 'posted'], entered
+                       f'{TOTAL} USD', 'Posted'], entered
 
 
 def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register_browser):
@@ -246,9 +246,11 @@ def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register
     assert heads == ['Number', 'Date', 'Vendor', 'Due date', 'Total', 'Status'], heads
     rows = b.evaluate('''[...document.querySelectorAll("table tr")].slice(1)
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))''')
+    # The demo company lists bills of its own; these two keep their newest-first order among them.
+    rows = [row for row in rows if len(row) > 2 and row[2] == 'Listing supply']
     assert [row[0] for row in rows] == [second['number'], first['number']], rows
     assert rows[0] == [second['number'], '2026-02-09', 'Listing supply', '2026-02-09',
-                       f'{SECOND} USD', 'posted'], rows[0]
+                       f'{SECOND} USD', 'Posted'], rows[0]
 
     # The number is the way into the bill, the way an invoice number is.
     b.evaluate(f'''document.querySelector('a[href$="/bill/{second["id"]}"]').click()''')

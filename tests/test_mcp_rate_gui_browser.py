@@ -57,7 +57,7 @@ def test_rate_exact_integer_decimal_conflict_destination_noop_and_replay(registe
     assert _command(b,env.site,'rate.query',{'date_from':raw['date'],'date_to':raw['date'],'from_currency':'EUR'})['items']==[]
     prepare(0,'rate-browser-save')
     stage(b)
-    preview=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    preview=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert preview['dry_run'] and preview['changed'] and preview['rate']==raw['rate']
     assert captures[-1]==raw
     saved=save()

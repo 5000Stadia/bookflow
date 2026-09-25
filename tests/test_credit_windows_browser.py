@@ -19,6 +19,7 @@ import pytest
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _click, _contained
+from tests.home_tiles import tile as home_tile
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
 
@@ -110,8 +111,7 @@ def _text(b, selector):
 
 
 def _tile(b, title):
-    return f'''[...document.querySelectorAll("a.flow-tile")].find(
-        a => a.querySelector(".flow-tile-title")?.textContent.trim() === {json.dumps(title)})'''
+    return home_tile(title)
 
 
 def _open_from_the_board(b, env, title, destination):
@@ -217,7 +217,7 @@ def test_the_credit_memo_tile_opens_a_window_that_posts_what_the_command_posts(r
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(row => row[0] === {json.dumps(written["number"])})''')
     assert entered == [written['number'], '2026-03-10', 'Memo homeowner', f'{CREDIT} USD',
-                       f'{CREDIT} USD', 'posted'], entered
+                       f'{CREDIT} USD', 'Posted'], entered
 
 
 def test_the_vendor_credit_tile_opens_a_window_that_posts_what_the_command_posts(register_browser):
@@ -303,7 +303,7 @@ def test_the_refund_tile_opens_a_window_and_a_credit_pays_itself_back_through_it
     _set(b, 'f:reference', 'Refund for March')
 
     _preview(b)
-    assert _totals(b) == {'Credits paid out': '40.00 USD',
+    assert _totals(b) == {'Paid back': '40.00 USD',
                           'Out of Cash checking': '40.00 USD'}, _totals(b)
 
     saved = _save(b, 'customer-refund', '.refund-sources')

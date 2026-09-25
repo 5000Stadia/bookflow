@@ -32,7 +32,7 @@ def test_any_money_top_level_and_nested_json_values_and_unchanged_text(register_
     stage(b)
     assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
     assert captures[-1][1]['credit_limit']==money
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['credit_limit']==expected['credit_limit']
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['credit_limit']==expected['credit_limit']
     _contained(b,width)
     _click(b,'submit')
     b.wait_for('document.readyState === "complete" && !location.pathname.endsWith("/create")')
@@ -54,7 +54,7 @@ def test_any_money_top_level_and_nested_json_values_and_unchanged_text(register_
     _fill(b,'f:credit_limit','null')
     stage(b)
     assert captures[-1][1]['credit_limit'] is None
-    assert json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))['credit_limit'] is None
+    assert json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))['credit_limit'] is None
     assert _command(b,env.site,'customer.show',{'customer':customer['id']})==customer
     vendor=_command(b,env.site,'vendor.create',{'name':'Any money supplier'})['id']
     form(b,base+'/item/create')
@@ -80,7 +80,7 @@ def test_any_money_top_level_and_nested_json_values_and_unchanged_text(register_
     assert captures[-1][1]['vendor_profiles'][1]['purchase_cost']==money
     assert b.evaluate('document.getElementsByName("json:c:vendor_profiles:0:purchase_cost")[0].checked') is False
     assert b.evaluate('document.getElementsByName("json:c:vendor_profiles:1:purchase_cost")[0].checked') is True
-    prospective=json.loads(b.evaluate('document.querySelector(".warn pre").textContent'))
+    prospective=json.loads(b.evaluate('document.querySelector(".technical-details pre").textContent'))
     assert {row['vendor_id']:row['purchase_cost']['minor_units'] for row in prospective['vendor_profiles']}=={vendor:125,second:300}
     _contained(b,width)
     _click(b,'submit')

@@ -118,7 +118,7 @@ def test_a_bookkeeper_reaches_all_four_reports_and_reads_the_money(site_with_a_m
     if width == 390:
         # On a phone nothing is pinned and nothing is off the side: every cell says
         # which column it is, so no job can be scrolled past and missed.
-        assert wrapper[1] == "visible"
+        assert not wrapper[0], wrapper
         labels = browser.evaluate("""[...document.querySelectorAll('#dimensional-lines tbody tr')][0]
             .querySelectorAll('.document-cell-label').length""")
         assert labels == len(headings)
