@@ -3,7 +3,6 @@ from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from bookflow.adapters.workbench.sales import detail_context, editable_values, preserve_line_origins
 from bookflow.adapters.workbench import forms
@@ -41,7 +40,7 @@ def test_owned_shipping_address_lookup_and_history_paging(hosted):
 
 
 def render(record, preview=False):
-    env = Environment(loader=FileSystemLoader(TEMPLATES), autoescape=select_autoescape())
+    from bookflow.adapters.workbench.pages import env  # the workbench's own filters and globals
     return env.get_template('sales_detail.html').render(sale=detail_context(record, 'company', preview=preview))
 
 

@@ -16,6 +16,7 @@ import json
 
 import pytest
 
+from bookflow.adapters.workbench.display import day
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _click, _contained
@@ -205,19 +206,19 @@ def test_the_credit_memo_tile_opens_a_window_that_posts_what_the_command_posts(r
     for part in ('Memo homeowner', 'Memo visit', 'Goodwill credit', 'Memo job', CREDIT,
                  'Credit for the items named below'):
         assert part in shown, (part, shown[:1500])
-    assert f'Still available {CREDIT} USD' in _text(b, '[data-credit-worth]')
+    assert f'Still available ${CREDIT}' in _text(b, '[data-credit-worth]')
 
     # And it is in the list of credit memos, at what it is still worth.
     b.evaluate('document.querySelector(".document-nav-find").click()')
     b.wait_for('location.pathname.endsWith("/credit-memo") && !!document.querySelector("table td")')
     assert b.evaluate('document.querySelector("h1").textContent').strip() == 'Credit memos'
     heads = b.evaluate('[...document.querySelectorAll("table th")].map(e => e.textContent.trim())')
-    assert heads == ['Number', 'Date', 'Customer', 'Total', 'Available', 'Status'], heads
+    assert heads == ['Number', 'Date', 'Customer', 'Total (USD)', 'Available (USD)', 'Status'], heads
     entered = b.evaluate(f'''[...document.querySelectorAll("table tr")].slice(1)
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(row => row[0] === {json.dumps(written["number"])})''')
-    assert entered == [written['number'], '2026-03-10', 'Memo homeowner', f'{CREDIT} USD',
-                       f'{CREDIT} USD', 'Posted'], entered
+    assert entered == [written['number'], day('2026-03-10'), 'Memo homeowner', CREDIT,
+                       CREDIT, 'Posted'], entered
 
 
 def test_the_vendor_credit_tile_opens_a_window_that_posts_what_the_command_posts(register_browser):
@@ -268,7 +269,7 @@ def test_the_vendor_credit_tile_opens_a_window_that_posts_what_the_command_posts
     b.wait_for('location.pathname.endsWith("/vendor-credit") && !!document.querySelector("table td")')
     assert b.evaluate('document.querySelector("h1").textContent').strip() == 'Vendor credits'
     heads = b.evaluate('[...document.querySelectorAll("table th")].map(e => e.textContent.trim())')
-    assert heads == ['Number', 'Date', 'Vendor', 'Total', 'Unapplied', 'Status'], heads
+    assert heads == ['Number', 'Date', 'Vendor', 'Total (USD)', 'Unapplied (USD)', 'Status'], heads
 
 
 def test_the_refund_tile_opens_a_window_and_a_credit_pays_itself_back_through_it(register_browser):
@@ -323,7 +324,7 @@ def test_the_refund_tile_opens_a_window_and_a_credit_pays_itself_back_through_it
         'source_current']['available_minor_units'] == 0
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/credit-memo/{credit["id"]}')
     b.wait_for('!!document.querySelector("[data-credit-worth]")')
-    assert 'Still available 0.00 USD' in _text(b, '[data-credit-worth]')
+    assert 'Still available $0.00' in _text(b, '[data-credit-worth]')
     assert 'Nothing is left on this credit' in _text(b, '.sales-document')
 
 
@@ -357,13 +358,13 @@ def test_a_credit_applied_from_its_own_page_lowers_what_the_invoice_owes(registe
     b.evaluate('document.querySelector("#credit-apply-save").click()')
     b.wait_for(f'location.pathname.endsWith("/credit-memo/{credit["id"]}")')
     b.wait_for('!!document.querySelector("[data-credit-worth]")')
-    assert 'Still available 0.00 USD' in _text(b, '[data-credit-worth]')
+    assert 'Still available $0.00' in _text(b, '[data-credit-worth]')
 
     # The invoice owes what it owed less exactly what was applied.
     b.navigate(f'{base}/invoice/{invoice["id"]}')
     b.wait_for('!!document.querySelector(".sales-document")')
     settlement = _text(b, '[aria-label="Current invoice settlement"]')
-    assert f'Applied {CREDIT}' in settlement and f'Due {STILL_OWED}' in settlement, settlement
+    assert f'Applied ${CREDIT}' in settlement and f'Due ${STILL_OWED}' in settlement, settlement
     assert books['run']('invoice.show', {'invoice': invoice['id']})[
         'settlement_current']['due_minor_units'] == 7000
 
@@ -377,7 +378,7 @@ def test_a_credit_applied_from_its_own_page_lowers_what_the_invoice_owes(registe
     b.evaluate('document.querySelector("#credit-unapply-save").click()')
     b.wait_for(f'location.pathname.endsWith("/credit-memo/{credit["id"]}")')
     b.wait_for('!!document.querySelector("[data-credit-worth]")')
-    assert f'Still available {CREDIT} USD' in _text(b, '[data-credit-worth]')
+    assert f'Still available ${CREDIT}' in _text(b, '[data-credit-worth]')
     assert books['run']('invoice.show', {'invoice': invoice['id']})[
         'settlement_current']['due_minor_units'] == 10000
 
