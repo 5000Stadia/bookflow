@@ -70,6 +70,106 @@
       target.scrollIntoView({block: phone.matches && target.matches('[data-submit-error]') ? 'center' : 'start'});
     });
   }, {signal:feedback.signal});
+  // A section's "+ New" menu closes on Escape, on a tap outside it and when focus leaves it.
+  for (const menu of document.querySelectorAll('[data-new-menu]')) {
+    const summary = menu.querySelector('summary');
+    menu.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && menu.open) { event.stopPropagation(); menu.open = false; summary.focus(); }
+    });
+    menu.addEventListener('focusout', event => {
+      if (menu.open && event.relatedTarget && !menu.contains(event.relatedTarget)) menu.open = false;
+    });
+    document.addEventListener('click', event => {
+      // The phone sheet's backdrop is the menu's own ::before, so a click on the <details> itself is outside.
+      if (menu.open && (event.target === menu || !menu.contains(event.target))) menu.open = false;
+    }, {signal:feedback.signal});
+  }
+  // The command finder: every task and command page this reader may open, found by name.
+  const finder = document.getElementById('finder');
+  if (finder && finder.showModal) {
+    const input = finder.querySelector('#finder-input');
+    const results = finder.querySelector('#finder-results');
+    const status = finder.querySelector('#finder-status');
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    for (const key of document.querySelectorAll('[data-finder-key]')) key.textContent = mac ? '⌘K' : 'Ctrl K';
+    let index = null, loading = null, shown = [], active = -1, opener = null;
+    const load = () => loading || (loading = fetch(finder.dataset.finderUrl, {credentials:'same-origin', headers:{'X-Bookflow-Workbench':'1'}})
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => { index = data.items.map((item, order) => ({...item, order,
+        text: [item.label, item.section, ...item.keywords].join(' ').toLowerCase().replace(/[-_]/g, ' ')})); })
+      .catch(() => { loading = null; status.textContent = 'The list of tasks could not be loaded. Use All commands below.'; }));
+    const rank = {section:0, task:1, page:2};
+    const score = (item, query, words) => {
+      const label = item.label.toLowerCase();
+      if (label === query) return 0;
+      if (label.startsWith(query)) return 1;
+      if (label.split(/[\s—/-]+/).some(word => word.startsWith(words[0]))) return 2;
+      return label.includes(words[0]) ? 3 : 4;
+    };
+    const select = next => {
+      const options = results.querySelectorAll('[role=option]');
+      if (!options.length) { active = -1; input.removeAttribute('aria-activedescendant'); return; }
+      active = (next + options.length) % options.length;
+      options.forEach((option, i) => option.setAttribute('aria-selected', String(i === active)));
+      input.setAttribute('aria-activedescendant', options[active].id);
+      options[active].scrollIntoView({block:'nearest'});
+    };
+    const render = () => {
+      if (!index) return;
+      const query = input.value.trim().toLowerCase().replace(/[-_]/g, ' ');
+      const words = query.split(/\s+/).filter(Boolean);
+      if (words.length) {
+        shown = index.filter(item => words.every(word => item.text.includes(word)))
+          .map(item => ({item, score: score(item, query, words)}))
+          .sort((a, b) => a.score - b.score || rank[a.item.kind] - rank[b.item.kind] || a.item.label.length - b.item.label.length || a.item.order - b.item.order)
+          .slice(0, 50).map(entry => entry.item);
+      } else {
+        // Before anything is typed: the everyday tasks, then the sections.
+        shown = [...index.filter(item => item.kind === 'task'), ...index.filter(item => item.kind === 'section')].slice(0, 80);
+      }
+      results.replaceChildren(...shown.map((item, i) => {
+        const option = document.createElement('li');
+        option.id = 'finder-option-' + i; option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
+        const link = document.createElement('a'); link.href = item.href; link.tabIndex = -1; link.textContent = item.label;
+        const where = document.createElement('span'); where.className = 'finder-where'; where.textContent = item.section;
+        option.append(link, where);
+        option.addEventListener('click', () => { window.location = item.href; });
+        return option;
+      }));
+      status.textContent = words.length && !shown.length ? 'Nothing matches. Try another word, or open All commands.' : '';
+      select(0);
+    };
+    const open = () => {
+      if (finder.open) { input.focus(); input.select(); return; }
+      opener = document.activeElement;
+      input.value = '';
+      finder.showModal();
+      input.focus();
+      if (index) render(); else { status.textContent = 'Loading…'; load().then(() => { if (index) { status.textContent = ''; render(); } }); }
+    };
+    finder.addEventListener('close', () => {
+      if (opener && opener.isConnected) opener.focus();
+      opener = null;
+    });
+    finder.addEventListener('click', event => { if (event.target === finder) finder.close(); });
+    finder.querySelector('[data-finder-close]').addEventListener('click', () => finder.close());
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); select(active + (event.key === 'ArrowDown' ? 1 : -1)); }
+      else if (event.key === 'Escape') { event.preventDefault(); finder.close(); }
+      else if (event.key === 'Enter') {
+        event.preventDefault();
+        if (active >= 0 && shown[active]) window.location = shown[active].href;
+      }
+    });
+    for (const control of document.querySelectorAll('[data-finder-open]')) {
+      control.setAttribute('role', 'button');
+      control.addEventListener('click', event => { event.preventDefault(); open(); });
+    }
+    document.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); open(); }
+    }, {signal:feedback.signal});
+  }
   const navigation = document.getElementById('workspace-navigation');
   const trigger = document.getElementById('menu-toggle');
   if (!navigation || !trigger) return;
@@ -143,8 +243,11 @@
     'item-receipt':'vendors', 'vendor-credit':'vendors', 'pay-bills':'vendors',
     employee:'employees', item:'items', inventory:'items', deposit:'banking', register:'banking', _registers:'banking',
     reconcile:'banking', account:'accounting', journal:'accounting', report:'reports',
-    company:'company', audit:'audit'
+    company:'company', audit:'audit', transfer:'banking', check:'vendors', 'card-charge':'vendors', 'bill-payment':'vendors'
   };
+  // The profile lists sit under Settings, where the anchor keeps them.
+  for (const list of ['customer-type', 'vendor-type', 'job-type', 'term', 'payment-method', 'sales-rep', 'ship-method',
+    'customer-message', 'price-level', 'unit-of-measure', 'item-category', 'sales-tax-code', 'class', 'custom-field']) sections[list] = 'settings';
   // An account register belongs to Banking, wherever its account sits in the chart.
   const noun = /^\/c\/[^/]+\/account\/[^/]+\/register$/.test(path) ? 'register' : path.split('/')[3];
   for (const link of navigation.querySelectorAll('a')) {
