@@ -52,9 +52,9 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R60 R31 readable money and dates across all screens, exact values kept in exports (M–L) — notes/mobile-audit-response-20260927.md
 - [~] R59 R31 ledger tables and money rows — right-aligned figures, currency in the header, fewer default columns (M) — notes/mobile-audit-response-20260927.md
 - [~] R63 R31 an Overview with numbers — figures strip, needs attention, recent activity (M–L) — notes/mobile-audit-response-20260927.md
-- [ ] R65 R31 live totals on documents from the core preview as you type (M–L) — notes/mobile-audit-response-20260927.md
-- [ ] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (L) — notes/mobile-audit-response-20260927.md
-- [ ] R62 R31 the account register on a phone as a list of entries with an add sheet (M) — notes/mobile-audit-response-20260927.md
+- [~] R65 R31 live totals on documents from the core preview as you type (M–L) — notes/mobile-audit-response-20260927.md
+- [~] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (L) — notes/mobile-audit-response-20260927.md
+- [~] R62 R31 the account register on a phone as a list of entries with an add sheet (M) — notes/mobile-audit-response-20260927.md
 - [ ] R32 Job scheduling and fuller timekeeping — design/V2-ROADMAP.md item 2
 - [ ] R33 Bulk import and migration — design/V2-ROADMAP.md item 3
 - [ ] R34 Bank imports and feeds — design/V2-ROADMAP.md item 4
