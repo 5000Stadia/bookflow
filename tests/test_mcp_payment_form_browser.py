@@ -122,15 +122,15 @@ def test_generated_payment_json_object_error_preview_and_saved_false(register_br
     _contained(b,width)
     b.evaluate('void(window.previousGeneratedForm = document.querySelector("[data-generated-form]"))')
     _click(b,'submit')
-    b.wait_for('!window.previousGeneratedForm?.isConnected && (!!document.querySelector(".save-feedback summary") || !!document.querySelector(".error"))')
+    b.wait_for('!window.previousGeneratedForm?.isConnected && (!!document.querySelector("#command-result summary") || !!document.querySelector(".error"))')
     assert captured[-1]==request, (captured[-1],request)
     assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
     raw=captured[-1]['request']['input']
     assert raw['custom_fields']=={definition:False}
     assert raw['expected_custom_field_kinds']=={definition:'bool'}
     assert raw['operation_key']=='json-control-preview'
-    b.evaluate('document.querySelector(".save-feedback summary").click()')
-    assert json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))==expected
+    b.evaluate('document.querySelector("#command-result summary").click()')
+    assert json.loads(b.evaluate('document.querySelector("#command-result pre").textContent'))==expected
     assert company_snapshot(Path(os.environ['BOOKFLOW_DATA_ROOT']))==baseline
     assert _command(b,env.site,'payment.query',{'customer':customer})['items']==[]
 

@@ -1,0 +1,14 @@
+{# A read-only command's answer, under the form that asked for it; the inputs stay as entered. #}
+{% macro table(t) %}<div class="table-wrap"><table class="list-table"><thead><tr>{% for c in t.columns %}<th scope="col">{{ c | label }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in t.rows %}<tr>{% for cell in row.cells %}<td data-label="{{ t.columns[loop.index0] | label }}">{% if loop.first and row.href %}<a href="{{ row.href }}">{{ cell or 'Open' }}</a>{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>{% endmacro %}
+{% macro fields(list) %}{% if list %}<dl class="result-fields">{% for f in list %}<div class="field"><dt>{{ f.key | label }}</dt><dd>{{ f.text if f.text != '' else '—' }}</dd></div>{% endfor %}</dl>{% endif %}{% endmacro %}
+<section class="workspace-card" id="command-result" aria-label="Result"><h2>{{ "Results" if command_result.rows is not none else "Result" }}</h2>
+{% if command_result.rows is not none %}{% if command_result.rows.rows %}{{ table(command_result.rows) }}
+<p class="muted list-count">Showing {{ command_result.rows.count }} {{ 'record' if command_result.rows.count == 1 else 'records' }}{% if command_result.next_cursor %} on this page{% endif %}.</p>
+{% else %}<p>No matching records. Try different inputs.</p>{% endif %}
+{% if command_result.next_cursor %}<nav class="pagination" aria-label="Results pages"><button type="button" class="button" data-query-next="{{ command_result.next_cursor }}">Next page →</button></nav>{% endif %}{% endif %}
+{{ fields(command_result.fields) }}
+{% for t in command_result.tables %}<h3>{{ t.key | label }}</h3>{{ table(t) }}{% endfor %}
+{% for g in command_result.groups %}<h3>{{ g.key | label }}</h3>{{ fields(g.fields) }}{% for t in g.tables %}<h4>{{ t.key | label }}</h4>{{ table(t) }}{% endfor %}{% if g.more %}<p class="muted">More detail is in the technical result below.</p>{% endif %}{% endfor %}
+<details class="technical-details"><summary>Technical result (JSON)</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details></section>

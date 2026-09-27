@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from bookflow.adapters.workbench import forms as F
-from bookflow.adapters.workbench import query_results as QueryResults
+from bookflow.adapters.workbench import command_result as CommandResult
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
@@ -2156,7 +2156,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.DOCUMENTS and not Billing.is_conversion(noun, verb) and "revision" in result else None,
                       work_history=result if noun in Work.DOCUMENTS and verb == "history" else None,
                       work_results=result if noun in Work.DOCUMENTS and verb == "query" else None,
-                      query_results=QueryResults.view(company_id, noun, verb, result) if not cmd.is_write and not preview else None,
+                      command_result=CommandResult.view(company_id, noun, verb, result,
+                          home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'))
+                          if not cmd.is_write and not preview and noun != 'report' and not billing else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
                       deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
@@ -2413,14 +2415,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
              and verb in ('history', 'query', 'billing'))
                 # A vendor credit joins for its revisions only: its list page is the ordinary
                 # one, so nothing about `vendor-credit query` changes here.
-                or (noun == 'vendor-credit' and verb == 'history')
-                # Every query shows its rows on its own page, under the filters that chose them,
-                # not on the Overview or an unfiltered list with the answer in a one-time notice.
-                or (not cmd.is_write and QueryResults.is_query(noun, verb))):
+                or (noun == 'vendor-credit' and verb == 'history')):
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         if noun == "report" and not cmd.is_write:
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,
                              report_input=cmd.input_model.model_validate(raw).model_dump())
+        if CommandResult.answers_in_place(cmd, _success_target(cmd, company_id, noun, record_id, out), company_id):
+            # A read-only answer belongs on its own page, under the inputs that asked for it,
+            # never on the Overview or another page with the answer in a one-time notice.
+            return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         return_token = form.get("_return_token")
         return_target = form.get("_return_target")
         created_id = _output_identifier(noun, _noun_meta(noun), out)

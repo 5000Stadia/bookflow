@@ -106,11 +106,11 @@ def test_all_six_nested_preview_request_branches_exact_input_results_and_inactiv
         enter('',raw)
         _contained(b,width)
         _click(b,'submit')
-        b.wait_for('document.readyState === "complete" && (!!document.querySelector(".save-feedback summary") || !!document.querySelector(".error"))')
+        b.wait_for('document.readyState === "complete" && (!!document.querySelector("#command-result summary") || !!document.querySelector(".error"))')
         assert captures[-1]==raw,(command,captures[-1],raw)
         assert not b.evaluate('document.querySelector(".error")?.textContent'),(command,b.evaluate('document.body.innerText'))
-        b.evaluate('document.querySelector(".save-feedback summary").click()')
-        result=json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))
+        b.evaluate('document.querySelector("#command-result summary").click()')
+        result=json.loads(b.evaluate('document.querySelector("#command-result pre").textContent'))
         assert result==expected,command
         assert company_snapshot(root)==baseline,command
         _contained(b,width)

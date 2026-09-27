@@ -51,11 +51,11 @@ def test_calculation_inline_null_origin_rejections_and_saved_selection(register_
     def receipt(raw):
         expected=call('payment calculate',raw)
         _click(b,'submit')
-        b.wait_for('document.readyState === "complete" && (!!document.querySelector(".save-feedback summary") || !!document.querySelector(".error"))')
+        b.wait_for('document.readyState === "complete" && (!!document.querySelector("#command-result summary") || !!document.querySelector(".error"))')
         assert captured[-1]==raw
         assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
-        b.evaluate('document.querySelector(".save-feedback summary").click()')
-        assert json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))==expected
+        b.evaluate('document.querySelector("#command-result summary").click()')
+        assert json.loads(b.evaluate('document.querySelector("#command-result pre").textContent'))==expected
         assert company_snapshot(root)==baseline
         _contained(b,width)
     for value,origin in [(None,'unresolved'),({'minor_units':125,'currency':'USD'},'entered')]:
