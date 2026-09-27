@@ -166,10 +166,10 @@ def test_success_uses_session_bound_one_time_post_redirect_get(hosted, monkeypat
     assert "prg.example.test" not in location
 
     first = owner.get(location)
-    assert first.status_code == 200 and "Result" in first.text and "prg.example.test" in first.text
+    assert first.status_code == 200 and "Saved successfully" in first.text and "prg.example.test" in first.text
     second = owner.get(location)
     assert second.status_code == 200 and "prg.example.test" in second.text  # the record itself remains updated
-    assert "Result — company update: done" not in second.text
+    assert "Saved successfully" not in second.text  # the one-time result is not shown again
 
     created = owner.post(
         f"/c/{hosted.company_id}/directive/add",
@@ -229,7 +229,7 @@ def test_successful_htmx_submit_navigates_to_the_result_destination(hosted):
     assert urlsplit(destination).path == f"/c/{hosted.company_id}/company/self"
     page = owner.get(destination)
     assert page.status_code == 200
-    assert "Result — company update: done" in page.text
+    assert "Saved successfully" in page.text
     assert "visible.example.test" in page.text
 
 
@@ -260,12 +260,13 @@ def test_picker_exposes_schema_revision_state_and_upgrade_link(hosted, root):
     client = _login(hosted)
     current = client.get("/companies")
     assert current.status_code == 200
-    assert migrate.HEADS["company"] in current.text and "current" in current.text
+    assert f'<code>{migrate.HEADS["company"]}</code> · Current' in current.text
+    assert 'href="/hub/upgrade"' not in current.text
 
     _hub_sql(root, "UPDATE companies SET schema_revision = 'co0001' WHERE id = ?", (hosted.company_id,))
     behind = client.get("/companies")
     assert behind.status_code == 200
-    assert "co0001" in behind.text and "behind" in behind.text
+    assert '<code>co0001</code> · Update available' in behind.text
     assert 'href="/hub/upgrade"' in behind.text
 
 

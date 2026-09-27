@@ -116,7 +116,7 @@ def exercise_cap_browser(client,root,tmp_path,source,count,net,tax,started):
             assert recovery in note
             footer=b.evaluate('document.querySelector(".billing-table").parentElement.nextElementSibling.innerText')
             assert f'Remaining net ${net//100:,}.{net%100:02d}' in footer
-            assert f'forecast tax {tax//100}.{tax%100:02d}' in footer
+            assert f'forecast tax ${tax//100:,}.{tax%100:02d}' in footer
             _contained(b,width)
             b.evaluate('document.querySelector("[aria-label=\\"Remaining tax forecast\\"]").scrollIntoView({block:"center"})')
             # Guidance must have an actual visible client rectangle on each width.
@@ -143,7 +143,9 @@ def exercise_cap_browser(client,root,tmp_path,source,count,net,tax,started):
             expected_net,expected_tax=(200,20) if count==1 else (1938,194)
             totals=b.evaluate('Array.from(document.querySelectorAll("section.sales-document > .table-wrap > table tfoot th")).map(n=>n.innerText)')
             fmt=lambda n:f'{n//100}.{n%100:02d}'
-            assert totals==['Total (USD)',fmt(expected_net),fmt(expected_tax),fmt(expected_net+expected_tax)]
+            # Where a money cell shows its column name (Net, Tax, Gross), it sits above the figure.
+            assert [t.split('\n')[-1] for t in totals]==['Total (USD)',fmt(expected_net),fmt(expected_tax),fmt(expected_net+expected_tax)],totals
+            assert [t.split('\n')[0] for t in totals[1:] if '\n' in t] in ([],['Net','Tax','Gross']),totals
             capture(b,tmp_path/f'cap-bounded-preview-{width}.png')
             receipts.append(dict(width=width,hypothetical=note,error=error,preview_totals=totals))
             if width==390:_click(b,'submit');first_id=_saved(b,'invoice')

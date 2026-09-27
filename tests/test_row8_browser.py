@@ -52,7 +52,7 @@ def test_journal_generated_post_and_revision_views(browser_site, tmp_path, width
         browser.wait_for('document.body.innerText.includes("Previous revision")')
         browser.evaluate('''[...document.querySelectorAll('a')].find(a => a.textContent === 'Previous revision').click()''')
         browser.wait_for('location.search.includes("revision_number=1") && document.body.innerText.includes("Current revision")')
-        assert browser.evaluate('document.querySelector("[aria-label=\\"Journal entry\\"]").innerText.includes("1200.00")')
+        assert browser.evaluate('document.querySelector("[aria-label=\\"Journal entry\\"]").innerText.includes("1,200.00")')
         _assert_rendered_page(browser, 'historical journal', viewport=(width, height))
     finally:
         browser.close()

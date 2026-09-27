@@ -117,11 +117,13 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
         _set(b, 'f:'+key, value)
     _click(b, 'submit')
     b.wait_for("document.body.textContent.includes('audit_watermark')")
-    body = b.evaluate('document.querySelector("main").textContent')
-    assert 'EUR' not in body and 'E_VALIDATION' not in body and 'E_USAGE' not in body
+    # The query's own result, not the Overview it returns to (whose recent activity names every rate set).
+    body = b.evaluate("[...document.querySelectorAll('pre')].find(p=>p.textContent.includes('audit_watermark')).textContent")
+    assert 'JPY' in body and 'EUR' not in body
+    assert not any(code in b.evaluate('document.body.textContent') for code in ('E_VALIDATION', 'E_USAGE'))
     b.navigate(base + '/rate?from_currency=JPY&date_from=2026-03-11&date_to=2026-03-12&limit=1')
     b.wait_for("!!document.querySelector('form.list-tools')")
-    body = b.evaluate('document.querySelector("main").textContent')
+    body = b.evaluate('document.querySelector("#list-results").textContent')
     # List dates read as a person says them ("Mar 11"); the filter inputs keep ISO dates.
     assert 'Mar 11' in body and 'EUR' not in body and 'Mar 12' not in body
     assert b.evaluate("document.querySelector('[name=from_currency]').value") == 'JPY'
@@ -133,6 +135,6 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
     assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')
     _set(b, 'from_currency', 'EUR')
     b.evaluate("document.querySelector('form.list-tools').requestSubmit()")
-    b.wait_for("!location.search.includes('cursor=') && document.body.textContent.includes('EUR')")
-    assert 'JPY' not in b.evaluate('document.querySelector("main").textContent')
+    b.wait_for("!location.search.includes('cursor=') && document.querySelector('#list-results')?.textContent.includes('EUR')")
+    assert 'JPY' not in b.evaluate('document.querySelector("#list-results").textContent')
     assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')

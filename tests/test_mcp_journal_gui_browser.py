@@ -50,14 +50,16 @@ def test_installed_agent_journal_visible_in_browser_register_and_expanded_audit(
         assert money[0]=='12.34' and money[-1]=='12.34'
         _contained(browser,width)
         browser.navigate(base+'/audit/'+event['id'])
-        browser.wait_for('document.body.innerText.includes("session_id")')
+        browser.wait_for('document.body.innerText.includes("Session id")')
+        # The event's own fields, not those of its nested entries.
         fields=browser.evaluate('''Object.fromEntries([...document.querySelectorAll('.field')]
-            .filter(e=>e.querySelector('b') && e.querySelector('span'))
-            .map(e=>[e.querySelector('b').textContent,e.querySelector('span').textContent]))''')
+            .filter(e=>e.querySelector(':scope > dt') && e.querySelector(':scope > dd') && !e.parentElement.closest('.field'))
+            .map(e=>[e.querySelector(':scope > dt').textContent,e.querySelector(':scope > dd').textContent.trim()]))''')
         for name in ('id','actor_id','actor_name','actor_kind','on_behalf_of','on_behalf_of_name',
                      'interface','client_name','session_id','directive_code','directive_text'):
-            assert fields[name]==event[name],name
-        assert fields['actor_kind']=='agent' and fields['interface']=='mcp'
+            # Each audit field is labelled in words ("session_id" reads "Session id").
+            assert fields[name.replace('_',' ').capitalize()]==event[name],name
+        assert fields['Actor kind']=='agent' and fields['Interface']=='mcp'
         # Merely viewing the journal/register/audit cannot create another posting.
         events=hosted.ok('audit.list',{'record_type':'transaction','record_id':result['journal']},company=hosted.company_id)
         assert [e['id'] for e in events['items']]==[event['id']]

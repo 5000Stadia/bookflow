@@ -102,24 +102,25 @@ def test_combined_partial_basis_and_rebill_survive_fresh_hub(client, tax_sale, t
     original = client.run('invoice show', dict(invoice=first['id']), company=COMPANY)['revision']
     target, company = attach(client, COMPANY, tmp_path)
     run = lambda command, data: target.run(command, data, company=company, reason='Portable captured work basis')
+    read = lambda command, data: target.run(command, data, company=company)
     run('company update', dict(sales_tax_calculation='line_component_half_even'))
-    copied = run('estimate show', dict(estimate=source['id']))
+    copied = read('estimate show', dict(estimate=source['id']))
     assert copied['revision']['facts'] == source['revision']['facts']
-    state = run('estimate billing', dict(estimate=source['id']))
+    state = read('estimate billing', dict(estimate=source['id']))
     assert state['remaining_net_minor_units'] == 10 and state['remaining_tax_minor_units'] == 1
     order = run('estimate work-order', dict(estimate=source['id'], expected_version=copied['version'], date='2026-06-03', conversion_key='portable-combined-order'))
     assert order['revision']['tax_calculation_details']['policy'] == 'invoice_combined_half_up'
-    remaining = run('work-order billing', dict(work_order=order['id']))
+    remaining = read('work-order billing', dict(work_order=order['id']))
     final = run('work-order invoice', dict(work_order=order['id'], expected_version=order['version'], date='2026-06-04', conversion_key='portable-combined-finish'))
     assert final['revision']['tax_calculation_details']['attribution'] == remaining['forecast_tax_attribution']
     assert final['tax_minor_units'] == 1
     assert all(row['allocation_version'] == 3 and row['allocation_proof']['basis_version'] == 2 for row in final['revision']['billing_sources'])
     run('invoice void', dict(invoice=final['id'], expected_version=1))
-    order = run('work-order show', dict(work_order=order['id']))
+    order = read('work-order show', dict(work_order=order['id']))
     previous = final['revision']['billing_sources'][0]
     rebill = run('work-order invoice', dict(work_order=order['id'], expected_version=order['version'], date='2026-06-05', conversion_key='portable-combined-rebill', selections=[dict(line_id=order['revision']['lines'][1]['line_id'], rebill_allocation_id=previous['id'])]))
     proof = rebill['revision']['billing_sources'][0]['allocation_proof']
     assert proof == dict(previous['allocation_proof'], source_revision_id=order['revision']['id'], source_line_id=order['revision']['lines'][1]['id'])
     assert rebill['tax_minor_units'] == 1
-    assert run('invoice show', dict(invoice=first['id']))['revision'] == original
+    assert read('invoice show', dict(invoice=first['id']))['revision'] == original
     assert client.run('estimate billing', dict(estimate=source['id']), company=COMPANY)['remaining_net_minor_units'] == 10

@@ -139,7 +139,7 @@ def test_correct_receipt_and_applied_invoice_with_customs(register_browser,width
     b.wait_for("!!document.querySelector('form[data-sales-form]')")
     _fill(b,'f:memo','Revised service description')
     assert b.evaluate("document.querySelector('[name=\"ctx:reason\"]').required")
-    assert 'Reason for invoice correction (required)' in b.evaluate('document.body.innerText')
+    assert b.evaluate("document.querySelector('label[for=\"ctx-reason\"]').innerText").startswith('Reason for this correction (required)')
     assert not b.evaluate("document.querySelector('[name=\"ctx:reason\"]').checkValidity()")
     # A direct form request bypassing HTML validation must still reject, retain
     # the draft and explain the human correction without calling them an agent.
