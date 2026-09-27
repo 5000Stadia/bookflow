@@ -131,6 +131,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_NETWORK_NOT_ALLOWED": "Binding outside loopback needs --allow-network.",
     "E_DOCS_STALE": "Generated documentation differs from the current command and schema definitions.",
     "E_USER_NOT_FOUND": "No such user.",
+    "E_AGENT_PRINCIPAL_MISMATCH": "An agent's principals must hold identical permissions; give this person a separate agent identity.",
     "E_TOKEN_NOT_FOUND": "No such token.",
 }
 

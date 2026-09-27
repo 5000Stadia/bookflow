@@ -183,3 +183,38 @@ def add_membership(root: Path, user_id: str, scope_type: str, scope_id: str, rol
                                                       granted_at=now_iso(), revoked_at=None))
         db.raw.execute("COMMIT")
     return membership_id
+
+
+def make_agent(call, username: str, *, principals, company: str, role: str = "standard",
+               owner: str | None = None, display_name: str | None = None) -> str:
+    """Create an authorized agent through the public agent commands (row 7), and return its id.
+
+    `call(name, body)` runs one command as a human installation administrator and returns its
+    document: `hosted_call(hosted)`, `office_call(office)`, `browser_call(browser)`, or a library
+    client's `run`. The agent acts for `principals` (humans with identical permissions) and holds
+    `role` on `company`. Issue its token with `token issue --user <agent> --principal <human>`.
+    """
+    agent = call("agent create", {"username": username, **({"owner": owner} if owner else {}),
+                                  **({"display_name": display_name} if display_name else {})})["agent"]["agent_id"]
+    for person in ([principals] if isinstance(principals, str) else principals):
+        call("agent assign", {"agent": agent, "principal": person, "confirm_permitted_use": True})
+    call("membership grant", {"user": agent, "company": company, "role": role})
+    call("agent authorize", {"agent": agent, "confirm_permitted_use": True})
+    return agent
+
+
+def hosted_call(hosted):
+    """`make_agent`'s caller for a running host: the installer's own bearer over HTTP."""
+    return lambda name, body: hosted.ok(name.replace(" ", "."), body)
+
+
+def browser_call(browser):
+    """`make_agent`'s caller through a logged-in workbench browser session."""
+    def call(name, body):
+        result = browser.evaluate(f"""fetch('/commands/{name.replace(" ", ".")}', {{method:'POST',
+          credentials:'same-origin', headers:{{'Content-Type':'application/json','X-Bookflow-Workbench':'1'}},
+          body: JSON.stringify({json.dumps(body)})}}).then(async r => ({{status:r.status, body:await r.json()}}))""",
+                                  await_promise=True)
+        assert result["status"] == 200, result
+        return result["body"]
+    return call

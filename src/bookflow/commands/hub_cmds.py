@@ -963,6 +963,8 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
             for company_seed, row in zip(seeds, rows):
                 try:
                     _apply_seed_history(s, ctx, company_seed, row)
+                    if row is primary:
+                        _seed_demo_agent(s, ctx, row)
                 except Exception as error:
                     raise BookflowError(
                         "E_PARTIAL_WRITE",
@@ -1068,6 +1070,46 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
     finally:
         s.close_company()
         s.company_row, s.company = saved_row, saved_company
+
+
+DEMO_AGENT = "demo-assistant"
+
+
+def _seed_demo_agent(s: Session, ctx: Context, company: dict[str, Any]) -> None:
+    """The demo's dedicated agent identity, through the registered agent commands.
+
+    Its retention scope is exactly this one identity: it is created once, assigned to the
+    human running the reset, given standard access to the new demo company and authorized.
+    A reset trashes the old company, which suspends it (its access shrank), so re-authorizing
+    it acknowledges the fresh context. No token is issued: a secret is shown only at
+    issuance, to whoever asks for one. No other user is touched.
+    """
+    from bookflow.core import registry as _registry
+    from bookflow.core.dispatch import run_in_session
+    from bookflow.hub.permission_access import activated
+    if not activated(s):
+        s.warnings.append(f"the demo agent {DEMO_AGENT} needs activated permissions; run `permission activate`")
+        return
+    hub_ctx = ctx.model_copy(update={"company_id": None})
+
+    def run(name: str, raw: dict[str, Any]) -> dict[str, Any]:
+        cmd = _registry.get(name)
+        return run_in_session(cmd, cmd.input_model.model_validate(raw), hub_ctx, s)
+
+    existing = users.find_user(s, username=DEMO_AGENT)
+    if existing is not None and existing["kind"] != "agent":
+        s.warnings.append(f"the username {DEMO_AGENT} belongs to a person, so the demo has no agent")
+        return
+    if existing is None:
+        run("agent create", {"username": DEMO_AGENT, "display_name": "Demo Assistant"})
+    shown = run("agent show", {"agent": DEMO_AGENT})
+    if s.actor.id not in {p["user_id"] for p in shown["principals"]}:
+        run("agent assign", {"agent": DEMO_AGENT, "principal": s.actor.id, "confirm_permitted_use": True})
+    run("membership grant", {"user": DEMO_AGENT, "company": company["id"], "role": "standard"})
+    shown = run("agent show", {"agent": DEMO_AGENT})
+    if shown["authority"]["suspended"]:
+        run("agent authorize", {"agent": DEMO_AGENT, "confirm_permitted_use": True,
+                                "acknowledge_fresh_context": shown["authority"]["fresh_context_required"]})
 
 
 _SEED_CAPTURE = re.compile(r"^[a-z][a-z0-9_]*$")

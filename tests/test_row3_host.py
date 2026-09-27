@@ -1904,26 +1904,15 @@ def test_the_timers_run_on_their_own(tmp_path, monkeypatch, caplog):
 def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, root):
     """Blueprint 4.3: an agent's token names the human it acts for; every write it makes records on_behalf_of."""
     import sqlalchemy as sa
-    from bookflow.core import clock
-    from bookflow.core.ids import new_id
     from bookflow.hub import schema as h
-    from bookflow.hub.users import common
     from bookflow.storage.engine import open_database
     admin_id = hosted.ok("company.list", {})  # any call proves the fixture credential works
     with open_database(root / "hub.db", writable=False) as db:
         admin = dict(db.conn.execute(sa.select(h.users).where(h.users.c.username == hosted.login)).mappings().first())
-        org_id = db.conn.execute(sa.select(h.companies.c.organization_id).where(h.companies.c.id == hosted.company_id)).scalar_one()
-    aid = new_id()
-    hosted.handle.host.submit(lambda: None)  # writer idle; insert through the writer's own hub connection to respect the single-writer rule
-    def insert():
-        hub = hosted.handle.host._hub
-        hub.raw.execute("BEGIN IMMEDIATE")
-        hub.conn.execute(h.users.insert().values(id=aid, kind="agent", username="ledger-bot", display_name="Ledger Bot", owner_user_id=admin["id"], password_hash=None, hub_admin=True, timezone=None, active=True, **common(admin["id"], "system")))
-        hub.conn.execute(h.agent_authority.insert().values(agent_user_id=aid, epoch=1, suspended_at=None, suspension_reason=None))
-        hub.conn.execute(h.agent_principals.insert().values(agent_user_id=aid, principal_user_id=admin["id"], assigned_by=admin["id"], assigned_at=clock.now_iso(), revoked_at=None))
-        hub.conn.execute(h.memberships.insert().values(id=new_id(), user_id=aid, scope_type="organization", scope_id=org_id, role="admin", granted_by=admin["id"], granted_at=clock.now_iso(), revoked_at=None))
-        hub.raw.execute("COMMIT")
-    hosted.handle.host.submit(insert)
+    from tests.conftest import hosted_call, make_agent
+    # The agent is created and authorized through the public agent commands, acting for the installer.
+    make_agent(hosted_call(hosted), "ledger-bot", principals=admin["id"], company=hosted.company_id, role="admin",
+               display_name="Ledger Bot")
     faceless = hosted.call("token.issue", {"user": "ledger-bot", "label": "faceless"})
     assert faceless.status_code == 422 and faceless.json()["details"]["fields"][0]["field"] == "principal"
     issued = hosted.ok("token.issue", {"user": "ledger-bot", "label": "bot-token", "principal": hosted.login})

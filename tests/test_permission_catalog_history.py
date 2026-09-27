@@ -38,6 +38,7 @@ ACCEPTED = {
     'job-time-v1': (471, '0072e030fb0f0b63b11f41c99facfa400a127148080e1fa3a60cbeffa53d0d07'),
     'journal-deletion-v1': (472, '8bb60e36da0155cf3551b01e83e7ded46ee06fce8c2962876a69da66636c0b95'),
     'customer-refund-history-v1': (473, '2cde0560b88c952260a309e5e2b22c242e0202a766ddfc6677b483ee1426c983'),
+    'agent-administration-v1': (479, 'c15675d00ce1b01aa628eaa2424ee0d8e402957c5eb669da5f9f0384d55add25'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -66,6 +67,8 @@ CHAIN_ADDITIONS = {
                     'time-activity show', 'time-activity update', 'time-activity void'},
     'journal-deletion-v1': {'journal delete'},
     'customer-refund-history-v1': {'customer-refund history'},
+    'agent-administration-v1': {'agent assign', 'agent authorize', 'agent create', 'agent list', 'agent show',
+                                'agent unassign'},
 }
 
 _ANCESTOR_EDIT = """

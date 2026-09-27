@@ -5,20 +5,17 @@ catalog, before any company exists. Nothing then needs activating before an acce
 suspends an agent's whole authority and revokes its tokens, and a restored membership revives
 no old token.
 
-Fixture note: until the agent commands exist, the agent, its authority and its principal
-assignments are written directly (as tests/test_row7_credentials.py does). Everything the
-test asserts about goes through the public commands over HTTP.
+The agent is created, assigned and authorized with the public agent commands, and everything
+the test asserts about goes through the public commands over HTTP.
 """
 import sqlite3
 
 import pytest
 
 import bookflow
-from bookflow.core import clock
-from bookflow.hub import permission_runtime as runtime, schema as h
-from tests.conftest import make_actor
+from bookflow.hub import permission_runtime as runtime
+from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
-from tests.test_row7_credentials import writer
 
 
 def hub_rows(root, sql, *args):
@@ -63,12 +60,7 @@ def test_on_a_fresh_install_revocation_suspends_the_agent_and_restoration_revive
     ids = {r["username"]: r["id"] for r in hub_rows(
         root, "SELECT username, id FROM users WHERE username IN ('principal-p', 'principal-q')")}
     P, Q = ids["principal-p"], ids["principal-q"]
-    G = make_actor(root, "agent-g", kind="agent", owner_user_id=P, company_role=(cid, "owner"))
-    with writer(root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=G, epoch=1))
-        for principal in (P, Q):
-            db.conn.execute(h.agent_principals.insert().values(agent_user_id=G, principal_user_id=principal,
-                                                               assigned_by=P, assigned_at=clock.now_iso()))
+    G = make_agent(hosted_call(hosted), "agent-g", principals=[P, Q], owner=P, company=cid, role="owner")
     issued = hosted.ok("token.issue", {"user": G, "label": "agent witness", "principal": P})
     agent = {"Authorization": "Bearer " + issued["secret"]}
 

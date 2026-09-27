@@ -7,12 +7,9 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from bookflow.core import clock
 from bookflow.core.config import Config
-from bookflow.hub import schema as h
-from tests.conftest import make_actor
+from tests.conftest import browser_call, make_agent
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
-from tests.test_row7_credentials import writer
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _click, _contained, _fill, _preview, _saved
 
@@ -25,15 +22,10 @@ def test_agent_invoice_human_correction_agent_continuation(register_browser, wid
     b.viewport(width, 900 if width == 1280 else 844)
     root = Path(os.environ["BOOKFLOW_DATA_ROOT"])
     principal = Config.load(root / "config.toml").user_table(env.site.login)["user_id"]
-    # Fixture setup stands in for the still-pending user/assignment administration.
-    # Every business operation below uses the real authenticated host or browser.
-    agent = make_actor(root, "handoff-agent", kind="agent", owner_user_id=principal,
-                       company_role=(env.site.company_id, "owner"))
-    with writer(root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(
-            agent_user_id=agent, principal_user_id=principal, assigned_by=principal,
-            assigned_at=clock.now_iso()))
+    # The agent is set up the way an installation administrator does it, through the
+    # agent commands in the same logged-in browser session.
+    agent = make_agent(browser_call(b), "handoff-agent", principals=principal,
+                       company=env.site.company_id, role="owner")
     issuance = b.evaluate(f'''fetch('/commands/token.issue', {{method:'POST',
         credentials:'same-origin', headers:{{'Content-Type':'application/json',
         'X-Bookflow-Workbench':'1'}}, body:JSON.stringify({json.dumps(dict(

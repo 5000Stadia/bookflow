@@ -65,6 +65,12 @@ def office(root):
     second = c.run("company new", {"display_name": "Northwind Roofing", "legal_name": "Northwind Roofing LLC",
                                    "home_currency": "USD", "organization": organization})
     c.run("user set-password", {"username": login, "password": INSTALLER_PASSWORD})
+    # These witnesses count the people who reach a company; the demo's own dedicated agent
+    # (seeded by `demo reset`) is set aside through the ordinary command.
+    try:
+        c.run("membership revoke", {"user": "demo-assistant", "company": first["company_id"]})
+    except bookflow.BookflowError as absent:  # a root built without the demo seed has no demo agent
+        assert absent.code in ("E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND"), absent
     handle = start_serving(root, client_version(), bind="127.0.0.1:8765", secure_cookies=False)
     try:
         yield Office(handle, root, login, first["company_id"], second["company_id"])
@@ -613,12 +619,10 @@ def test_organization_wide_access_is_listed_under_every_company_it_reaches(offic
 def test_an_agent_principal_is_listed_beside_the_person_it_acts_for(office):
     """`kind` and `acts_for` label an agent; nothing hides it, because a principal that
     can post to the books belongs in the answer to "who can reach this company"."""
-    from tests.conftest import make_actor
+    from tests.conftest import make_agent
     added = add_jordan(office)
-    # No registered command creates an agent identity -- `admin:agents` is in the frozen
-    # catalog and marked unavailable -- so the fixture stands in for the one row 7 adds.
-    make_actor(office.root, "jordan-agent", kind="agent", owner_user_id=added["user_id"],
-               company_role=(office.first, "standard"))
+    make_agent(lambda name, body: office.admin(name.replace(" ", "."), body), "jordan-agent",
+               principals="jordan", owner="jordan", company=office.first)
 
     people = {row["username"]: row for row in office.admin("user.list")["items"]}
     assert people["jordan-agent"]["kind"] == "agent"

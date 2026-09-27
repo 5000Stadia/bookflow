@@ -51,12 +51,32 @@ def install(app, *, run, render, page_error):
                 other_grants=json.dumps([x for x in grants if x not in CAPS]),
                 other_denies=json.dumps([x for x in denies if x not in ('ledger.post','ledger.read')]))
         effective = run(request,'membership effective',{'company':company_id,'user':selected},None) if selected else None
+        agents, agent_admin = agent_panel(request, rows, current)
         controls = grant_controls()
         return render('permissions.html',request,company_id=company_id,company_label=current['company_name'],
             current=current,rows=rows,values=values,result=result,error=error,effective=effective,
+            agents=agents,agent_admin=agent_admin,
             delete_grants=controls,delete_nouns=', '.join(label.lower() for _,label in controls),
             shown_capabilities=('ledger.read','ledger.post')+CAPS,
             status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
+
+    def agent_panel(request, rows, current):
+        """Agents whose membership reaches this company, with their authority when the viewer may see it.
+
+        Whether the viewer administers agents is the dispatcher's own answer to `agent show`,
+        so the controls can never offer what the command would refuse."""
+        ids = sorted({row['user_id'] for row in rows if row['kind'] == 'agent' and row['active']})
+        agents, admin = [], True
+        for agent_id in ids:
+            name = next(row['username'] for row in rows if row['user_id'] == agent_id)
+            try:
+                agents.append(run(request,'agent show',{'agent':agent_id},None))
+            except BookflowError as exc:
+                if exc.code != 'E_PERMISSION':
+                    raise
+                admin = False
+                agents.append({'agent_id':agent_id,'username':name,'authority':None,'principals':[]})
+        return agents, admin and current['mode'] == 'policy_v1'
 
     @app.get('/c/{company_id}/users',response_class=HTMLResponse)
     def company_users(company_id: str, request: Request):
