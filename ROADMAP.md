@@ -49,7 +49,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [~] R64 R31 a quieter document form — sticky save bar, Class and unit columns only when used, picker and date tidying, recording details folded (M) — notes/mobile-audit-response-20260927.md
 - [~] R57 R31 reports open with their numbers — one-line filters, date chips, headline figure, statement-shaped layout on desktop (M) — notes/mobile-audit-response-20260927.md
 - [~] R58 R31 lists and filters — pinned search as you type, filters apply themselves, phone filter sheet (M) — notes/mobile-audit-response-20260927.md
-- [ ] R60 R31 readable money and dates across all screens, exact values kept in exports (M–L) — notes/mobile-audit-response-20260927.md
+- [~] R60 R31 readable money and dates across all screens, exact values kept in exports (M–L) — notes/mobile-audit-response-20260927.md
 - [~] R59 R31 ledger tables and money rows — right-aligned figures, currency in the header, fewer default columns (M) — notes/mobile-audit-response-20260927.md
 - [~] R63 R31 an Overview with numbers — figures strip, needs attention, recent activity (M–L) — notes/mobile-audit-response-20260927.md
 - [~] R65 R31 live totals on documents from the core preview as you type (M–L) — notes/mobile-audit-response-20260927.md
