@@ -17,7 +17,7 @@ from tests.test_row3_host import WB, hosted  # noqa: F401
 from bookflow.adapters.workbench import home
 
 ROW = re.compile(r'<tr data-customer="[^"]*" data-status="(?P<status>[^"]*)">(?P<body>.*?)</tr>', re.S)
-AMOUNT = re.compile(r'<td data-amount>(?P<amount>[^<]*)</td>')
+AMOUNT = re.compile(r'<td data-amount[^>]*>(?P<amount>[^<]*)</td>')
 LABEL = re.compile(r'<td data-customer-label>(?P<label>.*?)</td>', re.S)
 
 

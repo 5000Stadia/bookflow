@@ -28,7 +28,7 @@
 {% if allocated %}
 <input type="hidden" name="c:{{ path }}:line_id" value="{{ allocated.line_id }}">
 <input type="hidden" name="c:{{ path }}:item" value="{{ allocated.item_id }}">
-<div class="line-allocated" data-allocated-line><strong>Billed from quoted work · priced on the source</strong><br>{{ allocated.item_snapshot.item.label }} · {{ allocated.description or '' }}<br>Quantity {{ allocated.quantity }} of an originally quoted {{ allocated.quoted_quantity }} · Rate {{ allocated.unit_price.amount if allocated.unit_price else 'priced as a whole-line amount' }}<br>Net {{ allocated.net.amount }} · Tax {{ allocated.tax.amount }} · Gross {{ allocated.gross.amount }} {{ allocated.currency }}<br>Remove the whole line to release its scope; add an ordinary line for an extra charge.</div>
+<div class="line-allocated" data-allocated-line><strong>Billed from quoted work · priced on the source</strong><br>{{ allocated.item_snapshot.item.label }} · {{ allocated.description or '' }}<br>Quantity {{ allocated.quantity }} of an originally quoted {{ allocated.quoted_quantity }} · Rate {{ allocated.unit_price|money(allocated.currency, home=math_company_currency) if allocated.unit_price else 'priced as a whole-line amount' }}<br>Net {{ allocated.net|money(allocated.currency, home=math_company_currency) }} · Tax {{ allocated.tax|money(allocated.currency, home=math_company_currency) }} · Gross {{ allocated.gross|money(allocated.currency, home=math_company_currency) }}<br>Remove the whole line to release its scope; add an ordinary line for an extra charge.</div>
 {{ row_actions() }}
 {% else %}
 <input type="hidden" name="c:{{ path }}:line_id" value="{{ value.get('line_id') or '' if value is mapping else '' }}">

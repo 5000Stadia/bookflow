@@ -24,7 +24,7 @@
     return Object.hasOwn(table, config.currency) ? table[config.currency] : 2;
   };
   const units = value => exact.minor(value, config.currency);
-  const money = value => units(value) + ' ' + config.currency;
+  const money = value => exact.money(units(value), config.currency);
 
   /* Exact decimal text to minor units. Null means "not a number this currency accepts", which
      is a refusal rather than a rounded guess: no monetary value is ever a float here. */
@@ -54,7 +54,7 @@
     area.replaceChildren();
     for (const field of err.details?.fields || []) area.append(el('p', `${field.field}: ${field.problem}`));
     if (err.details?.bill_number) area.append(el('p', `Bill ${err.details.bill_number}: ${err.details.next || 'this bill cannot take that amount.'}`));
-    if (err.details?.available) area.append(el('p', `Still open on that bill: ${err.details.available.amount} ${err.details.available.currency}.`));
+    if (err.details?.available) area.append(el('p', `Still open on that bill: ${exact.money(err.details.available.amount, err.details.available.currency)}.`));
     for (const row of err.details?.changes || []) area.append(el('p', `${row.actor_id || 'Unknown actor'} at ${row.at || 'unknown time'} changed ${(row.fields || []).join(', ') || 'this record'}.`));
   }
 
@@ -166,9 +166,9 @@
       billCell.append(link(row.number, '/c/' + encodeURIComponent(config.company) + '/bill/'
         + encodeURIComponent(row.id)));
       if (row.supplier_reference) billCell.append(el('small', ' · ref ' + row.supplier_reference));
-      const cells = [check, el('span', row.vendor_name), billCell, el('span', row.due_date),
-                     el('span', units(row.total_minor_units)),
-                     el('span', units(open)), input];
+      const cells = [check, el('span', row.vendor_name), billCell, el('span', exact.day(row.due_date)),
+                     el('span', exact.amount(units(row.total_minor_units))),
+                     el('span', exact.amount(units(open))), input];
       const labels = ['Select', 'Vendor', 'Bill', 'Due date', 'Original amount', 'Open balance', 'Payment'];
       cells.forEach((node, index) => {
         const td = el('td');
@@ -299,7 +299,7 @@
     const out = await command('bill pay', input);
     drawResult(out);
     await loadBills();
-    note(`Saved. ${out.group_count} payment${out.group_count === 1 ? '' : 's'} written for ${out.paid.amount} ${out.paid.currency}.`);
+    note(`Saved. ${out.group_count} payment${out.group_count === 1 ? '' : 's'} written for ${exact.money(out.paid.amount, out.paid.currency)}.`);
   }
 
   function drawResult(out) {
@@ -308,7 +308,7 @@
     area.dataset.groupCount = String(out.group_count);
     area.replaceChildren(el('h2', out.group_count === 1 ? 'Bill payment written'
       : `${out.group_count} bill payments written`));
-    area.append(el('p', `${out.paid.amount} ${out.paid.currency} paid across ${out.bill_count} bill${out.bill_count === 1 ? '' : 's'}.`));
+    area.append(el('p', `${exact.money(out.paid.amount, out.paid.currency)} paid across ${out.bill_count} bill${out.bill_count === 1 ? '' : 's'}.`));
     for (const payment of out.payments) {
       const card = el('div');
       card.className = 'pay-bills-effect';
@@ -316,13 +316,13 @@
       const head = el('p');
       head.append(link('Bill payment ' + payment.number,
         '/c/' + encodeURIComponent(config.company) + '/bill-payment/' + encodeURIComponent(payment.id)));
-      head.append(el('span', ` · ${payment.vendor_name} · ${payment.total.amount} ${payment.currency}`
+      head.append(el('span', ` · ${payment.vendor_name} · ${exact.money(payment.total.amount, payment.currency)}`
         + ` · ${payment.payment_method_name}`
         + (payment.check_number ? ` · check ${payment.check_number}` : '')));
       card.append(head);
       const settled = el('ul');
       for (const line of payment.revision.lines) {
-        const item = el('li', `Bill ${line.bill_number} · ${line.amount.amount} ${line.currency}`);
+        const item = el('li', `Bill ${line.bill_number} · ${exact.money(line.amount.amount, line.currency)}`);
         item.dataset.bill = line.bill_id;
         settled.append(item);
       }

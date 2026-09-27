@@ -67,7 +67,7 @@ def test_a_vendor_credit_is_corrected_from_its_own_page_and_the_bill_still_owes_
     b.wait_for('!!document.querySelector(".vendor-credit-lines")')
     shown = _text(b, '.sales-document')
     assert 'corrected rather than voided' in shown, shown[:1500]
-    assert 'Still free 0.00 USD' in _text(b, '[data-vendor-credit-settlement]')
+    assert 'Still free $0.00' in _text(b, '[data-vendor-credit-settlement]')
     _contained(b, width)
     _click(b, '[data-vendor-credit-correct]')
     b.wait_for('location.pathname.endsWith("/update") '

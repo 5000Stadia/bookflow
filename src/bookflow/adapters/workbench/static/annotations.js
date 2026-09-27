@@ -70,10 +70,20 @@
       try { await work(); } catch (error) { message(status, error.message || String(error), true); }
       finally { controls.forEach(node => { node.disabled = false; }); container.removeAttribute('aria-busy'); }
     }
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // An instant read the way the server's pages read one: "just now", "12 min ago", "3 h ago", else its date.
+    function ago(at) {
+      const then = new Date(at), seconds = (Date.now() - then.getTime()) / 1000;
+      if (Number.isNaN(seconds)) return at;
+      if (seconds < 60) return 'just now';
+      if (seconds < 3600) return Math.floor(seconds / 60) + ' min ago';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + ' h ago';
+      return `${MONTHS[then.getUTCMonth()]} ${then.getUTCDate()}, ${then.getUTCFullYear()}`;
+    }
     function attribution(container, actor, at) {
       const line = el('p', (actor || 'Unknown actor') + ' · ', 'muted');
-      // Read to the minute; the exact instant stays on the element for the audit trail.
-      const time = el('time', at ? at.slice(0, 16).replace('T', ' ') : ''); if (at) { time.dateTime = at; time.title = at; }
+      // Read as a person does; the exact instant stays on the element for the audit trail.
+      const time = el('time', at ? ago(at) : ''); if (at) { time.dateTime = at; time.title = at; }
       line.append(time); container.append(line);
     }
     function noteEntry(note) {

@@ -18,10 +18,10 @@
 {% if page.kind == 'sources' %}
 {% for row in page['items'] %}
 <section class="deposit-row-card" aria-label="Contributing receipt {{ row.ordinal }}">
-<h2>Receipt {{ row.source.number }} <span class="muted">{{ row.source.source_type.replace('_', ' ') }}</span> <span class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.label }}</span></h2>
+<h2>Receipt {{ row.source.number }} <span class="muted">{{ row.source.source_type.replace('_', ' ') }}</span> <span class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.display|money(row.amount.currency, home=math_company_currency) }}</span></h2>
 <div class="deposit-fields">
 <div><b>Row</b><span>{{ row.ordinal }}</span></div>
-<div><b>Receipt date (captured)</b><span>{{ row.receipt_date }}</span></div>
+<div><b>Receipt date (captured)</b><span>{{ row.receipt_date|longday }}</span></div>
 <div><b>Memo</b><span>{{ row.memo if row.memo else '—' }} <span class="muted">from the {{ row.memo_origin }}</span></span></div>
 <div><b>Receipt memo (captured)</b><span>{{ row.source_memo if row.source_memo else '—' }}</span></div>
 <div><b>Customer reference</b><span>{{ row.check_reference if row.check_reference else '—' }}</span></div>
@@ -44,7 +44,7 @@
 {% elif page.kind == 'additional' %}
 {% for row in page['items'] %}
 <section class="deposit-row-card" aria-label="Additional cash row {{ row.ordinal }}">
-<h2>Row {{ row.ordinal }} <span class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.label }}</span>{% if row.amount.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if row.amount.zero %} <span class="muted">no effect</span>{% endif %}</h2>
+<h2>Row {{ row.ordinal }} <span class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.display|money(row.amount.currency, home=math_company_currency) }}</span>{% if row.amount.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if row.amount.zero %} <span class="muted">no effect</span>{% endif %}</h2>
 <div class="deposit-fields">
 <div><b>Memo</b><span>{{ row.memo if row.memo else '—' }}</span></div>
 <div><b>Check number</b><span>{{ row.check_number if row.check_number else '—' }}</span></div>
@@ -59,7 +59,7 @@
 {% else %}
 <div class="table-wrap" role="region" aria-label="Scrollable cash allocations" tabindex="0"><table class="deposit-allocations">
 <thead><tr><th>Business row</th><th>Component</th><th>Goes to</th><th>Offsetting row</th><th>Amount</th></tr></thead>
-<tbody>{% for row in page['items'] %}<tr><td class="deposit-id">{{ row.row_id }}</td><td>{{ row.component_ordinal }}</td><td>{{ row.bucket.replace('_', ' ') }}</td><td class="deposit-id">{{ row.additional_row_id if row.additional_row_id else '—' }}</td><td class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.label }}</td></tr>{% endfor %}</tbody>
+<tbody>{% for row in page['items'] %}<tr><td class="deposit-id">{{ row.row_id }}</td><td>{{ row.component_ordinal }}</td><td>{{ row.bucket.replace('_', ' ') }}</td><td class="deposit-id">{{ row.additional_row_id if row.additional_row_id else '—' }}</td><td class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.display|money(row.amount.currency, home=math_company_currency) }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 
@@ -69,14 +69,14 @@
 <h2>Totals of the captured revision</h2>
 <div class="table-wrap" role="region" aria-label="Scrollable totals" tabindex="0"><table class="deposit-totals"><tbody>
 {% for label, value in [('Contributing receipts', page.totals.source_total), ('Additional cash in', page.totals.positive_additional_total), ('Additional cash out', page.totals.negative_additional_total), ('Subtotal', page.totals.subtotal), ('Cash back', page.totals.cash_back), ('Posting total', page.totals.posting_total), ('Bank total', page.totals.bank_total)] %}
-<tr><th scope="row">{{ label }}</th><td class="deposit-amount{% if value.negative %} deposit-negative{% endif %}{% if value.zero %} deposit-zero{% endif %}">{{ value.label }}{% if value.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if value.zero %} <span class="muted">no effect</span>{% endif %}</td></tr>
+<tr><th scope="row">{{ label }}</th><td class="deposit-amount{% if value.negative %} deposit-negative{% endif %}{% if value.zero %} deposit-zero{% endif %}">{{ value.display|money(value.currency, home=math_company_currency) }}{% if value.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if value.zero %} <span class="muted">no effect</span>{% endif %}</td></tr>
 {% endfor %}
 </tbody></table></div>
 </section>
 
 <section class="deposit-card" aria-label="Current records named by this page">
 <h2>Current records this page names</h2>
-<p class="muted">Observed at {{ page.current_observed_at }}, separately from the captured values above.</p>
+<p class="muted">Read <time datetime="{{ page.current_observed_at }}" title="{{ page.current_observed_at|when }}">{{ page.current_observed_at|ago }}</time>, separately from the captured values above.</p>
 {% if page.current_references %}<ul class="deposit-current-references">{% for reference in page.current_references %}<li><span class="muted">{{ reference.group.replace('_', ' ') }}</span> {{ reference.display_label }}{% if not reference.active %} <span class="muted">inactive</span>{% endif %}</li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
 </section>
 {% endif %}

@@ -121,9 +121,9 @@ def test_every_credit_route_renders_a_usable_page(hosted):
 
     # The saved documents show their own figures, not a schema dump.
     credit = browser.get(f"/c/{company}/credit-memo/{made['credit']['id']}").text
-    assert "Still available 30.00 USD" in credit
+    assert "Still available $30.00" in credit
     vendor_credit = browser.get(f"/c/{company}/vendor-credit/{made['vendor_credit']['id']}").text
-    assert "Still free 15.00 USD" in vendor_credit
+    assert "Still free $15.00" in vendor_credit
     refund = browser.get(f"/c/{company}/customer-refund/{made['refund']['id']}").text
     assert "2041" in refund and "10.00" in refund
 

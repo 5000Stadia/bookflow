@@ -1,7 +1,7 @@
 <section class="document-detail" aria-label="Received goods">
 <h2>Received goods</h2>
-<p>{{ record.profile.vendor.label }} · {{ record.date }} · {{ record.total.amount }} {{ record.total.currency }}</p>
-<p>Awaiting vendor bills: {{ record.receipt_liability_current.amount }} {{ record.receipt_liability_current.currency }}</p>
+<p>{{ record.profile.vendor.label }} · {{ record.date|longday }} · {{ record.total|money(record.currency, home=math_company_currency) }}</p>
+<p>Awaiting vendor bills: {{ record.receipt_liability_current|money(record.currency, home=math_company_currency) }}</p>
 <p>Enter the vendor bill before paying for these received goods.</p>
 {% if record.reference %}<p>Supplier reference: {{ record.reference }}</p>{% endif %}
 {% if record.memo %}<p>{{ record.memo }}</p>{% endif %}

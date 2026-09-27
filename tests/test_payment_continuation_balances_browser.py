@@ -12,7 +12,7 @@ from tests.test_customer_payment_browser import click,wait,shot
 @pytest.mark.parametrize('action',['Correct receipt','Unapply recorded applications','Void unapplied receipt','Apply available credit'])
 def test_receipt_continuations_discard_stale_current_ar(register_browser,tmp_path,width,action):
     b,run,payer,other,base=setup(register_browser);b.viewport(width,900)
-    assert b.evaluate("document.querySelector('#payment-payer-balance').innerText")=='0.00 USD'
+    assert b.evaluate("document.querySelector('#payment-payer-balance').innerText")=='$0.00'
     click(b,'preview');click(b,'save')
     b.evaluate(f"Array.from(document.querySelectorAll('#payment-record button')).find(x=>x.textContent==={json.dumps(action)}).click()")
     wait(b)
@@ -24,8 +24,8 @@ def test_receipt_continuations_discard_stale_current_ar(register_browser,tmp_pat
         db.execute('PRAGMA query_only=ON')
         facts['raw_ar']=db.execute("SELECT sum(l.debit_minor_units-l.credit_minor_units) FROM posting_lines l JOIN accounts a ON a.id=l.account_id WHERE a.type='accounts_receivable' AND l.name_type='customer' AND l.name_id=?",(payer,)).fetchone()[0]
     assert facts['raw_ar']==-1000
-    assert not facts['visible'] or facts['payer']==facts['family']=='-10.00 USD',facts
-    if action=='Apply available credit':assert facts['visible'] and facts['payer']==facts['family']=='-10.00 USD'
+    assert not facts['visible'] or facts['payer']==facts['family']=='-$10.00',facts
+    if action=='Apply available credit':assert facts['visible'] and facts['payer']==facts['family']=='-$10.00'
     else:assert not facts['visible'] and facts['payer']==facts['family']==''
     assert len(run('payment query',{'customer':payer})['items'])==1
     (tmp_path/'current-ar.json').write_text(json.dumps(facts,indent=2))
