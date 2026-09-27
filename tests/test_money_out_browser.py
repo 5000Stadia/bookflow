@@ -191,6 +191,8 @@ def test_the_expenses_grid_has_nothing_to_scroll_sideways_at_phone_width(registe
     b.viewport(390, 844)
     tag = 'Phone ' + noun.replace('-', ' ')
     books = _books(b, env.site, tag)
+    # The block shape under test pairs the amount with the class: a company using classes.
+    _command(b, env.site, 'company.update', {'use_classes': True})
 
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/{noun}/post')
     b.wait_for('!!document.querySelector("[data-generated-form]")')

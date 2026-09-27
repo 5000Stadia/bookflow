@@ -35,7 +35,7 @@
 {% for column in grid.columns %}
 {% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("amount:" ~ path)).replace(':', '-').replace('.', '-') %}
 <div class="line-cell" data-line-column="{{ column.name }}"{% if column.hint %} title="{{ column.hint }}"{% endif %}>
-{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span></span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
+{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span></span><span class="line-amount">{{ amounts.amount | amount if amounts else '—' }}</span>
 {% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}"><span class="line-cell-name">{{ column.label }}</span></label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
 {% endif %}
 </div>
@@ -107,13 +107,20 @@
 
 <section class="document-band document-footer" aria-label="{{ d.title }} footer"><h2 class="band-title">Notes and totals</h2>
 <div class="footer-inputs">{% for l in d.footer %}{{ field(l, l.index) }}{% endfor %}</div>
+{# The totals are the server's own preview. data-live-totals is what the page refreshes as
+   the person edits (sales.js runs the same preview in the background); the status line
+   beside it says when that is under way or why it could not be done. #}
 <div class="footer-totals" aria-label="Computed totals">
+<div data-live-totals>
 {% if d.totals %}<dl class="totals-list">
-{% for row in d.totals %}<dt>{{ row.label }}</dt><dd>{% if row.strong %}<strong>{{ row.value }}</strong>{% else %}{{ row.value }}{% endif %}</dd>{% endfor %}
+{% for row in d.totals %}{% set shown = row.value | money(home=math_company_currency) if row.money else row.value %}<dt>{{ row.label }}</dt><dd>{% if row.strong %}<strong>{{ shown }}</strong>{% else %}{{ shown }}{% endif %}</dd>{% endfor %}
 </dl>
+{% if d.noun == 'invoice' and d.computed and d.computed.due_date %}<p class="totals-due" data-totals-due>Due {{ d.computed.due_date | longday }}{% if d.computed.terms %} · {{ d.computed.terms }}{% endif %}</p>{% endif %}
 {% if d.reconciliation %}<p class="{{ 'muted' if d.reconciled else 'warn' }}" data-reconciliation>{{ d.reconciliation }}</p>{% endif %}
 
 {% else %}<p class="muted">{{ d.totals_empty }}</p>{% endif %}
+</div>
+<p class="live-totals-status" data-live-totals-status aria-live="polite"></p>
 </div>
 </section>
 

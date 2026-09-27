@@ -374,3 +374,16 @@ html:has(.document-actions) { scroll-padding-bottom: 5.5rem; }
 .date-field .date-tools input[type=date] { position: absolute; top: calc(100% + 2px); right: 0;
   z-index: 7; width: auto; }
 @media (max-width: 600px) { .workbench .date-field .date-calendar { width: 2.75rem; } }
+
+/* Live totals: the server's preview, refreshed as the person edits. Quiet while it runs;
+   a refusal is a small note beside the figures rather than an alarm. */
+.footer-totals [data-live-totals][aria-busy="true"] { opacity: .55; transition: opacity .15s; }
+.live-totals-status { margin: .35rem 0 0; font-size: 12px; color: var(--muted); min-height: 1em; }
+.live-totals-status:empty { display: none; }
+.totals-due { margin: .4rem 0 0; font-size: .85rem; color: #3c4a5a; text-align: right; }
+
+/* On a desktop the row's own controls are small enough to sit inside their column, so the
+   line grid has nothing to scroll sideways; a phone keeps the full-size touch targets. */
+@media (min-width: 701px) {
+  .workbench .line-cell-actions button { min-height: 0; padding: .2rem .4rem; font-size: .75rem; }
+}
