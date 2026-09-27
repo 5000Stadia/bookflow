@@ -40,8 +40,9 @@ def test_legacy_partial_basis_and_work_order_survive_upgrade_attach(legacy_work,
     c=bookflow.connect(data_root=str(target_root));c.run('upgrade',{})
     target,company=attach(c,'Demo Plumbing Co',tmp_path)
     run=lambda command,data:target.run(command,data,company=company,reason='Portable legacy work')
+    read=lambda command,data:target.run(command,data,company=company)
     run('company update',dict(sales_tax_calculation='invoice_combined_half_up'))
-    source=run('estimate show',dict(estimate=saved['source']['id']))
+    source=read('estimate show',dict(estimate=saved['source']['id']))
     assert source['revision']['facts']['schema_version']==1
     assert source['revision']['tax_calculation_details']['origin']['kind']=='legacy_implicit'
     assert all(line['facts']['schema_version']==1 for line in source['revision']['lines'])
@@ -52,7 +53,7 @@ def test_legacy_partial_basis_and_work_order_survive_upgrade_attach(legacy_work,
     malformed['profile'].update(schema_version=2,sales_tax_calculation='invoice_combined_half_up',tax_policy_origin={'kind':'explicit','source_id':None})
     with pytest.raises(ValidationError):read_facts(malformed)
     old_lines={line['line_id']:line['facts'] for line in source['revision']['lines']}
-    before=run('estimate billing',dict(estimate=source['id']))
+    before=read('estimate billing',dict(estimate=source['id']))
     assert before['remaining_net_minor_units']==25
     order=run('estimate work-order',dict(estimate=source['id'],expected_version=source['version'],date='2026-11-03',conversion_key='portable-legacy-order'))
     assert order['revision']['facts']['schema_version']==2
@@ -60,21 +61,37 @@ def test_legacy_partial_basis_and_work_order_survive_upgrade_attach(legacy_work,
     assert [line['facts'] for line in order['revision']['lines']]==list(old_lines.values())
     order=run('work-order update',dict(work_order=order['id'],expected_version=order['version'],lines=[dict(line_id=line['line_id'],item=saved['item']) for line in reversed(order['revision']['lines'])]))
     assert all(line['facts']['schema_version']==1 for line in order['revision']['lines'])
-    state=run('work-order billing',dict(work_order=order['id']))
+    state=read('work-order billing',dict(work_order=order['id']))
     assert state['remaining_net_minor_units']==25
     final=run('work-order invoice',dict(work_order=order['id'],expected_version=order['version'],date='2026-11-04',conversion_key='portable-legacy-finish'))
     assert final['subtotal_minor_units']==25
     assert {row['allocation_version'] for row in final['revision']['billing_sources']}=={1,2}
     assert run('estimate invoice',saved['request'])['idempotent_replay']
-    historical=run('estimate show',dict(estimate=source['id'],revision_number=2))
+    historical=read('estimate show',dict(estimate=source['id'],revision_number=2))
     assert historical['revision']['facts']==saved['source']['revision']['facts']
-    assert [line['facts'] for line in historical['revision']['lines']]==[line['facts'] for line in saved['source']['revision']['lines']]
+    # Today's output names the later captured cost accounts; a line captured before they existed has none.
+    from bookflow.company.sales_facts import LATER_LINE_PROFILE_FIELDS
+    legacy=[deepcopy(line['facts']) for line in saved['source']['revision']['lines']]
+    for facts in legacy:
+        assert not set(LATER_LINE_PROFILE_FIELDS)&set(facts['profile'])
+        facts['profile'].update(dict.fromkeys(LATER_LINE_PROFILE_FIELDS))
+    assert [line['facts'] for line in historical['revision']['lines']]==legacy
     path=target.company.show(company=company)['path']
     from pathlib import Path
     with sqlite3.connect(Path(path)/'company.db') as db:
         row=db.execute('SELECT source_basis_hash,facts_snapshot,spans_json FROM work_billing_allocations WHERE id=?',(saved['bill']['revision']['billing_sources'][0]['id'],)).fetchone()
     with sqlite3.connect(next(root.glob('organizations/*/Demo Plumbing Co/company.db'))) as db:
         assert db.execute('SELECT source_basis_hash,facts_snapshot,spans_json FROM work_billing_allocations WHERE id=?',(saved['bill']['revision']['billing_sources'][0]['id'],)).fetchone()==row
+
+
+def test_legacy_partial_basis_stays_billable_after_upgrade_in_place(legacy_work,tmp_path):
+    # A book upgraded where it sits (no attach) keeps its partly billed legacy line
+    # billable: the proof stored under the older line-fact shape still matches.
+    root,saved=legacy_work;target_root=tmp_path/'upgraded';shutil.copytree(root,target_root)
+    c=bookflow.connect(data_root=str(target_root));c.run('upgrade',{})
+    read=lambda command,data:c.run(command,data,company='Demo Plumbing Co')
+    state=read('estimate billing',dict(estimate=saved['source']['id']))
+    assert state['remaining_net_minor_units']==25
 
 
 def test_combined_partial_basis_and_rebill_survive_fresh_hub(client, tax_sale, tmp_path):

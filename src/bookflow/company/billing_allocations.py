@@ -7,18 +7,41 @@ import sqlalchemy as sa
 
 from bookflow.company import schema as c
 from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof, ExactFraction
-from bookflow.company.work_tax_facts import read_line, read_facts, basis_hash
+from bookflow.company.sales_facts import LATER_LINE_PROFILE_FIELDS
+from bookflow.company.work_tax_facts import read_line, read_facts, basis_hash, economic_basis
 from bookflow.company import tax_policy
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units
 
 
-def basis(line, root, policy=None):
-    if line.schema_version==2:return basis_hash(line,policy)
-    values = dict(basis_version=1, root_document_id=root[0], root_line_id=root[1],
-        line=line.model_dump(mode='json', exclude={'completed_quantity_microunits', 'billable'}))
+def _digest(values):
     encoded = json.dumps(values, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
     return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def _basis_values(line, root, policy):
+    if line.schema_version==2:return economic_basis(line,policy), 'economics'
+    return dict(basis_version=1, root_document_id=root[0], root_line_id=root[1],
+        line=line.model_dump(mode='json', exclude={'completed_quantity_microunits', 'billable'})), 'line'
+
+
+def basis(line, root, policy=None):
+    if line.schema_version==2:return basis_hash(line,policy)
+    return _digest(_basis_values(line, root, policy)[0])
+
+
+def matches_basis(stored, line, root, policy=None):
+    """A stored proof hash matches these facts in today's shape or, when the line carries none of
+    the later profile fields, in the shape a proof stored before those fields existed hashed.
+    Stored hashes are never rewritten; new proofs always carry today's shape."""
+    if stored == basis(line, root, policy):
+        return True
+    if any(getattr(line.profile, field) is not None for field in LATER_LINE_PROFILE_FIELDS):
+        return False
+    values, key = _basis_values(line, root, policy)
+    for field in LATER_LINE_PROFILE_FIELDS:
+        values[key]['profile'].pop(field, None)
+    return stored == _digest(values)
 
 
 def captured_line(row):
@@ -35,14 +58,26 @@ def source_policy(s,line):
     return tax_policy.effective(work.facts(rev).profile)
 
 
-def make_proof(source, revision, line, root, facts, spans):
+def proof_basis(s, root, facts, policy=None, *, excluding=None):
+    """The hash a new proof of this root carries. Every active proof of one root shares one
+    hash, so when active proofs carry an accepted earlier shape of these same facts, a new
+    proof continues it; otherwise today's shape."""
+    current = basis(facts, root, policy)
+    a = c.work_billing_allocations
+    query = active_query([root], excluding=excluding).with_only_columns(a.c.source_basis_hash).where(
+        a.c.allocation_version.in_((2, 3))).limit(1)
+    stored = s.company.conn.execute(query).scalar()
+    return stored if stored is not None and stored != current and matches_basis(stored, facts, root, policy) else current
+
+
+def make_proof(s, source, revision, line, root, facts, spans, *, excluding=None):
     from bookflow.company import billing_math as math
     model=TaxAllocationProof if facts.schema_version==2 else AllocationProof
     extra={'basis_version':2} if facts.schema_version==2 else {}
     policy=tax_policy.effective(read_facts(revision['facts_snapshot']).profile)
     return model(**extra,source_document_id=source['id'], source_revision_id=revision['id'],
         source_line_id=line['id'], root_document_id=root[0], root_line_id=root[1],
-        source_basis_hash=basis(facts, root, policy), quoted_quantity_microunits=facts.quantity_microunits,
+        source_basis_hash=proof_basis(s, root, facts, policy, excluding=excluding), quoted_quantity_microunits=facts.quantity_microunits,
         quoted_base_quantity_microunits=facts.base_quantity_microunits,
         quoted_net_minor_units=facts.net_minor_units,
         denominator=str(math.denominator(facts.quantity_microunits, facts.net_minor_units)),
@@ -144,8 +179,8 @@ def occupied_spans(s, root, facts, *, excluding=None, policy=None):
         document=root[0], line=root[1], excluded=excluding)
     with s.company.conn.execute(query, params) as result:
         for row in result.mappings():
-            if row['allocation_version'] in (2,3) and (row['source_basis_hash'] != expected_basis
-                    or row['denominator_hex'] != params['full']):
+            if row['allocation_version'] in (2,3) and (row['denominator_hex'] != params['full']
+                    or (row['source_basis_hash'] != expected_basis and not matches_basis(row['source_basis_hash'], facts, root, policy))):
                 raise BookflowError('E_WORK_DEPENDENCY', details=dict(problem='active billing uses a different source basis',
                     root_document_id=root[0], root_line_id=root[1]))
             yield math.coordinate_int(row['start']), math.coordinate_int(row['end'])

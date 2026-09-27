@@ -26,7 +26,7 @@ def source_facts(s, proof):
     root = identities[0]['root_document_id'], identities[0]['root_line_id']
     require(root == (proof.root_document_id,proof.root_line_id), 'source root differs')
     facts = read_line(row['facts_snapshot'])
-    require(proof.source_basis_hash == alloc.basis(facts, root, alloc.source_policy(s,row)), 'basis hash differs from stored source')
+    require(alloc.matches_basis(proof.source_basis_hash, facts, root, alloc.source_policy(s,row)), 'basis hash differs from stored source')
     require(getattr(proof,'basis_version',1)==facts.schema_version,'proof basis version differs from source facts')
     require((proof.quoted_quantity_microunits, proof.quoted_base_quantity_microunits, proof.quoted_net_minor_units) ==
             (facts.quantity_microunits, facts.base_quantity_microunits, facts.net_minor_units), 'quoted numeric basis differs')

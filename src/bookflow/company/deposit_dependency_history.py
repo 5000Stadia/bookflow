@@ -339,7 +339,7 @@ def _project(kind, value, fields=None):
             try:
                 raw = {**value, 'facts_snapshot': canonical(value['facts_snapshot'])}
                 proof = billing_allocations.read_proof(raw)
-                if proof is not None and proof.source_basis_hash != billing_allocations.basis(
+                if proof is not None and not billing_allocations.matches_basis(proof.source_basis_hash,
                         billing_allocations.captured_line(raw), (value['root_document_id'],value['root_line_id']),
                         billing_allocations.captured_policy(raw)):
                     raise MissingHistory('contradictory work allocation basis')

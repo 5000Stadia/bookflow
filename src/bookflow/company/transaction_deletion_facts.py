@@ -208,7 +208,7 @@ def load(s, ctx, intent, binding):
     for item in work_rows:
         value=item.values(); proof=billing_allocations.read_proof(value)
         if proof is not None:
-            require(value['source_basis_hash']==billing_allocations.basis(billing_allocations.captured_line(value),
+            require(billing_allocations.matches_basis(value['source_basis_hash'],billing_allocations.captured_line(value),
                 (value['root_document_id'],value['root_line_id']),billing_allocations.captured_policy(value)))
     events={r.values()['audit_event_id'] for r in rows if r.values().get('audit_event_id')}
     rows.extend(read(s,'audit_events','id',events))

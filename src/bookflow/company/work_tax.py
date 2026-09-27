@@ -1,9 +1,15 @@
 """Whole-work tax preparation, immutable attribution and independent effect checks."""
 from copy import deepcopy
 from bookflow.company import schema as c, tax_attribution as tax, tax_policy
+from bookflow.company.sales_facts import LATER_LINE_PROFILE_FIELDS
 from bookflow.company.work_tax_facts import read_facts, read_line
 
 TABLE_KEYS = {'work_tax_line_keys':'line_id', 'work_tax_attributions':'revision_id', 'work_tax_attribution_lines':'work_line_id'}
+
+
+def _captured_profile(profile):
+    # Legacy line facts carry no key for later profile fields; absent and null are one captured fact.
+    return {key:item for key,item in profile.items() if not (key in LATER_LINE_PROFILE_FIELDS and item is None)}
 
 
 def normalized(value):
@@ -12,7 +18,9 @@ def normalized(value):
     result['facts'].pop('schema_version',None)
     if 'schema_version' in value['facts']['profile']:
         result['facts']['profile']=tax.semantic_profile(read_facts(value['facts']).profile)
-    for line in result['lines']:line['facts'].pop('schema_version',None)
+    for line in result['lines']:
+        line['facts'].pop('schema_version',None)
+        line['facts']['profile']=_captured_profile(line['facts']['profile'])
     return result
 
 
@@ -22,6 +30,7 @@ def economics(value):
     if value['schema_version']==2:excluded|={'schema_version','tax_minor_units','gross_minor_units','taxes'}
     result={key:item for key,item in value.items() if key not in excluded}
     if value['schema_version']==2:result['tax_rules']=[cell['rule'] for cell in value['taxes']]
+    result['profile']=_captured_profile(value['profile'])
     return result
 
 
