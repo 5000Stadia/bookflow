@@ -17,8 +17,8 @@ Double-entry accounting for small businesses, where people in the browser and th
 
 - [~] R9 Lists: chart of accounts, customers and jobs, vendors, items, supporting lists (spec row 5; acceptance check being run against the spec) — design/specs/5-lists.md
 - [~] R10 Identity, memberships, roles and agent tokens (spec row 7; acceptance check being run against the spec) — design/specs/7-identity-isolation.md
-- [~] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; acceptance check being run against the spec) — design/specs/8-general-ledger.md
-- [~] R12 MCP adapter and agent/GUI cooperation (spec row 9; acceptance check being run against the spec) — design/specs/9-mcp-adapter.md
+- [x] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; every done-definition clause checked 2026-09-27) — design/specs/8-general-ledger.md
+- [x] R12 MCP adapter and agent/GUI cooperation (spec row 9; every done-definition clause checked 2026-09-27) — design/specs/9-mcp-adapter.md
 - [~] R13 Customer payments and invoice settlement (spec row 22; acceptance check being run against the spec) — design/specs/22-customer-payments.md
 - [~] R14 Sales-tax calculation policies (spec row 24; acceptance check being run against the spec) — design/specs/24-sales-tax-policy.md
 - [x] R15 Customer work, service sales, progress and work billing — design/customer-work.md
