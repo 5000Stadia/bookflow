@@ -128,7 +128,14 @@ def subject(noun, meta=None, plural=False):
     if label:
         return label
     name = words(noun)
-    return (name + 's') if plural else name
+    if not plural:
+        return name
+    # English plurals for the endings the registry's nouns actually have.
+    if name.endswith('y') and name[-2:-1] not in 'aeiou':
+        return name[:-1] + 'ies'
+    if name.endswith(('s', 'x', 'ch', 'sh')):
+        return name + 'es'
+    return name + 's'
 
 
 def heading(noun, verb, meta=None):
