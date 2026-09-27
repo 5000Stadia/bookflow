@@ -24,12 +24,13 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; every done-definition clause checked 2026-09-27) — design/specs/8-general-ledger.md
 - [x] R12 MCP adapter and agent/GUI cooperation (spec row 9; every done-definition clause checked 2026-09-27) — design/specs/9-mcp-adapter.md
 - [~] R13 Customer payments and invoice settlement (spec row 22; checked 2026-09-27: ledger, corrections, concurrency, permissions and agent/human continuation hold; R69–R70 remain) — design/specs/22-customer-payments.md
-- [~] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
+- [x] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
 - [ ] R70 R13 the blind fresh-agent payment exercise with its interview, fixes and retest; the payment workflow doc gains the MCP and browser journeys — design/specs/22-customer-payments.md
 - [~] R14 Sales-tax calculation policies (spec row 24; checked 2026-09-27: policies, arithmetic, migration and every surface hold; R71–R72 remain) — design/specs/24-sales-tax-policy.md
-- [~] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
+- [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
 - [ ] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
-- [~] R73 repair the stale tests the acceptance checks found across rows 5, 7, 8, 9, 22 and 24 — notes/NOW.md
+- [x] R73 repair the stale tests the acceptance checks found across rows 5, 7, 8, 9, 22 and 24 — notes/NOW.md
+- [ ] R75 investigate three suspected defects: deposit coordinate work E_INTERNAL "Unsupported source aggregate identity", a progress-billing schema constraint mismatch that differs between runs, and Find rates answering with a JSON flash on the Overview — notes/stale-tests-20260927.md
 - [x] R15 Customer work, service sales, progress and work billing — design/customer-work.md
 - [x] R16 Purchasing, receiving with shipping allocation, bills and vendor payments — design/architecture.md
 - [x] R17 Deposits and bank reconciliation — design/architecture.md
