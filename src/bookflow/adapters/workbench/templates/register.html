@@ -9,13 +9,15 @@
 <h1>{{ account_label }} register</h1>
 <p>{{ account.type.replace('_', ' ') | title }} · {{ account.currency }} · This account only</p>
 <p><a href="{{ gl_url }}">Account general ledger</a></p>
+{# On a phone the entry form is a bottom sheet behind "Add entry"; on a wide screen it stays in place. #}
+{% if config.writable %}<button type="button" id="register-sheet-open" class="register-sheet-open" aria-controls="register-entry" aria-expanded="false">Add entry</button>{% endif %}
 <div id="register-account-chooser"></div>
 {% if not config.supported %}<p>{% if account.type == 'non_posting' %}This is a non-posting account and accepts no entry.{% else %}Use the account general ledger for income and expense activity.{% endif %}</p>{% endif %}
 <section id="register-pending" aria-label="Save recovery" hidden><p id="register-pending-message" role="status"></p><button type="button" id="register-retry">Retry same save</button> <a id="register-review">Review original request</a> <a id="register-pending-location" hidden>Return to pending register</a><div id="register-reconciliation" hidden><label><input id="register-reconciled" type="checkbox"> I reviewed this request key in the authoritative journal and audit trail and resolved whether it committed.</label><button id="register-finish-reconciliation" type="button" disabled>Finish reconciliation and start a new draft</button></div></section>
 <section id="register-receipt" aria-label="Saved entry" role="status" hidden></section>
 {% if config.writable %}
-<section aria-label="Register entry">
-<h2 id="register-entry-title">{{ 'Edit journal' if config.edit else 'New journal entry' }}</h2>
+<section id="register-entry" class="register-sheet" aria-label="Register entry">
+<div class="register-sheet-head"><h2 id="register-entry-title">{{ 'Edit journal' if config.edit else 'New journal entry' }}</h2><button type="button" id="register-sheet-close">Close</button></div>
 <p class="muted">Only Record saves an entry. Date shortcuts: T = today; + / − = next / previous day.</p>
 <form id="register-form" novalidate data-math-company-currency="{{ config.currency }}">
 <fieldset id="register-fields">
@@ -42,18 +44,21 @@
 <label>Source reference <input name="source_ref" maxlength="2000"></label>
 <label>Directive <input name="directive_id" maxlength="2000"></label>
 <fieldset id="register-custom-fields" style="min-width:0;overflow-wrap:anywhere"><legend>Custom fields</legend></fieldset>
-<div class="actions"><button id="register-record" type="button">Record</button><button id="register-restore" type="button">Restore</button><button id="register-new" type="button" {% if not config.edit %}hidden{% endif %}>New entry</button></div>
+<div class="register-submit"><div id="register-error" class="error" role="alert" tabindex="-1"></div>
+<div class="actions"><button id="register-record" type="button">Record</button><button id="register-restore" type="button">Restore</button><button id="register-new" type="button" {% if not config.edit %}hidden{% endif %}>New entry</button></div></div>
 </fieldset>
-<div id="register-error" class="error" role="alert" tabindex="-1"></div>
 </form></section>
+<div class="register-sheet-backdrop" id="register-sheet-backdrop" hidden></div>
 {% endif %}
 {% if config.supported %}
 <section aria-label="Account movements">
 <h2>Account movements</h2>
 <form id="register-period" class="register-period"><label>From <input type="text" data-date required name="date_from" value="{{ config.date_from }}"></label><label>Through <input type="text" data-date required name="date_to" value="{{ config.date_to }}"></label><button type="submit">Refresh</button></form>
-<p id="register-current">All entries: loading…</p><p id="register-current-metadata" class="muted"></p>
-<p id="register-period-totals"></p><p id="register-metadata" class="muted"></p><p id="register-query-error" role="status"></p>
-<div class="table-wrap" role="region" aria-label="Scrollable account history" tabindex="0"><table id="register-history"><thead><tr><th>Date / recorded</th><th>Number / type / effect</th><th>Payee</th><th>Category</th><th>Memo / line description</th><th>Class</th><th>Increase</th><th>Decrease</th><th>Running balance</th><th>Journal</th></tr></thead><tbody></tbody></table></div>
+{% set movement = dict(config.directions) %}
+<p id="register-current">All entries: loading…</p>
+<p id="register-period-totals"></p><p id="register-query-error" role="status"></p>
+<details class="register-about"><summary>About these figures</summary><p id="register-current-metadata" class="muted"></p><p id="register-metadata" class="muted"></p></details>
+<div class="table-wrap" role="region" aria-label="Scrollable account history" tabindex="0"><table id="register-history"><thead><tr><th>Date / recorded</th><th>Number / type / effect</th><th>Payee</th><th>Category</th><th>Memo / line description</th><th>Class</th><th class="num">{{ movement.increase }} ({{ account.currency }})</th><th class="num">{{ movement.decrease }} ({{ account.currency }})</th><th class="num">Balance ({{ account.currency }})</th><th>Journal</th></tr></thead><tbody></tbody></table></div>
 <button id="register-next" type="button" hidden>Next page</button>
 </section>
 {% endif %}
