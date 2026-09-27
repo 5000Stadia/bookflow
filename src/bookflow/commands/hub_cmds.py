@@ -260,13 +260,19 @@ def plan_org_new(inp: NameInput, ctx: Context, s: Session) -> Plan:
     folder = choose_folder_name(s.organizations_dir, name)
     at = now_iso()
     row = {"id": new_id(), "display_name": name, "name_key": name_key(name), "path": f"organizations/{folder}", "pending_path": None, "is_demo": False, **users.common(s.actor.id, VIA(ctx), at)}
-    return Plan(preview=OrganizationNewOutput(**organization_output(s, row).model_dump()), data={"name": name})
+    return Plan(preview=_new_org_output(s, row), data={"name": name})
+
+
+def _new_org_output(s: Session, row: dict[str, Any]) -> OrganizationNewOutput:
+    """The creator owns the new organization; the output reports that access."""
+    out = organization_output(s, row).model_dump()
+    return OrganizationNewOutput(**{**out, "access": "organization", "role": "owner"})
 
 
 @org_new.applier
 def apply_org_new(plan: Plan, ctx: Context, s: Session) -> Applied:
-    row, touched = org.create(s, plan.data["name"], VIA(ctx))
-    return Applied(OrganizationNewOutput(**organization_output(s, row).model_dump()), [touched], f"created organization {row['display_name']}")
+    row, touched = org.create(s, plan.data["name"], VIA(ctx), owner_membership=True)
+    return Applied(_new_org_output(s, row), touched, f"created organization {row['display_name']}")
 
 
 org_list = command("organization list", scope="hub", description="List the organizations the acting user can see.",
@@ -921,7 +927,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
             audit.write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
         orow, t_org = org.create(s, normalize_display_name(seed["organization"]["display_name"]), VIA(ctx), is_demo=True)
         rows = []
-        touched = [t_org]
+        touched = list(t_org)
         seeds = [seed] + ([plan.data["reference"]] if plan.data["reference"] else [])
         for company_seed in seeds:
             inp = CompanyNewInput.model_validate({k: v for k, v in company_seed["company"].items()} | {"organization": orow["id"]})

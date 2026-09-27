@@ -142,7 +142,7 @@ Username matching uses Unicode NFC normalization and case folding; stored spelli
 
 There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it. Its `created_by` is its own id; it is the only self-referencing row. The first human user, created by `init`, is a hub admin. `init` starts a new data root in the current permission mode with the current catalog, exactly as `permission activate` would leave it; an older root upgraded in place keeps the `legacy` mode until its operator runs `permission activate`. Hub admins are the operators of the data root: they see every organization and company and their folder paths, and they create organizations. Every other user sees only what their memberships grant and never a path.
 
-`organization new` creates no membership; a hub admin grants the organization's first owner with `user add` and `membership grant` (row 7).
+`organization new` makes its creating human the organization's `owner` (an organization membership recorded in the same hub audit event), as `company new` makes its creator the company's owner; that owner grants further organization or company access with `user add` and `membership grant` (row 7). Organizations created before this rule keep the memberships they had.
 
 ### 4.1a Principals mirror
 

@@ -97,3 +97,43 @@ def test_on_a_fresh_install_revocation_suspends_the_agent_and_restoration_revive
     # Nor does restoration make a new token issuable without explicit reauthorization.
     fresh = hosted.call("token.issue", {"user": G, "label": "after restore", "principal": P})
     assert fresh.status_code == 403 and fresh.json()["code"] == "E_PERMISSION"
+
+
+def test_organization_new_makes_its_creator_owner_who_can_grant_organization_access(tmp_path, monkeypatch):
+    """On a fresh (activated) install, organization-wide access has an administrator to grant it."""
+    from fastapi.testclient import TestClient
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.context import client_version
+
+    root = tmp_path / "fresh"
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(root))
+    c = bookflow.connect(data_root=str(root))
+    me = c.init()
+    assert c.permission.show()["mode"] == "policy_v1"
+    preview = c.organization.new(name="Harbor Group", dry_run=True)
+    assert (preview["access"], preview["role"]) == ("organization", "owner")
+    made = c.organization.new(name="Harbor Group")
+    assert (made["access"], made["role"]) == ("organization", "owner")
+    owned = hub_rows(root, "SELECT user_id, role, revoked_at FROM memberships WHERE scope_type='organization' AND scope_id=?",
+                     made["organization_id"])
+    assert owned == [{"user_id": me["user_id"], "role": "owner", "revoked_at": None}]
+    event = c.hub.audit.list(command="organization new")["items"][0]
+    kinds = {e["record_type"] for e in c.hub.audit.show(event=event["id"])["entries"]}
+    assert {"organization", "membership"} <= kinds
+
+    # The owner grants organization-wide access, locally and over the host.
+    added = c.user.add(username="harbor-clerk", organization=made["organization_id"], role="standard")
+    assert added["membership"]["scope_type"] == "organization"
+    c.user.add(username="harbor-reader")
+    c.user.set_password(username=me["username"], password="correct-horse-battery")
+    handle = start_serving(root, client_version(), bind="127.0.0.1:8765", secure_cookies=False)
+    try:
+        browser = TestClient(handle.app)
+        assert browser.post("/login", json={"username": me["username"], "password": "correct-horse-battery"}).status_code == 200
+        second = browser.post("/commands/organization.new", json={"name": "Second Harbor"}, headers={"X-Bookflow-Workbench": "1"})
+        assert second.status_code == 200, second.text
+        granted = browser.post("/commands/membership.grant", headers={"X-Bookflow-Workbench": "1"},
+                               json={"user": "harbor-reader", "organization": second.json()["organization_id"], "role": "readonly"})
+        assert granted.status_code == 200 and granted.json()["scope_type"] == "organization", granted.text
+    finally:
+        handle.stop()
