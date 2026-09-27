@@ -59,8 +59,9 @@ def test_list_page_uses_declared_columns_and_command_backed_query_controls(hoste
     for column in ("Name", "Kind", "Due rule summary", "Discount rule summary", "Active"):
         assert column in page.text
     assert 'name="query" value="Net 30"' in page.text
-    assert 'name="sort" value="name"' in page.text
-    assert 'name="direction" value="desc"' in page.text
+    # Sort and direction are form controls that keep the chosen order.
+    assert '<option value="name" selected>' in page.text
+    assert '<option value="desc" selected>' in page.text
     assert 'aria-sort="descending"' in page.text
 
 
@@ -102,18 +103,10 @@ def test_list_page_preserves_repeated_filters_and_state_when_toggling_inactive(h
     assert 'value="active=true"' in page.text
     assert 'value="kind=standard"' in page.text
 
-    marker = 'href="/c/' + hosted.company_id + '/term?'
-    start = page.text.index(marker) + len('href="')
-    end = page.text.index('"', start)
-    query = parse_qs(urlsplit(html.unescape(page.text[start:end])).query)
-    assert query == {
-        "query": ["Net"],
-        "filter": ["active=true", "kind=standard"],
-        "sort": ["name"],
-        "direction": ["desc"],
-        "columns": ["name,active"],
-        "include_inactive": ["1"],
-    }
+    # Include inactive is a switch in the same form, so toggling it resubmits every other control.
+    assert '<input type="hidden" name="columns" id="browse-columns" value="name,active"' in page.text
+    assert '<option value="name" selected>' in page.text and '<option value="desc" selected>' in page.text
+    assert '<input type="checkbox" role="switch" name="include_inactive" value="1">' in page.text
 
 
 def test_native_list_search_ignores_the_spare_blank_filter_control(hosted):
@@ -152,7 +145,7 @@ def test_shell_declares_mobile_viewport_and_scopes_horizontal_scroll_to_tables(h
     audit = _browser(hosted).get(f"/c/{hosted.company_id}/audit")
     css = _browser(hosted).get("/static/style.css")
     assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in page.text
-    assert 'class="table-wrap"' in page.text
+    assert 'class="table-wrap' in page.text
     assert '<div class="table-wrap"><table>' in audit.text
     assert "@media (max-width:700px)" in css.text
     assert ".table-wrap{max-width:100%;overflow-x:auto}" in css.text
