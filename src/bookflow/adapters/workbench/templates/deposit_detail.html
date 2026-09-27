@@ -13,7 +13,7 @@
 <h1 class="deposit-heading">Deposit {{ detail.selected.number }}</h1>
 {% if detail.current.status == 'deleted' %}<p class="warn" data-deposit-deleted>This deposit was deleted. Its figures and revisions stay readable here; its bank effect was cancelled and every receipt it banked went back to Undeposited Funds. There is no restore action.</p>{% endif %}
 {% if delete_url %}<p class="deposit-actions"><a href="{{ delete_url }}">Delete deposit</a></p>{% endif %}
-<p class="deposit-lede"><span class="deposit-amount{% if detail.totals.bank_total.negative %} deposit-negative{% endif %}{% if detail.totals.bank_total.zero %} deposit-zero{% endif %}">{{ detail.totals.bank_total.label }}</span> into {{ detail.selected.deposit_to.display_label }} on {{ detail.selected.date }}</p>
+<p class="deposit-lede"><span class="deposit-amount{% if detail.totals.bank_total.negative %} deposit-negative{% endif %}{% if detail.totals.bank_total.zero %} deposit-zero{% endif %}">{{ detail.totals.bank_total.display|money(detail.totals.bank_total.currency, home=math_company_currency) }}</span> into {{ detail.selected.deposit_to.display_label }} on {{ detail.selected.date|longday }}</p>
 
 <section class="deposit-card" aria-label="Revision selection">
 <h2>Which revision you are reading</h2>
@@ -28,10 +28,10 @@
 
 <div class="deposit-fields">
 <div><b>Deposit number</b><span>{{ detail.selected.number }}</span></div>
-<div><b>Deposit date</b><span>{{ detail.selected.date }}</span></div>
+<div><b>Deposit date</b><span>{{ detail.selected.date|longday }}</span></div>
 <div><b>Memo</b><span>{{ detail.selected.memo if detail.selected.memo else '—' }}</span></div>
 <div><b>Deposited to (captured)</b><span>{{ detail.selected.deposit_to.display_label }}{% if not detail.selected.deposit_to.redacted %}{% if detail.selected.deposit_to.number %} · {{ detail.selected.deposit_to.number }}{% endif %} · {{ detail.selected.deposit_to.account_type }}{% endif %}</span></div>
-<div><b>Cash back</b><span>{% if detail.selected.cash_back %}<span class="deposit-amount{% if detail.selected.cash_back.amount.negative %} deposit-negative{% endif %}">{{ detail.selected.cash_back.amount.label }}</span> to {{ detail.selected.cash_back.account.display_label }}{% if detail.selected.cash_back.memo %} · {{ detail.selected.cash_back.memo }}{% endif %}{% else %}None{% endif %}</span></div>
+<div><b>Cash back</b><span>{% if detail.selected.cash_back %}<span class="deposit-amount{% if detail.selected.cash_back.amount.negative %} deposit-negative{% endif %}">{{ detail.selected.cash_back.amount.display|money(detail.selected.cash_back.amount.currency, home=math_company_currency) }}</span> to {{ detail.selected.cash_back.account.display_label }}{% if detail.selected.cash_back.memo %} · {{ detail.selected.cash_back.memo }}{% endif %}{% else %}None{% endif %}</span></div>
 <div><b>Issued by (captured)</b><span>{{ detail.selected.issuer.display_label }}{% if not detail.selected.issuer.redacted and detail.selected.issuer.legal_name %} · {{ detail.selected.issuer.legal_name }}{% endif %}</span></div>
 </div>
 <h3>Custom fields (captured)</h3>
@@ -41,13 +41,13 @@
 
 <section class="deposit-card" aria-label="Current record">
 <h2>Current record</h2>
-<p class="muted">Current status as of {{ detail.current_observed_at }}.</p>
+<p class="muted">Current status, read <time datetime="{{ detail.current_observed_at }}" title="{{ detail.current_observed_at|when }}">{{ detail.current_observed_at|ago }}</time>.</p>
 <div class="deposit-fields">
 <div><b>Current status</b><span>{{ detail.current.status }}</span></div>
 <div><b>Current number</b><span>{{ detail.current.number }}</span></div>
-<div><b>Current date</b><span>{{ detail.current.revision_date }}</span></div>
-<div><b>Current bank total</b><span class="deposit-amount{% if detail.current.revision_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.revision_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.revision_bank_total.label }}</span></div>
-<div><b>Effective bank movement</b><span class="deposit-amount{% if detail.current.effective_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.effective_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.effective_bank_total.label }}</span></div>
+<div><b>Current date</b><span>{{ detail.current.revision_date|longday }}</span></div>
+<div><b>Current bank total</b><span class="deposit-amount{% if detail.current.revision_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.revision_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.revision_bank_total.display|money(detail.current.revision_bank_total.currency, home=math_company_currency) }}</span></div>
+<div><b>Effective bank movement</b><span class="deposit-amount{% if detail.current.effective_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.effective_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.effective_bank_total.display|money(detail.current.effective_bank_total.currency, home=math_company_currency) }}</span></div>
 <div><b>Receipts currently claimed</b><span>{{ detail.current.active_source_count }}</span></div>
 </div>
 <h3>Current records this summary names</h3>
@@ -60,7 +60,7 @@
 <h2>Totals of the captured revision</h2>
 <div class="table-wrap" role="region" aria-label="Scrollable totals" tabindex="0"><table class="deposit-totals"><tbody>
 {% for label, value in [('Contributing receipts', detail.totals.source_total), ('Additional cash in', detail.totals.positive_additional_total), ('Additional cash out', detail.totals.negative_additional_total), ('Subtotal', detail.totals.subtotal), ('Cash back', detail.totals.cash_back), ('Posting total', detail.totals.posting_total), ('Bank total', detail.totals.bank_total)] %}
-<tr><th scope="row">{{ label }}</th><td class="deposit-amount{% if value.negative %} deposit-negative{% endif %}{% if value.zero %} deposit-zero{% endif %}">{{ value.label }}{% if value.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if value.zero %} <span class="muted">no effect</span>{% endif %}</td></tr>
+<tr><th scope="row">{{ label }}</th><td class="deposit-amount{% if value.negative %} deposit-negative{% endif %}{% if value.zero %} deposit-zero{% endif %}">{{ value.display|money(value.currency, home=math_company_currency) }}{% if value.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if value.zero %} <span class="muted">no effect</span>{% endif %}</td></tr>
 {% endfor %}
 </tbody></table></div>
 </section>
@@ -73,9 +73,9 @@
 
 {% if detail.dated_state %}
 <section class="deposit-card" aria-label="Dated bank effect">
-<h2>Bank effect as of {{ detail.dated_state.as_of }}</h2>
-<p>{{ detail.dated_state.financial_state.replace('_', ' ') }} · bank movement <span class="deposit-amount{% if detail.dated_state.bank_movement.negative %} deposit-negative{% endif %}{% if detail.dated_state.bank_movement.zero %} deposit-zero{% endif %}">{{ detail.dated_state.bank_movement.label }}</span> · receipts totalling <span class="deposit-amount">{{ detail.dated_state.source_membership_total.label }}</span></p>
-<p class="muted">All knowledge as of {{ detail.dated_state.knowledge_observed_at }}{% if detail.dated_state.cutoff_after_evaluation_date %}; the cutoff is after the evaluation date{% endif %}.</p>
+<h2>Bank effect as of {{ detail.dated_state.as_of|longday }}</h2>
+<p>{{ detail.dated_state.financial_state.replace('_', ' ') }} · bank movement <span class="deposit-amount{% if detail.dated_state.bank_movement.negative %} deposit-negative{% endif %}{% if detail.dated_state.bank_movement.zero %} deposit-zero{% endif %}">{{ detail.dated_state.bank_movement.display|money(detail.dated_state.bank_movement.currency, home=math_company_currency) }}</span> · receipts totalling <span class="deposit-amount">{{ detail.dated_state.source_membership_total.display|money(detail.dated_state.source_membership_total.currency, home=math_company_currency) }}</span></p>
+<p class="muted">Everything recorded, read <time datetime="{{ detail.dated_state.knowledge_observed_at }}" title="{{ detail.dated_state.knowledge_observed_at|when }}">{{ detail.dated_state.knowledge_observed_at|ago }}</time>{% if detail.dated_state.cutoff_after_evaluation_date %}; the cutoff is after the evaluation date{% endif %}.</p>
 </section>
 {% endif %}
 

@@ -70,6 +70,7 @@
 .deposit-list .document-lines caption{text-align:left;font-weight:600}
 .deposit-list .document-prose p{white-space:pre-wrap}
 .deposit-list .document-lines .document-total{font-variant-numeric:tabular-nums;font-weight:700}
+@media screen and (min-width:701px),print{.deposit-list .document-lines .num{text-align:right;white-space:nowrap}}
 @media screen and (max-width:700px){
  .deposit-list .document-lines caption{display:block;width:100%;box-sizing:border-box}
  .deposit-list .document-lines tr>td:nth-child(1),.deposit-list .document-lines tr>td:nth-child(3){grid-column:1 / -1}

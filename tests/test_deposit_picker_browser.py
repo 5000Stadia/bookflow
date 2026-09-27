@@ -41,7 +41,7 @@ def test_bank_payment_and_receipt_without_entering_identifiers(register_browser,
     b.evaluate('void (window.oldDepositForm=document.querySelector("form[data-generated-form]"))')
     _click(b,'preview');b.wait_for('!window.oldDepositForm?.isConnected')
     assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
-    assert '35.00 USD' in b.evaluate('document.querySelector(`[aria-label="Deposit preview"]`).innerText')
+    assert '$35.00' in b.evaluate('document.querySelector(`[aria-label="Deposit preview"]`).innerText')
     assert b.evaluate('document.getElementsByName("f:operation_key")[0].value')==key
     assert b.evaluate('document.querySelector(".deposit-receipts").scrollWidth <= document.querySelector(".deposit-receipts").clientWidth')
     b.evaluate('void (window.oldDepositForm=document.querySelector("form[data-generated-form]"))')
@@ -66,7 +66,7 @@ def test_bank_payment_and_receipt_without_entering_identifiers(register_browser,
     assert '/deposit/' in saved_link and b.evaluate('location.href').split('?')[0] == saved_link
     b.evaluate('document.querySelector(`[aria-label="Saved deposit"] a`).click()')
     b.wait_for('!!document.querySelector(".deposit-heading")')
-    assert '35.00 USD' in b.evaluate('document.querySelector(".deposit-lede").innerText')
+    assert '$35.00' in b.evaluate('document.querySelector(".deposit-lede").innerText')
     for width in (1280,390):
         b.viewport(width,900)
         assert b.evaluate('document.documentElement.scrollWidth===document.documentElement.clientWidth')
@@ -76,12 +76,12 @@ def test_bank_payment_and_receipt_without_entering_identifiers(register_browser,
     b.wait_for('!!document.querySelector(".deposit-row-card")')
     assert b.evaluate('document.querySelectorAll(".deposit-row-card").length') == 1
     first = b.evaluate('document.querySelector(".deposit-row-card").innerText')
-    assert '10.00 USD' in first or '25.00 USD' in first
+    assert '$10.00' in first or '$25.00' in first
     next_url = b.evaluate('document.querySelector("a[rel=next]").href')
     b.navigate(next_url)
     b.wait_for('!!document.querySelector(".deposit-row-card")')
     second = b.evaluate('document.querySelector(".deposit-row-card").innerText')
-    assert first != second and ('10.00 USD' in second or '25.00 USD' in second)
+    assert first != second and ('$10.00' in second or '$25.00' in second)
     assert b.evaluate('document.documentElement.scrollWidth===document.documentElement.clientWidth')
     assert b.evaluate('document.querySelector(".deposit-row-card").scrollWidth===document.querySelector(".deposit-row-card").clientWidth')
     (tmp_path / 'saved-deposit-items-390.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot', {'format':'png','captureBeyondViewport':True})['data']))
