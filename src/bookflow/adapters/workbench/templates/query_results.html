@@ -1,0 +1,9 @@
+{# A query's rows, under the form that asked for them; the filters above stay as entered. #}
+<section class="workspace-card" id="query-results" aria-label="Results"><h2>Results</h2>
+{% if query_results.rows %}<div class="table-wrap"><table class="list-table"><thead><tr>{% for c in query_results.columns %}<th scope="col">{{ c | label }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in query_results.rows %}<tr>{% for cell in row.cells %}<td data-label="{{ query_results.columns[loop.index0] | label }}">{% if loop.first and row.href %}<a href="{{ row.href }}">{{ cell or 'Open' }}</a>{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+<p class="muted list-count">Showing {{ query_results.count }} {{ 'record' if query_results.count == 1 else 'records' }}{% if query_results.next_cursor %} on this page{% endif %}.</p>
+{% else %}<p>No matching records. Try different filters.</p>{% endif %}
+{% if query_results.next_cursor %}<nav class="pagination" aria-label="Results pages"><button type="button" class="button" data-query-next="{{ query_results.next_cursor }}">Next page →</button></nav>{% endif %}
+<details class="technical-details"><summary>Technical result (JSON)</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details></section>

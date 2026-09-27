@@ -116,10 +116,12 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
     for key, value in {'from_currency':'JPY','date_from':DATE,'date_to':DATE,'limit':'1'}.items():
         _set(b, 'f:'+key, value)
     _click(b, 'submit')
-    b.wait_for("document.body.textContent.includes('audit_watermark')")
-    # The query's own result, not the Overview it returns to (whose recent activity names every rate set).
-    body = b.evaluate("[...document.querySelectorAll('pre')].find(p=>p.textContent.includes('audit_watermark')).textContent")
-    assert 'JPY' in body and 'EUR' not in body
+    b.wait_for("!!document.querySelector('#query-results')")
+    # The query answers on its own page, under the filters that chose it, as a table of rates.
+    assert b.evaluate('location.pathname').endswith('/rate/query')
+    assert b.evaluate("document.querySelector('[name=\"f:from_currency\"]').value") == 'JPY'
+    body = b.evaluate("document.querySelector('#query-results table').textContent")
+    assert 'JPY' in body and 'EUR' not in body and '0.0068' in body
     assert not any(code in b.evaluate('document.body.textContent') for code in ('E_VALIDATION', 'E_USAGE'))
     b.navigate(base + '/rate?from_currency=JPY&date_from=2026-03-11&date_to=2026-03-12&limit=1')
     b.wait_for("!!document.querySelector('form.list-tools')")

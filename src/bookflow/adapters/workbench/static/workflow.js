@@ -326,3 +326,14 @@ document.addEventListener('click', event => {
   input.dispatchEvent(new Event('change', {bubbles: true}));
   input.focus();
 });
+
+// A query's next page is the same query with the cursor it handed back.
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-query-next]');
+  if (!button) return;
+  const form = document.querySelector('[data-generated-form]');
+  const cursor = form?.querySelector('[name="f:cursor"]');
+  if (!cursor) return;
+  cursor.value = button.dataset.queryNext;
+  form.requestSubmit();
+});
