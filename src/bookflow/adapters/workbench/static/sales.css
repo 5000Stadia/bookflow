@@ -116,9 +116,15 @@
 .totals-list dt { color: #3c4a5a; }
 .totals-list dd { margin: 0; text-align: right; }
 
+/* Preview / Save / Cancel stay at the bottom of the window while the form scrolls under
+   them. Sticky rather than fixed: at the end of the form the bar is back in its own place,
+   below the last field, so it never covers it; the scroll padding keeps a field reached by
+   Tab from landing underneath the bar on the way. */
 .document-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
   background: #eef3f9; border: 1px solid #d0d9e4; border-radius: .35rem;
-  padding: .7rem; margin: .8rem 0; }
+  padding: .7rem; margin: .8rem 0; position: sticky; bottom: 0; z-index: 6;
+  box-shadow: 0 -6px 14px -10px #1f3a5f55; }
+html:has(.document-actions) { scroll-padding-bottom: 5.5rem; }
 .document-actions .primary-action { font-weight: 600; }
 .document-actions .cancel-action { padding: .35rem .6rem; color: #1f3a5f; }
 
@@ -334,3 +340,37 @@
 @media screen and (max-width: 700px) {
   .credit-apply-open input[name^="amount:"] { width: 100%; }
 }
+
+/* A quieter document form. The explanation of the whole document is a small line, not a
+   card; a field's own "About" note stays where it is but reads as an aside. */
+.workbench .technical-details.document-about { background: transparent; border: 0; box-shadow: none;
+  padding: 0; margin: 0 0 .5rem; }
+.workbench .technical-details.document-about > summary { font-size: 12px; font-weight: 400;
+  color: var(--muted); cursor: pointer; }
+.workbench .document-band .field-help summary { color: var(--muted); opacity: .85; }
+.workbench .document-band .field-help:not([open]) summary::marker { font-size: .8em; }
+
+/* Why this is recorded: one folded section, open when it is required or already filled. */
+.document-context > summary { cursor: pointer; font-weight: 600; color: #1f3a5f; font-size: .9rem; }
+.document-context[open] > summary { margin-bottom: .6rem; }
+.document-context .row.form-field + .row.form-field { margin-top: .6rem; }
+
+/* A picker offers Clear only once it holds something. */
+.reference-picker:not([data-has-value]) .reference-clear { display: none; }
+/* With script running, "Add new …" is the last choice in the list itself. */
+.reference-picker[data-add-in-list] .reference-actions { display: none; }
+.workbench .reference-picker .reference-add-option { color: var(--accent); font-weight: 600;
+  border-top: 1px solid var(--line); }
+
+/* The calendar sits inside the date field; the field stays typeable. */
+.date-field { position: relative; display: block; min-width: 0; max-width: 100%; }
+.date-field > input[data-date] { box-sizing: border-box; width: 100%; padding-right: 2.6rem; }
+.date-field > .date-tools { position: absolute; top: 0; right: 0; bottom: 0; display: flex;
+  align-items: center; gap: 0; }
+.workbench .date-field .date-calendar { min-height: 0; min-width: 0; width: 2.6rem; height: 100%;
+  padding: 0; margin: 0; border: 0; background: transparent; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; box-shadow: none; }
+.workbench .date-field .date-calendar:hover, .workbench .date-field .date-calendar:focus-visible { color: var(--accent); }
+.date-field .date-tools input[type=date] { position: absolute; top: calc(100% + 2px); right: 0;
+  z-index: 7; width: auto; }
+@media (max-width: 600px) { .workbench .date-field .date-calendar { width: 2.75rem; } }

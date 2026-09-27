@@ -526,12 +526,36 @@ def _address_group(title, prefix, leaves, placed):
             'component_paths': [leaf['path'] for leaf in group]}
 
 
-def _grid(key, title, leaf, columns, hints):
+def hidden_columns(company):
+    """Line columns this company has not turned on, from its own saved settings.
+
+    Class and unit of measure are columns only for a company that uses them, as in the
+    anchor product. A hidden column's control is not removed: it moves into the row's own
+    "More on this line" panel, so the form still submits exactly what the command accepts.
+    Settings that cannot be read hide nothing.
+    """
+    info = (company or {}).get('info') if isinstance(company, dict) else None
+    if not isinstance(info, dict):
+        return ()
+    hidden = []
+    if info.get('use_classes') is False:
+        hidden.append('class_id')
+    if info.get('units_of_measure_mode') == 'disabled':
+        hidden.append('unit')
+    return tuple(hidden)
+
+
+def _grid(key, title, leaf, columns, hints, hidden=()):
     """One line grid: its columns in document order and the track widths they add up to.
 
     The grid's own hint map wins over the shared one, so a head that means one thing on the
     Items tab and another on the Expenses tab is explained as itself on each.
     """
+    # A line that already carries a value keeps its column, so nothing entered is tucked away.
+    values = leaf['collection'].get('values') or []
+    hidden = [name for name in hidden
+              if not any(isinstance(value, dict) and value.get(name) for value in values)]
+    columns = [column for column in columns if column[0] not in hidden]
     line_fields = list(leaf['collection']['item']['fields'])
     named = {name for name, _ in columns if not name.startswith('@')}
     built = [{'name': name, 'label': label, 'hint': hints.get(name, COLUMN_HINTS.get(name)),
@@ -548,7 +572,7 @@ def _grid(key, title, leaf, columns, hints):
             'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
 
 
-def layout(noun, leaves):
+def layout(noun, leaves, hidden=()):
     """Bands of the document window, and every leaf placed exactly once."""
     by_path, placed = {leaf['path']: leaf for leaf in leaves}, set()
     transfer = noun == TRANSFER
@@ -609,11 +633,11 @@ def layout(noun, leaves):
     if not transfer:
         primary_lines = by_path.get(primary_path)
         if primary_lines is not None:
-            grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}))
+            grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}, hidden))
         if (bill or money_out) and not matched:
             item_lines = by_path.get('items')
             if item_lines is not None:
-                grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS))
+                grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS, hidden))
     for band in grids:
         placed.add(band['lines']['path'])
     lines = grids[0]['lines'] if grids else None
@@ -817,7 +841,7 @@ def transfer_totals(result):
 
 
 def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=False,
-            record_id=None, base='', error=None):
+            record_id=None, base='', error=None, hidden=()):
     """Everything the document template needs, with money taken from the server alone."""
     transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
@@ -863,7 +887,7 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
         reconciliation, reconciled = None, None
         empty = 'Preview to calculate totals.'
 
-    return dict(layout(noun, leaves),
+    return dict(layout(noun, leaves, hidden),
                 noun=noun, verb=verb, title=TITLES[noun],
                 heading=heading(noun, verb, originals),
                 help=('Bill goods already received. Matched item lines transfer receipt-owned Accounts Payable to this bill without receiving inventory again. Product costs exclude retained receipt shipping, which is included once in the total. Shipping belongs to the same receipt vendor. Product price differences correct the receipt date and affected sale costs.' if bill and any(l['path'] == 'receipts' and l.get('collection', {}).get('values') for l in leaves) else HELP[noun]), computed=figures, line_amount=line_amount,
