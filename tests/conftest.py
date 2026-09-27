@@ -43,13 +43,27 @@ def _seeded_template(tmp_path_factory):
     return src
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "legacy_permissions: the test's data root is put back in the never-activated `legacy` "
+        "permission mode (an upgraded older install); see make_legacy.")
+
+
 @pytest.fixture
-def root(tmp_path, monkeypatch, _seeded_template):
-    """A fresh, initialized data root with the demo organization and company."""
+def root(request, tmp_path, monkeypatch, _seeded_template):
+    """A fresh, initialized data root with the demo organization and company.
+
+    `init` starts it in the current permission mode (`policy_v1`), exactly as an install
+    does. A test marked `legacy_permissions` exercises rules that only an upgraded,
+    never-activated root still follows, and gets that root instead.
+    """
     r = tmp_path / "root"
     monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r))
     monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
     shutil.copytree(_seeded_template, r)
+    if request.node.get_closest_marker("legacy_permissions"):
+        make_legacy(r)
     return r
 
 
@@ -137,3 +151,35 @@ def as_user(root: Path, login: str) -> "bookflow.Client":
     c = Client(data_root=str(root))
     c._login = login
     return c
+
+
+def make_legacy(root: Path) -> None:
+    """Test-only: put a root back in the `legacy` permission mode an older install upgrades into.
+
+    `init` now starts every new root in the current permission mode, so a never-activated
+    root exists only as an upgraded one. Tests of that state build it here, the same way
+    tests/test_permission_activation.py does: mode and catalog cleared, frozen role defaults.
+    """
+    import sqlite3
+    from bookflow.hub import permission_catalog as c
+    with sqlite3.connect(root / "hub.db") as db:
+        db.execute("UPDATE permission_state SET mode='legacy',catalog_version=NULL,catalog_sha256=NULL,catalog_json=NULL")
+        db.execute("DELETE FROM role_capabilities")
+        db.executemany("INSERT INTO role_capabilities VALUES (?,?,?)",
+                       [(x.role, x.requirement.capability, x.requirement.threshold) for x in c.FROZEN_DEFAULTS])
+
+
+def add_membership(root: Path, user_id: str, scope_type: str, scope_id: str, role: str) -> str:
+    """Test-only: write one active membership row directly, as make_actor does for a new user."""
+    from bookflow.core.ids import new_id
+    from bookflow.core.session import now_iso
+    from bookflow.hub import schema as h
+    from bookflow.storage.engine import open_database
+    membership_id = new_id()
+    with open_database(root / "hub.db", writable=True) as db:
+        db.raw.execute("BEGIN IMMEDIATE")
+        db.conn.execute(h.memberships.insert().values(id=membership_id, user_id=user_id, scope_type=scope_type,
+                                                      scope_id=scope_id, role=role, granted_by=user_id,
+                                                      granted_at=now_iso(), revoked_at=None))
+        db.raw.execute("COMMIT")
+    return membership_id

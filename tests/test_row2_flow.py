@@ -133,12 +133,19 @@ def _agent_session(root, client, owner_login="k"):
         db.conn.execute(h.users.insert().values(id=aid, kind="agent", username="claude-agent", display_name="Claude Agent", owner_user_id=owner, password_hash=None, hub_admin=False, timezone=None, active=True, **common(owner, "system")))
         org = db.conn.execute(sa.select(h.organizations)).mappings().first()
         db.conn.execute(h.memberships.insert().values(id=new_id(), user_id=aid, scope_type="organization", scope_id=org["id"], role="admin", granted_by=owner, granted_at=clock.now_iso(), revoked_at=None))
+        # An eligible agent: authorized, and assigned to the human it acts for.
+        db.conn.execute(h.agent_authority.insert().values(agent_user_id=aid, epoch=1))
+        db.conn.execute(h.agent_principals.insert().values(agent_user_id=aid, principal_user_id=owner, assigned_by=owner, assigned_at=clock.now_iso()))
         db.raw.execute("COMMIT")
+    # The session is the agent's own login, bound to its principal, as a token would bind it.
+    cfg = Config.load(root / "config.toml")
+    cfg.set_user("claude-agent", aid)
+    cfg.save()
 
     def run(name, inp, **ctxkw):
         cmd = registry.get(name)
         ctx = Context.new(Interface.mcp, "test-agent", on_behalf_of=owner, **ctxkw)
-        s = Session(data_root=root, os_login="k", config=Config.load(root / "config.toml"))
+        s = Session(data_root=root, os_login="claude-agent", config=Config.load(root / "config.toml"))
         with private_umask(), RootLock(root, name):
             _open_hub(s, True, ctx)
             s.actor = Actor(id=aid, kind="agent", username="claude-agent", display_name="Claude Agent", hub_admin=False)
@@ -247,7 +254,7 @@ def test_principals_on_copy_and_baseline(client, root, tmp_path, monkeypatch):
     import shutil
     dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
     shutil.copytree(src["path"], dst)
-    c2.company.attach(path=str(dst))
+    c2.company.attach(path=str(dst), administrator="third")
     ev = c2.audit.list(company="Demo Plumbing Co", command="company update")["items"][0]
     assert ev["actor_name"] == "Second"
     out = c2.company.update(fax="c", company="Demo Plumbing Co")
@@ -496,7 +503,7 @@ def test_migration_entries_are_not_writers(client, root, tmp_path, monkeypatch):
     _downgrade_copy(db, "company", {"company_info": cols, "principals": ["user_id", "username", "display_name", "kind", "first_seen_at", "last_seen_at"]})
     assert current_revision_raw(db) == "co0001"
     before = sqlite3.connect(str(db)).execute("SELECT version, updated_by FROM company_info").fetchone()
-    c2.company.attach(path=str(dst))
+    c2.company.attach(path=str(dst), administrator="mover")
     shown = c2.company.show(company="Demo Plumbing Co")
     assert shown["schema_revision"] != "co0001", "attach migrated the copy"
     assert shown["info_version"] == before[0], "a migration never bumps the record version"

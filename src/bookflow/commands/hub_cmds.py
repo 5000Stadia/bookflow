@@ -142,6 +142,12 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                         me = users.create_human(s, username=username, display_name=display_name, created_by=system["id"], via=VIA(ctx), hub_admin=True)
                         touched = [Touched("user", system["id"], "create", None, 1, system), Touched("user", me["id"], "create", None, 1, me)]
                         audit.write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
+                        # A new root starts in the current permission mode, as
+                        # `permission activate` would leave it, so no agent can
+                        # ever hold authority under the legacy rules.
+                        from bookflow.hub.permission_activation import activate_new_root
+                        from bookflow.hub.permission_setup import audit_context
+                        activate_new_root(hub, actor_id=me["id"], context=audit_context(ctx, "permission activate"))
                         s.config.set_user(s.os_login, me["id"])
                         s.config.stage_pending(hub, request_id=ctx.request_id)
                         s.commits.commit(hub, "hub.init")

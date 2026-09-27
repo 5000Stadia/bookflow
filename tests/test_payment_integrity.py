@@ -72,6 +72,7 @@ def test_failed_receipt_rolls_back_all_financial_and_operation_state(client, sal
     assert paid['current']['applied_minor_units'] == 5000
 
 
+@pytest.mark.legacy_permissions  # an agent written without authority acts unbound only before activation
 def test_human_reasonless_exact_agent_recovery_after_expiry_writes_nothing(client, sale, root, monkeypatch):
     args = dict(customer=sale['customer'], date='2026-06-01', amount='1.00', payment_method=method(client), operation_key='human-reasonless')
     paid = client.run('payment receive', args, company=COMPANY, idempotency_key='transport-key')

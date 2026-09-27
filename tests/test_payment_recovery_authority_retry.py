@@ -217,6 +217,7 @@ def test_final_chunk_races_keep_a_complete_barrier_and_immutable_receipt(client,
     assert client.run('payment query',dict(customer=sale['customer']),company=COMPANY)['total_count']==0
 
 
+@pytest.mark.legacy_permissions  # an agent written without authority acts unbound only before activation
 def test_ordinary_agent_reason_and_directive_fail_before_immutable_lookup(client,sale,root,monkeypatch):
     draft,_,_=setup(client,sale)
     begin=declaration(draft,[])

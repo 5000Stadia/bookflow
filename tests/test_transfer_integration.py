@@ -35,6 +35,7 @@ def _files(store):
     return {str(p.relative_to(store)): p.read_bytes() for p in store.rglob("*") if p.is_file()}
 
 
+@pytest.mark.legacy_permissions  # the credential-less hosted session is admitted only before activation
 @pytest.mark.parametrize("role,code", [(None, "E_COMPANY_NOT_FOUND"), ("readonly", "E_PERMISSION")])
 def test_hosted_denial_precedes_input_read(hosted, root, role, code):
     host = hosted.handle.host

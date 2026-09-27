@@ -12,7 +12,7 @@ import pytest
 import sqlalchemy as sa
 
 from bookflow.core import durability
-from bookflow.core.config import Config
+from bookflow.core.config import Config, os_login
 from bookflow.core.errors import BookflowError
 from bookflow.hub import schema as h
 from bookflow.storage.engine import open_database
@@ -437,7 +437,7 @@ def test_ready_marker_sync_failure_reports_actual_state_and_attach_resyncs(clien
     with monkeypatch.context() as patch:
         patch.setattr(hub_cmds, "sync_directory", fail_ready)
         with pytest.raises(BookflowError) as error:
-            client.company.attach(path=str(folder))
+            client.company.attach(path=str(folder), administrator=os_login())
         assert error.value.code == "E_IO"
     assert _hub_row(root, h.companies, company_id) is None
     observed = []
@@ -448,7 +448,7 @@ def test_ready_marker_sync_failure_reports_actual_state_and_attach_resyncs(clien
         real_sync(path)
 
     monkeypatch.setattr(hub_cmds, "sync_directory", sync)
-    assert client.company.attach(path=str(folder))["company_id"] == company_id
+    assert client.company.attach(path=str(folder), administrator=os_login())["company_id"] == company_id
     assert observed == [folder, org]
 
 

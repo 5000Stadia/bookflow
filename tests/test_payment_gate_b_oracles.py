@@ -161,7 +161,8 @@ def test_invoice_correction_preview_is_bounded_on_all_lists(client,sale):
     assert max(lengths.values())<=50,repr(lengths)
 
 
-@pytest.mark.timeout(600)
+# Measured 2026-09-27 under load: 193 s on a legacy root, 634 s on an activated (new-install) root.
+@pytest.mark.timeout(1500)
 def test_one_receipt_corrected_across_complete_403_invoice_graph(client,sale):
     # Active Row22 demo receipts already have immutable unapply history. This
     # correction must preserve every such row and create none of its own.

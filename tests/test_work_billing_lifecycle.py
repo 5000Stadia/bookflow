@@ -264,6 +264,7 @@ def test_captured_amount_tax_mapping_and_closed_period(client, sale):
     assert run(client, 'estimate', 'billing', estimate=source['id'])['lines'][0]['state'] == 'billed'
 
 
+@pytest.mark.legacy_permissions  # monkeypatches the legacy role-only evaluator
 @pytest.mark.parametrize('resource', ['customer-work', 'ledger.post'])
 def test_composite_resource_check_happens_before_cached_replay(client, sale, monkeypatch, resource):
     from bookflow.hub import access

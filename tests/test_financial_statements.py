@@ -11,6 +11,7 @@ from bookflow.company import schema, financial_statements as fs
 from bookflow.core.errors import BookflowError
 from tests.test_row8_reports import ledger, insert, all_pages, numbered_ledger  # noqa: F401
 from tests.test_reference_year import reference_template, reference_client, EXPECTED, REFERENCE, cli_run  # noqa: F401
+from bookflow.core.config import os_login
 
 
 @pytest.fixture
@@ -205,7 +206,7 @@ def test_company_copy_attach_reproduces_statements_without_original_hub(referenc
     target=bookflow.connect(data_root=str(other));target.init();target.organization.new(name="Portable")
     destination=other/"organizations"/"Portable"/"Imported"
     shutil.copytree(Path(info["path"]),destination)
-    attached=target.company.attach(path=str(destination))["company_id"]
+    attached=target.company.attach(path=str(destination),administrator=os_login())["company_id"]
     copied_pl=target.report.profit_and_loss(company=attached,date_from="2026-01-01",**options)
     copied_bs=target.report.balance_sheet(company=attached,**options)
     for original,copied in ((profit,copied_pl),(balance,copied_bs)):

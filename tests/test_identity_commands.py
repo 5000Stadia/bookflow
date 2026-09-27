@@ -17,6 +17,7 @@ import bookflow
 from bookflow.commands.host_cmds import start_serving
 from bookflow.core.config import os_login
 from bookflow.core.context import client_version
+from tests.conftest import add_membership
 
 INSTALLER_PASSWORD = "correct-horse-battery"
 WB = {"X-Bookflow-Workbench": "1"}
@@ -100,6 +101,20 @@ def live(office):
             pass
 
 
+def own_the_organization(office):
+    """Make the installer an owner of the demo organization, directly (test-only).
+
+    On an activated root, organization-wide grants need an organization administrator, and
+    `demo reset` makes the installer owner of its company only. No command creates an
+    organization's first membership yet, so these organization-scope witnesses start from one.
+    """
+    from bookflow.core.config import Config
+    organization = office.admin("company.show", company=office.first)["organization_id"]
+    installer = Config.load(office.root / "config.toml").user_table(os_login())["user_id"]
+    add_membership(office.root, installer, "organization", organization, "owner")
+    return organization
+
+
 def add_jordan(office, **extra):
     """The second workstation's person, created the way an administrator creates one."""
     out = office.admin("user.add", {"username": "jordan", "display_name": "Jordan Reyes",
@@ -171,7 +186,10 @@ def test_the_grant_and_the_revocation_are_themselves_attributed(office):
     commands = [e["command"] for e in events]
     assert "membership grant" in commands and "membership revoke" in commands and "user add" in commands
     grant = next(e for e in events if e["command"] == "membership grant")
-    assert grant["actor_name"] and "jordan" in grant["summary"]
+    # An activated root's hub summary is deliberately generic; the entries name the membership.
+    entries = office.admin("hub.audit.show", {"event": grant["id"]})["entries"]
+    assert grant["actor_name"] and any(e["record_type"] == "membership" and added["user_id"] in json.dumps(e)
+                                       for e in entries)
     assert added["user_id"] not in {e["actor_id"] for e in events if e["command"].startswith("membership")}
 
 
@@ -363,7 +381,7 @@ def test_a_dry_run_adds_nobody_and_grants_nothing(office):
 
 
 def test_an_organization_grant_covers_every_company_in_it(office):
-    organization = office.admin("company.show", company=office.first)["organization_id"]
+    organization = own_the_organization(office)
     added = office.admin("user.add", {"username": "morgan", "organization": organization, "role": "standard"})
     morgan = office.login_as("morgan", added["password"])
     assert office.ok(morgan, "company.list")["count"] == 2
@@ -576,7 +594,7 @@ def test_an_ordinary_member_cannot_enumerate_the_installation(office):
 def test_organization_wide_access_is_listed_under_every_company_it_reaches(office):
     """A listing that dropped the covering row would answer "who can open this" with a
     name missing, which is a wrong answer rather than a quiet one."""
-    organization = office.admin("company.show", company=office.first)["organization_id"]
+    organization = own_the_organization(office)
     office.admin("user.add", {"username": "morgan", "organization": organization, "role": "standard"})
 
     for company in (office.first, office.second):
@@ -619,6 +637,7 @@ def test_an_agent_principal_is_listed_beside_the_person_it_acts_for(office):
     assert held["jordan-agent"]["kind"] == "agent" and held["jordan-agent"]["acts_for"] == "jordan"
 
 
+@pytest.mark.legacy_permissions  # an installation-wide `user list` exists only before activation
 def test_a_revoked_membership_leaves_the_listing_and_is_asked_for_by_name(office):
     add_jordan(office)
     office.admin("membership.revoke", {"user": "jordan", "company": office.first})

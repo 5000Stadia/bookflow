@@ -9,6 +9,9 @@ from bookflow.hub import access
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_row8_journal import journal_accounts, lines
 
+# A new root starts activated; these witnesses pin the legacy default Delete gate (capability_not_activated) and monkeypatch its owner.
+pytestmark = pytest.mark.legacy_permissions
+
 
 def session_call(client, monkeypatch, function):
     command = registry.get('company show')

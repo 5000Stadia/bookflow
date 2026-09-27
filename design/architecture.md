@@ -2651,7 +2651,12 @@ Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membershi
 and aggregate agent-administration versions/provenance, fresh-context metadata,
 and private singleton `permission_state`, initially generation1 in `legacy` mode
 with no catalog. Migration neither changes capability defaults nor activates A's
-policy evaluator. Historical membership/assignment IDs, authority epochs,
+policy evaluator. A brand-new root does not stay there: `init` activates it in the
+transaction that creates its first administrator, before any organization, company,
+agent or token exists, through the same preparation, write-set check and audit owner
+as `permission activate` (one `permission activate` hub event attributed to that
+administrator, current catalog, generation 2). Only an upgraded root is ever in
+`legacy` mode, and it stays there until its operator runs `permission activate`. Historical membership/assignment IDs, authority epochs,
 credentials, raw overrides and audit values remain intact.
 
 Conditional initialization of suspended authorities is admitted on the migration

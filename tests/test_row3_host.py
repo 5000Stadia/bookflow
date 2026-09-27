@@ -1071,7 +1071,7 @@ def test_filesystem_operations_release_every_affected_pooled_company(hosted):
     # object if detach came from an older process or interrupted release path.
     host.submit(lambda: host._companies.__setitem__(cid, Database(folder / "company.db", True)))
     assert is_pooled(cid)
-    hosted.ok("company.attach", {"path": str(folder)})
+    hosted.ok("company.attach", {"path": str(folder), "administrator": hosted.login})
     assert not is_pooled(cid)
 
     pool_company("555-6105")
@@ -1103,7 +1103,7 @@ def test_a_durable_write_error_still_checkpoints_and_wakes_subscribers(hosted, r
 
     try:
         with pytest.raises(BookflowError) as caught:
-            host.run_write(_admin_id(root), "", committed_then_failed)
+            host.run_write(_admin_id(root), os_login(), committed_then_failed)
         assert caught.value.code == "E_PARTIAL_WRITE"
         assert event.wait(0.5), "the durable audit event did not wake its subscriber"
         assert hosted.info()["info"]["fax"] == "555-6199"
@@ -1400,7 +1400,7 @@ def test_commit_between_first_drain_and_subscription_is_not_missed(hosted, live,
         if not raced:
             raced = True
             ctx = Context.new(Interface.http, "race-witness")
-            host.run_write(_admin_id(root), "", lambda s: execute(
+            host.run_write(_admin_id(root), os_login(), lambda s: execute(
                 registry.get("company update"), {"fax": "555-5151"}, ctx, s,
                 company_selector=cid, company_source="option"))
         return original(key, loop, event)
@@ -1780,7 +1780,7 @@ def test_the_wal_stays_bounded_with_a_reader_attached(hosted, root):
                 pinned.close()
                 pinned = None
             ctx = Context.new(Interface.http, "wal-fixture")
-            host.run_write(admin, "", lambda s, i=i, ctx=ctx: execute(
+            host.run_write(admin, os_login(), lambda s, i=i, ctx=ctx: execute(
                 cmd, {"phone": f"555-{i:04d}"}, ctx, s, company_selector=cid, company_source="option"))
         assert (db.parent / "company.db-wal").exists()
     finally:

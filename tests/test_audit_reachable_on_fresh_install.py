@@ -5,10 +5,11 @@ create an organization and a company, do a bookkeeper's ordinary work, and ask
 for the audit trail back through the CLI, through HTTP with a session cookie,
 and through the workbench page the navigation advertises.
 
-A never-activated root is the only kind an install can have: `init` leaves
-`permission_state.mode` at `legacy`, and no registered command changes it, so
-every authenticated reader has to work in that state or no install ever reads
-its own history.
+`init` starts every new root in the current permission mode, exactly as
+`permission activate` would leave it. A never-activated (`legacy`) root now
+exists only as an older install upgraded in place, so the self-observation
+checks below also build one explicitly: every authenticated reader has to work
+in both states or some install never reads its own history.
 """
 
 import json
@@ -24,7 +25,7 @@ from bookflow.core.config import os_login
 from bookflow.core.context import client_version
 from bookflow.commands.host_cmds import start_serving
 from bookflow.storage.engine import open_database
-from tests.conftest import BIN
+from tests.conftest import BIN, make_legacy
 from tests.test_row3_host import PASSWORD, WB, hosted  # noqa: F401
 from tests import provenance
 
@@ -68,18 +69,16 @@ def fresh(tmp_path, monkeypatch):
     return root, client
 
 
-def test_a_fresh_install_is_never_activated(fresh):
-    """The state every install is in, stated once so the rest is not a guess."""
-    root, _ = fresh
+def test_a_fresh_install_starts_in_the_current_permission_mode(fresh):
+    """The state every new install is in, stated once so the rest is not a guess."""
+    from bookflow.hub import permission_runtime as runtime
+    root, client = fresh
+    build = runtime.current_catalog()
     with open_database(root / "hub.db", writable=False) as db:
-        assert db.raw.execute("SELECT mode, catalog_version, catalog_sha256, catalog_json "
-                              "FROM permission_state").fetchall() == [("legacy", None, None, None)]
-    registry.load_all()
-    # No registered command names the permission catalog, so nothing an operator
-    # can run turns `legacy` into `policy_v1`. (The `activate` verbs on the list
-    # nouns are record activation and touch no permission state.)
-    assert not [cmd.name for cmd in registry.all_commands(include_standalone=True)
-                if "permission" in cmd.name or "catalog" in cmd.name]
+        assert db.raw.execute("SELECT mode, catalog_version, catalog_sha256 IS NOT NULL "
+                              "FROM permission_state").fetchall() == [("policy_v1", build.CATALOG.version, 1)]
+    state = client.permission.show()
+    assert state["mode"] == "policy_v1" and state["catalog_sha256"] == build.MANIFEST.descriptor_sha256
 
 
 def test_fresh_install_reads_its_own_audit_trail_from_the_cli(fresh):
@@ -134,16 +133,19 @@ def test_fresh_install_reads_its_own_audit_trail_over_http_and_in_the_workbench(
         handle.stop()
 
 
-def test_a_never_activated_root_can_observe_its_own_memberships(fresh):
+@pytest.mark.parametrize("mode", ["policy_v1", "legacy"])
+def test_a_root_in_either_mode_can_observe_its_own_memberships(fresh, mode):
     """The reader gate underneath every surface above, checked where it lives."""
     from bookflow.hub import permission_catalog as c, permission_runtime as runtime
     root, client = fresh
     company_id = client.company.list()["items"][0]["company_id"]
+    if mode == "legacy":
+        make_legacy(root)
     with open_database(root / "hub.db", writable=False) as db:
         actor = db.raw.execute("SELECT id FROM users WHERE username=?", (os_login(),)).fetchone()[0]
         observed = runtime.observe_current(db)
         assert actor in observed.snapshot.comparison.subjects
-        assert observed.snapshot.old.stamp.mode == "legacy"
+        assert observed.snapshot.old.stamp.mode == mode
         admitted = runtime.require_company(db, actor=actor, principal=None, company=company_id,
                                            requirement=c.Requirement("ledger.read", "member"))
         assert admitted.intersection_admitted
@@ -153,6 +155,7 @@ def test_administration_still_refuses_a_never_activated_root(fresh):
     """The relaxation is for self-observation only; a policy transition is not one."""
     from bookflow.hub import permission_runtime as runtime, permission_snapshot as s
     root, _ = fresh
+    make_legacy(root)
     with open_database(root / "hub.db", writable=False) as db:
         bundle = runtime.catalog_bundle()
         loaded = s.load_root(db, catalog=bundle)

@@ -210,6 +210,7 @@ def test_real_corrected_pages_offpage_freshness_and_void(client,sale,run_private
 from tests.test_deposit_dependency_binding import bound_people,observe,_credential
 
 
+@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 def test_real_readonly_actor_principal_report_and_current_revocation(root,client,sale,run_private,monkeypatch,bound_people):
     from tests.test_deposit_lifecycle import additional_document
     from tests.test_row7_credentials import writer
