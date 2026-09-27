@@ -44,6 +44,14 @@ Double-entry accounting for small businesses, where people in the browser and th
 ## M4 — V2 functional roadmap (each increment selected with the human)
 
 - [~] R31 Human-directed improved UI — design/V2-ROADMAP.md item 1
+- [ ] R55 R31 phone: quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the header (S) — notes/mobile-audit-response-20260927.md
+- [ ] R56 R31 phone: the form first on document forms, recent documents below it (S) — notes/mobile-audit-response-20260927.md
+- [ ] R57 R31 phone: reports open with their numbers, one-line filters with date chips, headline figure (M) — notes/mobile-audit-response-20260927.md
+- [ ] R58 R31 phone: lists show records on screen one — pinned search, filter and sort sheet (M) — notes/mobile-audit-response-20260927.md
+- [ ] R59 R31 phone: one money-row shape — name and amount on one line, whole row tappable (M) — notes/mobile-audit-response-20260927.md
+- [ ] R60 R31 phone: readable money and dates across all screens, exact values kept in exports (M–L) — notes/mobile-audit-response-20260927.md
+- [ ] R61 R31 phone: sections open on their list with + New; types under Settings; Overview shows what needs attention (L) — notes/mobile-audit-response-20260927.md
+- [ ] R62 R31 phone: the account register as a list of entries with an add sheet (M) — notes/mobile-audit-response-20260927.md
 - [ ] R32 Job scheduling and fuller timekeeping — design/V2-ROADMAP.md item 2
 - [ ] R33 Bulk import and migration — design/V2-ROADMAP.md item 3
 - [ ] R34 Bank imports and feeds — design/V2-ROADMAP.md item 4
