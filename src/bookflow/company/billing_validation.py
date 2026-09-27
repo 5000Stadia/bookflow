@@ -143,7 +143,7 @@ def _validate(plan, s, ctx):
         roots.add(root)
         d = math.denominator(lf.quantity_microunits,lf.net_minor_units)
         spans = checks.selected_spans(s,inp,line,root,lf,rev['currency'])
-        proof = None if spans == ((0,d),) and lf.schema_version==1 else alloc.make_proof(source,rev,line,root,lf,spans)
+        proof = None if spans == ((0,d),) and lf.schema_version==1 else alloc.make_proof(s,source,rev,line,root,lf,spans,excluding=header['id'])
         width = sum(b-a for a,b in spans)
         net = sum(round(Fraction(lf.net_minor_units*b,d))-round(Fraction(lf.net_minor_units*a,d)) for a,b in spans)
         tax = sum(exact_cells[envelope['id'],t.rule.id] for t in lf.taxes)

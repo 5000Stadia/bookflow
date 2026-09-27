@@ -10,10 +10,11 @@ import sys
 import tarfile
 import pytest
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head
+from bookflow.storage.migrate import HEADS, migrate_to_head
 from bookflow import BookflowError
 from tests.test_tax_policy_migration import co14_root
 from tests.test_payment_migration import raw_snapshot
+from tests.payment_raw_evidence import upgrade_to
 from tests import provenance
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0016_tax_work_allocations')
@@ -51,13 +52,21 @@ def test_preserving_allocation_rebuild(request,base,tmp_path):
         objects=raw.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT IN ('work_billing_allocations','work_billing_allocation_shape','company_info','alembic_version') ORDER BY type,name").fetchall()
         versions=dict(raw.execute('SELECT allocation_version,count(*) FROM work_billing_allocations GROUP BY allocation_version'))
         assert versions.keys()=={1,2}
-        assert migrate_to_head(db,'company',None)[1]=='co0016'
+        # The co0016 rebuild itself preserves every row, object and local extension.
+        assert upgrade_to(db,'co0016')=='co0016'
         for name,(columns,selected,values) in before.items():
             assert raw.execute(f'SELECT {selected} FROM "{name}" ORDER BY rowid').fetchall()==values,name
         after=raw.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT IN ('work_billing_allocations','work_billing_allocation_shape','company_info','alembic_version') ORDER BY type,name").fetchall()
         assert set(objects)<=set(after)
         assert raw.execute("SELECT sql FROM sqlite_schema WHERE name='work_billing_allocation_shape'").fetchone()==(M.NEW_SHAPE,)
         assert raw.execute('PRAGMA foreign_keys').fetchone()==(1,)
+        assert raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
+        assert raw.execute('PRAGMA foreign_key_check').fetchall()==[]
+        # The rest of the chain to today's head keeps those rows and the local columns.
+        assert migrate_to_head(db,'company',None)[1]==HEADS['company']
+        for name,(columns,selected,values) in before.items():
+            assert raw.execute(f'SELECT {selected} FROM "{name}" ORDER BY rowid').fetchall()==values,name
+        assert {'local_blob','local_size'}<={row[1] for row in raw.execute('PRAGMA table_xinfo(work_billing_allocations)')}
         assert raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
         assert raw.execute('PRAGMA foreign_key_check').fetchall()==[]
 

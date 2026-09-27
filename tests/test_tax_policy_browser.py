@@ -70,5 +70,5 @@ def test_print_includes_closed_tax_evidence(register_browser,width,tmp_path):
     path.write_bytes(base64.b64decode(b.call('Page.printToPDF',dict(printBackground=True))['data']))
     printed=subprocess.check_output(['pdftotext',str(path),'-'],text=True)
     (tmp_path/f'closed-tax-history-{width}.txt').write_text(printed)
-    assert all(text in printed for text in ('Captured company default','Stable tax order: 1','Stable tax order: 2','Tax browser agency','5% on 0.10','0.02'))
+    assert all(text in printed for text in ('Captured company default','Stable tax order: 1','Stable tax order: 2','Tax browser agency','5% on $0.10','0.02'))
     assert not b.evaluate('document.querySelector(".tax-details").open')

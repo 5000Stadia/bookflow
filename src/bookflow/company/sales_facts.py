@@ -233,6 +233,11 @@ class SalesLineProfile(StrictModel):
         return values
 
 
+# SalesLineProfile fields added after work-billing proofs were already being stored. Facts
+# captured before then carry no key for them; absent and null mean the same captured fact.
+LATER_LINE_PROFILE_FIELDS = ('cogs_account', 'asset_account')
+
+
 class SalesTaxComponent(StrictModel):
     schema_version: Literal[1] = 1
     position: int = Field(ge=1)

@@ -2,6 +2,7 @@
 import pytest
 import sqlalchemy as sa
 from bookflow import BookflowError
+from bookflow.core import registry
 from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from tests.test_service_sales_lifecycle import sale, COMPANY
@@ -9,7 +10,11 @@ from tests.test_row8_journal import database_path, hosted  # noqa: F401
 
 
 def run(client, noun, verb, **data):
-    return client.run(noun + ' ' + verb, data, company=COMPANY, reason='Customer work test')
+    # Writes carry their reason; a read takes none and refuses one.
+    name = noun + ' ' + verb
+    command = registry.get(name)
+    reason = 'Customer work test' if command is None or command.is_write else None
+    return client.run(name, data, company=COMPANY, reason=reason)
 
 
 def make(client, sale, noun='estimate', **extra):

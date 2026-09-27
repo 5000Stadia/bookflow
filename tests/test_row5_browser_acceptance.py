@@ -455,8 +455,11 @@ def test_row5_login_list_detail_form_preview_and_audit_in_real_chrome(
 
         update_url = browser.evaluate("location.href")
         audit_path = f"/c/{browser_site.company_id}/audit"
-        browser.evaluate(f"document.querySelector('header a[href={json.dumps(audit_path)}]').click()")
-        browser.wait_for("document.readyState === 'complete' && document.querySelector('h1')?.textContent.trim() === 'Audit'")
+        # Audit is a section of the company sidebar; its page links the company audit log.
+        browser.evaluate("document.querySelector('#company-navigation a[data-section=\"audit\"]').click()")
+        browser.wait_for("document.readyState === 'complete' && location.pathname.endsWith('/_group/audit')")
+        browser.evaluate(f"document.querySelector('main a[href={json.dumps(audit_path)}]').click()")
+        browser.wait_for(f"document.readyState === 'complete' && location.pathname === {json.dumps(audit_path)} && document.querySelector('h1')?.textContent.trim() === 'Audit'")
         _assert_rendered_page(browser, "company audit", viewport=viewport)
 
         browser.navigate(update_url)
