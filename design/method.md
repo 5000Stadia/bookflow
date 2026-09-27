@@ -31,6 +31,26 @@ ground everything else assumes.
 The critics and comparators you spawn read nothing in this file — only the brief you hand them and
 the artifact, so that what they find comes from what is there rather than from what we all expect.
 
+**In a colony, the colony carries the human channel.** When the project is on the person's colony
+board (its `CLAUDE.md` says so), every seat reads this with these substitutions, and the colony
+wins wherever the two differ:
+
+- **The plan and its status are `ROADMAP.md`.** Its items are the order of work and where it
+  stands; the spec list in `design/intention.md` still holds each in-flight row's target and
+  definition of done, and a roadmap item points at its row. Nothing else tracks progress: no
+  status file, no separate roadmap page, no status note to the human.
+- **A row passes on its definition of done, checked by us.** Run the check, close the row, mark
+  the item done. Nothing waits on the human's acceptance by default. Only what needs their own
+  eye — how something looks, feels or reads, or whether it is what they wanted (the taste gates
+  below) — is marked `[?]` and announced with `colony ready`.
+- **Forks and irreversible acts go through `colony gate`**, and that point holds until the answer
+  arrives as a note. That is the whole interrupt rule of *The human*, carried by the board.
+- **What the human says arrives as notes** — on the project, an item or a pin. Act on each and mark
+  it with `colony noted`. Findings on the running product still become spec rows as *The human*
+  says; the row keeps their sentence.
+- **Milestones reach them on the board**: the roadmap update and, when their eye is wanted, a
+  `colony ready` line. Pin what they will keep opening (the running app, a deliverable).
+
 Everything about the *product* lives in the project's own documents, which are as long as the
 product deserves.
 
@@ -656,8 +676,8 @@ the stall nobody saw. In solo, where nothing can hear a line mid-run, it arrives
 report and the next brief sizes its rows from it. **A flag surfaces a long loop to its owner; it
 never truncates one that is earning** — important elements take as long as they take, and gears
 govern the mechanical work, not the load-bearing. And when a loop runs on past its flag, the
-Navigator sends the human a status note — what row, what round, what family, still earning or
-not — informing, never asking whether to continue. Inside the loop every pass looks locally
+Navigator makes that visible to the human — what row, what round, what family, still earning or
+not — informing, never asking whether to continue (in a colony, on the item in `ROADMAP.md`). Inside the loop every pass looks locally
 justified; on both runs the diagnosis had to come from outside, because no seat owned standing
 back — and even an owned watch fires only when someone happens to look: on the run that priced
 this, the builder's line would have surfaced an eleven-round row at four, and the Navigator's

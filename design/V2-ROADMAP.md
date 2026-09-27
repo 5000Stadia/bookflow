@@ -1,6 +1,6 @@
 # V2 and beyond — functional roadmap
 
-Human-directed scope, 2026-09-17. These are future product features, not current V1 blockers or automatic implementation assignments. Sequence after item1 is provisional. Preserve working V1 functions while selecting later increments with the human.
+Human-directed scope, 2026-09-17. These are future product features, not current V1 blockers or automatic implementation assignments. Their order and status live in `ROADMAP.md` (items R31–R49); this file holds each item's detail. Preserve working V1 functions while selecting later increments with the human.
 
 1. **Human-directed improved user UI.** Work with the human on desktop/mobile navigation, task workspaces, forms, visual hierarchy and interaction. Use real screen examples and human feedback to guide the design.
 2. **Job scheduling and fuller timekeeping.** Employee/job calendars, weekly timesheets and clock-in/out; retain current time entry and billing.
@@ -8,7 +8,7 @@ Human-directed scope, 2026-09-17. These are future product features, not current
 4. **Bank imports and feeds.** Statement ingestion, matching, categorization rules and connected feeds; retain manual reconciliation.
 5. **Budgets and richer reports.** Budget entry, actual-versus-budget and prior-period/year comparisons, saved customized reports/groups; existing reports/exports/printing remain current.
 6. **Stock sales orders and fulfillment.** Reservations, partial shipments, backorders, pick/pack/ship and shipping labels.
-7. **Accurate stock availability/on-order.** Derive outstanding purchase quantities and reservation-aware availability; current stock-status on-order remains zero and available equals on-hand.
+7. **Accurate stock availability/on-order.** Stock status derives on-order from open purchase orders. Reservation-aware availability remains, and arrives with sales orders (item 6); until then available equals on-hand.
 8. **Assembly production.** Build finished items by consuming BOM components, with quantity/cost effects; definitions already exist.
 9. **Advanced inventory.** Warehouses/bins, transfers, serials/lots, physical counts, costing choices and allocation of later separate freight bills. Receiving-time shipping allocation already exists.
 10. **Advanced pricing.** Conditional promotions and quantity/customer/date rules beyond current price levels.

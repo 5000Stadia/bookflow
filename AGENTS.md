@@ -1,7 +1,8 @@
 Read `design/method.md` — it names what your seat reads — then `design/intention.md`. If `notes/NOW.md` exists, read it before doing anything else.
 
-For the development roadmap, inspect waiting notes at task resumptions and module handoffs with `python3 design/bridge.py --comments notes/comments.jsonl --list --waiting --json` when that file exists. Treat notes as design input to consider, not automatic execution authority. Update the dated private `notes/roadmap-status.json` atomically after meaningful progress; keep completed target identities and historical comments. See `tools/roadmap.md`.
+This project is part of the person's colony: its plan is `ROADMAP.md` (milestones `## M1 — name`, items `- [ ] R1 text`; `[~]` in progress, `[?]` built and waiting for the person's own eye, `[x]` done), and the person reaches the project through notes, gates and pins on the colony board. `CLAUDE.md` states the conventions in full; they apply to every seat. In short:
 
-Before starting each new work item, read the entire waiting-note queue above, including general, active, completed and archived targets. Also read all existing notes for the target being started. Record each reviewed note’s disposition in its owning plan or private assessment, then consume only those exact IDs. A new follow-up on previously read/completed work is a new unread note and must be ingested at the next checkpoint; never filter the queue by active module status or consume unseen notes. No need to interrupt active work.
-
-Keep Completed tags current only for the named reviewed increment. A confirmed defect against its original criteria sets the completed entry’s explicit status to Reopened with a reason until the fix passes review. New scope is tracked separately. Preserve target IDs, review history and comments; active parent modules are not completed by a finished component.
+- Keep `ROADMAP.md` current as you work and commit each finished piece. Check what you can check yourself (tests, a row's definition of done in `design/intention.md`, a review) and mark it done; `[?]` is only for how something looks, feels or reads, announced with `colony ready ITEM "what" --check "how to see it"`.
+- The person's notes arrive by themselves; act on each, then `colony noted ID "what you did"`.
+- Ask the person only for a decision the written intention does not answer or an act that cannot be undone: `colony gate "question" --item ITEM --why "what depends on it"`, and hold that point until it is answered.
+- Pin what the person will keep opening with `colony pin`.
