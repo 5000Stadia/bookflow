@@ -904,7 +904,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             heading=lambda noun, verb: Naming.heading(noun, verb, _noun_meta(noun)),
             plural=lambda noun: Naming.list_heading(noun, _noun_meta(noun)),
             selector=_record_selector)
-        return JSONResponse({"items": index}, headers={"Cache-Control": "private, max-age=60"})
+        return JSONResponse({"items": index}, headers={"Cache-Control": "no-store"})
 
     @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
     @permission_read_package(host)

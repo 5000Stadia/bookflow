@@ -94,6 +94,8 @@ def test_the_finder_index_reaches_every_routed_command(hosted):
     browser = _browser(hosted)
     response = browser.get(f"/c/{company}/_finder")
     assert response.status_code == 200
+    # What a reader may open changes with their role; a stale copy must never be reused.
+    assert response.headers["cache-control"] == "no-store"
     items = response.json()["items"]
     hrefs = {item["href"] for item in items}
     assert all(item["label"] and item["kind"] in ("section", "task", "page") for item in items)
