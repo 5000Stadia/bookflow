@@ -793,6 +793,18 @@ def persist_prepared(fresh, ctx, s, *, command_name):
         created_at=header['updated_at'])
 
 
+def refuse_coordinated_stock(plan):
+    """Refuse, with a typed error, a coordinated sales-receipt change that moves stock."""
+    stock = plan.data.get('stock')
+    if stock is not None and stock.moves_stock:
+        raise BookflowError('E_VALIDATION', message=(
+            'This sales receipt moves stock, and a deposit coordinate operation cannot carry '
+            'the inventory ledger with it. Correct or void the receipt on its own first, then '
+            'coordinate the deposit.'), details={'fields': [{
+                'field': 'replacement', 'problem': 'the receipt being replaced moves stock'}],
+                'reason': 'coordinated_sale_moves_stock'})
+
+
 def coordinate_rows_and_touches(plan):
     """Closed sales-receipt edit rows including their carried work allocations.
 
@@ -804,15 +816,9 @@ def coordinate_rows_and_touches(plan):
     """
     from bookflow.company.deposit_coordination import source_identity_map
     from bookflow.company import billing
+    refuse_coordinated_stock(plan)
     source_identity_map(plan, payment=False)
     data = plan.data
-    if data.get('stock') is not None and data['stock'].moves_stock:
-        raise BookflowError('E_VALIDATION', message=(
-            'This sales receipt moves stock, and a deposit coordinate operation cannot carry '
-            'the inventory ledger with it. Correct or void the receipt on its own first, then '
-            'coordinate the deposit.'), details={'fields': [{
-                'field': 'replacement', 'problem': 'the receipt being replaced moves stock'}],
-                'reason': 'coordinated_sale_moves_stock'})
     if data['document_type'] != 'sales_receipt' or data['operation'] not in ('update', 'void'):
         raise BookflowError('E_INTERNAL')
     if not data['changed']:
