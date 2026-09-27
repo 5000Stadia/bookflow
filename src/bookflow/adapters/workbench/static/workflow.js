@@ -227,11 +227,14 @@
     named(form, 'cf-state:' + id).value = 'set';
     form.querySelector('button[value="preview"]').click();
   });
-  document.addEventListener('input', event => {
+  // A typed field says so on input; a choice, a Yes/No or a checkbox may say so only on change.
+  const customSet = event => {
     if (!event.target.name?.startsWith('cf:')) return;
     const form = event.target.closest('[data-generated-form]');
     if (form) named(form, 'cf-state:' + event.target.name.slice(3)).value = 'set';
-  });
+  };
+  document.addEventListener('input', customSet);
+  document.addEventListener('change', customSet);
   document.addEventListener('change', event => {
     const form = event.target.closest('[data-generated-form]');
     if (!form) return;

@@ -158,8 +158,12 @@ def test_the_home_window_runs_only_read_commands_while_rendering(hosted, monkeyp
     browser = _browser(hosted)
     ran.clear()
     assert browser.get(f"/c/{hosted.company_id}/").status_code == 200
+    # The page itself waits on nothing but the company; the figures load from their own route.
+    assert ran == ["company show"], ran
+    ran.clear()
+    assert browser.get(f"/c/{hosted.company_id}/_overview").status_code == 200
     assert ran[0] == "company show", ran
-    assert set(ran) == {"company show", "report balance-sheet", "report ar-aging", "report open-invoices",
+    assert set(ran) == {"company show", "report cash-flows", "report ar-aging", "report open-invoices",
                         "report unpaid-bills", "report profit-and-loss", "audit list"}, ran
     assert not any(registry.get(name).is_write for name in ran), ran
 

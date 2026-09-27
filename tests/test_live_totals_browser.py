@@ -101,3 +101,46 @@ def test_the_preview_button_still_previews(register_browser):
     _preview(b)
     assert _totals(b)['Total'] == '$12.34', _totals(b)
     assert json.loads(b.evaluate('JSON.stringify(document.documentElement.scrollWidth <= innerWidth + 1)'))
+
+
+def test_a_totals_answer_that_is_not_the_form_says_so_quietly(register_browser):
+    """An error page or a login page in answer leaves the totals alone and says they are not updated."""
+    env, b = register_browser, register_browser.browser
+
+    def run(name, payload):
+        return _command(b, env.site, name, payload)
+
+    _fixture(run, 'Lost')
+    b.viewport(1280, 900)
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/invoice/post')
+    b.wait_for('!!document.querySelector("[data-sales-form]")')
+    _fill(b, 'f:date', '2026-05-08')
+    _choose(b, 'f:customer', 'Lost customer')
+    _choose(b, 'f:ar_account', 'Lost receivables')
+    _add_line(b)
+    _choose(b, 'c:lines:0:item', 'Lost service')
+    _fill(b, 'c:lines:0:quantity', '2')
+    b.wait_for(f'{LIVE}.textContent.includes("24.68")', timeout=30)
+    _settled(b)
+    status = 'document.querySelector("[data-live-totals-status]").textContent'
+    quiet = 'Totals could not be updated just now. Preview still checks them.'
+
+    # The preview route answers with an error page.
+    b.evaluate('''(() => {window.realFetch = window.fetch;
+        window.fetch = () => Promise.resolve(new Response('<!doctype html><h1>Error</h1><p class="error">E_INTERNAL</p>', {status: 500}));})()''')
+    _fill(b, 'c:lines:0:quantity', '3')
+    b.wait_for(f'{status} === {json.dumps(quiet)}', timeout=30)
+    _settled(b)
+    assert b.evaluate(f'{LIVE}.textContent.includes("24.68")'), 'the last good totals stay'
+    b.evaluate('window.fetch = window.realFetch')
+    _fill(b, 'c:lines:0:quantity', '4')
+    b.wait_for(f'{status} === "" && {LIVE}.textContent.includes("49.36")', timeout=30)
+    _settled(b)
+
+    # Signed out elsewhere: the answer is the login page, reached by a redirect.
+    b.evaluate('''fetch("/logout", {method: "POST", credentials: "same-origin",
+        headers: {"X-Bookflow-Workbench": "1", "HX-Request": "true"}})''', await_promise=True)
+    _fill(b, 'c:lines:0:quantity', '5')
+    b.wait_for(f'{status} === {json.dumps(quiet)}', timeout=30)
+    assert b.evaluate(f'{LIVE}.textContent.includes("49.36")')
+    assert b.evaluate('!!document.querySelector("[data-sales-form]")')

@@ -26,7 +26,6 @@ from typing import Any, Callable
 from urllib.parse import urlencode
 
 from bookflow.core import registry
-from bookflow.core.money import Money
 
 READ = "read"
 WRITE = "write"
@@ -823,91 +822,62 @@ _check_map()
 
 Ask = Callable[[str, dict[str, Any]], "dict[str, Any] | None"]
 ATTENTION_ROWS = 5
-_PAGE = 200
-_MAX_PAGES = 20
 
 
-def _pages(ask: Ask, name: str, raw: dict[str, Any], *, stop=None) -> list[dict] | None:
-    """Every row of a paged report, or None when it is not readable or too long to total here.
-
-    `stop(row)` ends the walk early once the report's own order says no later row can matter.
-    """
-    rows: list[dict] = []
-    cursor = None
-    for _ in range(_MAX_PAGES):
-        page = ask(name, {**raw, "limit": _PAGE, **({"cursor": cursor} if cursor else {})})
-        if page is None:
-            return None
-        for row in page["rows"]:
-            if stop and stop(row):
-                return rows
-            rows.append(row)
-        cursor = page.get("next_cursor")
-        if not cursor:
-            return rows
-    return None
-
-
-def _total(rows: list[dict], key: str, currency: str) -> dict[str, Any] | None:
-    """The sum of rows' home-currency amounts as returned; None if any row is in another currency."""
-    if any(row[key]["currency"] != currency for row in rows):
-        return None
-    return Money(sum(row[key]["minor_units"] for row in rows), currency).to_dict()
-
-
-def overview(company_id: str, today: str, home_currency: str, ask: Ask) -> dict[str, Any]:
+def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
     """The Overview's figures, what needs attention and recent activity, from read commands.
 
     `ask(name, input)` runs a registered command as the signed-in reader and answers None when
     that reader may not run it or it fails, so a figure the reader cannot read is simply absent.
-    Every amount is one a command returned, or a sum of the home-currency amounts on its rows.
+    Every figure is one report's own total, which covers the whole report whatever page of rows
+    comes back, so each read asks for no more rows than the attention lists show. Nothing here
+    adds amounts up: any interface can print the same figure by running the same report.
     """
     base = f"/c/{company_id}"
     report = lambda slug, **fields: f"{base}/report/{slug}?" + urlencode({f"f:{k}": v for k, v in fields.items()}, safe=":")
+    month_start = today[:8] + "01"
     week = (date.fromisoformat(today) + timedelta(days=7)).isoformat()
     figures: list[dict[str, Any]] = []
     attention: dict[str, Any] = {}
 
-    sheet = _pages(ask, "report balance-sheet", {"date_to": today})
-    banks = [row for row in sheet or () if row["account_type"] == "bank"]
-    cash = _total(banks, "amount", home_currency) if sheet is not None else None
-    if cash is not None:
-        figures.append(dict(key="cash", label="Cash in bank", value=cash,
-                            note="As of today",
-                            href=report("balance-sheet", date_to=today)))
+    # Closing cash is the sum of the bank accounts on the balance sheet for date_to, on either basis.
+    flows = ask("report cash-flows", {"date_from": month_start, "date_to": today, "limit": 1})
+    if flows is not None:
+        figures.append(dict(key="cash", label="Cash", value=flows["totals"]["closing_cash"],
+                            note="In the bank today",
+                            href=report("cash-flows", date_from=month_start, date_to=today)))
 
     aging = ask("report ar-aging", {"as_of": today, "limit": 1})
     if aging is not None:
         figures.append(dict(key="receivable", label="Owed to you", value=aging["totals"]["total"],
                             note="Open receivables", href=report("ar-aging", as_of=today)))
 
-    overdue = ask("report open-invoices", {"as_of": today, "past_due_only": True, "limit": _PAGE})
+    overdue = ask("report open-invoices", {"as_of": today, "past_due_only": True, "limit": ATTENTION_ROWS})
     if overdue is not None:
-        count = f"{overdue['count']}{'+' if overdue.get('next_cursor') else ''}"
         figures.append(dict(key="overdue", label="Overdue", value=overdue["totals"]["balance"],
-                            note=f"{count} invoice{'s' if count != '1' else ''} past due" if overdue["rows"] else "Nothing past due",
+                            note="Invoices past due" if overdue["rows"] else "Nothing past due",
                             href=report("open-invoices", as_of=today, past_due_only="true")))
         attention["overdue"] = [dict(row, href=f"{base}/{row['document_type'].replace('_', '-')}/{row['transaction_id']}")
-                                for row in overdue["rows"][:ATTENTION_ROWS]]
-        attention["overdue_more"] = len(overdue["rows"]) > ATTENTION_ROWS or bool(overdue.get("next_cursor"))
+                                for row in overdue["rows"]]
+        attention["overdue_more"] = bool(overdue.get("next_cursor"))
         attention["overdue_href"] = figures[-1]["href"]
 
-    # Unpaid bills come oldest due date first, so the walk stops at the first one due after the week.
-    due = _pages(ask, "report unpaid-bills", {"as_of": today}, stop=lambda row: row["due_date"] > week)
-    due_total = _total(due, "balance", home_currency) if due is not None else None
-    if due_total is not None:
-        figures.append(dict(key="bills", label="Bills due in 7 days", value=due_total,
-                            note=f"{len(due)} bill{'s' if len(due) != 1 else ''}, including overdue" if due else "Nothing due",
-                            href=report("unpaid-bills", as_of=today)))
-        attention["bills"] = [dict(row, href=f"{base}/bill/{row['transaction_id']}") for row in due[:ATTENTION_ROWS]]
-        attention["bills_more"] = len(due) > ATTENTION_ROWS
+    # Unpaid bills come oldest due date first, so the first rows are the overdue and the soonest
+    # due; one row past what is shown says whether there are more due within the week.
+    bills = ask("report unpaid-bills", {"as_of": today, "limit": ATTENTION_ROWS + 1})
+    if bills is not None:
+        figures.append(dict(key="payable", label="You owe", value=bills["totals"]["balance"],
+                            note="Unpaid bills", href=report("unpaid-bills", as_of=today)))
+        soon = [dict(row, href=f"{base}/bill/{row['transaction_id']}") for row in bills["rows"] if row["due_date"] <= week]
+        attention["bills"] = soon[:ATTENTION_ROWS]
+        attention["bills_more"] = len(soon) > ATTENTION_ROWS
         attention["bills_href"] = figures[-1]["href"]
 
-    month = ask("report profit-and-loss", {"date_from": today[:8] + "01", "date_to": today, "limit": 1})
+    month = ask("report profit-and-loss", {"date_from": month_start, "date_to": today, "limit": 1})
     if month is not None:
         figures.append(dict(key="income", label="Income this month", value=month["totals"]["income"],
                             note=month["totals"]["net_income"], note_label="Net income",
-                            href=report("profit-and-loss", date_from=today[:8] + "01", date_to=today)))
+                            href=report("profit-and-loss", date_from=month_start, date_to=today)))
 
     events = ask("audit list", {"limit": ATTENTION_ROWS})
     activity = None if events is None else [dict(event, href=f"{base}/audit/{event['id']}") for event in events["items"]]

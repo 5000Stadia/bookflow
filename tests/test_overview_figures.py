@@ -1,6 +1,6 @@
-"""The Overview's figures, needs-attention lists and recent activity: each shows what a read
-command returned, links to the report that explains it, and quietly drops out for a reader who
-cannot run that command."""
+"""The Overview's figures, needs-attention lists and recent activity: each figure is one report's
+own total, links to the report that explains it, and quietly drops out for a reader who cannot run
+that command. They arrive from their own route after the page, so the page never waits on them."""
 import re
 from datetime import date, timedelta
 
@@ -50,21 +50,29 @@ def _seed(hosted, browser):
 def test_the_overview_figures_are_the_reports_own_totals_and_link_to_them(hosted):
     browser = _browser(hosted)
     run, today, invoice, bill = _seed(hosted, browser)
-    page = browser.get(f"/c/{hosted.company_id}/")
-    assert page.status_code == 200
+    shell = browser.get(f"/c/{hosted.company_id}/")
+    assert shell.status_code == 200
+    # The page itself carries no figures, only the place they load into.
+    assert "data-figure" not in shell.text and "Needs attention" not in shell.text
+    assert f'hx-get="/c/{hosted.company_id}/_overview" hx-trigger="load"' in shell.text
+    page = browser.get(f"/c/{hosted.company_id}/_overview")
+    assert page.status_code == 200 and page.headers["cache-control"] == "no-store"
     figures = _figures(page.text)
-    assert list(figures) == ["cash", "receivable", "overdue", "bills", "income"], list(figures)
+    assert list(figures) == ["cash", "receivable", "overdue", "payable", "income"], list(figures)
 
+    # Each figure is one report's own total, never a sum of its rows.
+    flows = run("report cash-flows", {"date_from": today[:8] + "01", "date_to": today})
     aging = run("report ar-aging", {"as_of": today})
     overdue = run("report open-invoices", {"as_of": today, "past_due_only": True})
+    bills = run("report unpaid-bills", {"as_of": today})
     month = run("report profit-and-loss", {"date_from": today[:8] + "01", "date_to": today})
-    sheet = run("report balance-sheet", {"date_to": today, "limit": 200})
-    cash = sum(row["amount"]["minor_units"] for row in sheet["rows"] if row["account_type"] == "bank")
+    assert figures["cash"][1] == money(flows["totals"]["closing_cash"])
     assert figures["receivable"][1] == money(aging["totals"]["total"])
     assert figures["overdue"][1] == money(overdue["totals"]["balance"])
+    assert figures["payable"][1] == money(bills["totals"]["balance"])
     assert figures["income"][1] == money(month["totals"]["income"])
-    assert figures["cash"][1] == money(f"{cash // 100}.{cash % 100:02d}", "USD")
-    assert figures["bills"][1] == "$42.50"
+    assert figures["cash"][0] == f"/c/{hosted.company_id}/report/cash-flows?f:date_from={today[:8]}01&f:date_to={today}"
+    assert figures["payable"][0] == f"/c/{hosted.company_id}/report/unpaid-bills?f:as_of={today}"
 
     # Each figure opens the report that explains it, for the same date.
     assert figures["overdue"][0] == f"/c/{hosted.company_id}/report/open-invoices?f:as_of={today}&f:past_due_only=true"
@@ -91,9 +99,17 @@ def test_a_reader_who_cannot_run_a_command_just_does_not_see_its_part(hosted, mo
 
     monkeypatch.setattr(registry.get("report ar-aging"), "plan", refused)
     monkeypatch.setattr(registry.get("audit list"), "plan", refused)
-    page = browser.get(f"/c/{hosted.company_id}/")
+    page = browser.get(f"/c/{hosted.company_id}/_overview")
     assert page.status_code == 200
     figures = _figures(page.text)
-    assert "receivable" not in figures and {"cash", "overdue", "bills", "income"} <= set(figures)
+    assert "receivable" not in figures and {"cash", "overdue", "payable", "income"} <= set(figures)
     assert "Recent activity" not in page.text and 'class="error"' not in page.text
     assert "Needs attention" in page.text
+
+
+def test_the_panels_route_answers_quietly_when_it_cannot_load(hosted):
+    """Signed out, the panels send the whole window to the login; the shell's own error handling does the rest."""
+    signed_out = TestClient(hosted.handle.app)
+    answered = signed_out.get(f"/c/{hosted.company_id}/_overview", follow_redirects=False)
+    assert answered.status_code == 200 and answered.headers["hx-redirect"].startswith("/login"), answered.headers
+    assert answered.text == ""

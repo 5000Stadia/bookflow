@@ -213,6 +213,9 @@
     body.delete('ctx:idempotency_key');
     body.set('action', 'preview');
     const status = statusOf(form), totals = region(form);
+    const unavailable = () => {
+      if (status) { status.textContent = 'Totals could not be updated just now. Preview still checks them.'; status.dataset.state = 'refused'; }
+    };
     totals.setAttribute('aria-busy', 'true');
     if (status) { status.textContent = 'Updating…'; status.dataset.state = 'busy'; }
     try {
@@ -222,7 +225,9 @@
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
       if (seq !== run.seq || !form.isConnected) return;
       const answer = page.querySelector('[data-live-totals]');
-      if (answer) totals.innerHTML = answer.innerHTML;
+      // A login page, an error page or a failed answer is not this form: say so and leave it be.
+      if (!answer || response.redirected || !response.ok) { unavailable(); return; }
+      totals.innerHTML = answer.innerHTML;
       // Line amounts by position: the answer renders the lines in the order they were sent.
       const mine = [...form.querySelectorAll('.line-row .line-amount')];
       const theirs = [...page.querySelectorAll('[data-generated-form] .line-row .line-amount')];
@@ -238,7 +243,7 @@
       }
     } catch (error) {
       if (error.name === 'AbortError' || seq !== run.seq) return;
-      if (status) { status.textContent = 'Totals could not be updated just now. Preview still checks them.'; status.dataset.state = 'refused'; }
+      unavailable();
     } finally {
       if (seq === run.seq) totals.removeAttribute('aria-busy');
     }

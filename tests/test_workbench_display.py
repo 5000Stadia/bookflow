@@ -28,6 +28,21 @@ def test_dates_carry_the_year_only_when_it_is_not_this_year():
     assert D.day("not a date", today) == "not a date"
 
 
+def test_a_page_reads_this_year_from_the_company_calendar():
+    """In a template the year is the company's today when the page knows it, else the server's."""
+    from jinja2 import Environment
+    env = Environment()
+    env.filters.update(D.FILTERS)
+    shown = env.from_string("{{ '2026-12-31' | day }}")
+    # New Year's Eve in the company's zone while the server has already reached 2027, and back.
+    assert shown.render(company_today="2026-12-31") == "Dec 31"
+    assert env.from_string("{{ '2025-12-31' | day }}").render(company_today="2026-01-01") == "Dec 31, 2025"
+    # Without a company the server's today decides, as a direct call does.
+    assert shown.render() == D.day("2026-12-31") and shown.render(company_today="") == D.day("2026-12-31")
+    # A date the template passes still wins, as a report's own today does.
+    assert env.from_string("{{ '2026-12-31' | day(then) }}").render(then=date(2027, 1, 1), company_today="2026-12-31") == "Dec 31, 2026"
+
+
 def test_ago_reads_recent_instants_relative_to_now():
     now = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
     assert D.ago("2026-09-27T11:59:30Z", now) == "just now"

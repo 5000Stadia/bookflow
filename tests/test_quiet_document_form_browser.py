@@ -148,3 +148,33 @@ def test_a_new_record_shows_a_custom_field_as_its_value_only(hosted):
     assert f'<select name="cf-state:{field}"' not in page.text
     assert f'name="cf:{field}"' in page.text
     assert 'Keep stored value or absence' not in page.text
+
+
+@browser_only
+def test_a_choice_or_yes_no_custom_field_changed_on_a_new_invoice_is_saved(register_browser):
+    """A select says it changed only with `change`; that alone must turn the hidden Keep into Set."""
+    env, b = register_browser, register_browser.browser
+
+    def run(name, payload):
+        return _command(b, env.site, name, payload)
+
+    books = _fixture(run, 'Chosen')
+    choice = run('custom-field.create', {'name': 'Chosen channel', 'kind': 'choice', 'scopes': ['invoice'],
+                                         'choices': [{'value': 'Web'}, {'value': 'Phone'}]})['id']
+    flag = run('custom-field.create', {'name': 'Chosen rush', 'kind': 'bool', 'scopes': ['invoice']})['id']
+    b.viewport(DESKTOP, 900)
+    _open(b, env.site)
+    assert b.evaluate(f'document.getElementsByName("cf-state:{choice}")[0].value') == 'keep'
+    for field, value in ((choice, 'Phone'), (flag, 'true')):
+        b.evaluate(f'''(() => {{const e = document.getElementsByName("cf:{field}")[0]; e.value = {json.dumps(value)};
+            e.dispatchEvent(new Event("change", {{bubbles: true}}));}})()''')
+        assert b.evaluate(f'document.getElementsByName("cf-state:{field}")[0].value') == 'set', field
+    _choose(b, 'f:ar_account', 'Chosen receivables')
+    _choose(b, 'f:customer', 'Chosen customer')
+    _choose(b, 'c:lines:0:item', 'Chosen service')
+    _fill(b, 'c:lines:0:quantity', '1')
+    _preview(b)
+    _click(b, 'submit')
+    posted = run('invoice.show', dict(invoice=_saved(b, 'invoice')))
+    values = {v['definition_id']: v['value'] for v in posted['revision']['custom_fields']}
+    assert values.get(choice) == 'Phone' and values.get(flag) is True, values
