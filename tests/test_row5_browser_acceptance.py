@@ -445,7 +445,7 @@ def test_row5_login_list_detail_form_preview_and_audit_in_real_chrome(
         browser.wait_for("location.search.includes('query=Riverside') && document.body.innerText.includes('Riverside Apartments')")
         _assert_rendered_page(browser, "searched customer list", viewport=viewport)
 
-        browser.evaluate("document.querySelector('.table-wrap table a').click()")
+        browser.evaluate("document.querySelector('.table-wrap tbody a').click()")
         browser.wait_for("document.readyState === 'complete' && document.querySelector('h1')?.textContent.includes('Riverside Apartments')")
         _assert_rendered_page(browser, "customer detail", viewport=viewport)
 

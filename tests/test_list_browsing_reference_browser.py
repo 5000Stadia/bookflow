@@ -14,7 +14,7 @@ def test_reference_label_activity_survive_navigation(register_browser,width,tmp_
     base=f'{env.site.base_url}/c/{env.site.company_id}'
     b.navigate(base+'/vendor?'+urlencode({'query':'Retained reference vendor','limit':'1','columns':'name,terms'}))
     b.wait_for("document.querySelector('#browse-form')?.dataset.ready==='1'")
-    b.evaluate("document.querySelector('#filter-controls').open=true;document.querySelector('#filter-search').value='Terms';document.querySelector('#find-filters').click()")
+    b.evaluate("document.querySelector('.list-customize').open=true;document.querySelector('#filter-controls').open=true;document.querySelector('#filter-search').value='Terms';document.querySelector('#find-filters').click()")
     b.wait_for("[...document.querySelector('#available-filters').options].some(o=>o.value==='terms_id')")
     b.evaluate("document.querySelector('#available-filters').value='terms_id';document.querySelector('#available-filters').dispatchEvent(new Event('change'))")
     b.wait_for("!!document.querySelector('#filter-editor input[type=search]')")
@@ -22,7 +22,7 @@ def test_reference_label_activity_survive_navigation(register_browser,width,tmp_
     b.wait_for("[...document.querySelector('#filter-value').options].some(o=>o.textContent==='Retained reference term')")
     b.evaluate("let s=document.querySelector('#filter-value');s.value=[...s.options].find(o=>o.textContent==='Retained reference term').value;document.querySelector('#add-filter').click();document.querySelector('#browse-form').requestSubmit()")
     def check(label):
-        b.wait_for("document.querySelector('#browse-form')?.dataset.ready==='1'")
+        b.wait_for("document.querySelector('#browse-form')?.dataset.ready==='1' && window.bookflowList.idle()")
         text=b.evaluate("document.querySelector('#active-criteria').innerText")
         assert label in text and term['id'] not in text
         assert b.evaluate("document.querySelector('#browse-legacy input').value")=='terms_id='+term['id']
@@ -30,7 +30,7 @@ def test_reference_label_activity_survive_navigation(register_browser,width,tmp_
         assert b.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
     b.wait_for("location.search.includes('terms_id')");check('Retained reference term')
     url=b.evaluate('location.href');b.navigate(url);check('Retained reference term')
-    b.evaluate("document.querySelector('#master-results th button').click()")
+    b.evaluate("document.querySelector('#master-results th a').click()")
     b.wait_for("location.search.includes('direction=desc')");check('Retained reference term')
     b.navigate(b.evaluate("document.querySelector('a[rel=next]').href"));check('Retained reference term')
     cursor_url=b.evaluate('location.href')

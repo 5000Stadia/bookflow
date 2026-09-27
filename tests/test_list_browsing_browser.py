@@ -35,21 +35,57 @@ def _expand(b, selector):
     b.wait_for(f'document.querySelector({json.dumps(selector)}).open')
 
 
+def _phone(b):
+    return b.evaluate('innerWidth <= 700')
+
+
+def _open_sheet(b, button=1):
+    """On a phone the controls sit in the Filters sheet; a wide screen shows them inline."""
+    if _phone(b) and not b.evaluate("document.querySelector('.list-form').classList.contains('sheet-open')"):
+        _activate(b, f'.list-bar a:nth-child({button})')
+        b.wait_for("document.querySelector('.list-form').classList.contains('sheet-open')")
+
+
+def _settled(b):
+    b.wait_for('window.bookflowList?.idle()')
+
+
+def _apply(b):
+    """A phone applies the sheet once with Show results; a wide screen has already applied each
+    change, and Enter in the search field submits the same form from the keyboard."""
+    if _phone(b):
+        _open_sheet(b)
+        _activate(b, '#browse-form .list-apply')
+    else:
+        b.evaluate("document.querySelector('.list-search input').focus()")
+        _key(b, 'Enter')
+    _settled(b)
+
+
+def _clear_criteria(b):
+    b.evaluate("document.querySelectorAll('#active-criteria button').forEach(x => x.click())")
+
+
 def _customize(b, section):
+    _open_sheet(b)
     _expand(b, '.list-customize')
     _expand(b, section)
 
 
 def _sort(b, width):
     if width == 390:
-        _expand(b, '.master-mobile-sort')
-        _activate(b, '.master-mobile-sort button')
+        _open_sheet(b, 2)
+        b.evaluate("""(() => {const f = document.querySelector('#browse-form');
+            f.elements.sort.value = 'full_name';
+            f.elements.direction.value = new URLSearchParams(location.search).get('direction') === 'desc' ? 'asc' : 'desc';})()""")
+        _activate(b, '#browse-form .list-apply')
     else:
-        _activate(b, '#master-results th button')
+        _activate(b, '#master-results th a')
+    _settled(b)
 
 
 def _results(width):
-    return '.master-mobile-results' if width == 390 else '#master-results'
+    return '.list-cards' if width == 390 else '#master-results'
 
 
 @pytest.mark.parametrize('width', [1280, 390])
@@ -80,7 +116,7 @@ def test_named_columns_filters_and_readable_collections(register_browser, width,
     b.evaluate("document.querySelector('#filter-value').value='90071992547409.93'")
     _activate(b, '#add-filter')
     assert b.evaluate("document.querySelector('#browse-legacy input').value") == 'current_balance=9007199254740993'
-    _activate(b, '#clear-filters')
+    _clear_criteria(b)
     _activate(b, '#filter-controls > summary')
     # Use the chooser, not a handcrafted projection URL.
     _customize(b, '#column-controls')
@@ -90,8 +126,11 @@ def test_named_columns_filters_and_readable_collections(register_browser, width,
     b.evaluate("document.querySelector('#available-columns').value='email'")
     _activate(b, '#add-column')
     assert 'email' in b.evaluate("document.querySelector('#browse-columns').value")
-    # Keyboard activates the actual submit button.
-    _tab_to(b, '#browse-form button[type=submit]'); _key(b, 'Enter')
+    # The keyboard submits the same form: Show results in the phone sheet, Enter in search on a wide screen.
+    if width == 390:
+        _tab_to(b, '#browse-form button[type=submit]'); _key(b, 'Enter')
+    else:
+        _apply(b)
     b.wait_for("document.querySelector('#master-results')?.textContent.includes('browse@example.invalid')")
     _customize(b, '#filter-controls')
     b.evaluate("document.querySelector('#filter-search').value='Browsing bool'")
@@ -102,12 +141,13 @@ def test_named_columns_filters_and_readable_collections(register_browser, width,
     b.wait_for("!!document.querySelector('#filter-value')")
     b.evaluate("document.querySelector('#filter-value').value='false'")
     _activate(b, '#add-filter')
-    _activate(b, '#browse-form button[type=submit]')
+    _apply(b)
     b.wait_for("document.querySelector('.browse-count')?.textContent.includes('1 matching records')")
     assert customer['id'] in b.evaluate(f"document.querySelector('{_results(width)}').innerHTML")
     if width == 390:
-        assert 'Browsing example' in b.evaluate("document.querySelector('.master-mobile-record h2').innerText")
-        assert 'browse@example.invalid' in b.evaluate("document.querySelector('.master-mobile-record').innerText")
+        # A phone card: the name, and a column a person added on its muted second line.
+        assert 'Browsing example' in b.evaluate("document.querySelector('.list-card .list-card-link').innerText")
+        assert 'browse@example.invalid' in b.evaluate("document.querySelector('.list-card .list-card-sub').innerText")
     assert 'Yes' not in b.evaluate("document.querySelector('#active-criteria').textContent")
     # A sortable heading retains the selected filter and columns.
     _sort(b, width)
@@ -126,18 +166,18 @@ def test_named_columns_filters_and_readable_collections(register_browser, width,
     b.wait_for("[...document.querySelector('#filter-value').options].some(o=>o.textContent==='Option 204')")
     b.evaluate("const s=document.querySelector('#filter-value');s.value=[...s.options].find(o=>o.textContent==='Option 204').value")
     _activate(b, '#add-filter')
-    _activate(b, '#browse-form button[type=submit]')
+    _apply(b)
     b.wait_for(f"location.search.includes({json.dumps(defs['choice']['id'])}) && document.querySelector('#browse-form')?.dataset.ready === '1' && document.querySelector('#active-criteria')?.textContent.includes('Option 204')")
     assert '1 matching records' in b.evaluate("document.querySelector('.browse-count').textContent")
     # Exact accepted money must survive browser rendering beyond Number's integer precision.
     b.navigate(base + '/customer?' + urlencode({'query':'Browsing example','columns':'full_name,credit_limit'}))
     b.wait_for("!!document.querySelector('#master-results')")
     if width == 390:
-        assert b.evaluate("document.querySelector('.master-mobile-record').getBoundingClientRect().width > 0")
-        assert not b.evaluate("document.querySelector('.master-mobile-record details').open")
-        assert '90071992547409.93' not in b.evaluate("document.querySelector('.master-mobile-record').innerText")
-        _expand(b, '.master-mobile-record details')
-    assert '90071992547409.93' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
+        assert b.evaluate("document.querySelector('.list-card').getBoundingClientRect().width > 0")
+    else:
+        assert 'Credit limit (USD)' in b.evaluate("document.querySelector('#master-results thead').innerText")
+    # Grouped for reading, every digit kept.
+    assert '90,071,992,547,409.93' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
     vendor = command('vendor.create', {'name':'Browsing vendor', 'contacts':[{'role':'primary','display_name':'Readable Contact','work_phone':'555-0109'}]})
     b.navigate(base + '/vendor/' + vendor['id'])
     b.wait_for("!!document.querySelector('.master-sections')")
@@ -167,7 +207,8 @@ def test_reorder_reset_zero_missing_paging_and_stale_restart(register_browser, w
     b.wait_for("location.search.includes('direction=desc') && document.querySelector('#browse-form')?.dataset.ready==='1'")
     assert 'Paged browser 2' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
     _sort(b, width)
-    b.wait_for("location.search.includes('direction=asc') && document.querySelector('#browse-form')?.dataset.ready==='1'")
+    # Ascending is how a sort opens, so the address leaves it out.
+    b.wait_for("location.search.includes('sort=full_name') && !location.search.includes('direction=') && document.querySelector('#browse-form')?.dataset.ready==='1'")
     assert 'Paged browser 0' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
     # Keyboard column reordering and removing are the same controls as touch buttons.
     _customize(b, '#column-controls')
@@ -178,7 +219,7 @@ def test_reorder_reset_zero_missing_paging_and_stale_restart(register_browser, w
     assert b.evaluate("document.querySelector('#browse-columns').value")=='full_name,email'
     assert b.evaluate("document.activeElement.closest('li')===document.querySelector('#chosen-columns li:nth-child(2)')")
     _activate(b, '#reset-columns')
-    b.wait_for("document.querySelector('#browse-columns').value.startsWith('full_name,company_name')")
+    b.wait_for("document.querySelector('#browse-columns').value === 'full_name,phone,open_balance'")
     _customize(b, '#filter-controls')
     b.evaluate("document.querySelector('#filter-search').value='Browser zero criterion'")
     _activate(b, '#find-filters')
@@ -188,12 +229,12 @@ def test_reorder_reset_zero_missing_paging_and_stale_restart(register_browser, w
     b.wait_for("!!document.querySelector('#filter-value')")
     b.evaluate("document.querySelector('#filter-value').value='0'")
     _activate(b, '#add-filter')
-    _activate(b, '#browse-form button[type=submit]')
+    _apply(b)
     b.wait_for(f"location.search.includes({json.dumps(definition['id'])}) && document.querySelector('#browse-form')?.dataset.ready==='1'")
     assert 'Paged browser 0' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
     assert '1 matching records' in b.evaluate("document.querySelector('.browse-count').textContent")
-    _activate(b, '#clear-filters')
-    _activate(b, '#browse-form button[type=submit]')
+    _clear_criteria(b)
+    _apply(b)
     b.wait_for("document.querySelector('.browse-count')?.textContent.includes('3 matching records')")
     # Capture and use a real continuation, then invalidate it through an ordinary create.
     next_url=b.evaluate("document.querySelector('a[rel=next]').href")
@@ -202,7 +243,8 @@ def test_reorder_reset_zero_missing_paging_and_stale_restart(register_browser, w
     command('customer.create',{'name':'Paged browser new'})
     b.navigate(next_url);b.wait_for("document.body.textContent.includes('Restart to see current results')")
     restart=b.evaluate("[...document.querySelectorAll('a')].find(a=>a.textContent.toLowerCase().includes('restart')).href")
-    assert 'query=Paged' in restart and 'columns=' in restart and 'cursor=' not in restart
+    # Columns were reset to the defaults above, which the address leaves out; the rest is kept.
+    assert 'query=Paged' in restart and 'limit=1' in restart and 'cursor=' not in restart
     b.navigate(restart);b.wait_for("document.querySelector('#browse-form')?.dataset.ready==='1'")
     _customize(b, '#filter-controls')
     b.evaluate("document.querySelector('#filter-search').value='Browser zero criterion'")
@@ -210,15 +252,16 @@ def test_reorder_reset_zero_missing_paging_and_stale_restart(register_browser, w
     b.wait_for(f"[...document.querySelector('#available-filters').options].some(o=>o.value==={json.dumps(key)})")
     b.evaluate(f"document.querySelector('#available-filters').value={json.dumps(key)};document.querySelector('#available-filters').dispatchEvent(new Event('change'));document.querySelector('#filter-operator').value='is_missing';document.querySelector('#filter-operator').dispatchEvent(new Event('change'))")
     _activate(b, '#add-filter')
-    _activate(b, '#browse-form button[type=submit]')
+    _apply(b)
     b.wait_for("location.search.includes('is_missing') && document.querySelector('#browse-form')?.dataset.ready==='1'")
     assert '2 matching records' in b.evaluate("document.querySelector('.browse-count').textContent")
     # Active-only discovery cannot erase an explicit retained inactive criterion.
     command('custom-field.update', {'custom_field':definition['id'], 'expected_version':definition['version'], 'active':False})
+    _open_sheet(b)
     _expand(b, '.list-customize')
     _activate(b, '#metadata-active-only')
     b.wait_for(f"![...document.querySelector('#available-filters').options].some(o=>o.value==={json.dumps(key)})")
-    _activate(b, '#browse-form button[type=submit]')
+    _apply(b)
     b.wait_for("location.search.includes('metadata_active_only=1') && document.querySelector('#active-criteria')?.textContent.includes('(inactive)') && document.querySelector('#browse-form')?.dataset.ready==='1'")
     assert '2 matching records' in b.evaluate("document.querySelector('.browse-count').textContent")
     assert definition['id'] in b.evaluate("document.querySelector('#browse-custom').value")
