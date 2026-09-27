@@ -404,5 +404,5 @@ def test_preferences_credit_draft_application_history_and_internal_print(registe
     b.navigate(base+'/invoice/'+invoice['id']+'/settlement?as_of=2026-05-31')
     b.wait_for("document.body.innerText.includes('Recorded applications and reversals')")
     assert 'Not effective' in b.evaluate("document.querySelector('[aria-label=\"Dated invoice settlement\"]').innerText")
-    assert 'Due 40.00 USD' in b.evaluate("document.querySelector('[aria-label=\"All committed current settlement\"]').innerText")
+    assert 'Due $40.00' in b.evaluate("document.querySelector('[aria-label=\"All committed current settlement\"]').innerText")
     shot(b,tmp_path,'invoice-dated-current-settlement',width)

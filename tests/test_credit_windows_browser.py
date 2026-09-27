@@ -344,7 +344,7 @@ def test_a_credit_applied_from_its_own_page_lowers_what_the_invoice_owes(registe
     b.wait_for('!!document.querySelector("[data-credit-apply]")')
     b.evaluate('document.querySelector("[data-credit-apply]").click()')
     b.wait_for('location.pathname.endsWith("/apply") && !!document.querySelector("#credit-apply-form")')
-    assert f'Still available {CREDIT} USD' in _text(b, '[data-credit-available]')
+    assert f'Still available ${CREDIT}' in _text(b, '[data-credit-available]')
 
     # The row carries the invoice's own saved version, so nobody is asked to find one.
     row = f'document.querySelector(\'tr[data-invoice="{invoice["id"]}"]\')'
