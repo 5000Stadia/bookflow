@@ -392,6 +392,305 @@ MENU: tuple[MenuGroup, ...] = (
 
 MENU_BY_SLUG: dict[str, MenuGroup] = {entry.slug: entry for entry in MENU}
 
+
+# ---------------------------------------------------------------- section pages
+
+@dataclass(frozen=True)
+class Section:
+    """What a menu section opens on: the records a person works with, one "+ New" menu of what can
+    be created there, the lists that sit beside those records, and the everyday tasks.
+
+    Every entry is an `Action`, resolved against the registry the way a tile is, so a section never
+    links to a command that is missing, unrouted, switched off for this company or beyond this
+    role. Generated command pages are not listed here: the finder and All commands reach them.
+    """
+
+    slug: str
+    records: str | None = None  # the noun whose first records the page opens on
+    records_label: str = ""  # the heading over those records
+    new: tuple[Action, ...] = ()
+    lists: tuple[Action, ...] = ()
+    tasks: tuple[Action, ...] = ()
+    groups: tuple[tuple[str, tuple[Action, ...]], ...] = ()  # a page of grouped links (Settings)
+
+
+def _new(label: str, command: str, destination: str) -> Action:
+    return Action(label, WRITE, (command,), destination)
+
+
+def _list(label: str, command: str, destination: str) -> Action:
+    return Action(label, READ, (command,), destination)
+
+
+def _report(label: str, verb: str) -> Action:
+    return Action(label, READ, (f"report {verb}",), f"/report/{verb}")
+
+
+# Where the anchor keeps them: customer, vendor and item profile lists live under Settings rather
+# than beside the records that use them.
+SECTIONS: tuple[Section, ...] = (
+    Section(
+        "customers", records="customer", records_label="Customer list",
+        new=(
+            _new("Invoice", "invoice post", "/invoice/post"),
+            _new("Estimate", "estimate create", "/estimate/create"),
+            _new("Sales receipt", "sales-receipt post", "/sales-receipt/post"),
+            _new("Payment", "payment receive", "/receive-payments"),
+            _new("Credit memo", "credit-memo post", "/credit-memo/post"),
+            _new("Refund", "customer-refund post", "/customer-refund/post"),
+            _new("Statement charge", "statement-charge post", "/statement-charge/post"),
+            _new("Time entry", "time-activity create", "/time-activity/create"),
+            _new("Work order", "work-order create", "/work-order/create"),
+            _new("Proposal", "proposal create", "/proposal/create"),
+            _new("Customer", "customer create", "/customer/create"),
+            _new("Billing group", "billing-group create", "/billing-group/create"),
+        ),
+        lists=(
+            _list("Invoices", "invoice query", "/invoice"),
+            _list("Estimates", "estimate query", "/estimate"),
+            _list("Sales receipts", "sales-receipt query", "/sales-receipt"),
+            _list("Payments", "payment query", "/payment"),
+            _list("Credit memos", "credit-memo query", "/credit-memo"),
+            _list("Refunds", "customer-refund query", "/customer-refund"),
+            _list("Statement charges", "statement-charge query", "/statement-charge"),
+            _list("Proposals", "proposal query", "/proposal"),
+            _list("Work orders", "work-order query", "/work-order"),
+            _list("Time entries", "time-activity query", "/time-activity"),
+            _list("Billing groups", "billing-group list", "/billing-group"),
+            _list("Invoice batches", "batch-invoice query", "/batch-invoice"),
+        ),
+        tasks=(
+            Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
+            Action("Invoice a billing group", WRITE, ("batch-invoice post",), "/batch-invoice/post"),
+            Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
+            _report("Customer statement", "statement"),
+            _report("A/R aging summary", "ar-aging"),
+            _report("Open invoices", "open-invoices"),
+        ),
+    ),
+    Section(
+        "vendors", records="vendor", records_label="Vendor list",
+        new=(
+            _new("Bill", "bill post", "/bill/post"),
+            _new("Check", "check post", "/check/post"),
+            _new("Credit card charge", "card-charge post", "/card-charge/post"),
+            _new("Purchase order", "purchase-order post", "/purchase-order/post"),
+            _new("Item receipt", "item-receipt post", "/item-receipt/post"),
+            _new("Vendor credit", "vendor-credit post", "/vendor-credit/post"),
+            _new("Vendor", "vendor create", "/vendor/create"),
+        ),
+        lists=(
+            _list("Bills", "bill query", "/bill"),
+            _list("Bill payments", "bill payment query", "/bill-payment"),
+            _list("Checks", "check query", "/check"),
+            _list("Credit card charges", "card-charge query", "/card-charge"),
+            _list("Purchase orders", "purchase-order query", "/purchase-order"),
+            _list("Item receipts", "item-receipt query", "/item-receipt"),
+            _list("Vendor credits", "vendor-credit query", "/vendor-credit"),
+            _list("Sales tax payments", "sales-tax payment query", "/sales-tax-payment"),
+        ),
+        tasks=(
+            Action("Pay bills", WRITE, ("bill pay",), "/pay-bills"),
+            Action("Pay sales tax", WRITE, ("sales-tax pay",), "/sales-tax/pay"),
+            Action("Sales tax owed", READ, ("sales-tax liability",), "/sales-tax/liability"),
+            _report("A/P aging summary", "ap-aging"),
+            _report("Unpaid bills", "unpaid-bills"),
+            _report("Expenses by vendor", "expenses-by-vendor"),
+        ),
+    ),
+    Section(
+        "employees", records="employee", records_label="Employee list",
+        new=(
+            _new("Employee", "employee create", "/employee/create"),
+            _new("Other name", "other-name create", "/other-name/create"),
+            _new("Time entry", "time-activity create", "/time-activity/create"),
+        ),
+        lists=(
+            _list("Other names", "other-name list", "/other-name"),
+            _list("Time entries", "time-activity query", "/time-activity"),
+        ),
+    ),
+    Section(
+        "items", records="item", records_label="Item list",
+        new=(
+            _new("Item", "item create", "/item/create"),
+            _new("Inventory adjustment", "inventory adjust", "/inventory/adjust"),
+        ),
+        tasks=(
+            Action("Adjust inventory", WRITE, ("inventory adjust",), "/inventory/adjust"),
+            _report("Inventory valuation summary", "inventory-valuation"),
+            _report("Inventory stock status by item", "stock-status"),
+            _report("Sales by item", "sales-by-item"),
+        ),
+    ),
+    Section(
+        "banking",
+        new=(
+            _new("Check", "check post", "/check/post"),
+            _new("Deposit", "deposit post", "/deposit/post"),
+            _new("Transfer", "transfer post", "/transfer/post"),
+            _new("Credit card charge", "card-charge post", "/card-charge/post"),
+            _new("Journal entry", "journal post", "/journal/post"),
+        ),
+        lists=(
+            _list("Deposits", "deposit query", "/deposit"),
+            _list("Checks", "check query", "/check"),
+            _list("Transfers", "transfer query", "/transfer"),
+            _list("Credit card charges", "card-charge query", "/card-charge"),
+            _list("Exchange rates", "rate query", "/rate"),
+        ),
+        tasks=(
+            Action("Open an account register", READ, ("account list",), "/_registers"),
+            Action("Reconcile an account", WRITE,
+                   ("reconcile opening start", "reconcile start", "reconcile mark",
+                    "reconcile finish", "reconcile candidates", "reconcile preview"),
+                   "/reconcile-opening/start"),
+            Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
+            Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
+            _report("Missing checks", "missing-checks"),
+        ),
+    ),
+    Section(
+        "accounting", records="account", records_label="Chart of accounts",
+        new=(
+            _new("Journal entry", "journal post", "/journal/post"),
+            _new("Account", "account create", "/account/create"),
+            _new("Memorized transaction", "memorized create", "/memorized/create"),
+        ),
+        lists=(
+            _list("Journal entries", "journal query", "/journal"),
+            _list("Memorized transactions", "memorized list", "/memorized"),
+            _list("Memorized groups", "memorized-group list", "/memorized-group"),
+            _list("Exchange rates", "rate query", "/rate"),
+        ),
+        tasks=(
+            Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
+            _report("Trial balance", "trial-balance"),
+            _report("General ledger", "general-ledger"),
+            _report("Profit and loss", "profit-and-loss"),
+            _report("Balance sheet", "balance-sheet"),
+        ),
+    ),
+    Section(
+        "company",
+        lists=(
+            _list("Attachments", "attachment list", "/attachment"),
+            _list("Notes", "note list", "/note"),
+            _list("Directives", "directive list", "/directive"),
+            _list("Memorized transactions", "memorized list", "/memorized"),
+        ),
+        tasks=(
+            Action("Company information", READ, ("company show",), "/company/self"),
+            Action("Preferences", WRITE, ("company update",), "/company/self/update"),
+            Action("Users and permissions", READ, (), "/users"),
+            Action("Audit trail", READ, ("audit list",), "/audit"),
+            Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
+            Action("Rename the company", WRITE, ("company rename",), "/company/rename"),
+            Action("Settings and lists", READ, (), "/_group/settings"),
+        ),
+    ),
+    Section(
+        "settings",
+        groups=(
+            ("Customer and vendor profile lists", (
+                _list("Sales reps", "sales-rep list", "/sales-rep"),
+                _list("Customer types", "customer-type list", "/customer-type"),
+                _list("Vendor types", "vendor-type list", "/vendor-type"),
+                _list("Job types", "job-type list", "/job-type"),
+                _list("Terms", "term list", "/term"),
+                _list("Customer messages", "customer-message list", "/customer-message"),
+                _list("Payment methods", "payment-method list", "/payment-method"),
+                _list("Ship methods", "ship-method list", "/ship-method"),
+            )),
+            ("Items and prices", (
+                _list("Price levels", "price-level list", "/price-level"),
+                _list("Units of measure", "unit-of-measure list", "/unit-of-measure"),
+                _list("Item categories", "item-category list", "/item-category"),
+                _list("Sales tax codes", "sales-tax-code list", "/sales-tax-code"),
+            )),
+            ("Accounting", (
+                _list("Chart of accounts", "account list", "/account"),
+                _list("Classes", "class list", "/class"),
+                _list("Custom fields", "custom-field list", "/custom-field"),
+            )),
+            ("Company setup", (
+                Action("Company information", READ, ("company show",), "/company/self"),
+                Action("Preferences", WRITE, ("company update",), "/company/self/update"),
+                Action("Users and permissions", READ, (), "/users"),
+                Action("Apply a setup profile", WRITE, ("profile apply",), "/profile/apply"),
+                Action("Apply a chart of accounts", WRITE, ("chart apply",), "/chart/apply"),
+                Action("Compact the company file", WRITE, ("company compact",), "/company/compact"),
+            )),
+            ("Tools", (
+                Action("Audit trail", READ, ("audit list",), "/audit"),
+                Action("Undo a change", WRITE, ("undo",), "/undo"),
+                Action("All commands", READ, (), "/_all"),
+            )),
+        ),
+    ),
+)
+
+SECTION_BY_SLUG: dict[str, Section] = {section.slug: section for section in SECTIONS}
+
+# Which section a command noun belongs to, for the finder and for the menu's current section.
+# The registry's navigation group gives the default; these nouns sit where the anchor keeps them.
+_GROUP_SECTION = {
+    "Customers and sales": "customers", "Customer work": "customers", "Vendors and purchases": "vendors",
+    "Vendors": "vendors", "Employees": "employees", "Items": "items", "Accounting": "accounting",
+    "Settings": "settings", "Audit": "audit", "Company": "company", "Hub": "company",
+}
+NOUN_SECTION = {
+    **{noun: "settings" for noun in (
+        "sales-rep", "customer-type", "vendor-type", "job-type", "term", "customer-message",
+        "payment-method", "ship-method", "price-level", "unit-of-measure", "item-category",
+        "sales-tax-code", "class", "custom-field", "profile", "chart")},
+    **{noun: "banking" for noun in (
+        "register", "deposit", "reconcile", "reconcile opening", "transfer", "rate")},
+    **{noun: "vendors" for noun in ("purchase-order", "item-receipt", "sales-tax", "sales-tax payment")},
+    **{noun: "customers" for noun in (
+        "payment operation", "payment preview", "payment recovery", "payment selection", "payment settlement")},
+    "report": "reports", "undo": "settings",
+}
+
+
+def section_of(noun: str, group: str) -> str:
+    """The menu section slug a noun belongs to, given its registry navigation group."""
+    return NOUN_SECTION.get(noun) or _GROUP_SECTION.get(group, "company")
+
+
+def _live(action: Action, lookup, routed: set[str], permits) -> bool:
+    """A section link is live when every backing command is registered, routed and offered here."""
+    if action.destination is None:
+        return False
+    for name in action.commands:
+        command = lookup(name)
+        if command is None or name not in routed or not permits(command):
+            return False
+    return True
+
+
+def resolve_section(company_id: str, section: Section, *, get=None, routed=None, permits=None) -> dict[str, Any]:
+    """The live links of one section page, as dicts of label and href. Reads the registry only."""
+    lookup = registry.get if get is None else get
+    listing = registry.routed_commands if routed is None else routed
+    allow = (lambda command: True) if permits is None else permits
+    for action in (*section.new, *section.lists, *section.tasks, *(a for _, links in section.groups for a in links)):
+        for name in action.commands:
+            lookup(name)  # import before the routed listing, as `resolve` does
+    routed_names = {command.name for command in listing()}
+
+    def links(actions: tuple[Action, ...]) -> list[dict[str, str]]:
+        return [dict(label=action.label, href=f"/c/{company_id}{action.destination}")
+                for action in actions if _live(action, lookup, routed_names, allow)]
+
+    return dict(
+        slug=section.slug,
+        new=links(section.new),
+        lists=links(section.lists),
+        tasks=links(section.tasks),
+        groups=[(title, found) for title, actions in section.groups if (found := links(actions))],
+    )
+
 # The register chooser lists balance-sheet accounts in the order a bookkeeper reaches for them.
 REGISTER_TYPES: tuple[tuple[str, str], ...] = (
     ("bank", "Bank accounts"),
@@ -613,3 +912,71 @@ def overview(company_id: str, today: str, home_currency: str, ask: Ask) -> dict[
     events = ask("audit list", {"limit": ATTENTION_ROWS})
     activity = None if events is None else [dict(event, href=f"{base}/audit/{event['id']}") for event in events["items"]]
     return dict(figures=figures, attention=attention, activity=activity, today=today)
+
+
+# ---------------------------------------------------------------- the command finder
+
+# A generated page whose title reads as machinery gets the words a person would search for.
+FINDER_LABELS = {
+    "customer link-vendor": "Link a customer to a vendor",
+    "customer unlink-vendor": "Unlink a customer from a vendor",
+}
+
+
+def finder_index(company_id: str, grouped, *, permits, heading, plural, selector) -> list[dict[str, Any]]:
+    """Every task and command page this reader may open, by name, for the header's finder.
+
+    ``grouped`` is the company's (group, [(noun, verbs)]) rows already filtered to what this company
+    and role offer, the same rows All commands renders; ``heading(noun, verb)`` and ``plural(noun)``
+    are the workbench's page titles and ``selector(command, noun)`` says whether a show needs a record.
+    Tasks come first, in the words of the Overview and the section pages; every generated command
+    page follows under its section. A record-level action (edit, void, link…) is reached from the
+    record's own page, so it is not listed on its own. Reads the registry only.
+    """
+    base = f"/c/{company_id}"
+    labels = {entry.slug: entry.label for entry in MENU}
+    entries: dict[str, dict[str, Any]] = {}
+
+    def add(label: str, href: str, section: str, kind: str, *keywords: str) -> None:
+        entry = entries.get(href)
+        if entry is None:
+            entries[href] = dict(label=label, href=href, section=section, kind=kind, keywords=list(keywords))
+        else:
+            entry["keywords"] += [word for word in (label, *keywords) if word not in entry["keywords"]]
+
+    add("Overview", base + "/", "Menu", "section")
+    for entry in MENU:
+        add(entry.label, f"{base}/_group/{entry.slug}", "Menu", "section")
+    for panel in resolve(company_id, permits=permits):
+        for item in panel.steps:
+            if item.live:
+                add(item.step.action.label, item.href, panel.panel.title, "task", item.step.title, *item.step.action.commands)
+    for section in SECTIONS:
+        found = resolve_section(company_id, section, permits=permits)
+        where = labels.get(section.slug, "")
+        for link in found["new"]:
+            add("New " + link["label"][0].lower() + link["label"][1:], link["href"], where, "task")
+        for link in (*found["tasks"], *found["lists"], *(item for _, items in found["groups"] for item in items)):
+            add(link["label"], link["href"], where, "task")
+    for group, nouns in grouped:
+        for noun, verbs in nouns:
+            where = labels.get(section_of(noun, group), group)
+            noun_base = f"{base}/{noun.replace(' ', '-')}"
+            query = registry.get(f"{noun} query")
+            if any(verb.verb == "list" for verb in verbs) or (query is not None and not query.local_only and permits(query)):
+                add(plural(noun), noun_base, where, "page", f"{noun} list")
+            for verb in verbs:
+                if not verb.verb:
+                    add(heading(noun, ""), noun_base, where, "page", verb.name)
+                elif verb.verb == "list":
+                    continue
+                elif verb.verb == "show" and not selector(verb, noun):
+                    add(heading(noun, "show"), noun_base + "/self", where, "page", verb.name)
+                elif verb.verb == "show":
+                    # The show form picks one record and opens it.
+                    title = heading(noun, "show").lower()
+                    add(("Open an " if title[:1] in "aeiou" and not title.startswith("uni") else "Open a ") + title, f"{noun_base}/show", where, "page", verb.name)
+                elif not verb.version_source:
+                    add(FINDER_LABELS.get(verb.name) or heading(noun, verb.verb), f"{noun_base}/{verb.verb}", where, "page", verb.name)
+    add("All commands", base + "/_all", labels.get("settings", ""), "task", "advanced tools")
+    return list(entries.values())

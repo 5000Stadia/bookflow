@@ -1,0 +1,40 @@
+{% extends "base.html" %}{% block title %}{{ page_title }} · {{ company.display_name }}{% endblock %}{% block body %}
+{% from 'browse_value.html' import plain with context %}
+{# A section opens on what a person works with: its records, one "+ New" menu and its tasks.
+   Every link here is resolved against the registry; the finder and All commands reach the rest. #}
+{% set s = section %}{% set home = company.info.home_currency %}
+<div class="section-head"><h1>{{ page_title }}</h1>
+{% if s.new %}<details class="new-menu" data-new-menu><summary class="new-menu-button"><span aria-hidden="true">+</span> New</summary>
+<div class="new-menu-sheet" role="group" aria-labelledby="new-menu-title"><p class="new-menu-title" id="new-menu-title">Create</p><ul>
+{% for link in s.new %}<li><a href="{{ link.href }}">{{ link.label }}</a></li>{% endfor %}</ul></div></details>{% endif %}
+</div>
+{% set has_main = records or registers is not none or s.groups %}
+<div class="section-layout{% if not (s.tasks or s.lists) %} section-single{% elif not has_main %} section-cards{% endif %}">
+{% if has_main %}<div class="section-main">
+{% if records %}{% set r = records %}{% set layout = r.layout %}{% set list_href = '/c/' ~ company_id ~ '/' ~ (r.noun|segment) %}
+<section class="overview-card section-records" aria-labelledby="records-title">
+<h2 id="records-title">{{ r.label }}</h2>
+<form method="get" action="{{ list_href }}" class="section-search" role="search" aria-label="Search {{ r.meta.plural_label | lower }}"><input type="search" name="query" placeholder="Search {{ r.meta.plural_label | lower }}" aria-label="Search {{ r.meta.plural_label | lower }}" autocomplete="off"><button type="submit">Search</button></form>
+{% if r.result['items'] %}<ul class="overview-rows section-rows" aria-label="{{ r.meta.plural_label }}">
+{% for row in r.result['items'] %}{% set parts = [] %}{% for key in layout.secondary if key != 'active' %}{% set cell = row['values'].get(key) %}{% set text = (ui_words(cell) if key in layout.words and cell is string else plain(cell, key, r.labels[key], 'date' if key in layout.dates else '', layout.prefix.get(key, ''), home)) | trim %}{% if text %}{% set _ = parts.append(text) %}{% endif %}{% endfor %}
+<li><a href="{{ list_href }}/{{ row.id }}"><span class="overview-row-main"><span class="overview-row-name">{{ row.label }}</span>{% if parts %}<span class="overview-row-meta">{{ parts | join(' · ') }}</span>{% endif %}</span>{% if layout.amount and row['values'][layout.amount] is mapping %}<span class="num">{{ row['values'][layout.amount] | money(home=home) }}</span>{% endif %}</a></li>{% endfor %}
+</ul>{% else %}<p class="muted">No {{ r.meta.plural_label | lower }} yet.</p>{% endif %}
+<p class="overview-more"><a href="{{ list_href }}" class="section-list-link">Open the full list{% if r.result.matching_total > r.result['items'] | length %} ({{ r.result.matching_total }}){% endif %}</a></p>
+</section>{% endif %}
+{% if registers is not none %}<section class="overview-card section-records" aria-labelledby="registers-title">
+<h2 id="registers-title">Registers</h2>
+{% for label, accounts in registers %}<h3>{{ label }}</h3><ul class="overview-rows section-rows">{% for account in accounts %}<li><a href="/c/{{ company_id }}/account/{{ account.id }}/register"><span class="overview-row-main"><span class="overview-row-name">{{ account.number ~ ' · ' if account.number }}{{ account.full_name }}</span></span><span class="num">{{ account.balance | money(home=home) }}</span></a></li>{% endfor %}</ul>{% endfor %}
+<p class="overview-more"><a href="/c/{{ company_id }}/_registers" class="section-list-link">All account registers</a></p>
+</section>{% endif %}
+{% for title, links in s.groups %}<section class="overview-card section-group" aria-labelledby="group-{{ loop.index }}"><h2 id="group-{{ loop.index }}">{{ title }}</h2>
+<ul class="section-links">{% for link in links %}<li><a href="{{ link.href }}">{{ link.label }}</a></li>{% endfor %}</ul></section>{% endfor %}
+</div>{% endif %}
+{% if s.tasks or s.lists %}<div class="section-side">
+{% if s.tasks %}<section class="overview-card" aria-labelledby="tasks-title"><h2 id="tasks-title">Tasks</h2>
+<ul class="section-links">{% for link in s.tasks %}<li><a href="{{ link.href }}">{{ link.label }}</a></li>{% endfor %}</ul></section>{% endif %}
+{% if s.lists %}<section class="overview-card" aria-labelledby="lists-title"><h2 id="lists-title">Lists</h2>
+<ul class="section-links">{% for link in s.lists %}<li><a href="{{ link.href }}">{{ link.label }}</a></li>{% endfor %}</ul></section>{% endif %}
+</div>{% endif %}
+</div>
+<p class="section-footer">{% if s.slug != 'settings' %}Types, terms and other setup lists are in <a href="/c/{{ company_id }}/_group/settings">Settings</a>. {% endif %}Everything else is in <a href="/c/{{ company_id }}/_all">All commands</a>, or search for any task by name with <a href="/c/{{ company_id }}/_all" data-finder-open>Find</a> at the top of the page.</p>
+{% endblock %}

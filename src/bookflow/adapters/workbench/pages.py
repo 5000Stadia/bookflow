@@ -803,7 +803,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @app.get("/c/{company_id}/_group/{slug}", response_class=HTMLResponse)
     @permission_read_package(host)
     def company_group(company_id: str, slug: str, request: Request):
-        """One menu group: the same grouped-noun rendering, filtered to that group."""
+        """One menu section: its records, a "+ New" menu and its tasks; Reports and Audit keep the
+        grouped-noun rendering, filtered to that group."""
         entry = Home.MENU_BY_SLUG.get(slug)
         if entry is None:
             return page_error(request, BookflowError("E_USAGE", message=f"no such section `{slug}`"), company_id=company_id)
@@ -811,6 +812,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             show = run(request, "company show", {}, company_id)
         except BookflowError as e:
             return page_error(request, e)
+        section = Home.SECTION_BY_SLUG.get(slug)
+        if section is not None:
+            return section_page(request, show, entry, section)
         selected = []
         for group, noun_rows in _grouped_nouns(company_noun_rows(request, show), company=True):
             kept = noun_rows if group in entry.groups else [row for row in noun_rows if row[0] in entry.nouns]
@@ -825,6 +829,65 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             groups=selected,
             menu_group=slug,
         )
+
+    def section_page(request: Request, show: dict[str, Any], entry, section):
+        """A section opens on what a person works with: the first records of its list (from the
+        list's own query, laid out as the list lays them out), then "+ New" and its tasks."""
+        from bookflow.adapters.workbench import list_layout as Layout
+        company_id = show["company_id"]
+        permits = company_permits(request, show)
+        records = registers = None
+        noun = section.records
+        query = registry.get(f"{noun} query") if noun else None
+        if query is not None and permits(query):
+            try:
+                result = run(request, query.name, {"columns": list(Layout.LAYOUTS[noun]["columns"]), "limit": 8}, company_id)
+            except BookflowError:
+                result = None
+            if result is not None:
+                definition = _noun_meta(noun).get("definition")
+                columns = result["columns"]
+                records = dict(noun=noun, result=result, meta=_noun_meta(noun), label=section.records_label,
+                               layout=Layout.plan(noun, [c["key"] for c in columns], [row["values"] for row in result["items"]],
+                                                  name=definition.display_field if definition else None,
+                                                  kinds={c["key"]: c["kind"] for c in columns},
+                                                  defaults=Layout.LAYOUTS[noun]["columns"],
+                                                  words=[c["key"] for c in columns if c["kind"] == "choice" and not c.get("definition")]),
+                               labels={c["key"]: c["label"] for c in columns})
+        if section.slug == "banking" and permits(registry.get("account list")):
+            # The register chooser's first groups (bank accounts and cards) are what Banking opens on.
+            try:
+                accounts = run(request, "account list", {}, company_id)["items"]
+            except BookflowError:
+                accounts = []
+            registers = Home.register_groups(accounts)[:2]
+        return render(
+            "section.html",
+            request,
+            company=show,
+            company_id=company_id,
+            page_title=entry.label,
+            menu_group=section.slug,
+            section=Home.resolve_section(company_id, section, permits=permits),
+            records=records,
+            registers=registers,
+        )
+
+    @app.get("/c/{company_id}/_finder")
+    @permission_read_package(host)
+    def company_finder(company_id: str, request: Request):
+        """The header finder's index: every task and command page this reader may open, by name."""
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            return JSONResponse({"error": e.to_dict()}, status_code=STATUS.get(e.code, 400))
+        index = Home.finder_index(
+            show["company_id"], _grouped_nouns(company_noun_rows(request, show), company=True),
+            permits=company_permits(request, show),
+            heading=lambda noun, verb: Naming.heading(noun, verb, _noun_meta(noun)),
+            plural=lambda noun: Naming.list_heading(noun, _noun_meta(noun)),
+            selector=_record_selector)
+        return JSONResponse({"items": index}, headers={"Cache-Control": "private, max-age=60"})
 
     @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
     @permission_read_package(host)

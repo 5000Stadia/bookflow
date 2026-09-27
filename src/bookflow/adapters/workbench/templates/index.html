@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% set heading = page_title or (company.display_name if company else "Administration") %}{% block title %}{{ heading }}{% endblock %}{% block body %}
 <h1>{{ heading }}</h1>
 {% if company and page_title %}<nav class="crumbs"><a href="/c/{{ company_id }}/">Overview</a></nav>{% endif %}
-<div class="group-grid">{% for group, nouns in groups %}<section class="nav-group"><h2>{{ group }}</h2>
+<div class="group-grid">{% for group, nouns in groups %}<section class="nav-group" id="{{ group | lower | replace(' ', '-') }}"><h2>{{ group }}</h2>
 {% for noun, verbs in nouns %}<div class="noun-row"><h3>{{ ui_words(noun) }}</h3><p class="actions">
 {% set base = noun_base(company_id or None, noun) %}
 {% if company and noun == 'estimate' %}<a href="{{ base }}">View list</a>{% endif %}

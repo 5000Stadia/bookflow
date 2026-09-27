@@ -379,6 +379,8 @@ def test_a_registered_command_whose_handler_fails_never_passes_the_witness(hoste
 # ---------------------------------------------------------------- the menu
 
 def test_every_menu_group_lands_on_a_page_of_that_group(hosted):
+    """Each menu entry is a page headed with its name; tests/test_sections_and_finder.py checks what
+    the section pages hold, and Reports and Audit keep their grouped pages."""
     browser = _browser(hosted)
     home_page = browser.get(f"/c/{hosted.company_id}/")
     for entry in home.MENU:
@@ -386,11 +388,10 @@ def test_every_menu_group_lands_on_a_page_of_that_group(hosted):
         page = browser.get(f"/c/{hosted.company_id}/_group/{entry.slug}")
         assert page.status_code == 200, entry.slug
         assert f"<h1>{entry.label}</h1>" in page.text, entry.slug
-        assert '<div class="noun-row">' in page.text, (entry.slug, "an empty section is not a destination")
-        for group in entry.groups:
-            assert f"<h2>{group}</h2>" in page.text, (entry.slug, group)
-        for noun in entry.nouns:
-            assert f"<h3>{naming.words(noun)}</h3>" in page.text, (entry.slug, noun)
+        if entry.slug not in home.SECTION_BY_SLUG:
+            assert '<div class="noun-row">' in page.text, (entry.slug, "an empty section is not a destination")
+            for noun in entry.nouns:
+                assert f"<h3>{naming.words(noun)}</h3>" in page.text, (entry.slug, noun)
     assert browser.get(f"/c/{hosted.company_id}/_group/nope").status_code == 400
 
 
