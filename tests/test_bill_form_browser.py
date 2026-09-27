@@ -16,6 +16,7 @@ import json
 
 import pytest
 
+from bookflow.adapters.workbench.display import day
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _click, _contained, _fill, _value
@@ -181,10 +182,10 @@ def test_the_enter_bill_tile_opens_a_window_that_posts_what_the_command_posts(re
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b) == {'Expenses': f'{TOTAL} USD', 'Amount due': f'{TOTAL} USD'}
+    assert _totals(b) == {'Expenses': f'${TOTAL}', 'Amount due': f'${TOTAL}'}
     # The vendor's terms derived the due date, and the footer says which date and which rule.
     said = b.evaluate('document.querySelector("[data-reconciliation]").textContent')
-    assert 'Due 2026-04-03' in said and 'Parity net 30' in said, said
+    assert 'Due Apr 3, 2026' in said and 'Parity net 30' in said, said
 
     saved = _save(b)
     written = books['run']('bill.show', {'bill': saved})
@@ -206,7 +207,7 @@ def test_the_enter_bill_tile_opens_a_window_that_posts_what_the_command_posts(re
 
     # The page the save landed on is the bill itself, showing what was entered.
     detail = _text(b, '.sales-document')
-    for part in ('Parity supply', 'SUP-77', '2026-04-03', FIRST, SECOND, TOTAL,
+    for part in ('Parity supply', 'SUP-77', 'Apr 3, 2026', FIRST, SECOND, TOTAL,
                  'Parity parts', 'Parity fuel', 'Parity homeowner', 'Parity job'):
         assert part in detail, (part, detail[:1200])
     billable = b.evaluate('''[...document.querySelectorAll(".bill-lines tbody tr")]
@@ -223,8 +224,8 @@ def test_the_enter_bill_tile_opens_a_window_that_posts_what_the_command_posts(re
     entered = b.evaluate(f'''[...document.querySelectorAll("table tr")].slice(1)
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(row => row[0] === {json.dumps(written["number"])})''')
-    assert entered == [written['number'], '2026-03-04', 'Parity supply', '2026-04-03',
-                       f'{TOTAL} USD', 'Posted'], entered
+    assert entered == [written['number'], day('2026-03-04'), 'Parity supply', day('2026-04-03'),
+                       TOTAL, TOTAL, 'Posted'], entered
 
 
 def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register_browser):
@@ -243,14 +244,15 @@ def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register
     b.wait_for('!!document.querySelector("table")')
     assert b.evaluate('document.querySelector("h1").textContent').strip() == 'Bills'
     heads = b.evaluate('[...document.querySelectorAll("table th")].map(e => e.textContent.trim())')
-    assert heads == ['Number', 'Date', 'Vendor', 'Due date', 'Total', 'Status'], heads
+    assert heads == ['Number', 'Date', 'Vendor', 'Due date', 'Total (USD)', 'Open balance (USD)',
+                     'Status'], heads
     rows = b.evaluate('''[...document.querySelectorAll("table tr")].slice(1)
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))''')
     # The demo company lists bills of its own; these two keep their newest-first order among them.
     rows = [row for row in rows if len(row) > 2 and row[2] == 'Listing supply']
     assert [row[0] for row in rows] == [second['number'], first['number']], rows
-    assert rows[0] == [second['number'], '2026-02-09', 'Listing supply', '2026-02-09',
-                       f'{SECOND} USD', 'Posted'], rows[0]
+    assert rows[0] == [second['number'], day('2026-02-09'), 'Listing supply', day('2026-02-09'),
+                       SECOND, SECOND, 'Posted'], rows[0]
 
     # The number is the way into the bill, the way an invoice number is.
     b.evaluate(f'''document.querySelector('a[href$="/bill/{second["id"]}"]').click()''')
@@ -298,7 +300,7 @@ def test_a_correction_replaces_the_lines_and_the_saved_bill_shows_the_new_total(
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b) == {'Expenses': '200.00 USD', 'Amount due': '200.00 USD'}
+    assert _totals(b) == {'Expenses': '$200.00', 'Amount due': '$200.00'}
     _save(b)
 
     after = books['run']('bill.show', {'bill': posted['id']})
@@ -481,7 +483,7 @@ def test_the_items_tab_buys_something_and_the_saved_bill_says_what_was_bought(re
         b.evaluate('document.body.innerText')[:900]
     # The footer names the grid the lines are on. A bill bought wholly on the Items tab is
     # not told that it spent nothing on expenses.
-    assert _totals(b) == {'Items': f'{VALVES} USD', 'Amount due': f'{VALVES} USD'}
+    assert _totals(b) == {'Items': f'${VALVES}', 'Amount due': f'${VALVES}'}
     # A preview swaps the whole window in place; it comes back on the tab being worked on.
     assert _tabs(b)['shown'] == ['items'], _tabs(b)
 
@@ -606,7 +608,7 @@ def test_a_browser_correction_leaves_both_grids_exactly_as_they_were_captured(re
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b)['Items'] == '225.25 USD', _totals(b)   # 15 x 12.35 + 40.00
+    assert _totals(b)['Items'] == '$225.25', _totals(b)   # 15 x 12.35 + 40.00
     _save(b)
     revision, final = grids()
     assert revision == 4
@@ -712,8 +714,8 @@ def test_one_window_enters_both_tabs_and_saves_both_grids(register_browser):
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b) == {'Expenses': f'{FIRST} USD', 'Items': f'{VALVES} USD',
-                          'Amount due': f'{BOTH_TABS} USD'}
+    assert _totals(b) == {'Expenses': f'${FIRST}', 'Items': f'${VALVES}',
+                          'Amount due': f'${BOTH_TABS}'}
 
     saved = _save(b)
     written = books['run']('bill.show', {'bill': saved})

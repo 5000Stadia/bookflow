@@ -240,8 +240,8 @@ def test_the_vendor_credit_tile_opens_a_window_that_posts_what_the_command_posts
     _pick(b, _name(b, 'expenses', 0, 'customer'), 'Vend homeowner')
 
     _preview(b)
-    assert _totals(b) == {'Credited lines': '15.00 USD', 'Taken off what you owe': '15.00 USD',
-                          'Still free to apply': '15.00 USD'}, _totals(b)
+    assert _totals(b) == {'Credited lines': '$15.00', 'Taken off what you owe': '$15.00',
+                          'Still free to apply': '$15.00'}, _totals(b)
     said = b.evaluate('document.querySelector("[data-reconciliation]").textContent')
     assert 'Nothing is settled here' in said, said
 
@@ -262,7 +262,7 @@ def test_the_vendor_credit_tile_opens_a_window_that_posts_what_the_command_posts
     for part in ('Vend supply', 'CN-42', 'Vend parts', 'Two boxes back', 'Vend homeowner',
                  '15.00', 'A credit is never due'):
         assert part in shown, (part, shown[:1500])
-    assert 'Still free 15.00 USD' in _text(b, '[data-vendor-credit-settlement]')
+    assert 'Still free $15.00' in _text(b, '[data-vendor-credit-settlement]')
     assert 'This credit answers no bill yet' in shown
 
     b.evaluate('document.querySelector(".document-nav-find").click()')
@@ -304,8 +304,8 @@ def test_the_refund_tile_opens_a_window_and_a_credit_pays_itself_back_through_it
     _set(b, 'f:reference', 'Refund for March')
 
     _preview(b)
-    assert _totals(b) == {'Paid back': '40.00 USD',
-                          'Out of Cash checking': '40.00 USD'}, _totals(b)
+    assert _totals(b) == {'Paid back': '$40.00',
+                          'Out of Cash checking': '$40.00'}, _totals(b)
 
     saved = _save(b, 'customer-refund', '.refund-sources')
     written = books['run']('customer-refund.show', {'refund': saved})

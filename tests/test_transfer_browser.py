@@ -121,11 +121,11 @@ def test_the_transfer_window_posts_the_transfer_the_command_posts(register_brows
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b) == {f'Out of {books["tag"]} checking': f'{MOVED} USD',
-                          f'Into {books["tag"]} savings': f'{MOVED} USD'}
+    assert _totals(b) == {f'Out of {books["tag"]} checking': f'${MOVED}',
+                          f'Into {books["tag"]} savings': f'${MOVED}'}
     said = b.evaluate('document.querySelector("[data-reconciliation]").textContent')
-    assert said == (f'{books["tag"]} checking goes down {MOVED} USD and {books["tag"]} savings '
-                    f'goes up {MOVED} USD. Neither end is income or expense, so this changes '
+    assert said == (f'{books["tag"]} checking goes down ${MOVED} and {books["tag"]} savings '
+                    f'goes up ${MOVED}. Neither end is income or expense, so this changes '
                     f'no profit.')
 
     written = books['run']('journal.show', {'journal': _save(b)})
@@ -152,7 +152,7 @@ def test_paying_the_card_down_in_the_window_says_what_you_owe_goes_down(register
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
     said = b.evaluate('document.querySelector("[data-reconciliation]").textContent')
-    assert (f'what you owe on {books["tag"]} card goes down {CARD_PAYMENT} USD') in said
+    assert (f'what you owe on {books["tag"]} card goes down ${CARD_PAYMENT}') in said
 
     written = books['run']('journal.show', {'journal': _save(b)})
     sides = {line['account_id']: line['side'] for line in written['revision']['lines']}

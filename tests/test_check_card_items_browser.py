@@ -138,10 +138,10 @@ def test_saved_purchase_edit_history_and_register_owner_routes(register_browser,
     assert stock['quantity_on_hand'] == '1' and stock['asset_value']['minor_units'] == 617
     b.navigate(owner + '?revision_number=1')
     content = b.evaluate('document.querySelector("[data-purchase-item]").textContent')
-    assert 'Quantity 0.5' in content and 'Unit cost 12.34' in content and 'Captured copper' in content
+    assert 'Quantity 0.5' in content and 'Unit cost $12.34' in content and 'Captured copper' in content
     b.navigate(owner)
     content = b.evaluate('document.querySelector("[data-purchase-item]").textContent')
-    assert 'Quantity 1' in content and 'Unit cost 6.17' in content
+    assert 'Quantity 1' in content and 'Unit cost $6.17' in content
     dest = Path('notes/lifecycle-screenshots'); dest.mkdir(parents=True, exist_ok=True)
     shot = b.call('Page.captureScreenshot', {'captureBeyondViewport': True, 'fromSurface': True})
     (dest / f'{noun}-{width}.png').write_bytes(base64.b64decode(shot['data']))

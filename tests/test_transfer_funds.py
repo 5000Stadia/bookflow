@@ -361,10 +361,11 @@ def test_the_footer_says_what_each_end_did_in_the_words_that_end_uses(books):
         from_account=books['checking'], to_account=books['card'], date='2026-05-05',
         amount=CARD_PAYMENT, memo='Pay the card down'), reason='Pay the card down')
     rows, said, reconciled = Document.transfer_totals(posted)
-    assert rows == [{'label': 'Out of Checking', 'value': '250.00 USD', 'strong': False},
-                    {'label': 'Into Company Card', 'value': '250.00 USD', 'strong': True}]
-    assert said == ('Checking goes down 250.00 USD and what you owe on Company Card goes down '
-                    '250.00 USD. Neither end is income or expense, so this changes no profit.')
+    # The rows keep the server's exact figure; the page shows it as money.
+    assert rows == [{'label': 'Out of Checking', 'value': '250.00 USD', 'strong': False, 'money': True},
+                    {'label': 'Into Company Card', 'value': '250.00 USD', 'strong': True, 'money': True}]
+    assert said == ('Checking goes down $250.00 and what you owe on Company Card goes down '
+                    '$250.00. Neither end is income or expense, so this changes no profit.')
     assert reconciled is True
     # Nothing computed means nothing shown; the footer never invents a figure.
     assert Document.transfer_totals(None) == ([], None, None)

@@ -14,6 +14,7 @@ Integration: call ``is_document(noun, verb)`` to select the layout, ``describe``
 human labels on the typed leaves, and ``context`` for the template. Leaves this module
 does not place reach the reader in the advanced sections rather than disappearing.
 """
+from bookflow.adapters.workbench import display as Display
 from bookflow.core.money import Money
 
 NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill', 'credit-memo', 'customer-refund',
@@ -733,19 +734,19 @@ def money_out_totals(noun, result, error):
         # typed: an unnumbered cheque takes the next one from its own bank account.
         cheque = ([_row('Check number', document['check_number'])]
                   if document.get('check_number') else [])
-        return (cheque + [_row('Expenses', f"{document['expense_total']['amount']} {currency}"),
-                          *([_row('Items', f"{document['item_total']['amount']} {currency}")] if document.get('items') else []),
-                          _row(face, f"{document['amount']['amount']} {currency}", True)],
+        return (cheque + [_row('Expenses', f"{document['expense_total']['amount']} {currency}", money=True),
+                          *([_row('Items', f"{document['item_total']['amount']} {currency}", money=True)] if document.get('items') else []),
+                          _row(face, f"{document['amount']['amount']} {currency}", True, money=True)],
                 'The expense and item lines add up to what this document is written for.', True)
     details = (error or {}).get('details') if isinstance(error, dict) else None
     if isinstance(details, dict) and isinstance(details.get('difference'), dict):
         currency = details['currency']
         over = details['difference_minor_units'] > 0
-        return ([_row('Expenses', f"{details['expense_total']['amount']} {currency}"),
-                 *([_row('Items', f"{details['item_total']['amount']} {currency}")] if (details.get('item_total') or {}).get('minor_units') else []),
-                 _row(face, f"{details['amount']['amount']} {currency}"),
+        return ([_row('Expenses', f"{details['expense_total']['amount']} {currency}", money=True),
+                 *([_row('Items', f"{details['item_total']['amount']} {currency}", money=True)] if (details.get('item_total') or {}).get('minor_units') else []),
+                 _row(face, f"{details['amount']['amount']} {currency}", money=True),
                  _row('Over' if over else 'Short by',
-                      f"{details['difference']['amount']} {currency}", True)],
+                      f"{details['difference']['amount']} {currency}", True, money=True)],
                 'The expense and item lines do not add up to what this document is written for. '
                 'Nothing was written.', False)
     return [], None, None
@@ -771,16 +772,16 @@ def bill_totals(result):
     items = (result.get('item_total') or {}).get('minor_units')
     rows = []
     if result['expense_total']['minor_units'] or not items:
-        rows.append(_row('Expenses', f"{result['expense_total']['amount']} {currency}"))
+        rows.append(_row('Expenses', f"{result['expense_total']['amount']} {currency}", money=True))
     if items:
-        rows.append(_row('Items', f"{result['item_total']['amount']} {currency}"))
-    rows.append(_row('Amount due', f"{result['total']['amount']} {currency}", True))
+        rows.append(_row('Items', f"{result['item_total']['amount']} {currency}", money=True))
+    rows.append(_row('Amount due', f"{result['total']['amount']} {currency}", True, money=True))
     settlement = result.get('settlement_current')
     if isinstance(settlement, dict) and settlement.get('applied_minor_units'):
-        rows += [_row('Paid so far', settlement['applied']['amount']),
-                 _row('Still open', f"{settlement['open']['amount']} {currency}", True)]
+        rows += [_row('Paid so far', f"{settlement['applied']['amount']} {currency}", money=True),
+                 _row('Still open', f"{settlement['open']['amount']} {currency}", True, money=True)]
     terms = ((result.get('revision') or {}).get('profile') or {}).get('terms')
-    said = 'Due ' + str(result['due_date']) + (' on ' + terms['label'] if terms else '') + '.'
+    said = 'Due ' + Display.longday(result['due_date']) + (' on ' + terms['label'] if terms else '') + '.'
     return rows, said + ' Accounts Payable carries it until it is paid.', True
 
 
@@ -796,8 +797,8 @@ def refund_totals(result):
     currency = result['currency']
     figure = f"{result['total']['amount']} {currency}"
     funding = (((result.get('revision') or {}).get('profile') or {}).get('funding_account') or {})
-    rows = [_row('Paid back', figure),
-            _row('Out of ' + (funding.get('full_name') or 'the funding account'), figure, True)]
+    rows = [_row('Paid back', figure, money=True),
+            _row('Out of ' + (funding.get('full_name') or 'the funding account'), figure, True, money=True)]
     return (rows, 'Accounts Receivable is debited and that account is credited. The credits and '
             'payments named above are worth exactly this much less and cannot be applied to an '
             'invoice as well.', True)
@@ -813,14 +814,14 @@ def vendor_credit_totals(result):
     if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
         return [], None, None
     currency = result['currency']
-    rows = [_row('Credited lines', f"{result['expense_total']['amount']} {currency}"),
-            _row('Taken off what you owe', f"{result['total']['amount']} {currency}", True)]
+    rows = [_row('Credited lines', f"{result['expense_total']['amount']} {currency}", money=True),
+            _row('Taken off what you owe', f"{result['total']['amount']} {currency}", True, money=True)]
     settlement = result.get('settlement_current')
     said = ('Accounts Payable is debited the total, so the vendor is owed that much less. '
             'Nothing is settled here: apply it to a bill to say which bill it answers.')
     if isinstance(settlement, dict):
         rows.append(_row('Still free to apply',
-                         f"{settlement['unapplied']['amount']} {currency}", True))
+                         f"{settlement['unapplied']['amount']} {currency}", True, money=True))
     return rows, said, True
 
 
@@ -840,10 +841,11 @@ def transfer_totals(result):
         return [], None, None
     currency, source, target = document['currency'], document['from_account'], document['to_account']
     figure = f"{document['amount']['amount']} {currency}"
-    said = (f'{_leg_figure(source)} {EFFECT_WORDS[source["effect"]]} {figure} and '
-            f'{_leg_figure(target)} {EFFECT_WORDS[target["effect"]]} {figure}.')
-    return ([_row('Out of ' + source['name'], figure),
-             _row('Into ' + target['name'], figure, True)],
+    shown = Display.money(figure)
+    said = (f'{_leg_figure(source)} {EFFECT_WORDS[source["effect"]]} {shown} and '
+            f'{_leg_figure(target)} {EFFECT_WORDS[target["effect"]]} {shown}.')
+    return ([_row('Out of ' + source['name'], figure, money=True),
+             _row('Into ' + target['name'], figure, True, money=True)],
             said[0].upper() + said[1:] + ' Neither end is income or expense, so this changes '
             'no profit.', True)
 
