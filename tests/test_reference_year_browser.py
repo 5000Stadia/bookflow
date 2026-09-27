@@ -67,9 +67,9 @@ def test_reference_picker_checking_register(reference_site, tmp_path, width, hei
         browser.wait_for("[...document.querySelectorAll('.actions a')].some(a=>a.textContent==='Open register')")
         browser.evaluate("[...document.querySelectorAll('.actions a')].find(a=>a.textContent==='Open register').click()")
         # $72,550 journal balance + $100 service + $8 tax + $20 exempt.
-        browser.wait_for("document.querySelector('#register-current')?.textContent.includes('72678.00')")
+        browser.wait_for("document.querySelector('#register-current')?.textContent.includes('72,678.00')")
         browser.navigate(browser.evaluate('location.href').split('?')[0]+'?date_from=2026-01-01&date_to=2026-12-31')
-        browser.wait_for("document.querySelector('#register-period-totals')?.textContent.includes('72678.00')")
+        browser.wait_for("document.querySelector('#register-period-totals')?.textContent.includes('72,678.00')")
         assert 'USD' in browser.evaluate("document.querySelector('#register-current').textContent")
         assert 'Reference Plumbing Co' in browser.evaluate("document.querySelector('.current-company').textContent")
         assert 'REF-' in browser.evaluate("document.querySelector('#register-history').textContent")

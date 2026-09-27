@@ -7,7 +7,24 @@
   const $ = id => document.getElementById(id);
   const root = $('register-workspace'), form = $('register-form');
   const field = name => form.elements.namedItem(name);
-  const money = value => value ? `${value.amount} ${value.currency}` : '';
+  // Display only, as display.py's amount/day filters: the exact decimal string is regrouped as
+  // text and never passes through a number; a date shows its year only outside this year.
+  const figure = value => {
+    const text = value?.amount ?? '', m = /^([+-]?)(\d+)(\.\d+)?$/.exec(text);
+    return m ? (m[1] === '-' ? '-' : '') + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (m[3] || '') : text;
+  };
+  const money = value => value ? `${figure(value)} ${value.currency}` : '';
+  const zero = value => !value || /^[+-]?0*(\.0*)?$/.test(value.amount);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function day(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    if (!m) return iso || '';
+    const shown = `${months[Number(m[2]) - 1]} ${Number(m[3])}`;
+    return m[1] === String(c.today || '').slice(0, 4) ? shown : `${shown}, ${m[1]}`;
+  }
+  // A phone shows the entry form as a bottom sheet behind "Add entry" (register.css).
+  const phone = window.matchMedia('(max-width: 700px)');
+  let savedJournal = null;
   const base = `/c/${encodeURIComponent(c.company)}`;
   const path = `${base}/account/${encodeURIComponent(c.account)}/register`;
   const storageKey = 'bookflow-register-pending-v1';
@@ -61,7 +78,9 @@
     const status = node('small'); status.role = 'status';
     let selected = value, selectedLabel = label, version = 0, timer, choices = [], active = -1;
     function close() { options.hidden = true; active = -1; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
-    function set(id = '', name = '') { version++; clearTimeout(timer); selected = id; selectedLabel = name; input.value = name; input.setCustomValidity(''); close(); status.textContent = id ? 'Selected: ' + name : ''; }
+    // Clear shows only while the field holds something to clear.
+    const clearable = () => { if (clear) clear.hidden = !input.value; };
+    function set(id = '', name = '') { version++; clearTimeout(timer); selected = id; selectedLabel = name; input.value = name; input.setCustomValidity(''); close(); status.textContent = id ? 'Selected: ' + name : ''; clearable(); }
     function choose(index) { const row = choices[index]; if (!row) return; set(row.id, row.label); if (form?.contains(wrapper)) dirty = true; input.focus(); }
     async function search() {
       const requestVersion = ++version, query = input.value.trim();
@@ -76,7 +95,7 @@
         status.textContent = choices.length ? 'Use arrows then Enter to choose.' : 'No matching records.';
       } catch (e) { if (version === requestVersion) { close(); status.textContent = errorText(e); } }
     }
-    input.addEventListener('input', () => { version++; selected = ''; selectedLabel = ''; close(); clearTimeout(timer); input.setCustomValidity(input.value ? 'Choose a matching name or Clear.' : ''); timer = setTimeout(search, 180); if (form?.contains(wrapper)) dirty = true; });
+    input.addEventListener('input', () => { clearable(); version++; selected = ''; selectedLabel = ''; close(); clearTimeout(timer); input.setCustomValidity(input.value ? 'Choose a matching name or Clear.' : ''); timer = setTimeout(search, 180); if (form?.contains(wrapper)) dirty = true; });
     input.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.preventDefault(); version++; clearTimeout(timer); close(); return; }
       if (e.key === 'Tab') { close(); return; }
@@ -108,6 +127,21 @@
   }));
   let payee, category, rowClass;
   function dateFocus() { if (form && !$('register-fields').disabled) { field('date').focus(); field('date').select(); } }
+  const sheetOpen = () => phone.matches && root.classList.contains('sheet-open');
+  function openSheet() {
+    if (!form) return;
+    root.classList.add('sheet-open'); document.documentElement.classList.add('register-sheet-lock');
+    $('register-entry').setAttribute('role', 'dialog'); $('register-entry').setAttribute('aria-modal', 'true');
+    $('register-sheet-open').setAttribute('aria-expanded', 'true'); $('register-sheet-backdrop').hidden = false;
+    $('register-entry').scrollTop = 0; dateFocus();
+  }
+  function closeSheet() {
+    if (!form) return;
+    root.classList.remove('sheet-open'); document.documentElement.classList.remove('register-sheet-lock');
+    $('register-entry').removeAttribute('role'); $('register-entry').removeAttribute('aria-modal');
+    $('register-sheet-open').setAttribute('aria-expanded', 'false'); $('register-sheet-backdrop').hidden = true;
+    if (phone.matches) $('register-sheet-open').focus();
+  }
   function textControl(container, title, value = '', decimal = false) {
     const label = node('label', title), input = node('input'); input.value = value || ''; if (decimal) input.inputMode = 'decimal'; else input.maxLength = 2000;
     label.append(input); container.append(label); return input;
@@ -347,7 +381,7 @@
       saved.append(node('span', money(result.receipt.amount), 'register-money')); receipt.replaceChildren(saved);
       receipt.append(node('p', `Accounting date ${result.date}. This receipt is the saved account movement; All entries is a separate balance snapshot.`), link('Open saved journal', `${base}/journal/${encodeURIComponent(result.id)}`));
       if (result.warnings?.length) receipt.append(node('p', result.warnings.join(' ')));
-      receipt.hidden = false;
+      receipt.hidden = false; savedJournal = result.id;
       const date = pending.payload.date;
       try { forgetResolved(); } catch (_) { storageBlocked = true; throw {code: 'STORAGE', message: 'Saved. Recovery cleanup failed; reload after restoring storage access.'}; }
       initial = null; load({payload: {date}}); field('reason').value = ''; field('source_ref').value = ''; field('directive_id').value = '';
@@ -359,7 +393,10 @@
         if (!storageBlocked) customLoad({payload: edit || {}, customState: structuredClone(customState), custom_fields: initial?.custom_fields || []});
       }
       error(e);
-    } finally { sending = false; pendingView(); if (!pending && !storageBlocked && !$('register-error')?.textContent) dateFocus(); }
+    } finally {
+      sending = false; pendingView();
+      if (!pending && !storageBlocked && !$('register-error')?.textContent) { if (sheetOpen()) closeSheet(); else dateFocus(); }
+    }
   }
   async function record() {
     if (pending || sending || storageBlocked) { pendingView(); return; }
@@ -381,8 +418,9 @@
       const tr = node('tr'); tr.dataset.kind = row.kind;
       if (row.kind !== 'posting') {
         const label = node('th', row.kind === 'opening' ? 'Period opening' : 'Period closing'); label.colSpan = 8;
-        tr.append(label, node('td', money(row.running_balance), 'register-money'), node('td')); body.append(tr); continue;
+        tr.append(label, node('td', figure(row.running_balance), 'register-money reg-balance'), node('td')); body.append(tr); continue;
       }
+      tr.dataset.journal = row.transaction_id;
       const purchase = {check: {noun: 'check', label: 'Check'},
         'card-charge': {noun: 'card-charge', label: 'Credit card charge'}}[row.purchase_noun];
       const document = purchase || {
@@ -396,12 +434,17 @@
       const reference = row.check_number
         ? `${row.check_number} · Check · ${row.transaction_number}`
         : `${row.transaction_number} · ${document?.label || row.transaction_type || ''}`;
-      const values = [row.effective_date + '\n' + row.recorded_at,
-        `${reference} · ${row.batch_kind}`, row.party_name, row.category_label,
-        [row.memo, row.description !== row.memo ? row.description : null].filter(Boolean).join(' / '),
-        row.class_summary, money(row.increase), money(row.decrease), money(row.running_balance)];
-      values.forEach((value, i) => tr.append(node('td', value || '', i >= 6 ? 'register-money' : '')));
-      const actions = node('td'), journal = encodeURIComponent(row.transaction_id);
+      const when = node('td', null, 'reg-date'), effective = node('time', day(row.effective_date));
+      effective.dateTime = row.effective_date; when.append(effective, ' ', node('small', row.recorded_at, 'reg-recorded'));
+      tr.append(when);
+      const values = [[`${reference} · ${row.batch_kind}`, 'reg-ref'], [row.party_name, 'reg-payee'], [row.category_label, 'reg-category'],
+        [[row.memo, row.description !== row.memo ? row.description : null].filter(Boolean).join(' / '), 'reg-memo'],
+        [row.class_summary, 'reg-class'],
+        [zero(row.increase) ? '' : figure(row.increase), 'register-money reg-increase'],
+        [zero(row.decrease) ? '' : figure(row.decrease), 'register-money reg-decrease'],
+        [figure(row.running_balance), 'register-money reg-balance']];
+      for (const [value, cls] of values) tr.append(node('td', value || '', cls + (value ? '' : ' reg-empty')));
+      const actions = node('td', null, 'reg-actions'), journal = encodeURIComponent(row.transaction_id);
       if (document) actions.append(link('History', `${base}/${document.noun}/${journal}?` + new URLSearchParams(row.revision_number ? {revision_number: row.revision_number} : {})));
       if (c.writable && row.transaction_type === 'journal_entry') {
         actions.append(' ', link('Edit current', purchase ? `${base}/${purchase.noun}/${journal}/update` : path + '?' + new URLSearchParams({edit: row.transaction_id})), ' ', link('Void current', `${base}/${purchase?.noun || 'journal'}/${journal}/void`));
@@ -420,10 +463,18 @@
       if (epoch !== queryEpoch) return;
       if (!more) $('register-history').tBodies[0].replaceChildren();
       appendRows(result.rows); nextCursor = result.next_cursor;
+      if (savedJournal && phone.matches) {
+        // After a save from the phone sheet, bring the new entry into view in the list.
+        const rows = $('register-history').querySelectorAll(`tr[data-journal="${CSS.escape(savedJournal)}"]`);
+        const row = rows[rows.length - 1];
+        if (row) { row.classList.add('register-saved-row'); row.scrollIntoView({block: 'center'}); }
+      }
+      if (!more) savedJournal = null;
       $('register-next').hidden = !nextCursor;
       $('register-current').replaceChildren('All entries: ', node('span', money(result.current_balance.balance), 'register-money'), ' (includes future-dated entries)');
       $('register-current-metadata').textContent = metadata(result.current_balance);
-      $('register-period-totals').replaceChildren(`Selected period ${result.metadata.period.date_from} through ${result.metadata.period.date_to}: `);
+      $('register-period-summary').textContent = `${day(result.metadata.period.date_from)} – ${day(result.metadata.period.date_to)}`;
+      $('register-period-totals').replaceChildren('Selected period: ');
       for (const [key, label] of [['opening', 'Opening'], ['increases', 'Increases'], ['decreases', 'Decreases'], ['closing', 'Closing']]) {
         $('register-period-totals').append(label + ' ', node('span', money(result.totals[key]), 'register-money'), key === 'closing' ? '' : ' · ');
       }
@@ -493,6 +544,12 @@
       } catch (e) { error(e); }
     });
     $('register-record').addEventListener('click', record);
+    $('register-sheet-open').addEventListener('click', openSheet);
+    $('register-sheet-close').addEventListener('click', closeSheet);
+    $('register-sheet-backdrop').addEventListener('click', closeSheet);
+    root.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.defaultPrevented && sheetOpen()) { e.preventDefault(); closeSheet(); } });
+    // Focus stays in the open sheet; leaving it returns to the sheet's Close button.
+    document.addEventListener('focusin', e => { if (sheetOpen() && !$('register-entry').contains(e.target)) $('register-sheet-close').focus(); });
     $('register-restore').addEventListener('click', () => { if (pending) { pendingView(); return; } load(initial); dateFocus(); });
     $('register-new').addEventListener('click', () => { if (pending || (dirty && !confirm('Discard the changed draft and begin a new journal?'))) return; initial = null; load(null); dateFocus(); });
   }
@@ -526,6 +583,19 @@
   window.addEventListener('beforeunload', e => { if (dirty && !pending) { e.preventDefault(); e.returnValue = ''; } });
   root.addEventListener('focusin', e => { setTimeout(() => e.target.scrollIntoView({block: 'nearest', inline: 'nearest'}), 0); });
   window.visualViewport?.addEventListener('resize', () => { if (root.contains(document.activeElement)) document.activeElement.scrollIntoView({block: 'nearest', inline: 'nearest'}); });
-  if (c.supported) { $('register-period').addEventListener('submit', e => { e.preventDefault(); refresh(); }); $('register-next').addEventListener('click', () => refresh(true)); refresh(); }
-  dateFocus();
+  if (c.supported) { $('register-period').addEventListener('submit', e => { e.preventDefault(); $('register-period-box').open = false; refresh(); }); $('register-next').addEventListener('click', () => refresh(true)); refresh(); }
+  // The period's calendars sit inside their fields, as the entry date's does.
+  const calendarIcon = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="14" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  document.querySelectorAll('#register-period input[data-date]').forEach(input => {
+    const tools = input.nextElementSibling;
+    if (!tools?.classList.contains('date-tools') || input.parentElement.classList.contains('date-field')) return;
+    const box = node('span', null, 'date-field'); input.before(box); box.append(input, tools);
+    tools.querySelector('.date-calendar').innerHTML = calendarIcon;
+  });
+  // A phone folds the account finder away; a wide screen keeps it open.
+  const switcher = $('register-switch');
+  const foldSwitcher = () => { switcher.open = !phone.matches; };
+  foldSwitcher(); phone.addEventListener('change', foldSwitcher);
+  // Opening an entry to edit it on a phone goes straight to the sheet.
+  if (form && c.edit && phone.matches) openSheet(); else dateFocus();
 })();

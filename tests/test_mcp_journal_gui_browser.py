@@ -44,9 +44,10 @@ def test_installed_agent_journal_visible_in_browser_register_and_expanded_audit(
         selector='a[href*="/journal/'+result['journal']+'?"]'
         browser.wait_for(f'!!document.querySelector({json.dumps(selector)})')
         row=browser.evaluate(f'document.querySelector({json.dumps(selector)}).closest("tr").innerText')
-        assert '12.34' in row and '2026-01-12' in row
+        assert '12.34' in row
+        assert browser.evaluate(f'document.querySelector({json.dumps(selector)}).closest("tr").querySelector("time").dateTime')=='2026-01-12'
         money=browser.evaluate(f'[...document.querySelector({json.dumps(selector)}).closest("tr").querySelectorAll(".register-money")].map(e=>e.textContent)')
-        assert money[0]=='12.34 USD' and money[-1]=='12.34 USD'
+        assert money[0]=='12.34' and money[-1]=='12.34'
         _contained(browser,width)
         browser.navigate(base+'/audit/'+event['id'])
         browser.wait_for('document.body.innerText.includes("session_id")')
