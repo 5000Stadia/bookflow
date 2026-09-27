@@ -271,7 +271,7 @@ def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register
     # The new-bill window offers the last few bills, as every other document window does.
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill/post')
     b.wait_for('!!document.querySelector(".document-recent-list")')
-    recent = _text(b, '.document-recent')
+    recent = _text(b, '.document-others')
     assert 'Recent bills' in recent, recent
     assert second['number'] in recent and first['number'] in recent, recent
     assert 'Listing supply' in recent, recent

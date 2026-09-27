@@ -6,7 +6,6 @@
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun|replace("-", " ")|replace("_", " ")|capitalize }}</a> / {{ document.heading if document else heading }}</nav>
 <h1>{{ document.heading if document else heading }}</h1>
-{% if document_nav %}{% include "document_nav.html" %}{% endif %}
 {% set report_presentation %}
 {% if result and result.metadata and result.metadata.basis == "cash" %}<p class="workflow-note">Cash-basis view using current payment matching. Later matching or corrections can change an earlier period. Opening the ledger shows the original accrual entries.{% if verb == 'sales-by-item' %} Item quantities show physical activity; cash-basis average selling price is not calculated.{% endif %}</p>{% endif %}
 {% if report_page and result and result.metadata %}<div class="report-print-heading"><h2>{{ heading }}</h2><p>{{ company_label or '' }}</p><p>{% if result.metadata.period.date_from %}{{ result.metadata.period.date_from }} through {{ result.metadata.period.date_to }}{% else %}As of {{ result.metadata.period.date_to }}{% endif %} · {{ result.metadata.basis|capitalize }} basis · {{ result.metadata.currency }}</p><p>Generated {{ result.metadata.generation_time }} · Audit watermark {{ result.metadata.audit_watermark }}{% if not report_full %} · Displayed-page copy only. Use Print full filtered report for all matching rows.{% endif %}</p></div>{% endif %}
@@ -275,6 +274,8 @@
 {% include "submit_error.html" %}
 {% if document %}<div class="document-actions"><button name="action" value="preview">Preview</button><button name="action" value="submit" class="primary-action">Save</button>{% if document.creating %}<button name="action" value="submit-new">Save &amp; New</button>{% endif %}<a class="cancel-action" href="{{ (base ~ '/' ~ record_id) if record_id else base }}">Cancel</a></div>
 {% else %}<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ ('Complete work' if verb == 'complete' else 'Create copy' if verb == 'copy' else 'Create estimate' if verb == 'estimate' else 'Create work order' if verb == 'work-order' else 'Create invoice' if verb == 'invoice' else 'Create sales receipt' if verb == 'sales-receipt' else 'Save' if cmd.is_write else 'Find work') if work_form else 'Run report' if noun == 'report' else ('Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Save deposit' if noun == 'deposit' and verb == 'post' else 'Submit') }}</button></span></div>{% endif %}</form>
+{# The form first; the documents already written below it. #}
+{% if document_nav %}{% include "document_nav.html" %}{% endif %}
 
 {% if noun == "report" %}{% if not report_full %}</details>{% endif %}{{ result_presentation }}{% endif %}
 {% include "annotations.html" %}
