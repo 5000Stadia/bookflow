@@ -9,9 +9,10 @@
 <h1>{{ account_label }} register</h1>
 <p>{{ account.type.replace('_', ' ') | title }} · {{ account.currency }} · This account only</p>
 <p><a href="{{ gl_url }}">Account general ledger</a></p>
+{# A phone folds the account finder behind "Switch account"; a wide screen keeps it open (register.js). #}
+<details id="register-switch" class="register-switch" open><summary>Switch account</summary><div id="register-account-chooser"></div></details>
 {# On a phone the entry form is a bottom sheet behind "Add entry"; on a wide screen it stays in place. #}
 {% if config.writable %}<button type="button" id="register-sheet-open" class="register-sheet-open" aria-controls="register-entry" aria-expanded="false">Add entry</button>{% endif %}
-<div id="register-account-chooser"></div>
 {% if not config.supported %}<p>{% if account.type == 'non_posting' %}This is a non-posting account and accepts no entry.{% else %}Use the account general ledger for income and expense activity.{% endif %}</p>{% endif %}
 <section id="register-pending" aria-label="Save recovery" hidden><p id="register-pending-message" role="status"></p><button type="button" id="register-retry">Retry same save</button> <a id="register-review">Review original request</a> <a id="register-pending-location" hidden>Return to pending register</a><div id="register-reconciliation" hidden><label><input id="register-reconciled" type="checkbox"> I reviewed this request key in the authoritative journal and audit trail and resolved whether it committed.</label><button id="register-finish-reconciliation" type="button" disabled>Finish reconciliation and start a new draft</button></div></section>
 <section id="register-receipt" aria-label="Saved entry" role="status" hidden></section>
@@ -22,8 +23,7 @@
 <form id="register-form" novalidate data-math-company-currency="{{ config.currency }}">
 <fieldset id="register-fields">
 <div class="register-entry-grid">
-<label>Date <input data-date data-date-picker="register-calendar" id="register-date" name="date" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" required aria-describedby="register-date-help"></label>
-<button id="register-calendar-open" type="button">Calendar</button>
+<label>Date <span class="date-field"><input data-date data-date-picker="register-calendar" id="register-date" name="date" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" required aria-describedby="register-date-help"><button id="register-calendar-open" type="button"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="14" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></span></label>
 <label id="register-calendar-label" hidden>Choose date<input id="register-calendar" type="date" data-date-native></label>
 <label>Journal number <input name="number" maxlength="64" placeholder="Automatic"></label>
 <div id="register-payee"></div>
@@ -53,7 +53,9 @@
 {% if config.supported %}
 <section aria-label="Account movements">
 <h2>Account movements</h2>
-<form id="register-period" class="register-period"><label>From <input type="text" data-date required name="date_from" value="{{ config.date_from }}"></label><label>Through <input type="text" data-date required name="date_to" value="{{ config.date_to }}"></label><button type="submit">Refresh</button></form>
+{# The period reads as one line; Change opens the existing controls. #}
+<details id="register-period-box" class="register-period-box"><summary><span id="register-period-summary">{{ config.date_from | day }} – {{ config.date_to | day }}</span> · <span class="register-period-change">Change</span></summary>
+<form id="register-period" class="register-period"><label>From <input type="text" data-date required name="date_from" value="{{ config.date_from }}"></label><label>Through <input type="text" data-date required name="date_to" value="{{ config.date_to }}"></label><button type="submit">Refresh</button></form></details>
 {% set movement = dict(config.directions) %}
 <p id="register-current">All entries: loading…</p>
 <p id="register-period-totals"></p><p id="register-query-error" role="status"></p>

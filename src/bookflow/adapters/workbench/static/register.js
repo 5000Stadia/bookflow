@@ -78,7 +78,9 @@
     const status = node('small'); status.role = 'status';
     let selected = value, selectedLabel = label, version = 0, timer, choices = [], active = -1;
     function close() { options.hidden = true; active = -1; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
-    function set(id = '', name = '') { version++; clearTimeout(timer); selected = id; selectedLabel = name; input.value = name; input.setCustomValidity(''); close(); status.textContent = id ? 'Selected: ' + name : ''; }
+    // Clear shows only while the field holds something to clear.
+    const clearable = () => { if (clear) clear.hidden = !input.value; };
+    function set(id = '', name = '') { version++; clearTimeout(timer); selected = id; selectedLabel = name; input.value = name; input.setCustomValidity(''); close(); status.textContent = id ? 'Selected: ' + name : ''; clearable(); }
     function choose(index) { const row = choices[index]; if (!row) return; set(row.id, row.label); if (form?.contains(wrapper)) dirty = true; input.focus(); }
     async function search() {
       const requestVersion = ++version, query = input.value.trim();
@@ -93,7 +95,7 @@
         status.textContent = choices.length ? 'Use arrows then Enter to choose.' : 'No matching records.';
       } catch (e) { if (version === requestVersion) { close(); status.textContent = errorText(e); } }
     }
-    input.addEventListener('input', () => { version++; selected = ''; selectedLabel = ''; close(); clearTimeout(timer); input.setCustomValidity(input.value ? 'Choose a matching name or Clear.' : ''); timer = setTimeout(search, 180); if (form?.contains(wrapper)) dirty = true; });
+    input.addEventListener('input', () => { clearable(); version++; selected = ''; selectedLabel = ''; close(); clearTimeout(timer); input.setCustomValidity(input.value ? 'Choose a matching name or Clear.' : ''); timer = setTimeout(search, 180); if (form?.contains(wrapper)) dirty = true; });
     input.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.preventDefault(); version++; clearTimeout(timer); close(); return; }
       if (e.key === 'Tab') { close(); return; }
@@ -471,7 +473,8 @@
       $('register-next').hidden = !nextCursor;
       $('register-current').replaceChildren('All entries: ', node('span', money(result.current_balance.balance), 'register-money'), ' (includes future-dated entries)');
       $('register-current-metadata').textContent = metadata(result.current_balance);
-      $('register-period-totals').replaceChildren(`Selected period ${day(result.metadata.period.date_from)} through ${day(result.metadata.period.date_to)}: `);
+      $('register-period-summary').textContent = `${day(result.metadata.period.date_from)} – ${day(result.metadata.period.date_to)}`;
+      $('register-period-totals').replaceChildren('Selected period: ');
       for (const [key, label] of [['opening', 'Opening'], ['increases', 'Increases'], ['decreases', 'Decreases'], ['closing', 'Closing']]) {
         $('register-period-totals').append(label + ' ', node('span', money(result.totals[key]), 'register-money'), key === 'closing' ? '' : ' · ');
       }
@@ -580,7 +583,19 @@
   window.addEventListener('beforeunload', e => { if (dirty && !pending) { e.preventDefault(); e.returnValue = ''; } });
   root.addEventListener('focusin', e => { setTimeout(() => e.target.scrollIntoView({block: 'nearest', inline: 'nearest'}), 0); });
   window.visualViewport?.addEventListener('resize', () => { if (root.contains(document.activeElement)) document.activeElement.scrollIntoView({block: 'nearest', inline: 'nearest'}); });
-  if (c.supported) { $('register-period').addEventListener('submit', e => { e.preventDefault(); refresh(); }); $('register-next').addEventListener('click', () => refresh(true)); refresh(); }
+  if (c.supported) { $('register-period').addEventListener('submit', e => { e.preventDefault(); $('register-period-box').open = false; refresh(); }); $('register-next').addEventListener('click', () => refresh(true)); refresh(); }
+  // The period's calendars sit inside their fields, as the entry date's does.
+  const calendarIcon = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="14" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  document.querySelectorAll('#register-period input[data-date]').forEach(input => {
+    const tools = input.nextElementSibling;
+    if (!tools?.classList.contains('date-tools') || input.parentElement.classList.contains('date-field')) return;
+    const box = node('span', null, 'date-field'); input.before(box); box.append(input, tools);
+    tools.querySelector('.date-calendar').innerHTML = calendarIcon;
+  });
+  // A phone folds the account finder away; a wide screen keeps it open.
+  const switcher = $('register-switch');
+  const foldSwitcher = () => { switcher.open = !phone.matches; };
+  foldSwitcher(); phone.addEventListener('change', foldSwitcher);
   // Opening an entry to edit it on a phone goes straight to the sheet.
   if (form && c.edit && phone.matches) openSheet(); else dateFocus();
 })();

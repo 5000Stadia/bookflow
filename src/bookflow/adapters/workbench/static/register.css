@@ -33,6 +33,23 @@
 .register-about summary { cursor: pointer; }
 .register-about p { margin: .3rem 0; }
 
+/* A calendar icon inside each date field (entry date and period); typing stays the main way in. */
+#register-workspace .date-field { position: relative; display: block; min-width: 0; max-width: 100%; }
+#register-workspace .date-field > input[data-date] { padding-right: 2.75rem; }
+#register-workspace .date-field .date-calendar { position: absolute; top: 0; right: 0; bottom: 0; width: 2.75rem; min-height: 0; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted, #596773); display: inline-flex; align-items: center; justify-content: center; }
+#register-workspace .date-field .date-calendar:hover, #register-workspace .date-field .date-calendar:focus-visible { color: var(--accent, #176b50); }
+#register-workspace .date-field .date-tools input[type=date] { position: absolute; top: calc(100% + 2px); right: 0; z-index: 7; width: auto; }
+
+/* The period reads as one line ("Jan 1 – Sep 27 · Change") that opens its controls. */
+.register-period-box { margin-block: .6rem; }
+.register-period-box > summary { display: block; padding: .7rem 0; cursor: pointer; list-style: none; font-weight: 600; }
+.register-period-box > summary::-webkit-details-marker { display: none; }
+.register-period-box .register-period-change { margin-left: .35em; color: var(--accent, #176b50); text-decoration: underline; font-weight: 500; }
+.register-period-box[open] .register-period-change { text-decoration: none; }
+.register-period-box .register-period { margin-top: .4rem; }
+/* The account finder: open on a wide screen, behind "Switch account" on a phone. */
+.register-switch > summary { display: none; }
+
 /* Entry on a phone (R62). The same entry form becomes a bottom sheet opened by "Add entry"; posting,
    checks and recovery are the desktop register's own. History rows read as one line per entry:
    date · payee (or memo), the movement at the right, and the running balance muted beneath it. */
@@ -41,6 +58,8 @@
 .register-sheet-head h2 { margin: 0; }
 .register-submit #register-error { margin-bottom: .5rem; }
 @media (max-width: 700px) {
+  #register-workspace .register-switch > summary { display: block; padding: .6rem 0; cursor: pointer; color: var(--accent, #176b50); text-decoration: underline; }
+  #register-workspace > p { margin-block: .4rem; }
   #register-workspace .register-sheet-open { display: block; width: 100%; min-height: 48px; margin: .8rem 0; background: var(--accent, #176b50); border-color: var(--accent, #176b50); color: #fff; font-weight: 650; }
   #register-workspace .register-sheet { display: none; }
   #register-workspace.sheet-open .register-sheet { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; margin: 0; max-height: 88vh; overflow: auto; overscroll-behavior: contain; padding: 0 16px; background: var(--surface, #fff); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 30px rgba(20, 30, 36, .2); }

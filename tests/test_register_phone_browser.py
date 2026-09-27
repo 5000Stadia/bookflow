@@ -12,7 +12,7 @@ FITS = "document.documentElement.scrollWidth <= innerWidth + 1"
 
 def _visible(browser, selector):
     return browser.evaluate(f"""(() => {{const n=document.querySelector({json.dumps(selector)});
-      return !!n && n.getClientRects().length > 0 && getComputedStyle(n).visibility !== 'hidden';}})()""")
+      return !!n && n.checkVisibility({{visibilityProperty: true}});}})()""")
 
 
 def test_phone_register_rows_and_add_entry_sheet(register_browser, tmp_path):
@@ -21,6 +21,16 @@ def test_phone_register_rows_and_add_entry_sheet(register_browser, tmp_path):
     b.viewport(390, 844)
     b.navigate(f"{env.site.base_url}/c/{env.site.company_id}/account/{checking['id']}/register?date_from=2026-01-01&date_to=2026-12-31")
     b.wait_for("document.querySelectorAll('#register-history tr[data-kind=posting]').length > 5")
+
+    # The first screen reaches the entries: the account finder, the period controls and the entry
+    # form are folded away behind "Switch account", the period line and "Add entry".
+    b.evaluate("window.scrollTo(0, 0)")
+    first = b.evaluate("document.querySelector('#register-history tr[data-kind=posting]').getBoundingClientRect().bottom")
+    assert first <= 844, first
+    assert not b.evaluate("document.querySelector('#register-switch').open")
+    assert not _visible(b, '#register-account-chooser') and _visible(b, '#register-switch > summary')
+    assert not _visible(b, '#register-period') and _visible(b, '#register-period-summary')
+    assert b.evaluate("document.querySelector('#register-period-summary').textContent") == 'Jan 1 – Dec 31'
 
     # Entries read as rows: date, payee or memo, the movement at the right; the form is out of the way.
     assert b.evaluate(FITS)
@@ -45,6 +55,9 @@ def test_phone_register_rows_and_add_entry_sheet(register_browser, tmp_path):
               payee:!!s.querySelector('#register-payee input'), category:!!s.querySelector('#register-category input')};})()""")
     assert sheet['position'] == 'fixed' and abs(sheet['bottom'] - 844) < 2 and sheet['role'] == 'dialog'
     assert sheet['fields'] and sheet['payee'] and sheet['category']
+    # The calendar is an icon inside the date field, and a picker's Clear shows only with a value.
+    assert b.evaluate("document.querySelector('#register-calendar-open').parentElement.classList.contains('date-field')")
+    assert not _visible(b, '#register-payee .register-picker > button')
     assert b.evaluate(FITS)
 
     # A rejected save keeps the sheet open and shows the error beside Record.
@@ -63,6 +76,7 @@ def test_phone_register_rows_and_add_entry_sheet(register_browser, tmp_path):
     _type(b, 'Professional')
     b.wait_for("!document.querySelector('#register-category .register-options').hidden")
     b.evaluate("document.querySelector('#register-category .register-options button').click()")
+    assert _visible(b, '#register-category .register-picker > button')
     b.evaluate("document.querySelector('[name=memo]').focus()")
     _type(b, 'Phone sheet entry')
     b.evaluate("document.querySelector('#register-record').click()")
@@ -80,3 +94,12 @@ def test_phone_register_rows_and_add_entry_sheet(register_browser, tmp_path):
     assert b.evaluate(FITS)
     picture = b.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})
     (tmp_path / 'register-phone-saved.png').write_bytes(base64.b64decode(picture['data']))
+
+    # The period line opens the existing controls; Refresh still re-reads the list and folds them.
+    b.evaluate("window.scrollTo(0, 0); document.querySelector('#register-period-box > summary').click()")
+    assert _visible(b, '#register-period')
+    b.evaluate("""(() => {const f=document.querySelector('#register-period'); f.elements.date_from.value='2026-09-01';
+      f.querySelector('button[type=submit]').click();})()""")
+    b.wait_for("document.querySelector('#register-period-summary').textContent === 'Sep 1 – Dec 31'")
+    assert not b.evaluate("document.querySelector('#register-period-box').open")
+    assert b.evaluate("document.querySelector('#register-history time').dateTime") >= '2026-09-01'
