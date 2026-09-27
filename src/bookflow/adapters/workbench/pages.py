@@ -763,9 +763,26 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company=show,
             company_id=show["company_id"],
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
-            overview=overview_summary(request, show),
         )
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
+        return resp
+
+    @app.get("/c/{company_id}/_overview", response_class=HTMLResponse)
+    @permission_read_package(host)
+    def company_overview_panels(company_id: str, request: Request):
+        """The Overview's figures and lists, fetched after the page renders so it never waits on them."""
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            if e.code == "E_UNAUTHENTICATED" and not signed_in(request):
+                from urllib.parse import quote
+                return Response(status_code=200, headers={"HX-Redirect": "/login?next=" + quote(f"/c/{company_id}/", safe=""),
+                                                          "Cache-Control": "no-store"})
+            return HTMLResponse('<p class="overview-loading muted">Figures could not be loaded just now.</p>',
+                                headers={"Cache-Control": "no-store"})
+        resp = render("overview_summary.html", request, company=show, company_id=show["company_id"],
+                      overview=overview_summary(request, show))
+        resp.headers["Cache-Control"] = "no-store"
         return resp
 
     def overview_summary(request: Request, show: dict[str, Any]) -> dict[str, Any]:

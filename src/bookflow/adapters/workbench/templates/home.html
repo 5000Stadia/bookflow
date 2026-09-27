@@ -5,7 +5,8 @@
 <section class="quick-actions" aria-labelledby="quick-actions-title"><h2 id="quick-actions-title">Start a transaction</h2><div class="quick-action-grid">
 {% for row in panels %}{% for item in row.chain + row.asides if item.live and item.step.id in ('invoice','receive-payment','bill','write-check') %}<a href="{{ item.href }}"><span aria-hidden="true">＋</span>{{ item.step.action.label }}</a>{% endfor %}{% endfor %}
 </div></section></div>
-{% include "overview_summary.html" %}
+{# The figures and lists run reports; they arrive after the page so the tasks never wait on them. #}
+<div class="overview-live" hx-get="/c/{{ company_id }}/_overview" hx-trigger="load" hx-swap="outerHTML" hx-on::response-error="this.querySelector('.overview-loading').textContent = 'Figures could not be loaded just now.'"><p class="overview-loading muted" role="status">Loading figures…</p></div>
 {# Every task, as compact links grouped by area. #}
 <h2 class="overview-section-title">All tasks</h2>
 <div class="flow-board">

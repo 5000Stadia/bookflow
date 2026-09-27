@@ -1,6 +1,6 @@
-"""The Overview's figures, needs-attention lists and recent activity: each shows what a read
-command returned, links to the report that explains it, and quietly drops out for a reader who
-cannot run that command."""
+"""The Overview's figures, needs-attention lists and recent activity: each figure is one report's
+own total, links to the report that explains it, and quietly drops out for a reader who cannot run
+that command. They arrive from their own route after the page, so the page never waits on them."""
 import re
 from datetime import date, timedelta
 
@@ -50,8 +50,13 @@ def _seed(hosted, browser):
 def test_the_overview_figures_are_the_reports_own_totals_and_link_to_them(hosted):
     browser = _browser(hosted)
     run, today, invoice, bill = _seed(hosted, browser)
-    page = browser.get(f"/c/{hosted.company_id}/")
-    assert page.status_code == 200
+    shell = browser.get(f"/c/{hosted.company_id}/")
+    assert shell.status_code == 200
+    # The page itself carries no figures, only the place they load into.
+    assert "data-figure" not in shell.text and "Needs attention" not in shell.text
+    assert f'hx-get="/c/{hosted.company_id}/_overview" hx-trigger="load"' in shell.text
+    page = browser.get(f"/c/{hosted.company_id}/_overview")
+    assert page.status_code == 200 and page.headers["cache-control"] == "no-store"
     figures = _figures(page.text)
     assert list(figures) == ["cash", "receivable", "overdue", "payable", "income"], list(figures)
 
@@ -94,9 +99,17 @@ def test_a_reader_who_cannot_run_a_command_just_does_not_see_its_part(hosted, mo
 
     monkeypatch.setattr(registry.get("report ar-aging"), "plan", refused)
     monkeypatch.setattr(registry.get("audit list"), "plan", refused)
-    page = browser.get(f"/c/{hosted.company_id}/")
+    page = browser.get(f"/c/{hosted.company_id}/_overview")
     assert page.status_code == 200
     figures = _figures(page.text)
     assert "receivable" not in figures and {"cash", "overdue", "payable", "income"} <= set(figures)
     assert "Recent activity" not in page.text and 'class="error"' not in page.text
     assert "Needs attention" in page.text
+
+
+def test_the_panels_route_answers_quietly_when_it_cannot_load(hosted):
+    """Signed out, the panels send the whole window to the login; the shell's own error handling does the rest."""
+    signed_out = TestClient(hosted.handle.app)
+    answered = signed_out.get(f"/c/{hosted.company_id}/_overview", follow_redirects=False)
+    assert answered.status_code == 200 and answered.headers["hx-redirect"].startswith("/login"), answered.headers
+    assert answered.text == ""
