@@ -15,12 +15,12 @@ Double-entry accounting for small businesses, where people in the browser and th
 
 ## M2 — V1 accounting product
 
-- [?] R9 Lists: chart of accounts, customers and jobs, vendors, items, supporting lists (spec row 5; built and in use; acceptance check not yet passed) — design/specs/5-lists.md
-- [?] R10 Identity, memberships, roles and agent tokens (spec row 7; built and in use; acceptance check not yet passed) — design/specs/7-identity-isolation.md
-- [?] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; built and in use; acceptance check not yet passed) — design/specs/8-general-ledger.md
-- [?] R12 MCP adapter and agent/GUI cooperation (spec row 9; built and in use; acceptance check not yet passed) — design/specs/9-mcp-adapter.md
-- [?] R13 Customer payments and invoice settlement (spec row 22; built and in use; acceptance check not yet passed) — design/specs/22-customer-payments.md
-- [?] R14 Sales-tax calculation policies (spec row 24; built and in use; acceptance check not yet passed) — design/specs/24-sales-tax-policy.md
+- [x] R9 Lists: chart of accounts, customers and jobs, vendors, items, supporting lists (spec row 5; accepted 2026-09-27) — design/specs/5-lists.md
+- [x] R10 Identity, memberships, roles and agent tokens (spec row 7; accepted 2026-09-27) — design/specs/7-identity-isolation.md
+- [x] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; accepted 2026-09-27) — design/specs/8-general-ledger.md
+- [x] R12 MCP adapter and agent/GUI cooperation (spec row 9; accepted 2026-09-27) — design/specs/9-mcp-adapter.md
+- [x] R13 Customer payments and invoice settlement (spec row 22; accepted 2026-09-27) — design/specs/22-customer-payments.md
+- [x] R14 Sales-tax calculation policies (spec row 24; accepted 2026-09-27) — design/specs/24-sales-tax-policy.md
 - [x] R15 Customer work, service sales, progress and work billing — design/customer-work.md
 - [x] R16 Purchasing, receiving with shipping allocation, bills and vendor payments — design/architecture.md
 - [x] R17 Deposits and bank reconciliation — design/architecture.md
