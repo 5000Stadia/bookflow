@@ -43,18 +43,18 @@ Double-entry accounting for small businesses, where people in the browser and th
 
 ## M4 — V2 functional roadmap (each increment selected with the human)
 
-- [~] R31 Human-directed improved UI — design/V2-ROADMAP.md item 1
+- [x] R31 Human-directed improved UI (phone and desktop audit round, R55–R65) — design/V2-ROADMAP.md item 1
 - [x] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [?] R56 R31 the form first on document forms, recent documents as compact rows (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R64 R31 a quieter document form — sticky save bar, Class and unit columns only when used, picker and date tidying, recording details folded (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R57 R31 reports open with their numbers — one-line filters, date chips, headline figure, statement-shaped layout on desktop (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R58 R31 lists and filters — pinned search as you type, filters apply themselves, phone filter sheet (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R60 R31 readable money and dates across all screens, exact values kept in exports (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R59 R31 ledger tables and money rows — right-aligned figures, currency in the header, fewer default columns (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R63 R31 an Overview with numbers — figures strip, needs attention, recent activity (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R65 R31 live totals on documents from the core preview as you type (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
-- [?] R62 R31 the account register on a phone as a list of entries with an add sheet (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
+- [x] R56 R31 the form first on document forms, recent documents as compact rows (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R64 R31 a quieter document form — sticky save bar, Class and unit columns only when used, picker and date tidying, recording details folded (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R57 R31 reports open with their numbers — one-line filters, date chips, headline figure, statement-shaped layout on desktop (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R58 R31 lists and filters — pinned search as you type, filters apply themselves, phone filter sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R60 R31 readable money and dates across all screens, exact values kept in exports (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R59 R31 ledger tables and money rows — right-aligned figures, currency in the header, fewer default columns (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R63 R31 an Overview with numbers — figures strip, needs attention, recent activity (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R65 R31 live totals on documents from the core preview as you type (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R62 R31 the account register on a phone as a list of entries with an add sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
 - [ ] R32 Job scheduling and fuller timekeeping — design/V2-ROADMAP.md item 2
 - [ ] R33 Bulk import and migration — design/V2-ROADMAP.md item 3
 - [ ] R34 Bank imports and feeds — design/V2-ROADMAP.md item 4
