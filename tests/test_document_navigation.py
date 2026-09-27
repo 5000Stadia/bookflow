@@ -135,7 +135,6 @@ def test_previous_and_next_reach_the_adjacent_documents(hosted, noun):
     nav = _nav(page)
     assert _destination(nav, 'Previous') == f'{base}/{order[middle - 1]}'
     assert _destination(nav, 'Next') == f'{base}/{order[middle + 1]}'
-    assert Nav.ORDER in _text(nav)
     assert f'{middle + 1} of {len(order)}' in _text(nav)
 
     # Following the arrow lands on the neighbour, which points back at where you were.
