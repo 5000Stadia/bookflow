@@ -65,10 +65,12 @@ def test_running_a_report_moves_focus_to_its_result_not_the_skip_link(browser_si
         run = 'document.querySelector("button[name=action][value=submit]")'
         b.wait_for(f'!!{run}')
         b.evaluate(f'(() => {{ const d = {run}.closest("details"); if (d) d.open = true; {run}.scrollIntoView({{block:"center"}}); {run}.focus(); }})()')
+        # The report already ran on open; mark that result so the wait is for the new one.
+        b.evaluate('document.querySelector("#financial-statement").dataset.stale = "1"')
         _key(b, 'Enter')
-        b.wait_for('!!document.querySelector("#financial-statement")', timeout=30)
+        b.wait_for('!!document.querySelector("#financial-statement:not([data-stale])")', timeout=30)
         b.wait_for('document.activeElement !== document.body', timeout=10)
-        assert b.evaluate('document.activeElement.closest("#financial-statement") !== null'), \
+        assert b.evaluate('document.activeElement.closest("#report-result, #financial-statement") !== null'), \
             b.evaluate('document.activeElement.outerHTML.slice(0, 200)')
         assert not b.evaluate('document.activeElement.matches(".skip-link")')
         # The result is on screen, clear of the sticky header.

@@ -70,7 +70,7 @@ def open_report(browser,verb,heading):
     tile=home_tile("Reports")
     browser.wait_for("!!"+tile)
     browser.evaluate(tile+".click()")
-    link="[...document.querySelectorAll('.nav-group a')].find(a=>a.textContent===%s)" % json.dumps(verb)
+    link="[...document.querySelectorAll('.nav-group a')].find(a=>a.textContent.trim()===%s)" % json.dumps(heading)
     browser.wait_for("!!"+link)
     browser.evaluate(link+".click()")
     browser.wait_for("!!document.querySelector('form[data-generated-form]')")
