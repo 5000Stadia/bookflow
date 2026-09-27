@@ -1,4 +1,80 @@
-.browse-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;max-width:76rem}.browse-controls details{padding:.8rem;border:1px solid #c9d2d9;border-radius:.3rem}.browse-controls summary{cursor:pointer;font-weight:600;padding:.4rem}.browse-picker{display:flex;flex-wrap:wrap;gap:.7rem;align-items:end;padding:.7rem 0}.browse-picker label{display:grid;gap:.3rem;min-width:12rem;max-width:100%}.browse-picker select{max-width:100%}.browse-controls button,.browse-controls select,.browse-controls input{min-height:44px}.browse-controls input[type=search]{width:100%}#chosen-columns li,#active-criteria .criterion{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.5rem 0}#chosen-columns li span{min-width:10rem}#browse-error{color:#a11919}.browse-value{margin:0}.browse-value dt{font-size:.85em;color:#566}.browse-value dd{margin:0 0 .4rem}.master-sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:1rem}.master-sections section{border:1px solid #ccd6dd;padding:1rem;border-radius:.3rem;min-width:0}.master-sections .field{overflow-wrap:anywhere}.collection-details{max-width:100%;overflow:auto}.collection-details table{min-width:30rem}#master-results td{max-width:28rem;overflow-wrap:anywhere}#master-results th a{display:inline-block;min-height:44px;padding:.6rem 0}@media(max-width:600px){.browse-picker{display:grid;grid-template-columns:minmax(0,1fr)}.browse-picker label{min-width:0}#chosen-columns{padding-left:1.3rem}#chosen-columns li span{width:100%}}
-#master-results{table-layout:fixed}#master-results th{overflow-wrap:anywhere}#master-results th button{font:inherit;font-weight:600;color:#164b7c;border:0;background:transparent;text-align:left;text-decoration:underline;cursor:pointer;min-height:44px;max-width:100%;overflow-wrap:anywhere;padding:.3rem 0}
-@media(max-width:700px){#master-results,#master-results thead,#master-results tbody,#master-results tr,#master-results th,#master-results td{display:block;width:auto}#master-results thead tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}#master-results tbody tr{margin:.8rem 0;border:1px solid #ccd6dd}#master-results td{max-width:none;border:0;border-bottom:1px solid #edf0f2}#master-results td[data-label]::before{content:attr(data-label);display:block;font-size:.85em;font-weight:600;color:#526371}#master-results th:last-child{display:none}}
+.browse-controls details{padding:.8rem;border:1px solid #c9d2d9;border-radius:.3rem}.browse-controls summary{cursor:pointer;font-weight:600;padding:.4rem}.browse-picker{display:flex;flex-wrap:wrap;gap:.7rem;align-items:end;padding:.7rem 0}.browse-picker label{display:grid;gap:.3rem;min-width:12rem;max-width:100%}.browse-picker select{max-width:100%}.workbench .browse-controls button,.workbench .browse-controls select,.workbench .browse-controls input:not([type=checkbox]){min-height:44px}.browse-controls input[type=search]{width:100%}#chosen-columns li,#active-criteria .criterion{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.5rem 0}#chosen-columns li span{min-width:10rem}#browse-error{color:#a11919}.browse-value{margin:0}.browse-value dt{font-size:.85em;color:#566}.browse-value dd{margin:0 0 .4rem}.master-sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:1rem}.master-sections section{border:1px solid #ccd6dd;padding:1rem;border-radius:.3rem;min-width:0}.master-sections .field{overflow-wrap:anywhere}.collection-details{max-width:100%;overflow:auto}.collection-details table{min-width:30rem}@media(max-width:600px){.browse-picker{display:grid;grid-template-columns:minmax(0,1fr)}.browse-picker label{min-width:0}#chosen-columns{padding-left:1.3rem}#chosen-columns li span{width:100%}}
 #active-criteria .criterion>span{min-width:0;max-width:100%;overflow-wrap:anywhere}
+
+/* List search and filters (R58). One GET form: search on top; on a wide screen the filters sit
+   inline and apply as they change; on a phone they live in a bottom sheet behind one row of
+   Filters · Sort · + and apply once, on "Show results". */
+.workbench .list-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;margin:0 0 16px}
+.workbench .list-form .list-search{flex:1 1 24rem;max-width:40rem;display:grid;gap:4px;font-weight:600}
+.workbench .list-form .list-search input{width:100%}
+.workbench .list-bar,.workbench .list-sheet-head,.workbench .list-sheet-backdrop{display:none}
+.workbench .list-sheet{display:contents}
+.workbench .list-form .list-customize,.workbench .list-form #active-criteria,.workbench .list-form #browse-error{flex:1 1 100%;margin:0}
+.workbench .list-form #active-criteria:empty,.workbench .list-form #browse-error:empty{display:none}
+.workbench .list-form .list-reset,.workbench .list-form .list-more{flex:0 0 auto;align-self:center;padding:.35rem 0}
+.workbench .list-form .list-reset[hidden]{display:none}
+.workbench .list-toggle{display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;min-height:44px;cursor:pointer;font-weight:500;color:var(--ink)}
+.workbench .list-toggle input[role=switch]{appearance:none;-webkit-appearance:none;flex:none;width:36px;height:20px;min-height:0;margin:0;padding:0;border:0;border-radius:10px;background:#b9c3c8;position:relative;cursor:pointer;transition:background .15s}
+.workbench .list-toggle input[role=switch]::before{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.workbench .list-toggle input[role=switch]:checked{background:var(--accent)}
+.workbench .list-toggle input[role=switch]:checked::before{transform:translateX(16px)}
+.workbench .list-toggle input[role=switch]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.workbench .list-form[aria-busy=true]~#list-results{opacity:.6;transition:opacity .2s .15s}
+.workbench .list-form-compact.is-live .list-apply{display:none}
+@media(min-width:701px){
+ .workbench .list-form.is-live .list-apply{display:none}
+ .workbench .browse-controls .list-sort{display:none}
+}
+@media(max-width:700px){
+ .workbench form.list-form{display:block}
+ .workbench .list-form .list-search{max-width:none}
+ .workbench .list-bar{display:flex;gap:8px;margin:10px 0 4px}
+ .workbench .list-bar a{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-weight:600;text-decoration:none}
+ .workbench .list-bar .list-bar-button{flex:1 1 0}
+ .workbench .list-bar .list-bar-add{flex:0 0 52px;padding:0;background:var(--accent);border-color:var(--accent);color:#fff;font-size:24px;font-weight:500;line-height:1}
+ .workbench .list-actions.has-list-bar .list-create{display:none}
+ .workbench .list-actions.has-list-bar:not(:has(a:not(.list-create))){display:none}
+ .workbench .list-form:not(.list-form-compact) .list-sheet{display:none}
+ .workbench .list-form-compact .list-sheet{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+ .workbench .list-form.sheet-open .list-sheet,.workbench .list-form .list-sheet:target{display:flex;flex-direction:column;flex-wrap:nowrap;gap:12px;position:fixed;left:0;right:0;bottom:0;max-height:85vh;overflow:auto;overscroll-behavior:contain;z-index:60;margin:0;padding:0 16px calc(16px + env(safe-area-inset-bottom));background:var(--surface);border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(20,30,36,.2)}
+ .workbench #list-sheet>*,.workbench #list-sheet .date-range-presets{flex:0 0 auto;width:100%;margin:0}
+ .workbench #list-sheet>.list-toggle{width:auto;align-self:flex-start}
+ .workbench .list-sheet .list-sheet-head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;padding:14px 0 8px;background:var(--surface);border-bottom:1px solid var(--line)}
+ .workbench .list-sheet-head h2{margin:0;font-size:17px}
+ .workbench .list-sheet-head a{display:inline-flex;align-items:center;min-height:44px;padding:0 4px}
+ .workbench .list-form.sheet-open .list-sheet-backdrop,.workbench .list-sheet:target~.list-sheet-backdrop{display:block;position:fixed;inset:0;z-index:59;background:rgba(20,30,36,.4)}
+ .workbench .list-sheet .list-apply{position:sticky;bottom:0;min-height:48px;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:650;box-shadow:0 -10px 12px var(--surface)}
+ .workbench .list-form .list-reset{display:inline-block;margin-top:6px}
+ html.list-sheet-lock{overflow:hidden}
+}
+
+/* Ledger tables and money rows (R59). Figures right-aligned in tabular digits; one-line headings
+   that stay while the rows scroll; the whole row opens the record (its first-cell link stays the
+   keyboard route). On a phone each row is one card. */
+.workbench .list-scroll{max-height:calc(100vh - 120px);overflow:auto}
+.workbench .list-ledger{width:100%;table-layout:auto}
+.workbench .list-ledger th,.workbench #master-results.list-ledger th:nth-child(n){position:sticky;top:0;z-index:1;white-space:nowrap;width:auto;box-shadow:inset 0 -1px 0 var(--line)}
+.workbench .list-ledger td{max-width:28rem;overflow-wrap:anywhere}
+.workbench .list-ledger .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.workbench .list-ledger th a[data-sort-link]{display:inline-flex;align-items:center;min-height:32px;color:inherit;text-decoration:none}
+.workbench .list-ledger th a[data-sort-link]:hover,.workbench .list-ledger th a[data-sort-link]:focus-visible{color:var(--accent);text-decoration:underline}
+.workbench .list-ledger tr.is-linked{cursor:pointer}
+.workbench .list-ledger tbody tr.is-linked:hover{background:#eef6f1}
+.workbench .list-ledger tr.is-inactive td{color:var(--muted)}
+.workbench .list-ledger .list-inactive{font-size:12px;margin-left:4px}
+.workbench .list-cards{display:none;list-style:none;margin:8px 0;padding:0}
+@media(max-width:700px){
+ .workbench .list-desktop{display:none}
+ .workbench .list-cards{display:grid;gap:8px}
+ .workbench .list-card{position:relative;padding:12px 14px;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+ .workbench .list-card:has(a.list-card-link:active){background:#f5faf7}
+ .workbench .list-card-main{display:flex;align-items:baseline;gap:12px}
+ .workbench .list-card-link{flex:1 1 auto;min-width:0;font-weight:600;color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+ .workbench a.list-card-link::after{content:"";position:absolute;inset:0;border-radius:inherit}
+ .workbench a.list-card-link:focus-visible{outline:none}
+ .workbench a.list-card-link:focus-visible::after{outline:2px solid var(--accent);outline-offset:-2px}
+ .workbench .list-card-amount{flex:none;margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+ .workbench .list-card-sub{margin:3px 0 0;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+ .workbench .list-card.is-inactive .list-card-link{color:var(--muted)}
+}
+@media print{.workbench .list-cards{display:none!important}.workbench .list-desktop{display:block!important}.workbench .list-scroll{max-height:none;overflow:visible}.workbench .list-ledger th{position:static}}

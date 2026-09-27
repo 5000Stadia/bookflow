@@ -135,7 +135,6 @@ def test_previous_and_next_reach_the_adjacent_documents(hosted, noun):
     nav = _nav(page)
     assert _destination(nav, 'Previous') == f'{base}/{order[middle - 1]}'
     assert _destination(nav, 'Next') == f'{base}/{order[middle + 1]}'
-    assert Nav.ORDER in _text(nav)
     assert f'{middle + 1} of {len(order)}' in _text(nav)
 
     # Following the arrow lands on the neighbour, which points back at where you were.
@@ -230,6 +229,22 @@ def test_the_recent_panel_lists_the_newest_documents_first(hosted, noun):
     assert panel.status_code == 200, panel.text[:600]
     shown = re.findall(r'href="/c/[^/]+/' + noun + r'/([^"]+)"', panel.text)
     assert shown == list(reversed(order))[:Nav.RECENT]
+
+
+@pytest.mark.parametrize('noun', NOUNS)
+def test_the_form_comes_first_and_recent_documents_are_rows_below_it(hosted, noun):
+    books = _books(hosted)
+    _write(hosted, books, noun, '2027-04-02', 3)
+    page = _browser(hosted).get(f"/c/{books['company']}/{noun}/{NEW[noun]}")
+    assert page.text.index('data-generated-form') < page.text.index('class="document-others"')
+    panel = _browser(hosted).get(f"/c/{books['company']}/_recent/{noun}")
+    rows = re.findall(r'(?s)<a class="document-recent-row" href="[^"]+">(.*?)</a>', panel.text)
+    # The demo company has documents of its own, some dated later; find the one written here.
+    row = next((row for row in rows if 'Nav customer' in row), None)
+    assert row is not None, panel.text[:1200]
+    # Number, customer, a readable date and the total, each in its own column.
+    assert '<span class="recent-date">Apr 2, 2027</span>' in row, row
+    assert re.search(r'<span class="recent-amount">\$[0-9,]+\.\d\d</span>', row), row
 
 
 def test_the_recent_panel_refuses_a_noun_that_is_not_a_sales_document(hosted):

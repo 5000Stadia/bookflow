@@ -113,7 +113,8 @@ def test_browser_sale_history_links_and_no_journal_actions(register_browser, doc
     env.browser.wait_for(f"document.querySelectorAll({selector}).length === 3")
     from bookflow.core.money import Money
     expected_balance = Money(before[control] + 1000, 'USD').to_dict()['amount']
-    assert expected_balance in env.browser.evaluate("document.querySelector('#register-current').textContent")
+    from bookflow.adapters.workbench.display import amount
+    assert amount(expected_balance) in env.browser.evaluate("document.querySelector('#register-current').textContent")
     rows = env.browser.evaluate("""Array.from(document.querySelectorAll(%s)).map(r => ({
         text: r.textContent, links: Array.from(r.querySelectorAll('a')).map(a => ({text:a.textContent, href:a.getAttribute('href')}))}))""" % selector)
     assert all(('Invoice' if document_type == 'invoice' else 'Sales receipt') in r['text'] for r in rows)

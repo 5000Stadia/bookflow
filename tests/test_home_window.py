@@ -127,7 +127,7 @@ def test_the_home_window_renders_its_panels_and_keeps_the_old_grid(hosted):
     page = browser.get(f"/c/{hosted.company_id}/")
     assert page.status_code == 200
     for panel in home.PANELS:
-        assert f'<h2 id="flow-panel-{panel.id}">{panel.title}</h2>' in page.text, panel.id
+        assert f'<h3 id="flow-panel-{panel.id}">{panel.title}</h3>' in page.text, panel.id
     for panel in resolved(hosted.company_id):
         for item in panel.steps:
             if item.live:
@@ -143,8 +143,8 @@ def test_the_home_window_renders_its_panels_and_keeps_the_old_grid(hosted):
     assert f'href="/c/{hosted.company_id}/term"' in grid.text
 
 
-def test_the_home_window_runs_no_business_command_while_rendering(hosted, monkeypatch):
-    """Resolution is a registry read. The page runs the company lookup it needs and nothing else."""
+def test_the_home_window_runs_only_read_commands_while_rendering(hosted, monkeypatch):
+    """Tile resolution is a registry read; the figures above the tiles come from read commands only."""
     from bookflow.adapters.http import execution
 
     ran = []
@@ -158,7 +158,10 @@ def test_the_home_window_runs_no_business_command_while_rendering(hosted, monkey
     browser = _browser(hosted)
     ran.clear()
     assert browser.get(f"/c/{hosted.company_id}/").status_code == 200
-    assert ran == ["company show"], ran
+    assert ran[0] == "company show", ran
+    assert set(ran) == {"company show", "report balance-sheet", "report ar-aging", "report open-invoices",
+                        "report unpaid-bills", "report profit-and-loss", "audit list"}, ran
+    assert not any(registry.get(name).is_write for name in ran), ran
 
 
 # ---------------------------------------------------------------- the placeholder half
@@ -171,7 +174,10 @@ def test_unavailable_steps_stay_off_daily_home_and_remain_in_future_features(hos
     board = resolved(hosted.company_id)
     for panel in board:
         for item in panel.steps:
-            if item.live:
+            if item.live and item.step.id == "invoice":
+                # Offered once, as the first quick action above the panels.
+                assert f'href="{item.href}"' in _main(page.text)
+            elif item.live:
                 element, markup = tiles[item.step.action.label]
                 assert element == "a" and f'href="{item.href}"' in markup
             else:
@@ -273,7 +279,9 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
     navigate_witness(browser, real, "invoice")
 
     page = browser.get(f"/c/{hosted.company_id}/").text
-    assert _tiles(page)[invoice.action.label][0] == "a"
+    # Create an invoice is offered once, as the first quick action, not again as a panel tile.
+    assert f'href="{real.href}"' in _main(page)
+    assert invoice.action.label not in _tiles(page)
     # The board filled up at V1: every declared tile is live, so the "still planned" half of this
     # pair was retired rather than kept alive with an invented placeholder.
     assert all(item.live or not item.offered for panel in home.resolve(hosted.company_id) for item in panel.steps)
@@ -371,6 +379,8 @@ def test_a_registered_command_whose_handler_fails_never_passes_the_witness(hoste
 # ---------------------------------------------------------------- the menu
 
 def test_every_menu_group_lands_on_a_page_of_that_group(hosted):
+    """Each menu entry is a page headed with its name; tests/test_sections_and_finder.py checks what
+    the section pages hold, and Reports and Audit keep their grouped pages."""
     browser = _browser(hosted)
     home_page = browser.get(f"/c/{hosted.company_id}/")
     for entry in home.MENU:
@@ -378,11 +388,10 @@ def test_every_menu_group_lands_on_a_page_of_that_group(hosted):
         page = browser.get(f"/c/{hosted.company_id}/_group/{entry.slug}")
         assert page.status_code == 200, entry.slug
         assert f"<h1>{entry.label}</h1>" in page.text, entry.slug
-        assert '<div class="noun-row">' in page.text, (entry.slug, "an empty section is not a destination")
-        for group in entry.groups:
-            assert f"<h2>{group}</h2>" in page.text, (entry.slug, group)
-        for noun in entry.nouns:
-            assert f"<h3>{naming.words(noun)}</h3>" in page.text, (entry.slug, noun)
+        if entry.slug not in home.SECTION_BY_SLUG:
+            assert '<div class="noun-row">' in page.text, (entry.slug, "an empty section is not a destination")
+            for noun in entry.nouns:
+                assert f"<h3>{naming.words(noun)}</h3>" in page.text, (entry.slug, noun)
     assert browser.get(f"/c/{hosted.company_id}/_group/nope").status_code == 400
 
 

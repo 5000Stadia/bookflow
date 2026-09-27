@@ -13,6 +13,7 @@ from time import perf_counter
 import pytest
 
 from bookflow.core.money import Money
+from bookflow.adapters.workbench.display import money
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import register_browser, _command  # noqa: F401
 
@@ -24,9 +25,9 @@ ROLES = ('table', 'row', 'columnheader', 'cell')
 
 
 def _labels(page):
-    """The eight whole-filter amounts the command returned, in the product's own format."""
+    """The eight whole-filter amounts the command returned, as the page shows money."""
     amounts = dict(page['totals'], effective_bank_total=page['effective_bank_total'])
-    return {key: str(Money(value['minor_units'], value['currency'])) for key, value in amounts.items()}
+    return {key: money(str(Money(value['minor_units'], value['currency']))) for key, value in amounts.items()}
 
 
 def _rendered_totals(browser):
@@ -307,18 +308,18 @@ def test_saved_deposit_list_totals_paging_filters_and_journey(register_browser, 
     for row in rows:
         document = sources[row['number']]
         assert row['deposit'] == document['deposit_id']
-        assert row['revision'] == str(Money(**document['current']['revision_bank_total']))
-        assert row['effective'] == str(Money(**document['current']['effective_bank_total']))
-        assert row['status'].startswith(document['current']['status'])
+        assert row['revision'] == money(str(Money(**document['current']['revision_bank_total'])))
+        assert row['effective'] == money(str(Money(**document['current']['effective_bank_total'])))
+        assert row['status'].lower().startswith(document['current']['status'])
         for key in ('source_total', 'cash_back', 'negative_additional_total'):
-            assert str(Money(**document['totals'][key])) in row['details'], (row['number'], key)
+            assert money(str(Money(**document['totals'][key]))) in row['details'], (row['number'], key)
         assert f"{document['counts']['sources']} receipts" in row['details']
     by_number = {row['number']: row for row in rows}
-    assert by_number['SIG-005']['status'].startswith('voided')
-    assert (by_number['SIG-005']['revision'], by_number['SIG-005']['effective']) == ('300.00 USD', '0.00 USD')
-    assert (by_number['SIG-004']['revision'], by_number['SIG-004']['effective']) == ('0.00 USD', '0.00 USD')
-    assert (by_number['SIG-006']['revision'], by_number['SIG-007']['revision']) == ('12.34 USD', '12.34 USD')
-    assert '60.00 USD' in by_number['SIG-008']['details'] and '1 receipts' in by_number['SIG-008']['details']
+    assert by_number['SIG-005']['status'].lower().startswith('voided')
+    assert (by_number['SIG-005']['revision'], by_number['SIG-005']['effective']) == ('$300.00', '$0.00')
+    assert (by_number['SIG-004']['revision'], by_number['SIG-004']['effective']) == ('$0.00', '$0.00')
+    assert (by_number['SIG-006']['revision'], by_number['SIG-007']['revision']) == ('$12.34', '$12.34')
+    assert '$60.00' in by_number['SIG-008']['details'] and '1 receipts' in by_number['SIG-008']['details']
 
     # ------------------------------------------------- 6. layout and scoped roles
     for width in (1280, 390):
@@ -337,10 +338,10 @@ def test_saved_deposit_list_totals_paging_filters_and_journey(register_browser, 
     # ------------------------- 5. saved detail, composition, back to a retained list
     voided_row = f'tr[data-deposit="{saved["SIG-005"]["id"]}"] .deposit-open'
     follow(voided_row, '.deposit-heading')
-    assert '300.00 USD' in b.evaluate('document.querySelector(".deposit-lede").innerText')
+    assert '$300.00' in b.evaluate('document.querySelector(".deposit-lede").innerText')
     assert 'voided' in b.evaluate('document.body.innerText').lower()
     follow('.deposit-kinds a[href*="kind=additional"]', '.deposit-heading')
-    assert '300.00 USD' in b.evaluate('document.body.innerText')
+    assert '$300.00' in b.evaluate('document.body.innerText')
     follow('.deposit-list-back a', '#deposit-list-lines')
     assert b.evaluate('document.querySelector("[name=q]").value') == 'Signature'
     assert b.evaluate('document.querySelector("[name=sort]").value') == 'bank_total'

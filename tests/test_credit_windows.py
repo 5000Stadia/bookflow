@@ -81,11 +81,13 @@ def test_the_four_credit_nouns_are_filed_under_their_own_group_not_hub(hosted):
     vendors = browser.get(f"/c/{hosted.company_id}/_group/vendors")
     company = browser.get(f"/c/{hosted.company_id}/_group/company")
     assert customers.status_code == vendors.status_code == company.status_code == 200
-    for noun in ("credit-memo", "customer-refund", "customer-credit"):
-        assert f"<h3>{noun}</h3>" in customers.text, noun
-        assert f"<h3>{noun}</h3>" not in company.text, (noun, "still misfiled under Hub")
-    assert "<h3>vendor-credit</h3>" in vendors.text
-    assert "<h3>vendor-credit</h3>" not in company.text, "vendor credit is still misfiled under Hub"
+    # The sections lead to the credit lists and forms; customer credits are applied from a credit memo.
+    for noun in ("credit-memo", "customer-refund"):
+        assert f'href="/c/{hosted.company_id}/{noun}"' in customers.text, noun
+        assert f'href="/c/{hosted.company_id}/{noun}/post"' in customers.text, noun
+        assert f'href="/c/{hosted.company_id}/{noun}"' not in company.text, (noun, "still misfiled under Hub")
+    assert f'href="/c/{hosted.company_id}/vendor-credit"' in vendors.text
+    assert f'href="/c/{hosted.company_id}/vendor-credit"' not in company.text, "vendor credit is still misfiled under Hub"
 
 
 def test_every_credit_route_renders_a_usable_page(hosted):
@@ -119,9 +121,9 @@ def test_every_credit_route_renders_a_usable_page(hosted):
 
     # The saved documents show their own figures, not a schema dump.
     credit = browser.get(f"/c/{company}/credit-memo/{made['credit']['id']}").text
-    assert "Still available 30.00 USD" in credit
+    assert "Still available $30.00" in credit
     vendor_credit = browser.get(f"/c/{company}/vendor-credit/{made['vendor_credit']['id']}").text
-    assert "Still free 15.00 USD" in vendor_credit
+    assert "Still free $15.00" in vendor_credit
     refund = browser.get(f"/c/{company}/customer-refund/{made['refund']['id']}").text
     assert "2041" in refund and "10.00" in refund
 

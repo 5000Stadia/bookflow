@@ -13,6 +13,9 @@
     return exact.minor(n,currency);
   };
   const asMoney = (n, currency=config.currency) => ({minor_units:n, currency});
+  // What a person reads on the receipt, grid and totals: "$1,855.95", "Nov 12". Review comparisons keep `money`.
+  const shown = value => value?.amount !== undefined ? exact.money(value.amount, value.currency) : '';
+  const cash = (n, currency=config.currency) => exact.money(units(n, currency), currency);
   const link = (text, href) => { const n = el('a', text); n.href = href; return n; };
   const storageKey = 'payment-request:' + config.company + ':' + config.actor;
   let mode = config.mode, payment = config.initial, draft = config.draft, selected = new Map(), candidates = [];
@@ -171,9 +174,9 @@
     selected=new Map(out.items.map(row=>[row.invoice_id,row]));
     $('amount').value=draft.amount?.amount || ''; $('amount-origin').textContent='Amount source: '+draft.amount_origin.replaceAll('_',' ');
     $('selection-status').textContent=`Shared selection version ${draft.version}; ${draft.item_count} selected invoices. ${draft.state==='consumed'?'Already recorded.':''}`;
-    const totals=$('totals');totals.replaceChildren(el('p','Selected invoice payments: '+units(draft.applied_minor_units)+' '+config.currency),
-      el('p',(mode==='apply'?'Unallocated draft amount':'Unapplied cash retained by '+(customer?.full_name||customer?.name||'payer'))+': '+(draft.unapplied_minor_units===null?'unresolved':units(draft.unapplied_minor_units)+' '+config.currency)));
-    if(mode==='apply') totals.append(el('p','Current available payment credit: '+units(payment.current.available_minor_units)+' '+config.currency));
+    const totals=$('totals');totals.replaceChildren(el('p','Selected invoice payments: '+cash(draft.applied_minor_units)),
+      el('p',(mode==='apply'?'Unallocated draft amount':'Unapplied cash retained by '+(customer?.full_name||customer?.name||'payer'))+': '+(draft.unapplied_minor_units===null?'unresolved':cash(draft.unapplied_minor_units))));
+    if(mode==='apply') totals.append(el('p','Current available payment credit: '+cash(payment.current.available_minor_units)));
     for (const problem of draft.problems) totals.append(el('p',problem));
     if(draft.current_lifecycle?.state?.startsWith('recovery_')) $('selection-status').append(' Recovery pending: '+draft.current_lifecycle.received_entry_count+' of '+draft.current_lifecycle.declared_entry_count+' attempted edits shared.');
     if(draft.current_lifecycle?.consumed_operation) totals.append(button('Original recorded operation',()=>recoverOperation(draft.current_lifecycle.consumed_operation.operation_key)));
@@ -198,7 +201,7 @@
   async function loadInvoices(cursor=null) {
     const out=await command('payment invoices',{...context(),limit:50,...(cursor?{cursor}:{})});
     candidates=out.items;nextCursor=out.next_cursor;$('more').hidden=!nextCursor;
-    $('balances').hidden=false;$('payer-balance').textContent=money(out.payer_balance);$('family-balance').textContent=money(out.family_balance);
+    $('balances').hidden=false;$('payer-balance').textContent=shown(out.payer_balance);$('family-balance').textContent=shown(out.family_balance);
     for (const row of candidates) {
       if (!row.customer_label) { const party=row.customer_id===customer?.id?customer:await command('customer show',{customer:row.customer_id}); row.customer_label=party.full_name||party.name; }
     }
@@ -226,7 +229,7 @@
           ...(value?{amount:value,amount_origin:'entered'}:{amount_origin:'unresolved'})}]});
       });});
       const entry=el('span');entry.append(input,el('small',chosen?' '+chosen.amount_origin:' Not selected'));
-      const cells=[check,el('span',row.date),description,el('span',units(row.original_gross_minor_units)),el('span',units(row.gross_minor_units)),el('span',units(row.applied_minor_units)),el('span',units(row.due_minor_units)),entry];
+      const cells=[check,el('span',exact.day(row.date)),description,el('span',exact.amount(units(row.original_gross_minor_units))),el('span',exact.amount(units(row.gross_minor_units))),el('span',exact.amount(units(row.applied_minor_units))),el('span',exact.amount(units(row.due_minor_units))),entry];
       const labels=['Select','Date','Job / document','Original','Current','Applied','Due','Payment'];
       cells.forEach((node,index)=>{const td=el('td');td.dataset.label=labels[index];td.append(node);tr.append(td);});body.append(tr);
     }
@@ -347,7 +350,7 @@
         el('p','Its original details, revisions, number and audit history remain readable afterwards. There is no restore action.'));
       return;
     }
-    area.append(el('p',`Received ${units(preview.out.current.received_minor_units)}; applied ${units(preview.out.current.applied_minor_units)}; available ${units(preview.out.current.available_minor_units)} ${config.currency}.`));
+    area.append(el('p',`Received ${cash(preview.out.current.received_minor_units)}; applied ${cash(preview.out.current.applied_minor_units)}; available ${cash(preview.out.current.available_minor_units)}.`));
     if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {
       const section=el('details');section.open=rows.length<=10;section.append(el('summary',kind.replaceAll('_',' ')+': '+rows.length+' complete changes'));
@@ -662,9 +665,9 @@
     if(!confirming) {$('form').hidden=true;$('title').textContent='Payment '+record.number+(record.deletion?' — deleted':'');}
     $('record').hidden=false;
     const section=$('record'),r=record.revision,c=record.current;section.replaceChildren(el('h2','Internal payment receipt · revision '+r.revision_number),
-      el('p',`${r.profile.payer.label} · ${r.date} · ${money(r.total)}`),el('p',`${r.profile.payment_method.label} · ${r.reference||'No reference'} · ${r.profile.deposit_account.full_name}`),el('p',r.memo||''),
+      el('p',`${r.profile.payer.label} · ${exact.longday(r.date)} · ${shown(r.total)}`),el('p',`${r.profile.payment_method.label} · ${r.reference||'No reference'} · ${r.profile.deposit_account.full_name}`),el('p',r.memo||''),
       el('p',r.id===record.current_revision_id?'Latest recorded receipt facts.':'Historical receipt facts; actions use current settlement below.'),
-      el('h3','Current settlement'),el('p',`${record.status}. Applied ${units(c.applied_minor_units)}; unapplied credit ${units(c.available_minor_units)} ${c.currency}.`));
+      el('h3','Current settlement'),el('p',`${record.status}. Applied ${cash(c.applied_minor_units,c.currency)}; unapplied credit ${cash(c.available_minor_units,c.currency)}.`));
     if(record.deletion) {
       const d=record.deletion,block=el('div');block.className='warn';block.setAttribute('aria-label','Deleted payment');
       block.append(el('h3','Deleted payment'),

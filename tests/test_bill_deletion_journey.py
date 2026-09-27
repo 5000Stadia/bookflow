@@ -104,7 +104,7 @@ def test_a_standard_user_deletes_a_bill_from_its_own_page(office, books):
     # The ordinary list no longer links the row; the retained-records view still does.
     assert f'href="{url}/{post["id"]}"' not in listed.text
     assert 'Include deleted records' in listed.text
-    assert f'{url}?include_deleted=true' in listed.text
+    assert 'name="include_deleted" value="true"' in listed.text
     retained_list = clerk.get(f'{url}?include_deleted=true')
     assert f'href="{url}/{post["id"]}?include_deleted=1"' in retained_list.text
     assert clerk.get(detail).status_code == 404

@@ -65,7 +65,8 @@ def test_a_phone_keeps_the_tile_menu_without_layout_controls(browser_site, tmp_p
         # A desktop preference saved on this device must not change the phone menu.
         browser.evaluate("localStorage.setItem('bookflow.menu', JSON.stringify({collapsed: true, top: true}))")
         browser.navigate(f"{browser_site.base_url}/c/{browser_site.company_id}/")
-        browser.evaluate("document.getElementById('workspace-navigation').open = true")
+        browser.evaluate("document.getElementById('menu-toggle').click()")
+        browser.wait_for("document.getElementById('workspace-navigation').hasAttribute('data-open')")
         assert browser.evaluate("getComputedStyle(document.querySelector('.nav-controls')).display") == "none"
         tile = _box(browser, "[data-section=customers]")
         assert tile["height"] >= 44 and tile["width"] >= 90

@@ -451,8 +451,8 @@ def test_the_host_and_the_workbench_serve_the_payables(hosted):  # noqa: F811
     assert units(run("report ap-aging", {"as_of": AS_OF, "limit": 200})["totals"]) == EXPECTED_TOTALS
     api = TestClient(hosted.handle.app)
     assert api.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
-    for name, table, total in (("ap-aging", "payables-aging", "3465.50"),
-                               ("unpaid-bills", "payables-unpaid", "3465.50")):
+    for name, table, total in (("ap-aging", "payables-aging", "3,465.50"),
+                               ("unpaid-bills", "payables-unpaid", "3,465.50")):
         page = api.get(f"/c/{cid}/report/{name}", headers=WB)
         assert page.status_code == 200 and 'name="f:as_of"' in page.text
         # The filter form restarts the report; the continuation lives on the result.
@@ -463,10 +463,10 @@ def test_the_host_and_the_workbench_serve_the_payables(hosted):  # noqa: F811
         assert f'id="{table}"' in result.text and 'id="payables-totals"' in result.text
         assert "Aging Freight LLC" in result.text, result.text[:2000]
         key = "total" if name == "ap-aging" else "balance"
-        assert f'<td data-total="{key}">{total}</td>' in result.text, result.text[:2000]
+        assert f'<td class="num" data-total="{key}">{total}</td>' in result.text, result.text[:2000]
     aging = api.post(f"/c/{cid}/report/ap-aging", data={"f:as_of": AS_OF, "f:limit": "200"}, headers=WB).text
     for heading in ("Current", "1-30", "31-60", "61-90", "Over 90"):
-        assert f'<th scope="col">{heading}</th>' in aging
+        assert f'<th scope="col" class="num">{heading}</th>' in aging
     # Each vendor opens their own open bills; each bill opens itself.
     assert f'/c/{cid}/report/unpaid-bills?f%3Aas_of={AS_OF}&amp;f%3Avendor=' in aging, aging[:2000]
     listed = api.post(f"/c/{cid}/report/unpaid-bills", data={"f:as_of": AS_OF, "f:limit": "200"}, headers=WB).text

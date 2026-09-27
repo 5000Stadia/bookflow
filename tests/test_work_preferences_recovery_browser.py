@@ -152,7 +152,7 @@ def test_stale_recovery_explicit_adoption_retains_draft(recovery_browser, width,
     _click(b,'preview'); b.wait_for('document.body.innerText.includes("E_FEATURE_DISABLED") && !document.querySelector(".htmx-request")')
     assert draft()['billing-recovery:'+line] == '2.00'
     button = 'document.querySelector("[data-billing-recovery-adopt]")'
-    assert b.evaluate(button+'.textContent').strip() == 'Use current recommendation: 2.02 USD net'
+    assert b.evaluate(button+'.textContent').strip() == 'Use current recommendation: $2.02 net'
     b.evaluate(button+'.focus()')
     _key(b, 'Enter')
     assert draft()['billing-recovery:'+line] == '2.02'

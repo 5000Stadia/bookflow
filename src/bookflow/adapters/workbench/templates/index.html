@@ -1,10 +1,12 @@
 {% extends "base.html" %}{% set heading = page_title or (company.display_name if company else "Administration") %}{% block title %}{{ heading }}{% endblock %}{% block body %}
 <h1>{{ heading }}</h1>
 {% if company and page_title %}<nav class="crumbs"><a href="/c/{{ company_id }}/">Overview</a></nav>{% endif %}
-<div class="group-grid">{% for group, nouns in groups %}<section class="nav-group"><h2>{{ group }}</h2>
+<div class="group-grid">{% for group, nouns in groups %}<section class="nav-group" id="{{ group | lower | replace(' ', '-') }}"><h2>{{ group }}</h2>
 {% for noun, verbs in nouns %}<div class="noun-row"><h3>{{ ui_words(noun) }}</h3><p class="actions">
 {% set base = noun_base(company_id or None, noun) %}
 {% if company and noun == 'estimate' %}<a href="{{ base }}">View list</a>{% endif %}
-{% for v in verbs %}{% if not v.verb %}<a href="{{ base }}">Open</a>{% elif v.verb == "list" %}<a href="{{ base }}">View list</a>{% elif v.verb == "show" and not record_selector(v, noun) %}<a href="{{ base }}/self">View details</a>{% elif not v.version_source %}<a href="{{ base }}/{{ v.verb }}">{{ ui_heading(noun, v.verb) }}</a>{% endif %}{% endfor %}</p></div>{% endfor %}
+{% if company and noun == 'register' %}<a class="primary-action" href="/c/{{ company_id }}/_registers">Open an account register</a>{% endif %}
+{# The Banking section leads to the real registers; the generated register commands are listed on that page. #}
+{% for v in verbs if not (menu_group == 'banking' and noun == 'register') %}{% if not v.verb %}<a href="{{ base }}">Open</a>{% elif v.verb == "list" %}<a href="{{ base }}">View list</a>{% elif v.verb == "show" and not record_selector(v, noun) %}<a href="{{ base }}/self">View details</a>{% elif not v.version_source %}<a href="{{ base }}/{{ v.verb }}">{{ ui_heading(noun, v.verb) }}</a>{% endif %}{% endfor %}</p></div>{% endfor %}
 </section>{% endfor %}</div>
 {% endblock %}

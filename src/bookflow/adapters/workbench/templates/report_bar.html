@@ -1,0 +1,8 @@
+{# The report's one-line summary of its filters, which opens the whole filter form, with Print
+   and CSV beside it. Closed by report_result.html after the form. #}
+{% set rv = report_view %}
+<link rel="stylesheet" href="{{ static_urls['report-page.css'] }}"><script src="{{ static_urls['report-page.js'] }}" defer></script>
+<div class="report-bar report-tools">
+{% if report_print_url or report_export_url %}<p class="report-actions">{% if report_print_url %}<a class="button" href="{{ report_print_url }}" id="report-print-all" title="Print full filtered report">Print</a>{% endif %}{% if report_export_url %}<a class="button" href="{{ report_export_url }}" download id="report-export" title="Download CSV · all matching rows">CSV</a>{% endif %}</p>{% endif %}
+<details class="form-section report-filters" id="report-filters" aria-label="Report filters"{% if not result or error %} open{% endif %}>
+<summary>{% if rv %}<span class="report-scope" data-report-scope>{% if rv.date_from %}{{ rv.date_from|day(rv.today_date) }} – {{ rv.date_to|day(rv.today_date) }}{% elif rv.date_to %}As of {{ rv.date_to|day(rv.today_date) }}{% endif %}{% if rv.basis %} · {{ rv.basis|capitalize }}{% endif %}{% if rv.extra_filters %} · {{ rv.extra_filters }} more filter{{ 's' if rv.extra_filters != 1 }}{% endif %}</span> <span class="report-edit">Edit</span>{% else %}Report filters{% endif %}</summary>

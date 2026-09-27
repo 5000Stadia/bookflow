@@ -75,8 +75,21 @@ def _choose(browser, selector, query):
     assert browser.evaluate("document.querySelector('#register-receipt').hidden")
 
 
+_PHONE = "matchMedia('(max-width: 700px)').matches"
+
+
+def _open_entry(browser):
+    """On a phone the entry form is a bottom sheet: open it from "Add entry" by keyboard."""
+    if not browser.evaluate(_PHONE) or browser.evaluate("document.querySelector('#register-workspace').classList.contains('sheet-open')"):
+        return
+    _tab_to(browser, '#register-sheet-open')
+    _key(browser, 'Enter')
+    browser.wait_for("document.activeElement.id === 'register-date'")
+
+
 def _simple_draft(env, amount="100.00"):
     b = env.browser
+    _open_entry(b)
     _tab_to(b, '[name="amount"]')
     _type(b, amount)
     _choose(b, '#register-category input[role="combobox"]', "CDP supplies")
@@ -87,13 +100,18 @@ def _record_keyboard(browser):
     _key(browser, 'Enter')
     browser.wait_for("!document.querySelector('#register-receipt').hidden || !!document.querySelector('#register-error').textContent")
     assert browser.evaluate("document.querySelector('#register-error').textContent") == ""
-    browser.wait_for("document.activeElement.id === 'register-date'")
+    # Desktop keeps the date selected for the next row; a phone closes the sheet back to "Add entry".
+    if browser.evaluate(_PHONE):
+        browser.wait_for("document.activeElement.id === 'register-sheet-open' && !document.querySelector('#register-workspace').classList.contains('sheet-open')")
+    else:
+        browser.wait_for("document.activeElement.id === 'register-date'")
 
 
 @pytest.mark.parametrize("width,height", [(1280, 900), (390, 844)])
 def test_keyboard_payment_deposit_receipt_and_contained_history(register_browser, width, height, tmp_path):
     env, b = register_browser, register_browser.browser
     b.viewport(width, height)
+    _open_entry(b)
     _key(b, "t")
     today = b.evaluate("JSON.parse(document.querySelector('#register-config').textContent).today")
     assert b.evaluate("document.querySelector('#register-date').value") == today
@@ -110,6 +128,7 @@ def test_keyboard_payment_deposit_receipt_and_contained_history(register_browser
     assert b.evaluate("document.querySelector('#register-receipt').textContent.includes('100.00')")
     assert b.evaluate("location.pathname.endsWith('/register')")
     # Deposit is a native select, driven with real keyboard events.
+    _open_entry(b)
     _tab_to(b, '[name="direction"]')
     _key(b, "ArrowDown")
     _tab_to(b, '[name="amount"]')
@@ -125,11 +144,14 @@ def test_keyboard_payment_deposit_receipt_and_contained_history(register_browser
     assert balance["amount"] == "-59.75"
     assert b.evaluate("document.documentElement.scrollWidth") <= width + 1
     if width == 390:
-        assert b.evaluate("document.querySelector('.table-wrap').scrollWidth > document.querySelector('.table-wrap').clientWidth")
+        # A phone lists each movement as one row that fits the width, not a sideways table.
+        assert b.evaluate("document.querySelector('.table-wrap').scrollWidth <= document.querySelector('.table-wrap').clientWidth")
+        assert b.evaluate("getComputedStyle(document.querySelector('#register-history tr[data-kind=posting]')).display") == 'grid'
     screenshot = b.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})
     (tmp_path / f'register-{width}.png').write_bytes(base64.b64decode(screenshot['data']))
     # Reduced visual viewport witness, not a physical phone-keyboard claim.
     b.viewport(width, 360)
+    _open_entry(b)
     _tab_to(b, '#register-record')
     b.wait_for("(() => {const r=document.activeElement.getBoundingClientRect(); return r.top >= 0 && r.bottom <= visualViewport.height && r.right <= innerWidth;})()")
     b.call('Emulation.setPageScaleFactor', {'pageScaleFactor': 1.5})

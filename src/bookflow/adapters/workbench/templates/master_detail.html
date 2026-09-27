@@ -1,4 +1,4 @@
-{% from 'browse_value.html' import value %}
+{% from 'browse_value.html' import value with context %}
 <link rel="stylesheet" href="{{ static_urls['browsing.css'] }}">
 <div class="master-sections">{% for group in master_detail.groups %}<section aria-label="{{ group.title }}"><h2>{{ group.title }}</h2>{% for label, item in group.fields %}<div class="field"><b>{{ label }}</b><div>{{ value(item, company_id, noun, record_id) }}</div></div>{% endfor %}</section>{% endfor %}</div>
 {% for collection in master_detail.collections %}<section class="collection-details" id="{{ collection.key }}"><h2>{{ collection.label }}</h2><p>{{ collection.page.matching_total }} entries; {{ collection.page.count }} on this page.</p>

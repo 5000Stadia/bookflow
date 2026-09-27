@@ -14,6 +14,7 @@ import json
 
 import pytest
 
+from bookflow.adapters.workbench.display import day
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _contained
@@ -141,7 +142,7 @@ def test_the_pay_bills_tile_pays_two_bills_and_each_open_balance_falls_by_what_w
     b.wait_for(f'!!{_row(first["id"])} && !!{_row(second["id"])}')
 
     # The window shows what the bill itself reports: due date, original amount, open balance.
-    assert _cell(b, first['id'], 'Due date') == '2026-03-04'
+    assert _cell(b, first['id'], 'Due date') == day('2026-03-04')
     assert _cell(b, first['id'], 'Original amount') == '184.60'
     assert _cell(b, first['id'], 'Open balance') == '184.60'
     assert _cell(b, second['id'], 'Open balance') == '100.00'
@@ -156,19 +157,19 @@ def test_the_pay_bills_tile_pays_two_bills_and_each_open_balance_falls_by_what_w
     # normalised the way it normalises everywhere else in the product.
     assert b.evaluate(f'{_row(first["id"])}.querySelector(".pay-bills-amount").value') == '84.6'
     assert _total(b) == {'minor': 18460, 'bills': 2,
-                         'text': 'Total to be paid: 184.60 USD across 2 bills.'}
+                         'text': 'Total to be paid: $184.60 across 2 bills.'}
     # One vendor, one payable: one payment, and the page says so before anything is written.
     before = _groups(b)
     assert before['count'] == 1, before
     assert 'makes 1 payment' in before['summary'], before
     assert before['items'][0]['vendor'] == vendor and before['items'][0]['ap'] == books['ap'], before
-    assert '184.60 USD' in before['items'][0]['text'], before
+    assert '$184.60' in before['items'][0]['text'], before
 
     _save(b)
 
     result = _text(b, '#pay-bills-result')
     assert 'Bill payment written' in result, result
-    assert '184.60 USD paid across 2 bills' in result, result
+    assert '$184.60 paid across 2 bills' in result, result
     payment_id = b.evaluate('document.querySelector("#pay-bills-result [data-payment]").dataset.payment')
 
     written = books['run']('bill.payment.show', {'payment': payment_id})
@@ -214,8 +215,8 @@ def test_two_vendors_say_two_payments_before_the_save_and_one_save_writes_both(r
     assert 'makes 2 payments, one for each payee' in shown['summary'], shown
     assert [item['vendor'] for item in shown['items']] == [one, two], shown
     assert all(item['ap'] == books['ap'] for item in shown['items']), shown
-    assert '150.00 USD · 2 bills' in shown['items'][0]['text'], shown['items'][0]
-    assert '70.00 USD · 1 bill' in shown['items'][1]['text'], shown['items'][1]
+    assert '$150.00 · 2 bills' in shown['items'][0]['text'], shown['items'][0]
+    assert '$70.00 · 1 bill' in shown['items'][1]['text'], shown['items'][1]
     assert _total(b)['minor'] == 22000
 
     # A check number names one check. Two payees is two checks, so the save is held back and
@@ -299,8 +300,8 @@ def test_a_saved_payment_is_found_in_the_list_and_read_back_with_the_bills_it_se
     row = b.evaluate(f'''[...document.querySelectorAll("table tbody tr")]
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(cells => cells[1] === {json.dumps(payment["number"])})''')
-    assert row == ['2026-06-30', payment['number'], 'Reading supply', 'Check', '5150',
-                   '50.00 USD', '50.00', '0.00', 'posted · applied'], row
+    assert row == [day('2026-06-30'), payment['number'], 'Reading supply', 'Check', '5150',
+                   '$50.00', '$50.00', '$0.00', 'posted · applied'], row
 
     # The payment number is the way in, the way a bill number is.
     b.evaluate(f'''document.querySelector('a[href$="/bill-payment/{payment["id"]}"]').click()''')
@@ -308,10 +309,10 @@ def test_a_saved_payment_is_found_in_the_list_and_read_back_with_the_bills_it_se
                '&& !!document.querySelector("[data-payment-settlement]")')
 
     detail = _text(b, '.sales-document')
-    for part in ('Reading supply', '5150', 'REF-J', '50.00', 'Check', '2026-06-30'):
+    for part in ('Reading supply', '5150', 'REF-J', '$50.00', 'Check', 'Jun 30, 2026'):
         assert part in detail, (part, detail[:1200])
     assert 'Checking' in b.evaluate('document.querySelector("[data-funding-account]").innerText')
-    assert 'Applied to bills 50.00' in _text(b, '[data-payment-settlement]')
+    assert 'Applied to bills $50.00' in _text(b, '[data-payment-settlement]')
     settled = b.evaluate('''[...document.querySelectorAll(".payment-lines tbody tr")].map(r => [
         r.dataset.bill,
         r.querySelector('[data-label="Bill"] a').innerText.trim(),
@@ -322,14 +323,14 @@ def test_a_saved_payment_is_found_in_the_list_and_read_back_with_the_bills_it_se
     assert b.evaluate(f'''!!document.querySelector('.payment-lines a[href$="/bill/{first["id"]}"]')''')
     history = b.evaluate('''[...document.querySelectorAll("[data-settlement-history] tbody tr")]
         .map(r => [...r.querySelectorAll("td")].map(c => c.textContent.trim()))''')
-    assert sorted(history) == sorted([['apply', first['number'], '25.00', '2026-06-30', 'active'],
-                                      ['apply', second['number'], '25.00', '2026-06-30', 'active']]), history
+    assert sorted(history) == sorted([['apply', first['number'], '25.00', day('2026-06-30'), 'active'],
+                                      ['apply', second['number'], '25.00', day('2026-06-30'), 'active']]), history
 
     # Following one of those links lands on the bill, and the bill says what is left on it.
     b.evaluate(f'''document.querySelector('.payment-lines a[href$="/bill/{second["id"]}"]').click()''')
     b.wait_for(f'location.pathname.endsWith("/bill/{second["id"]}") '
                '&& !!document.querySelector("[data-bill-settlement]")')
-    assert 'Partial · Bill 75.00 · Paid 25.00 · Open 50.00 USD' in _text(b, '[data-bill-settlement]')
+    assert 'Partial · Bill $75.00 · Paid $25.00 · Open $50.00' in _text(b, '[data-bill-settlement]')
 
     # And the bill offers the way to pay what is left on it, filtered to that vendor.
     other = _vendor(books, 'Reading fuel')

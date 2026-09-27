@@ -3,7 +3,7 @@
 Today uses the company timezone. Missing or unavailable timezone data falls back to
 UTC, not the browser or host's local timezone. Historical/retry inputs stay untouched.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -76,3 +76,37 @@ def seed(command, today, *, initial_get, query, originals, attempted):
             attempted[key] = query[field]
         elif not query:
             attempted[key] = today[:4] + '-01-01' if field == 'date_from' else today
+
+
+def _month_end(year, month):
+    """The last day of a month, months counted from 1 and allowed to run past twelve."""
+    year, month = year + (month - 1) // 12, (month - 1) % 12 + 1
+    following = date(year + month // 12, month % 12 + 1, 1)
+    return following - timedelta(days=1)
+
+
+def presets(command, today):
+    """The one-tap date ranges a report offers beside its filters, as (label, {field: iso}).
+
+    The ranges are the calendar ones dates.js offers in its preset menu, counted from the
+    company's today. A period report takes a from/to pair; a report read on one date takes
+    that date. A report this map does not date offers none.
+    """
+    fields = REPORTS.get(command)
+    if not fields:
+        return []
+    day = date.fromisoformat(today)
+    quarter = (day.month - 1) // 3 * 3 + 1
+    if fields == ('date_from', 'date_to'):
+        ranges = (('This month', date(day.year, day.month, 1), _month_end(day.year, day.month)),
+                  ('This quarter', date(day.year, quarter, 1), _month_end(day.year, quarter + 2)),
+                  ('Year to date', date(day.year, 1, 1), day),
+                  ('Last year', date(day.year - 1, 1, 1), date(day.year - 1, 12, 31)))
+        return [(label, {'date_from': start.isoformat(), 'date_to': end.isoformat()})
+                for label, start, end in ranges]
+    field, = fields
+    ends = (('Today', day),
+            ('End of last month', date(day.year, day.month, 1) - timedelta(days=1)),
+            ('End of last quarter', date(day.year, quarter, 1) - timedelta(days=1)),
+            ('End of last year', date(day.year - 1, 12, 31)))
+    return [(label, {field: end.isoformat()}) for label, end in ends]

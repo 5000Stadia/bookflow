@@ -293,7 +293,7 @@ def test_the_workbench_page_reads_a_dimensional_row_it_actually_has(served, verb
     assert 'id="statement-accounts"' not in page
     assert _table(page, "dimensional-lines") == (headings, rows)
     assert _pairs(page, "dimensional-column-summary") == summary
-    assert ("net income", "500.00 USD") in [(term.lower(), value)
+    assert ("net income", "500.00") in [(term.lower(), value)
                                             for term, value in _pairs(page, "dimensional-totals")]
     # Each row's Total opens that account's own current general ledger.
     assert page.count(f'/c/{hosted.company_id}/report/general-ledger?') >= len(rows)
@@ -317,8 +317,7 @@ def test_the_dimensional_page_folds_wide_columns_and_carries_its_own_next_page(s
         [["Dimension income Income", "300.00", "300.00", "0.00", "600.00"],
          ["Dimension swing Income", "25.00", "-25.00", "0.00", "0.00"],
          ["Dimension expense Expense", "0.00", "50.00", "50.00", "100.00"]])
-    count = narrow[narrow.index('id="report-page-count"'):]
-    assert "added together in the Other column" in count[:count.index("</p>")]
+    assert re.search(r'<p class="muted statement-note">2 further [^<]* are added together in the Other column', narrow)
 
     first = _run_report(api, hosted.company_id, "profit-and-loss-by-job", **{"f:limit": "1"})
     assert _table(first, "dimensional-lines")[1] == [
@@ -332,5 +331,5 @@ def test_the_dimensional_page_folds_wide_columns_and_carries_its_own_next_page(s
     assert _table(page.text, "dimensional-lines")[1] == [
         ["Dimension swing Income", "25.00", "0.00", "-25.00", "0.00", "0.00"]]
     # Whole-statement totals on every page, never this page's own arithmetic.
-    assert ("net income", "500.00 USD") in [(term.lower(), value)
+    assert ("net income", "500.00") in [(term.lower(), value)
                                             for term, value in _pairs(page.text, "dimensional-totals")]

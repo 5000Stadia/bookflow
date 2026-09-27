@@ -8,6 +8,8 @@ who wants it, and the structured report data below the table carries it verbatim
 """
 from urllib.parse import urlencode
 
+from bookflow.adapters.workbench.display import money
+
 COMMANDS = {"report sales-by-customer", "report sales-by-item", "report sales-by-rep",
             "report expenses-by-vendor"}
 
@@ -54,9 +56,8 @@ def filter_summary(scope):
     named = ", ".join(
         f"{FILTER_LABELS[choice['filter']]} {choice['label']}"
         + ("" if choice["active"] else " (inactive)") for choice in scope["selected"])
-    return (f"Filtered to {named}. The whole period came to {scope['period']['amount']}"
-            f" {scope['period']['currency']}, of which {scope['excluded']['amount']}"
-            " is not on this report.")
+    return (f"Filtered to {named}. The whole period came to {money(scope['period'])},"
+            f" of which {money(scope['excluded'])} is not on this report.")
 
 
 def view(result, inputs, company_id, verb):

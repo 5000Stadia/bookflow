@@ -120,7 +120,7 @@ def test_the_check_window_posts_the_check_the_command_posts(register_browser):
     # The footer shows the number the server settled on for this bank account's chequebook,
     # which is what the register and `report missing-checks` will show for the same cheque.
     assert _totals(b) == {'Check number': f'{books["tag"]}-1042',
-                          'Expenses': f'{CHECK} USD', 'Amount of this check': f'{CHECK} USD'}
+                          'Expenses': f'${CHECK}', 'Amount of this check': f'${CHECK}'}
     assert 'add up' in b.evaluate('document.querySelector("[data-reconciliation]").textContent')
 
     written = books['run']('journal.show', {'journal': _save(b)})
@@ -149,8 +149,8 @@ def test_lines_that_do_not_add_up_refuse_in_the_window_and_show_the_difference(r
     _act(b, 'preview')
     error = b.evaluate('document.querySelector(".error").textContent')
     assert 'E_UNBALANCED_ENTRY' in error and '4.60' in error and '280.00' in error
-    assert _totals(b) == {'Expenses': '280.00 USD', 'Amount of this check': f'{CHECK} USD',
-                          'Short by': '4.60 USD'}
+    assert _totals(b) == {'Expenses': '$280.00', 'Amount of this check': f'${CHECK}',
+                          'Short by': '$4.60'}
     # The entered values survive the refusal, so the difference can be fixed in place.
     assert _value(b, 'f:amount') == CHECK
     assert _value(b, _line(b, 1, 'amount')) == '95.40'
@@ -177,7 +177,7 @@ def test_a_card_charge_window_funds_from_the_card(register_browser):
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b) == {'Expenses': '75.25 USD', 'Amount of this charge': '75.25 USD'}
+    assert _totals(b) == {'Expenses': '$75.25', 'Amount of this charge': '$75.25'}
     written = books['run']('journal.show', {'journal': _save(b)})
     sides = {line['account_id']: line['side'] for line in written['revision']['lines']}
     assert sides[books['card']] == 'credit' and sides[books['second']] == 'debit'
@@ -191,6 +191,8 @@ def test_the_expenses_grid_has_nothing_to_scroll_sideways_at_phone_width(registe
     b.viewport(390, 844)
     tag = 'Phone ' + noun.replace('-', ' ')
     books = _books(b, env.site, tag)
+    # The block shape under test pairs the amount with the class: a company using classes.
+    _command(b, env.site, 'company.update', {'use_classes': True})
 
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/{noun}/post')
     b.wait_for('!!document.querySelector("[data-generated-form]")')

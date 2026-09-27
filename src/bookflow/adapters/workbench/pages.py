@@ -31,6 +31,7 @@ from bookflow.adapters.workbench import transaction_detail as Detail
 from bookflow.adapters.workbench import missing_checks as MissingChecks
 from bookflow.adapters.workbench import report_export as Export
 from bookflow.adapters.workbench import report_print as ReportPrint
+from bookflow.adapters.workbench import report_page as ReportPage
 from bookflow.adapters.workbench import purchases as Purchases
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
@@ -41,6 +42,7 @@ from bookflow.core.money import Money
 from bookflow.adapters.workbench import bills as Bills
 from bookflow.adapters.workbench import credits as Credits
 from bookflow.adapters.workbench import document_form as Document
+from bookflow.adapters.workbench import display as Display
 from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.adapters.workbench import list_paging as Paging
 from bookflow.adapters.workbench import naming as Naming
@@ -64,6 +66,8 @@ env.globals["noun_base"] = Routing.base
 env.globals["ui_heading"] = Naming.heading
 env.globals["ui_words"] = Naming.words
 env.filters["when"] = Naming.when
+# Money and dates as a person reads them; display only, never input or export.
+env.filters.update(Display.FILTERS)
 # Whether a noun's show command is about one record or about the whole thing, so the
 # navigation grid sends each to the page that can actually open. Registered after the
 # function it calls; see `_record_selector`.
@@ -562,7 +566,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -759,9 +763,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company=show,
             company_id=show["company_id"],
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
+            overview=overview_summary(request, show),
         )
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
+
+    def overview_summary(request: Request, show: dict[str, Any]) -> dict[str, Any]:
+        """The Overview's figures and lists, each from a read command this reader may run."""
+        permits = company_permits(request, show)
+
+        def ask(name: str, raw: dict[str, Any]) -> dict[str, Any] | None:
+            cmd = registry.get(name)
+            if cmd is None or not permits(cmd):
+                return None
+            try:
+                return run(request, name, raw, show["company_id"])
+            except BookflowError:
+                return None
+
+        return Home.overview(show["company_id"], DateDefaults.company_today(show), show["info"]["home_currency"], ask)
 
     @app.get("/c/{company_id}/_all", response_class=HTMLResponse)
     @permission_read_package(host)
@@ -783,7 +803,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @app.get("/c/{company_id}/_group/{slug}", response_class=HTMLResponse)
     @permission_read_package(host)
     def company_group(company_id: str, slug: str, request: Request):
-        """One menu group: the same grouped-noun rendering, filtered to that group."""
+        """One menu section: its records, a "+ New" menu and its tasks; Reports and Audit keep the
+        grouped-noun rendering, filtered to that group."""
         entry = Home.MENU_BY_SLUG.get(slug)
         if entry is None:
             return page_error(request, BookflowError("E_USAGE", message=f"no such section `{slug}`"), company_id=company_id)
@@ -791,6 +812,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             show = run(request, "company show", {}, company_id)
         except BookflowError as e:
             return page_error(request, e)
+        section = Home.SECTION_BY_SLUG.get(slug)
+        if section is not None:
+            return section_page(request, show, entry, section)
         selected = []
         for group, noun_rows in _grouped_nouns(company_noun_rows(request, show), company=True):
             kept = noun_rows if group in entry.groups else [row for row in noun_rows if row[0] in entry.nouns]
@@ -803,6 +827,86 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company_id=show["company_id"],
             page_title=entry.label,
             groups=selected,
+            menu_group=slug,
+        )
+
+    def section_page(request: Request, show: dict[str, Any], entry, section):
+        """A section opens on what a person works with: the first records of its list (from the
+        list's own query, laid out as the list lays them out), then "+ New" and its tasks."""
+        from bookflow.adapters.workbench import list_layout as Layout
+        company_id = show["company_id"]
+        permits = company_permits(request, show)
+        records = registers = None
+        noun = section.records
+        query = registry.get(f"{noun} query") if noun else None
+        if query is not None and permits(query):
+            try:
+                result = run(request, query.name, {"columns": list(Layout.LAYOUTS[noun]["columns"]), "limit": 8}, company_id)
+            except BookflowError:
+                result = None
+            if result is not None:
+                definition = _noun_meta(noun).get("definition")
+                columns = result["columns"]
+                records = dict(noun=noun, result=result, meta=_noun_meta(noun), label=section.records_label,
+                               layout=Layout.plan(noun, [c["key"] for c in columns], [row["values"] for row in result["items"]],
+                                                  name=definition.display_field if definition else None,
+                                                  kinds={c["key"]: c["kind"] for c in columns},
+                                                  defaults=Layout.LAYOUTS[noun]["columns"],
+                                                  words=[c["key"] for c in columns if c["kind"] == "choice" and not c.get("definition")]),
+                               labels={c["key"]: c["label"] for c in columns})
+        if section.slug == "banking" and permits(registry.get("account list")):
+            # The register chooser's first groups (bank accounts and cards) are what Banking opens on.
+            try:
+                accounts = run(request, "account list", {}, company_id)["items"]
+            except BookflowError:
+                accounts = []
+            registers = Home.register_groups(accounts)[:2]
+        return render(
+            "section.html",
+            request,
+            company=show,
+            company_id=company_id,
+            page_title=entry.label,
+            menu_group=section.slug,
+            section=Home.resolve_section(company_id, section, permits=permits),
+            records=records,
+            registers=registers,
+        )
+
+    @app.get("/c/{company_id}/_finder")
+    @permission_read_package(host)
+    def company_finder(company_id: str, request: Request):
+        """The header finder's index: every task and command page this reader may open, by name."""
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            return JSONResponse({"error": e.to_dict()}, status_code=STATUS.get(e.code, 400))
+        index = Home.finder_index(
+            show["company_id"], _grouped_nouns(company_noun_rows(request, show), company=True),
+            permits=company_permits(request, show),
+            heading=lambda noun, verb: Naming.heading(noun, verb, _noun_meta(noun)),
+            plural=lambda noun: Naming.list_heading(noun, _noun_meta(noun)),
+            selector=_record_selector)
+        return JSONResponse({"items": index}, headers={"Cache-Control": "private, max-age=60"})
+
+    @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
+    @permission_read_package(host)
+    def company_registers(company_id: str, request: Request):
+        """Choose an account to open its register; the generated register commands stay listed below."""
+        try:
+            show = run(request, "company show", {}, company_id)
+            accounts = run(request, "account list", {}, company_id)["items"]
+        except BookflowError as e:
+            return page_error(request, e)
+        permits = company_permits(request, show)
+        tools = [cmd for cmd in _verbs("register", "company") if permits(cmd)]
+        return render(
+            "registers.html",
+            request,
+            company=show,
+            company_id=show["company_id"],
+            register_groups=Home.register_groups(accounts),
+            register_tools=tools,
         )
 
     @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)
@@ -1115,17 +1219,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
                    ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
-                   ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
+                   ["number", "date", "customer_name", "total", "open_balance", "status"] if noun == 'invoice' else
+                   ["number", "date", "customer_name", "due_date", "total", "status"] if noun == 'sales-receipt' else
                    # A statement charge has no terms and no due date, so the column an invoice
                    # list spends on one is spent here on what the charge was for.
                    ["number", "date", "customer_name", "memo", "total", "status"] if noun == 'statement-charge' else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
                    ["number", "date", "total", "status"] if noun == 'item-receipt' else
-                   ["number", "date", "vendor_name", "due_date", "total", "status"] if noun == 'bill' else
+                   ["number", "date", "vendor_name", "due_date", "total", "open_balance", "status"] if noun == 'bill' else
                    list(definition.summary_columns) if definition is not None else
                    # No rows means no keys to derive columns from; an empty list is a page,
                    # not a failure, so the table renders its heading and says so.
                    (list_columns(items) or []))
+        opened_columns = list(columns)
         column_text = request.query_params.get("columns", "")
         if column_text and definition is not None:
             requested_columns = [field.strip() for field in column_text.split(",") if field.strip()]
@@ -1145,6 +1251,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         # the deletion families, never hand-listed here: a family whose retained storage
         # ships gains them in the same change.
         from bookflow.adapters.workbench.permissions import NOUNS as DELETABLE_NOUNS
+        from bookflow.adapters.workbench import list_layout as Layout
+        items = Layout.open_balances(noun, items)
+        fields = cmd.input_model.model_fields
+        # The one text control that sits above the list and applies as a person types.
+        search = next((name for name in ("query", "title", "number") if name in fields
+                       and (name != "title" or noun in Work.DOCUMENTS)), None)
+        opened = {"direction": "desc" if noun in Paging.NEWEST_FIRST else "asc",
+                  "limit": "50", "active": "true", "columns": ",".join(opened_columns)}
         return render(
             "list.html",
             request,
@@ -1171,6 +1285,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
             selected_columns=",".join(columns),
+            search=search,
+            layout=Layout.plan(noun, columns, items, defaults=opened_columns),
+            list_state=Layout.state(request.query_params, opened, quiet=(search, "sort", "direction", "columns")),
             heading=Naming.list_heading(noun, meta),
             paging=Paging.controls(request.url.path, request.query_params, out.get("next_cursor")),
             extra={k: v for k, v in out.items() if k not in ("items", "next_cursor", "projection")},
@@ -1778,6 +1895,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             DateDefaults.seed(cmd.name, DateDefaults.company_today(authorized_company),
                 initial_get=initial_date_get, query=request.query_params,
                 originals=originals, attempted=attempted)
+        if (request.method == 'GET' and Export.is_report(cmd) and company_id and record_id is None
+                and result is None and error is None and report_full is None):
+            # A report opens with its numbers: run it on the values the form opened with,
+            # which are the company-calendar defaults or the filters the link carried.
+            result, report_input, error = ReportPage.open_report(
+                cmd, attempted, lambda raw: run(request, cmd.name, raw, company_id))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
         if noun == 'invoice' and verb == 'update':
             described = [leaf for leaf in described if leaf['path'] not in ('operation_key', 'settlement_guard', 'settlement_versions')]
@@ -1815,6 +1938,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # filter change would submit last page's continuation with it and be
             # refused as mismatched instead of running the report asked for.
             described = [leaf for leaf in described if leaf["path"] != "cursor"]
+        if noun == "report":
+            # A range is asked from-then-to, whatever order the command declares it in.
+            described.sort(key=lambda leaf: leaf["path"] != "date_from")
         document_form = Document.is_document(noun, verb)
         if document_form:
             described = Document.describe(described, noun)
@@ -2036,6 +2162,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       # and a link that saves what is on the screen as a file -- is decided by the
                       # registry calling this command a report rather than by naming any of them.
                       report_page=report_page, report_full=report_full,
+                      report_view=ReportPage.context(cmd, company_id, authorized_company, result, report_input)
+                          if report_page and not report_full else None,
+                      report_ran=request.method == 'POST',
                       report_print_url=(ReportPrint.print_url(company_id, verb, report_input)
                           if report_page and result and report_input is not None and company_id and not report_full else None),
                       report_export_url=(Export.export_url(company_id, verb, report_input)
@@ -2049,7 +2178,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       document=Document.context(noun, verb, described, originals, shown=shown,
                           result=result if result and 'revision' in result else None, preview=preview,
                           record_id=record_id, error=error,
-                          base=_document_base(company_id, noun)) if document_form else None,
+                          base=_document_base(company_id, noun),
+                          hidden=Document.hidden_columns(authorized_company)) if document_form else None,
                       form_groups=None if document_form else Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(

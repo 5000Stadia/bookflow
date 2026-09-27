@@ -44,9 +44,9 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
     b.navigate(base + '/')
     b.wait_for('!!document.querySelector(".flow-board")')
     assert not b.evaluate('!!document.querySelector(\'a[href$="/estimate/create"]\')')
-    assert b.evaluate('''(() => {const tile = [...document.querySelectorAll('.flow-tile')]
-        .find(e => e.querySelector('.flow-tile-title').textContent === 'Estimate');
-        return tile.tagName === 'DIV' && tile.getAttribute('aria-disabled') === 'true';})()''')
+    # A step the company has switched off is left off the board entirely.
+    assert not b.evaluate('''[...document.querySelectorAll('.flow-tile')]
+        .some(e => e.querySelector('.flow-tile-title').textContent === 'Write an estimate')''')
     _contained(b, width)
     b.navigate(base + '/_all')
     b.wait_for('!!document.querySelector(".group-grid")')

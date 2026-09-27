@@ -9,6 +9,23 @@
   const wire = picker => picker.querySelector('[data-ref-value]');
   const search = picker => picker.querySelector('[data-ref-search]');
   const status = (picker, text) => { picker.querySelector('[data-ref-status]').textContent = text; };
+  // Clear is offered only on a picker holding something: a choice or a typed name.
+  const filled = picker => picker.toggleAttribute('data-has-value', !!(wire(picker).value || search(picker).value.trim()));
+  // "Add new …" is the last choice in the list, as in the anchor's drop-downs. The link
+  // under the field stays in the page (hidden) as the target that choice opens, and as
+  // the return address the new record's window answers to.
+  const adders = picker => [...picker.querySelectorAll('[data-ref-add-target]')].filter(link => !link.hidden);
+  function addOptions(picker, options) {
+    adders(picker).forEach(link => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.role = 'option'; button.tabIndex = -1;
+      button.id = 'reference-choice-' + (++sequence);
+      button.className = 'reference-add-option';
+      button.textContent = link.textContent;
+      button.addEventListener('click', () => { close(picker); link.click(); });
+      options.append(button);
+    });
+  }
   function close(picker) {
     picker.querySelector('[data-ref-options]').hidden = true;
     search(picker).setAttribute('aria-expanded', 'false');
@@ -26,6 +43,7 @@
     if (checkbox) checkbox.checked = true;
     status(picker, message);
     close(picker);
+    filled(picker);
     syncVersions(picker, null);
     if (previous) invalidateUnit(picker);
   }
@@ -54,15 +72,24 @@
     syncVersions(picker, option);
     status(picker, 'Selected: ' + option.label);
     close(picker);
+    filled(picker);
     if (changed) invalidateUnit(picker);
     search(picker).focus();
   }
-  async function suggestions(picker) {
+  function onlyAdders(picker) {
+    const options = picker.querySelector('[data-ref-options]');
+    options.replaceChildren();
+    addOptions(picker, options);
+    options.hidden = !options.children.length;
+    search(picker).setAttribute('aria-expanded', String(!options.hidden));
+  }
+  async function suggestions(picker, asked = false) {
     const input = search(picker);
     requests.get(picker)?.abort();
     const controller = new AbortController();
     requests.set(picker, controller);
-    if (!input.value.trim()) { close(picker); return; }
+    // An empty field asked to open (↓) offers what can be added; typing searches.
+    if (!input.value.trim()) { if (asked) onlyAdders(picker); else close(picker); return; }
     const url = new URL(picker.dataset.suggestions, location.origin);
     url.searchParams.set('q', input.value.trim());
     const form = picker.closest('form');
@@ -98,14 +125,16 @@
         button.addEventListener('click', () => choose(picker, option));
         options.append(button);
       });
-      options.hidden = !data.options.length;
-      input.setAttribute('aria-expanded', String(!!data.options.length));
+      addOptions(picker, options);
+      options.hidden = !options.children.length;
+      input.setAttribute('aria-expanded', String(!options.hidden));
       status(picker, data.options.length ? 'Choose a match. Use ↓ and Enter, or click a name.' : 'No matching records. Refine the name or add a new record.');
     } catch (error) {
       if (error.name !== 'AbortError') { close(picker); status(picker, error.message); }
     }
   }
   function refresh(form) {
+    form.querySelectorAll('[data-reference]:not([data-add-in-list])').forEach(picker => { picker.toggleAttribute('data-add-in-list', true); filled(picker); });
     form.querySelectorAll('[data-definition-default]').forEach(wrapper => {
       const previous = wrapper.firstElementChild;
       const kind = named(form, 'f:kind')?.value;
@@ -154,6 +183,7 @@
     // A full-body preview/error response replaces form nodes. Rebind the
     // transport before the next user action, as well as presentation state.
     if (window.htmx && document.body) window.htmx.process(document.body);
+    document.querySelectorAll('[data-reference]').forEach(picker => { picker.toggleAttribute('data-add-in-list', true); filled(picker); });
     document.querySelectorAll('[data-generated-form]').forEach(refresh);
   }
   document.addEventListener('DOMContentLoaded', initialize);
@@ -164,12 +194,15 @@
     requests.get(picker)?.abort();
     wire(picker).value = '';
     picker.querySelector('[data-ref-state]').value = 'pending';
+    filled(picker);
     event.target.setCustomValidity('Choose a matching record or use Clear.');
     syncVersions(picker, null);
     invalidateUnit(picker);
     close(picker);
+    // What was listed answered the old text; nothing stale stays behind to be chosen.
+    picker.querySelector('[data-ref-options]').replaceChildren();
     clearTimeout(picker.searchTimer);
-    picker.searchTimer = setTimeout(() => suggestions(picker), 200);
+    if (event.target.value.trim()) picker.searchTimer = setTimeout(() => suggestions(picker), 200);
   });
   document.addEventListener('keydown', event => {
     const picker = event.target.closest('[data-reference]');
@@ -178,7 +211,7 @@
     if (event.key === 'Escape') { close(picker); search(picker).focus(); return; }
     if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
     if (event.key === 'Enter' && event.target.matches('[role="option"]')) { event.preventDefault(); event.target.click(); return; }
-    if (options.hidden) { if (event.key !== 'Enter') { event.preventDefault(); suggestions(picker); } return; }
+    if (options.hidden) { if (event.key !== 'Enter') { event.preventDefault(); suggestions(picker, true); } return; }
     const buttons = [...options.querySelectorAll('button')];
     if (event.key === 'Enter') { event.preventDefault(); return; }
     event.preventDefault();

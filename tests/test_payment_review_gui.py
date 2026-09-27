@@ -64,7 +64,8 @@ def test_large_exact_cash_display(register_browser,tmp_path,width):
     facts=dict(preview=preview,receipt=receipt,cash=cash)
     (tmp_path/'exact-cash.json').write_text(json.dumps(facts,indent=2));shot(b,tmp_path,'exact-cash',width)
     assert cash==9007199254740993
-    assert '90071992547409.92' not in preview+receipt and ('unapplied credit '+amount) in receipt,facts
+    # Read as money, every digit kept: grouped, never rounded through a float.
+    assert '90,071,992,547,409.92' not in preview+receipt and 'unapplied credit $90,071,992,547,409.93' in receipt,facts
 
 
 def invoice_setup(run,payer):
@@ -117,7 +118,7 @@ def test_exact_large_suggestion_round_trips_shared_selection(register_browser,tm
     invoice=run('invoice post',dict(customer=payer,date='2026-06-01',lines=[dict(item=item,quantity='1')]))
     field(b,'amount','90071992547409.93');click(b,'load');click(b,'auto')
     # Suggestions use typed Money minor units through the real JSON serializer.
-    assert '90071992547409.93' in b.evaluate("document.querySelector('#payment-totals').innerText")
+    assert '$90,071,992,547,409.93' in b.evaluate("document.querySelector('#payment-totals').innerText")
     click(b,'preview');click(b,'save')
     path=Path(run('company show',{})['path'])/'company.db'
     with sqlite3.connect(path) as db:

@@ -1,3 +1,110 @@
+/* A list row opens its record from anywhere on the row; the link in its first cell stays the
+   keyboard and screen-reader route, and a row's other links and controls keep their own clicks. */
+document.addEventListener('click', event => {
+  const row = event.target.closest('tr.is-linked');
+  if (!row || event.defaultPrevented || event.button || event.target.closest('a, button, input, select, textarea, label, summary')) return;
+  if (String(getSelection?.() || '')) return;
+  const link = row.querySelector('a.row-link');
+  if (!link) return;
+  if (event.ctrlKey || event.metaKey) window.open(link.href, '_blank', 'noopener'); else link.click();
+});
+/* Lists apply their controls as they change. Without JavaScript the same form is a plain GET
+   submit and the URL carries the list state either way. Search applies as a person types;
+   a discrete control applies on change; on a phone the Filters sheet applies once, on
+   "Show results", so the list does not reload behind it on every toggle. */
+(() => {
+  const form = document.querySelector('form[data-live-list]');
+  if (!form || form.dataset.live) return;
+  form.dataset.live = '1';
+  form.classList.add('is-live');
+  const sheet = form.querySelector('.list-sheet');
+  const phone = matchMedia('(max-width: 700px)');
+  let timer = 0, ticket = 0, opener = null;
+  const compact = () => form.classList.contains('list-form-compact');
+  const deferred = el => phone.matches && !compact() && sheet?.contains(el);
+  function target() {
+    // A control left as the list opens stays out of the address, as it would be on a fresh visit.
+    const defaults = new Map([...form.querySelectorAll('[data-default]')].map(el => [el.name, el.dataset.default]));
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(form))
+      if (typeof value === 'string' && value.trim() !== '' && defaults.get(key) !== value) params.append(key, value);
+    const query = params.toString();
+    return location.pathname + (query ? '?' + query : '');
+  }
+  let inflight = 0, waiting = false;
+  async function apply() {
+    clearTimeout(timer); waiting = false;
+    const url = target(), mine = ++ticket;
+    if (url === location.pathname + location.search) return;
+    inflight++;
+    form.setAttribute('aria-busy', 'true');
+    try {
+      let response, doc;
+      try {
+        response = await fetch(url, {credentials: 'same-origin', headers: {Accept: 'text/html'}});
+        doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+      } catch (err) { location.href = url; return; }
+      if (mine !== ticket) return;
+      const fresh = doc.getElementById('list-results');
+      // An error page (a stale or refused list) is shown as the page it is.
+      if (!response.ok || !fresh) { location.href = url; return; }
+      document.getElementById('list-results').replaceWith(document.adoptNode(fresh));
+      document.querySelectorAll('[data-list-sync]').forEach(el => {
+        const next = doc.getElementById(el.id);
+        if (next) el.replaceWith(document.adoptNode(next));
+      });
+      history.replaceState(history.state, '', url);
+      document.dispatchEvent(new CustomEvent('bookflow:list-updated', {detail: {doc}}));
+    } finally {
+      if (--inflight === 0) form.removeAttribute('aria-busy');
+    }
+  }
+  const schedule = delay => { clearTimeout(timer); waiting = true; timer = setTimeout(apply, delay); };
+  // Programmatic changes (a chosen filter, a moved column) apply the same way a control does.
+  window.bookflowList = {changed: el => { if (!deferred(el || sheet)) schedule(50); }, apply: () => schedule(0),
+    idle: () => !waiting && inflight === 0};
+  const managed = el => el.hasAttribute('data-no-apply') || !!el.closest('.list-customize');
+  form.addEventListener('input', event => {
+    const el = event.target;
+    if (el.dataset.live === 'type' && !deferred(el)) schedule(300);
+  });
+  form.addEventListener('change', event => {
+    const el = event.target;
+    if (el.dataset.live === 'type' || managed(el) || deferred(el)) return;
+    schedule(50);
+  });
+  // Enter in a field, or "Show results": listeners that sync hidden inputs run first.
+  form.addEventListener('submit', event => { event.preventDefault(); closeSheet(); schedule(0); });
+  function openSheet(link) {
+    opener = link;
+    form.classList.add('sheet-open');
+    document.documentElement.classList.add('list-sheet-lock');
+    const focus = (link.dataset.sheetOpen && sheet.querySelector(link.dataset.sheetOpen)) || sheet.querySelector('input, select, summary, button');
+    focus?.focus();
+  }
+  function closeSheet() {
+    if (!form.classList.contains('sheet-open')) return;
+    form.classList.remove('sheet-open');
+    document.documentElement.classList.remove('list-sheet-lock');
+    opener?.focus();
+  }
+  form.addEventListener('click', event => {
+    const open = event.target.closest('[data-sheet-open]'), close = event.target.closest('[data-sheet-close]');
+    if (open) { event.preventDefault(); openSheet(open); }
+    else if (close) { event.preventDefault(); closeSheet(); }
+  });
+  form.addEventListener('keydown', event => { if (event.key === 'Escape' && form.classList.contains('sheet-open')) closeSheet(); });
+  // A sortable heading keeps every other control: it sets the sort and applies the form.
+  document.addEventListener('click', event => {
+    const link = event.target.closest('a[data-sort-link]');
+    if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.button) return;
+    const chosen = new URL(link.href).searchParams, sort = form.elements.sort, direction = form.elements.direction;
+    if (!sort || !direction) return;
+    event.preventDefault();
+    sort.value = chosen.get('sort') || ''; direction.value = chosen.get('direction') || 'asc';
+    schedule(0);
+  });
+})();
 /* Metadata-driven read controls. Decimal values remain strings throughout. */
 (() => {
   const host = document.getElementById('browse-data');
@@ -24,6 +131,7 @@
   }
   function safe(action) {return async () => {message(''); try {await action();} catch (err) {message(err.message);}};}
   function option(select, d) {select.append(node('option', `${d.label}${d.active === false ? ' (inactive)' : ''}`, {value:d.key}));}
+  const changed = () => window.bookflowList?.changed();
   function sync() {
     $('browse-columns').value = columns.map(d => d.key).join(',');
     $('browse-custom').value = JSON.stringify(criteria.filter(c => c.custom).map(c => c.custom));
@@ -33,9 +141,9 @@
     $('chosen-columns').replaceChildren();
     columns.forEach((d,i) => {
       const row = node('li',''); row.append(node('span',d.label));
-      const up = button('Move up', () => {if(i){[columns[i-1],columns[i]]=[columns[i],columns[i-1]]; drawColumns(); $('chosen-columns').children[i-1].querySelector('button:not([hidden])').focus();}}); up.hidden = i === 0; up.setAttribute('aria-label',`Move ${d.label} up`);
-      const down = button('Move down', () => {if(i < columns.length-1){[columns[i+1],columns[i]]=[columns[i],columns[i+1]];drawColumns();$('chosen-columns').children[i+1].querySelector('button:not([hidden])').focus();}}); down.hidden = i === columns.length-1; down.setAttribute('aria-label',`Move ${d.label} down`);
-      const remove = button('Remove', () => {if(columns.length > 1){columns.splice(i,1);drawColumns();} else message('Keep at least one column.');}); remove.setAttribute('aria-label',`Remove ${d.label} column`);
+      const up = button('Move up', () => {if(i){[columns[i-1],columns[i]]=[columns[i],columns[i-1]]; drawColumns();changed(); $('chosen-columns').children[i-1].querySelector('button:not([hidden])').focus();}}); up.hidden = i === 0; up.setAttribute('aria-label',`Move ${d.label} up`);
+      const down = button('Move down', () => {if(i < columns.length-1){[columns[i+1],columns[i]]=[columns[i],columns[i+1]];drawColumns();changed();$('chosen-columns').children[i+1].querySelector('button:not([hidden])').focus();}}); down.hidden = i === columns.length-1; down.setAttribute('aria-label',`Move ${d.label} down`);
+      const remove = button('Remove', () => {if(columns.length > 1){columns.splice(i,1);drawColumns();changed();} else message('Keep at least one column.');}); remove.setAttribute('aria-label',`Remove ${d.label} column`);
       row.append(up,down,remove); $('chosen-columns').append(row);
     }); sync();
   }
@@ -45,7 +153,7 @@
       const row = node('div','',{className:'criterion'});
       const display = c.display !== undefined ? c.display : c.value;
       row.append(node('span',`${c.descriptor.label}${c.descriptor.active === false ? ' (inactive)' : ''} — ${labels[c.operator]}${display === undefined ? '' : ': ' + (display === true ? 'Yes' : display === false ? 'No' : display)}`));
-      row.append(button('Remove filter', () => {criteria.splice(i,1);drawCriteria();})); $('active-criteria').append(row);
+      row.append(button('Remove filter', () => {criteria.splice(i,1);drawCriteria();changed();})); $('active-criteria').append(row);
     }); sync();
   }
   function populate(select, page, map, append) {
@@ -122,16 +230,23 @@
     }
     if(d.definition){if(d.kind==='bool'&&!presence)value=value==='true';const custom={definition:d.definition,kind:presence?'presence':d.kind,operator};if(!presence)custom.value=value;criteria.push({descriptor:d,operator,value:presence?undefined:value,display:presence?undefined:display,custom});}
     else criteria.push({descriptor:d,operator,value,display,legacy:`${d.key}=${value}`});
-    drawCriteria();
+    drawCriteria(); changed();
   });
-  $('add-column').addEventListener('click',()=>{const d=columnMap.get($('available-columns').value);if(!d)return message('Choose a column.');if(columns.some(c=>c.key===d.key))return message('That column is already selected.');if(columns.length>=64)return message('Use at most 64 columns.');columns.push(d);drawColumns();});
-  $('reset-columns').addEventListener('click',safe(async()=>{const page=await read({kind:'columns',keys:data.defaults,limit:200});page.items.forEach(d=>columnMap.set(d.key,d));columns=data.defaults.map(key=>columnMap.get(key));drawColumns();}));
-  $('clear-filters').addEventListener('click',()=>{criteria=[];drawCriteria();});
+  $('add-column').addEventListener('click',()=>{const d=columnMap.get($('available-columns').value);if(!d)return message('Choose a column.');if(columns.some(c=>c.key===d.key))return message('That column is already selected.');if(columns.length>=64)return message('Use at most 64 columns.');columns.push(d);drawColumns();changed();});
+  $('reset-columns').addEventListener('click',safe(async()=>{const page=await read({kind:'columns',keys:data.defaults,limit:200});page.items.forEach(d=>columnMap.set(d.key,d));columns=data.defaults.map(key=>columnMap.get(key));drawColumns();changed();}));
   $('find-columns').addEventListener('click',safe(()=>columnsPage(false))); $('more-columns').addEventListener('click',safe(()=>columnsPage(true)));
   $('find-filters').addEventListener('click',safe(()=>filtersPage(false))); $('more-filters').addEventListener('click',safe(()=>filtersPage(true)));
   $('metadata-active-only').addEventListener('change',safe(async()=>{await columnsPage(false);await filtersPage(false);await editor();}));
   form.addEventListener('submit',sync);
-  document.querySelectorAll('[data-sort-url]').forEach(button => button.addEventListener('click', () => { location.href=button.dataset.sortUrl; }));
+  // Applied in place, the server's reading of each criterion (a renamed or retired field) still arrives.
+  document.addEventListener('bookflow:list-updated', event => {
+    const fresh = event.detail.doc.getElementById('browse-data');
+    if (!fresh) return;
+    const wire = c => JSON.stringify(c.custom || c.legacy);
+    const read = new Map(JSON.parse(fresh.textContent).criteria.map(c => [wire(c), c]));
+    criteria = criteria.map(c => read.has(wire(c)) ? {...c, descriptor: read.get(wire(c)).descriptor, display: read.get(wire(c)).display} : c);
+    drawCriteria();
+  });
   populate($('available-columns'),columnPage,columnMap,false); populate($('available-filters'),filterPage,filterMap,false);
   $('more-columns').hidden=!columnPage.next_cursor; $('more-filters').hidden=!filterPage.next_cursor; drawColumns(); drawCriteria();
 })();

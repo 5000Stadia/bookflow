@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+from bookflow.adapters.workbench.display import amount as figure, money
 from tests.test_customer_statement import (
     EXPECTED_AGING, EXPECTED_ROWS, EXPECTED_TOTALS, FROM, TO, build,
 )
@@ -67,14 +68,14 @@ def test_a_statement_reads_as_a_document_at_both_widths_and_pages_without_restar
             browser.evaluate("document.body.innerText")
         assert cells(browser, "#statement-lines tbody tr") == [
             {"kind": kind, "entry": entry,
-             "values": [f"{amount / 100:.2f}", f"{balance / 100:.2f}"]}
+             "values": [figure(f"{amount / 100:.2f}"), figure(f"{balance / 100:.2f}")]}
             for _customer, kind, entry, _date, _number, amount, balance in EXPECTED_ROWS]
         for key, minor in EXPECTED_TOTALS.items():
             assert browser.evaluate(f"document.querySelector('[data-total={key}] dd').textContent") \
-                == f"{minor / 100:.2f} USD", key
+                == money(f"{minor / 100:.2f}", "USD"), key
         for key, minor in EXPECTED_AGING.items():
             assert browser.evaluate(f"document.querySelector('[data-aging={key}] dd').textContent") \
-                == f"{minor / 100:.2f} USD", key
+                == money(f"{minor / 100:.2f}", "USD"), key
         # The document a row names opens where it was written.
         assert browser.evaluate("""!!document.querySelector('#statement-lines a[href*="/invoice/"]')""")
         assert browser.evaluate("""!!document.querySelector('#statement-lines a[href*="/payment/"]')""")
@@ -114,12 +115,12 @@ def test_a_statement_reads_as_a_document_at_both_widths_and_pages_without_restar
         browser.wait_for("document.querySelectorAll('#statement-lines tbody tr').length === 4")
         first = cells(browser, "#statement-lines tbody tr")
         assert [row["values"][1] for row in first] == ["250.00", "250.00", "500.00", "900.00"]
-        assert browser.evaluate("document.querySelector('[data-total=closing] dd').textContent") == "630.00 USD"
+        assert browser.evaluate("document.querySelector('[data-total=closing] dd').textContent") == "$630.00"
         browser.evaluate("document.querySelector('#customer-statement-next-page button').click()")
         browser.wait_for("document.querySelector('#statement-lines tbody tr')?.dataset.entry === 'payment'")
         second = cells(browser, "#statement-lines tbody tr")
         assert [row["values"][1] for row in second] == ["600.00", "450.00", "380.00", "380.00"]
-        assert browser.evaluate("document.querySelector('[data-total=closing] dd').textContent") == "630.00 USD"
+        assert browser.evaluate("document.querySelector('[data-total=closing] dd').textContent") == "$630.00"
         assert browser.evaluate("document.querySelectorAll('form[data-generated-form] [name=\"f:cursor\"]').length") == 0
         box = fits(browser, "#statement-lines")
         assert box["scroll"] == box["client"], box
@@ -134,7 +135,7 @@ def test_a_statement_reads_as_a_document_at_both_widths_and_pages_without_restar
         assert browser.evaluate("document.querySelector('[name=\"f:date_from\"]').value") == FROM
         assert browser.evaluate("document.querySelector('[name=\"f:customer\"]').value")
         fill(browser, {"limit": "200"})
-        browser.wait_for("document.querySelector('[data-total=closing] dd')?.textContent === '250.00 USD'")
+        browser.wait_for("document.querySelector('[data-total=closing] dd')?.textContent === '$250.00'")
         assert browser.evaluate("""[...new Set([...document.querySelectorAll('#statement-lines tbody tr')]
             .map(r => r.dataset.customer))].length""") == 1
         assert browser.evaluate("document.querySelectorAll('#statement-lines tbody tr').length") == 2

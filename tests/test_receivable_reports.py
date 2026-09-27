@@ -278,8 +278,8 @@ def test_the_host_and_the_workbench_serve_the_aging(hosted):  # noqa: F811
     assert units(run("report ar-aging", {"as_of": AS_OF, "limit": 200})["totals"]) == EXPECTED_TOTALS
     api = TestClient(hosted.handle.app)
     assert api.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
-    for name, table, total in (("ar-aging", "receivables-aging", "3350.00"),
-                               ("open-invoices", "receivables-open", "3400.00")):
+    for name, table, total in (("ar-aging", "receivables-aging", "3,350.00"),
+                               ("open-invoices", "receivables-open", "3,400.00")):
         page = api.get(f"/c/{cid}/report/{name}", headers=WB)
         assert page.status_code == 200 and 'name="f:as_of"' in page.text
         result = api.post(f"/c/{cid}/report/{name}", data={"f:as_of": AS_OF, "f:limit": "200"}, headers=WB)
@@ -288,10 +288,10 @@ def test_the_host_and_the_workbench_serve_the_aging(hosted):  # noqa: F811
         assert f'id="{table}"' in result.text and 'id="receivables-totals"' in result.text
         assert "Aging Alpha:North Job" in result.text, result.text[:2000]
         key = "total" if name == "ar-aging" else "balance"
-        assert f'<td data-total="{key}">{total}</td>' in result.text, result.text[:2000]
+        assert f'<td class="num" data-total="{key}">{total}</td>' in result.text, result.text[:2000]
     aging = api.post(f"/c/{cid}/report/ar-aging", data={"f:as_of": AS_OF, "f:limit": "200"}, headers=WB).text
     for heading in ("Current", "1-30", "31-60", "61-90", "Over 90"):
-        assert f'<th scope="col">{heading}</th>' in aging
+        assert f'<th scope="col" class="num">{heading}</th>' in aging
     # Each customer opens their own open invoices; each invoice opens itself.
     assert f'/c/{cid}/report/open-invoices?f%3Aas_of={AS_OF}&amp;f%3Acustomer=' in aging, aging[:2000]
     listed = api.post(f"/c/{cid}/report/open-invoices", data={"f:as_of": AS_OF, "f:limit": "200"}, headers=WB).text

@@ -35,6 +35,7 @@ unbounded count, so no position is shown rather than a wrong one.
 from urllib.parse import quote
 
 from bookflow.core.errors import BookflowError
+from bookflow.adapters.workbench import display as Display
 
 NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill', 'credit-memo', 'customer-refund',
          'vendor-credit')
@@ -72,7 +73,7 @@ def _shell(company_id, noun):
             'list_url': base, 'find_label': 'Find ' + _article(singular), 'order': ORDER,
             'recent_url': None, 'record_url': None, 'previous': None, 'next': None,
             'at_start': False, 'at_end': False, 'position': None, 'total': None,
-            'unavailable': None, 'steps': False}
+            'unavailable': None, 'steps': False, 'form': False}
 
 
 def _raw(noun, raw):
@@ -86,15 +87,21 @@ def _step(base, row):
     status = row.get('status')
     # Whose document it is, named for whichever side of the books it sits on: a sale carries a
     # customer and a bill carries a vendor, and one arrow label reads both.
-    parts = [part for part in (row.get('number'), row.get('date'),
+    parts = [part for part in (row.get('number'), row.get('date') and Display.day(row['date']),
                                row.get('customer_name') or row.get('vendor_name'),
-                               total.get('amount')) if part]
+                               total.get('amount') and Display.money(total)) if part]
     if status in ('voided', 'cancelled'):
         parts.append(status)
     elif row.get('active') is False:
         parts.append('closed')
+    # The label reads the step as one line; the separate parts let the recent rows set the
+    # same facts as columns, which the template formats from the query's own strings.
     return {'url': base + '/' + quote(str(row['id']), safe=''),
-            'number': row.get('number'), 'label': ' · '.join(str(part) for part in parts)}
+            'number': row.get('number'), 'label': ' · '.join(str(part) for part in parts),
+            'date': row.get('date'), 'party': row.get('customer_name') or row.get('vendor_name'),
+            'total': total or None,
+            'state': status if status in ('voided', 'cancelled')
+            else 'closed' if row.get('active') is False else None}
 
 
 def _window(read, company_id, noun, raw):
@@ -151,6 +158,8 @@ def form_bar(company_id, noun, verb, record_id):
     if not company_id or noun not in NOUNS:
         return None
     view = _shell(company_id, noun)
+    # On a form this sits below the form, the form being what the page is for.
+    view['form'] = True
     if verb in ('post', 'create'):
         view['recent_url'] = '/c/' + quote(str(company_id), safe='') + '/_recent/' + noun
     elif record_id:

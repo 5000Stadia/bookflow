@@ -9,6 +9,7 @@ import re
 
 import pytest
 
+from bookflow.adapters.workbench import display as Display
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
 from tests.test_service_sales_browser import _choose, _click, _contained, _fill, _name, _value
@@ -149,9 +150,10 @@ def test_the_document_posts_the_same_invoice_the_command_does(register_browser):
     assert drift and all('origins.unit' in difference for difference in drift), drift
 
     # The totals shown at preview are the server's, to the cent.
-    assert on_screen['Subtotal'] == from_form['revision']['subtotal']['amount']
-    assert on_screen['Tax'] == from_form['revision']['tax']['amount']
-    assert on_screen['Total'].split()[0] == from_form['revision']['total']['amount']
+    money = lambda value: Display.money(value, 'USD', home='USD')
+    assert on_screen['Subtotal'] == money(from_form['revision']['subtotal']['amount'])
+    assert on_screen['Tax'] == money(from_form['revision']['tax']['amount'])
+    assert on_screen['Total'] == money(from_form['revision']['total']['amount'])
 
 
 def test_a_saved_invoice_reopens_with_every_value_and_its_line_origins(register_browser):
@@ -181,7 +183,7 @@ def test_a_saved_invoice_reopens_with_every_value_and_its_line_origins(register_
         assert _value(b, f'c:lines:{index}:quantity') == line['quantity']
     assert _value(b, 'c:lines:0:description') == 'Original line text'
     assert _value(b, 'c:lines:1:unit_price') == '4.44'
-    assert _totals(b)['Total'].split()[0] == posted['revision']['total']['amount']
+    assert _totals(b)['Total'] == Display.money(posted['revision']['total']['amount'], 'USD')
 
     # A correction that changes one quantity keeps the saved origins of both lines.
     run('item.update', dict(item=books['item'], price='99.00', description='New master text'))
@@ -218,8 +220,8 @@ def test_an_applied_payment_survives_a_correction_made_in_the_document(register_
     b.navigate(f'{base}/{posted["id"]}/update')
     b.wait_for('!!document.querySelector("[data-sales-form]")')
     before = _totals(b)
-    assert before['Payments Applied'] == '50.00'
-    assert before['Balance Due'].split()[0] == '50.00'
+    assert before['Payments Applied'] == '$50.00'
+    assert before['Balance Due'] == '$50.00'
     _fill(b, 'c:lines:0:quantity', '2')
     _fill(b, 'ctx:reason', 'Second visit added')
     _preview(b)
@@ -235,8 +237,8 @@ def test_an_applied_payment_survives_a_correction_made_in_the_document(register_
     b.navigate(f'{base}/{posted["id"]}/update')
     b.wait_for('!!document.querySelector("[data-sales-form]")')
     after = _totals(b)
-    assert after['Payments Applied'] == '50.00' and after['Balance Due'].split()[0] == '150.00'
-    assert after['Total'].split()[0] == corrected['revision']['total']['amount']
+    assert after['Payments Applied'] == '$50.00' and after['Balance Due'] == '$150.00'
+    assert after['Total'] == Display.money(corrected['revision']['total']['amount'], 'USD')
 
 
 def test_adding_and_removing_lines_keeps_the_values_already_entered(register_browser):

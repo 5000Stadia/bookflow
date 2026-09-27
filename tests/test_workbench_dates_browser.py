@@ -36,6 +36,8 @@ def test_calendars_presets_invalid_attempts_and_dynamic_controls(register_browse
     env=register_browser;b=env.browser;b.viewport(width,900)
     b.wait_for("!!document.querySelector('#register-period .date-range-presets')")
     assert b.evaluate("document.querySelectorAll('#register-calendar-open').length") == 1
+    if width == 390:  # On a phone the entry date lives in the Add entry sheet.
+        click(b,'#register-sheet-open')
     # Actual pointer activation delegates to the real native API, preserving invalid text.
     b.evaluate("""window.calendarCalls=0;window.calendarErrors=[];
       var nativePicker=HTMLInputElement.prototype.showPicker;
@@ -128,6 +130,8 @@ def test_native_calendar_keyboard_selection_updates_text_on_trusted_input(regist
     evidence=[]
     for width in (1280,390):
         b.viewport(width,900)
+        if width == 390:  # On a phone the entry date lives in the Add entry sheet.
+            click(b,'#register-sheet-open')
         b.evaluate("""window.nativeDateEvents=[];
           document.querySelector('#register-date').value='2028-02-28';
           for(var kind of ['input','change']) document.querySelector('#register-calendar').addEventListener(kind,e=>window.nativeDateEvents.push({type:e.type,trusted:e.isTrusted,value:e.target.value}));""")

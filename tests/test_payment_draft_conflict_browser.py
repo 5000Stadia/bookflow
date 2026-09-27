@@ -115,8 +115,8 @@ def test_rejected_row_review_refreshes_all_retained_dependencies(register_browse
         assert run('payment show',dict(payment=payment['id']))['version']==2
         assert current['amount']['minor_units']==5000
         totals=b.evaluate("document.querySelector('#payment-totals').innerText")
-        assert 'Unallocated draft amount: 42.00 USD' in totals
-        assert 'Current available payment credit: 40.00 USD' in totals
+        assert 'Unallocated draft amount: $42.00' in totals
+        assert 'Current available payment credit: $40.00' in totals
         assert b.evaluate("document.querySelector('#payment-amount-label').innerText")=='Amount to allocate'
     else:
         assert next(row for row in rows if row['invoice_id']==second['id'])['expected_version']==2
@@ -124,7 +124,7 @@ def test_rejected_row_review_refreshes_all_retained_dependencies(register_browse
     click(b,'preview')
     assert not b.evaluate("document.querySelector('#payment-save').disabled")
     if payment:
-        assert 'available 32.00 USD' in b.evaluate("document.querySelector('#payment-preview-result').innerText")
+        assert 'available $32.00' in b.evaluate("document.querySelector('#payment-preview-result').innerText")
     shot(b,tmp_path,'retained-'+dependency+'-dependency',width)
 
 

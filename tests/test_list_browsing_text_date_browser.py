@@ -21,6 +21,13 @@ def _ready(browser):
     browser.wait_for("document.querySelector('#browse-form')?.dataset.ready === '1'")
 
 
+def _settle(browser, action):
+    """Controls apply in place: the results are replaced and the address updated, without a reload."""
+    browser.evaluate("void(window.previousResults = document.getElementById('list-results'))")
+    action()
+    browser.wait_for("!window.previousResults?.isConnected && window.bookflowList?.idle() && document.querySelector('#browse-form')?.dataset.ready === '1'")
+
+
 def _replace_document(browser, action):
     browser.evaluate("void(window.previousBrowseDocument = document.documentElement)")
     action()
@@ -28,7 +35,12 @@ def _replace_document(browser, action):
 
 
 def _choose(browser, definition, label, operator, value, kind):
-    browser.evaluate("document.querySelector('#clear-filters').click();document.querySelector('#filter-controls').open=true")
+    phone = browser.evaluate('innerWidth <= 700')
+    if phone and not browser.evaluate("document.querySelector('.list-form').classList.contains('sheet-open')"):
+        browser.evaluate("document.querySelector('.list-bar [data-sheet-open]').click()")
+    browser.evaluate("document.querySelectorAll('#active-criteria button').forEach(x => x.click());"
+                     "document.querySelector('.list-customize').open=true;document.querySelector('#filter-controls').open=true")
+    browser.wait_for('window.bookflowList.idle()')
     browser.evaluate(f"document.querySelector('#filter-search').value={json.dumps(label)};document.querySelector('#find-filters').click()")
     key = 'custom:' + definition
     browser.wait_for(f"[...document.querySelector('#available-filters').options].some(o => o.value === {json.dumps(key)})")
@@ -43,15 +55,20 @@ def _choose(browser, definition, label, operator, value, kind):
     else:
         browser.evaluate(f"document.querySelector('#filter-value').value={json.dumps(value)}")
         assert browser.evaluate("document.querySelector('#filter-value').value") == value
-    # The same actual Add and Apply controls are reachable using Tab/Enter from the filter row.
+    # The same actual Add control is reachable using Tab/Enter from the filter row. On a wide
+    # screen adding the filter applies it; on a phone the sheet's Show results applies it.
     browser.evaluate("(document.querySelector('#filter-value') || document.querySelector('#filter-operator')).focus()")
     _tab_to(browser, '#add-filter')
-    _key(browser, 'Enter')
-    assert not browser.evaluate("document.querySelector('#browse-error').textContent")
     assert browser.evaluate("(() => {const r=document.querySelector('#add-filter').getBoundingClientRect();return r.width>=44 && r.height>=44;})()")
-    browser.evaluate("document.querySelector('#filter-controls').open=false")
-    _tab_to(browser, '#browse-form button[type=submit]')
-    _replace_document(browser, lambda: _key(browser, 'Enter'))
+    if phone:
+        _key(browser, 'Enter')
+        assert not browser.evaluate("document.querySelector('#browse-error').textContent")
+        browser.evaluate("document.querySelector('#filter-controls').open=false")
+        _tab_to(browser, '#browse-form button[type=submit]')
+        _settle(browser, lambda: _key(browser, 'Enter'))
+    else:
+        _settle(browser, lambda: _key(browser, 'Enter'))
+        assert not browser.evaluate("document.querySelector('#browse-error').textContent")
 
 
 @pytest.mark.parametrize('kind', ['text', 'date'])
@@ -124,7 +141,7 @@ def test_text_date_named_criteria_exact_wire_results_and_retained_identity(
                      'operator': operator, 'value': value}
         _choose(b, definition['id'], label, operator, value, kind)
         check('matching', criterion, records[:2], label)
-        _replace_document(b, lambda: b.evaluate("document.querySelector('#master-results th button').click()"))
+        _settle(b, lambda: b.evaluate("document.querySelector('#master-results th a').click()"))
         assert 'direction=desc' in b.evaluate('location.search')
         check('sorted', criterion, list(reversed(records[:2])), label)
         # A current metadata label changes without changing the stored values

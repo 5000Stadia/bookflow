@@ -28,14 +28,14 @@
 {% if allocated %}
 <input type="hidden" name="c:{{ path }}:line_id" value="{{ allocated.line_id }}">
 <input type="hidden" name="c:{{ path }}:item" value="{{ allocated.item_id }}">
-<div class="line-allocated" data-allocated-line><strong>Billed from quoted work · priced on the source</strong><br>{{ allocated.item_snapshot.item.label }} · {{ allocated.description or '' }}<br>Quantity {{ allocated.quantity }} of an originally quoted {{ allocated.quoted_quantity }} · Rate {{ allocated.unit_price.amount if allocated.unit_price else 'priced as a whole-line amount' }}<br>Net {{ allocated.net.amount }} · Tax {{ allocated.tax.amount }} · Gross {{ allocated.gross.amount }} {{ allocated.currency }}<br>Remove the whole line to release its scope; add an ordinary line for an extra charge.</div>
+<div class="line-allocated" data-allocated-line><strong>Billed from quoted work · priced on the source</strong><br>{{ allocated.item_snapshot.item.label }} · {{ allocated.description or '' }}<br>Quantity {{ allocated.quantity }} of an originally quoted {{ allocated.quoted_quantity }} · Rate {{ allocated.unit_price|money(allocated.currency, home=math_company_currency) if allocated.unit_price else 'priced as a whole-line amount' }}<br>Net {{ allocated.net|money(allocated.currency, home=math_company_currency) }} · Tax {{ allocated.tax|money(allocated.currency, home=math_company_currency) }} · Gross {{ allocated.gross|money(allocated.currency, home=math_company_currency) }}<br>Remove the whole line to release its scope; add an ordinary line for an extra charge.</div>
 {{ row_actions() }}
 {% else %}
 <input type="hidden" name="c:{{ path }}:line_id" value="{{ value.get('line_id') or '' if value is mapping else '' }}">
 {% for column in grid.columns %}
 {% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("amount:" ~ path)).replace(':', '-').replace('.', '-') %}
 <div class="line-cell" data-line-column="{{ column.name }}"{% if column.hint %} title="{{ column.hint }}"{% endif %}>
-{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span></span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
+{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span></span><span class="line-amount">{{ amounts.amount | amount if amounts else '—' }}</span>
 {% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}"><span class="line-cell-name">{{ column.label }}</span></label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
 {% endif %}
 </div>
@@ -94,7 +94,7 @@
 <h2 class="band-title{% if d.tabs %} band-title-tabbed{% endif %}">{{ grid.title }}</h2>
 <div class="line-grid" data-collection data-collection-path="{{ grid.lines.path }}" style="--line-columns: {{ grid.grid_template }}; --line-width: {{ grid.grid_width }}">
 <input type="hidden" name="collection:{{ grid.lines.path }}" value="1">
-<div class="line-head" aria-hidden="true">{% for column in grid.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
+<div class="line-head" aria-hidden="true">{% for column in grid.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}</span>{% endfor %}<span class="line-cell line-cell-actions"></span></div>
 <div class="line-body" data-collection-items>{% for value in grid.lines.collection["values"] %}{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":" ~ loop.index0, value, d.line_amount(value.get('line_id') if value is mapping else none, loop.index0), grid) }}{% endfor %}</div>
 <template data-collection-template data-index-token="__INDEX0__">{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":__INDEX0__", {}, none, grid) }}</template>
 <button type="button" data-collection-add class="line-add">Add a line</button>
@@ -107,13 +107,20 @@
 
 <section class="document-band document-footer" aria-label="{{ d.title }} footer"><h2 class="band-title">Notes and totals</h2>
 <div class="footer-inputs">{% for l in d.footer %}{{ field(l, l.index) }}{% endfor %}</div>
+{# The totals are the server's own preview. data-live-totals is what the page refreshes as
+   the person edits (sales.js runs the same preview in the background); the status line
+   beside it says when that is under way or why it could not be done. #}
 <div class="footer-totals" aria-label="Computed totals">
+<div data-live-totals>
 {% if d.totals %}<dl class="totals-list">
-{% for row in d.totals %}<dt>{{ row.label }}</dt><dd>{% if row.strong %}<strong>{{ row.value }}</strong>{% else %}{{ row.value }}{% endif %}</dd>{% endfor %}
+{% for row in d.totals %}{% set shown = row.value | money(home=math_company_currency) if row.money else row.value %}<dt>{{ row.label }}</dt><dd>{% if row.strong %}<strong>{{ shown }}</strong>{% else %}{{ shown }}{% endif %}</dd>{% endfor %}
 </dl>
+{% if d.noun == 'invoice' and d.computed and d.computed.due_date %}<p class="totals-due" data-totals-due>Due {{ d.computed.due_date | longday }}{% if d.computed.terms %} · {{ d.computed.terms }}{% endif %}</p>{% endif %}
 {% if d.reconciliation %}<p class="{{ 'muted' if d.reconciled else 'warn' }}" data-reconciliation>{{ d.reconciliation }}</p>{% endif %}
 
 {% else %}<p class="muted">{{ d.totals_empty }}</p>{% endif %}
+</div>
+<p class="live-totals-status" data-live-totals-status aria-live="polite"></p>
 </div>
 </section>
 
