@@ -1,9 +1,6 @@
 # Bookflow roadmap
 
-The colony view of the plan. Each item points at the document that holds its detail; those
-documents stay authoritative. The target and done definition of an open spec row live only in the
-spec list of `design/intention.md`. Paths under `notes/` are local working memory and are not
-published with the repository.
+Double-entry accounting for small businesses, where people in the browser and their AI agents post to the same books.
 
 ## M1 — Foundation
 
