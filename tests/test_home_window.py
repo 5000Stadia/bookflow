@@ -127,7 +127,7 @@ def test_the_home_window_renders_its_panels_and_keeps_the_old_grid(hosted):
     page = browser.get(f"/c/{hosted.company_id}/")
     assert page.status_code == 200
     for panel in home.PANELS:
-        assert f'<h2 id="flow-panel-{panel.id}">{panel.title}</h2>' in page.text, panel.id
+        assert f'<h3 id="flow-panel-{panel.id}">{panel.title}</h3>' in page.text, panel.id
     for panel in resolved(hosted.company_id):
         for item in panel.steps:
             if item.live:
@@ -143,8 +143,8 @@ def test_the_home_window_renders_its_panels_and_keeps_the_old_grid(hosted):
     assert f'href="/c/{hosted.company_id}/term"' in grid.text
 
 
-def test_the_home_window_runs_no_business_command_while_rendering(hosted, monkeypatch):
-    """Resolution is a registry read. The page runs the company lookup it needs and nothing else."""
+def test_the_home_window_runs_only_read_commands_while_rendering(hosted, monkeypatch):
+    """Tile resolution is a registry read; the figures above the tiles come from read commands only."""
     from bookflow.adapters.http import execution
 
     ran = []
@@ -158,7 +158,10 @@ def test_the_home_window_runs_no_business_command_while_rendering(hosted, monkey
     browser = _browser(hosted)
     ran.clear()
     assert browser.get(f"/c/{hosted.company_id}/").status_code == 200
-    assert ran == ["company show"], ran
+    assert ran[0] == "company show", ran
+    assert set(ran) == {"company show", "report balance-sheet", "report ar-aging", "report open-invoices",
+                        "report unpaid-bills", "report profit-and-loss", "audit list"}, ran
+    assert not any(registry.get(name).is_write for name in ran), ran
 
 
 # ---------------------------------------------------------------- the placeholder half

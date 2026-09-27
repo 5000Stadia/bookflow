@@ -206,3 +206,39 @@ body.workbench{font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe U
 .workbench .register-choices a:hover{background:#f5faf7}.workbench .register-choices .register-choice-name{min-width:0;overflow-wrap:anywhere;font-weight:550}
 .workbench .register-choices .num{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
 .workbench .register-tools{max-width:760px;margin-top:28px}.workbench .register-tools h2{font-size:13px;color:var(--muted);font-weight:550}
+/* Overview: figures first, then what needs attention and recent activity, then every task as compact links. */
+.workbench .overview-head .quick-actions{margin:0 0 20px}
+.workbench .overview-figures ul{list-style:none;margin:0 0 20px;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.workbench .overview-figures a{display:flex;flex-direction:column;gap:2px;height:100%;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);color:var(--ink);text-decoration:none}
+.workbench .overview-figures a:hover{border-color:#81b39d;background:#fbfdfc}
+.workbench .figure-label{font-size:12px;font-weight:600;color:var(--muted)}
+.workbench .figure-value{font-size:22px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.workbench .figure-note{font-size:12px;color:var(--muted)}
+.workbench .overview-panels{display:grid;align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px;margin:0 0 28px}
+.workbench .overview-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;min-width:0}
+.workbench .overview-card h2{margin:0 0 6px}.workbench .overview-card h3{font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 2px}
+.workbench .overview-rows{list-style:none;margin:0;padding:0}.workbench .overview-rows li+li{border-top:1px solid #edf1f2}
+.workbench .overview-rows a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:8px 4px;color:var(--ink);text-decoration:none;border-radius:6px}
+.workbench .overview-rows a:hover{background:#f5faf7}
+.workbench .overview-row-main{display:flex;flex-direction:column;min-width:0}.workbench .overview-row-name{font-weight:550;overflow-wrap:anywhere}
+.workbench .overview-row-meta,.workbench .overview-when{font-size:12px;color:var(--muted)}.workbench .overview-when{white-space:nowrap}
+.workbench .overview-rows .num{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:550}
+.workbench .overview-more{margin:8px 0 0;font-size:13px}
+.workbench .overview-section-title{font-size:13px;color:var(--muted);font-weight:550;margin:0 0 12px}
+.workbench .flow-board{grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px;align-items:start}
+.workbench .flow-panel{padding:14px 16px}
+.workbench .flow-panel .flow-panel-head{margin:0 0 6px;padding-bottom:8px}.workbench .flow-panel-head .icon{width:20px;height:20px}
+.workbench .flow-panel-head h3{margin:0;font-size:15px;color:var(--ink)}
+.workbench .flow-board .flow-steps,.workbench .flow-board .flow-asides{grid-template-columns:1fr;gap:0}
+.workbench .flow-board .flow-asides{margin-top:0;border-top:1px dashed var(--line);padding-top:2px}
+.workbench .flow-board .flow-tile{border:0;background:none;min-height:0;padding:6px 4px;border-radius:5px;font-size:13px;color:#14634c}
+.workbench .flow-board a.flow-tile:hover{background:var(--accent-soft)}.workbench .flow-board .flow-tile-title{font-weight:500}
+@media(max-width:600px){
+ .workbench .overview-figures ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .workbench .overview-figures a{padding:12px}.workbench .figure-value{font-size:18px}
+ .workbench .overview-card{padding:14px}
+ .workbench .flow-board{grid-template-columns:1fr}
+ .workbench .flow-board .flow-steps,.workbench .flow-board .flow-asides{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:8px}
+ .workbench .flow-board .flow-tile{min-height:44px;padding:8px 4px}
+ .workbench .quick-action-grid a{min-height:48px}
+}

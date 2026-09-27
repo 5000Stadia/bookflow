@@ -762,9 +762,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company=show,
             company_id=show["company_id"],
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
+            overview=overview_summary(request, show),
         )
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
+
+    def overview_summary(request: Request, show: dict[str, Any]) -> dict[str, Any]:
+        """The Overview's figures and lists, each from a read command this reader may run."""
+        permits = company_permits(request, show)
+
+        def ask(name: str, raw: dict[str, Any]) -> dict[str, Any] | None:
+            cmd = registry.get(name)
+            if cmd is None or not permits(cmd):
+                return None
+            try:
+                return run(request, name, raw, show["company_id"])
+            except BookflowError:
+                return None
+
+        return Home.overview(show["company_id"], DateDefaults.company_today(show), show["info"]["home_currency"], ask)
 
     @app.get("/c/{company_id}/_all", response_class=HTMLResponse)
     @permission_read_package(host)

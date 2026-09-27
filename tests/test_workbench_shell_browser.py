@@ -114,3 +114,28 @@ def test_the_banking_register_entry_opens_the_account_registers(browser_site, tm
         assert _current == 'banking'
     finally:
         b.close()
+
+
+def test_the_overview_reads_figures_then_attention_then_activity_then_tasks(browser_site, tmp_path):
+    b = _Cdp(tmp_path / 'shell-overview')
+    try:
+        _signed_in(b, browser_site)
+        home = f'{browser_site.base_url}/c/{browser_site.company_id}/'
+        tops = '''[...document.querySelectorAll("[data-figure]")].map(a => Math.round(a.getBoundingClientRect().top))'''
+        order = '''[".overview-figures", ".overview-attention", ".overview-activity", ".flow-board"].map(
+            s => document.querySelector(s).getBoundingClientRect().top)'''
+        b.viewport(390, 844)
+        b.navigate(home)
+        b.wait_for('!!document.querySelector("[data-figure]")')
+        figures = b.evaluate(tops)
+        assert len(figures) == 5 and figures[0] == figures[1] and figures[2] > figures[1], figures
+        assert b.evaluate(order) == sorted(b.evaluate(order))
+        assert b.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        b.viewport(1440, 900)
+        b.navigate(home)
+        b.wait_for('!!document.querySelector("[data-figure]")')
+        assert len(set(b.evaluate(tops))) == 1, b.evaluate(tops)
+        # The figures and both lists sit on the first screen of a desktop.
+        assert b.evaluate('document.querySelector(".overview-activity").getBoundingClientRect().top') < 900
+    finally:
+        b.close()
