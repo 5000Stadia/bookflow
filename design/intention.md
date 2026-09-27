@@ -50,6 +50,7 @@ Irreversible acts registry: pushing to `main` (standing, at tested milestones), 
 
 | # | What to build now | What done looks like |
 |---|---|---|
+| 7 | Identity and isolation. `user add`, `membership grant` and `revoke`, hashed revocable agent tokens bound to a human principal and authority epoch, memberships with roles (owner, admin, standard, readonly), current permission checks on every command, company listing limited to memberships, workbench buttons limited by role. Assigned shared-agent principals have equal effective permissions; authorized access reductions suspend affected agent authority and revoke its tokens atomically without blocking the human change. | An agent token with membership in organization A cannot list, open, or infer organization B or its companies; a token with membership in one company cannot see its siblings. Readonly members cannot write on any surface. Revocation succeeds even when it breaks shared-principal equality; stale queued work and streams cannot publish through revoked authority, and restoring membership cannot revive old tokens. Tests cover these paths and explicit reauthorization. |
 
 
 **Next ID:** 25
