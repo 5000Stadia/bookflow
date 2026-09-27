@@ -1,5 +1,6 @@
-{# The Overview's figures, what needs attention and recent activity. Every amount is one a read
-   command returned (or the sum of its rows); a figure this reader cannot read is left out. #}
+{# The Overview's figures, what needs attention and recent activity. Every figure is one report's
+   own total and every listed amount a row that report returned; a figure this reader cannot read
+   is left out. #}
 {% set o = overview %}{% set home = company.info.home_currency %}
 {% if o.figures %}<section class="overview-figures" aria-label="Key figures"><ul>
 {% for f in o.figures %}<li><a href="{{ f.href }}" data-figure="{{ f.key }}"><span class="figure-label">{{ f.label }}</span><strong class="figure-value">{{ f.value | money(home=home) }}</strong><span class="figure-note">{% if f.note_label %}{{ f.note_label }} {{ f.note | money(home=home) }}{% else %}{{ f.note }}{% endif %}</span></a></li>{% endfor %}

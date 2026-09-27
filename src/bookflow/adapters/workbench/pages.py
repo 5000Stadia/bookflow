@@ -781,7 +781,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             except BookflowError:
                 return None
 
-        return Home.overview(show["company_id"], DateDefaults.company_today(show), show["info"]["home_currency"], ask)
+        return Home.overview(show["company_id"], DateDefaults.company_today(show), ask)
 
     @app.get("/c/{company_id}/_all", response_class=HTMLResponse)
     @permission_read_package(host)
