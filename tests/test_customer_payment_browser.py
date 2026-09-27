@@ -229,6 +229,15 @@ def test_agent_draft_fixed_amount_save_new_query_and_readonly_recovery(register_
     shot(b,tmp_path,'payment-original-recovery',width)
 
 
+def _locked_but_recoverable(b):
+    # After an ambiguous save every entry control stays locked on the exact submitted
+    # request; the one way forward is recovering that request, which must be usable.
+    assert b.evaluate("document.querySelector('#payment-review').hidden")
+    assert b.evaluate("(()=>{const r=document.querySelector('#payment-retry');return !r.hidden&&!r.disabled&&r.offsetParent!==null})()")
+    assert b.evaluate("[...document.querySelectorAll('#payment-form input,#payment-form select,#payment-form textarea,#payment-form button')]"
+        ".filter(x=>!['payment-retry','payment-review'].includes(x.id)).every(x=>x.disabled)")
+
+
 @pytest.mark.parametrize('width', [1280, 390])
 def test_lost_response_exact_recovery_locks_draft_and_voids_without_duplicate(register_browser, width, tmp_path):
     from tests.test_row8_register_browser import _key, _type
@@ -256,14 +265,14 @@ def test_lost_response_exact_recovery_locks_draft_and_voids_without_duplicate(re
     b.evaluate("document.querySelector('#payment-save-new').click()")
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')")
     assert not b.evaluate("document.querySelector('#payment-error').hidden")
-    assert b.evaluate("[...document.querySelectorAll('#payment-form input,#payment-form button')].every(x=>x.disabled)")
+    _locked_but_recoverable(b)
     paid=run('payment query',dict(customer=payer))['items']
     assert len(paid)==1 and paid[0]['received_minor_units']==4000
     path=Path(run('company show',{})['path'])/'company.db'
     before=recorded_state(path)
     url=b.evaluate('location.href');b.navigate(url)
     b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'")
-    assert not b.evaluate("document.querySelector('#payment-retry').hidden")
+    _locked_but_recoverable(b)
     shot(b,tmp_path,'payment-ambiguous-locked',width)
     click(b,'retry')
     assert 'Recovered original payment' in b.evaluate("document.querySelector('#payment-message').innerText")

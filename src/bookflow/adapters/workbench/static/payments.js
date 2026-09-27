@@ -41,8 +41,11 @@
   function note(text) { $('message').textContent = text; }
   function button(text, fn) { const n=el('button',text); n.type='button'; n.addEventListener('click',()=>perform(fn)); return n; }
   function invalidate() { reviewEpoch++;recoveryConfirmed=null;document.querySelectorAll('[data-recovery-confirm]').forEach(button=>{button.disabled=true;});preview=null; $('save').disabled=true; $('save-new').disabled=true; $('preview-result').hidden=true; }
+  // Locks every entry control on the exact submitted request. Recovering that
+  // request is the one way forward, so its button is governed by `submitted` alone.
   function lockSubmitted(locked) {
     for(const control of $('form').querySelectorAll('input,select,textarea,button')) {
+      if(control===$('retry')) continue;
       if(locked) {if(control.dataset.beforePending===undefined) control.dataset.beforePending=String(control.disabled);control.disabled=true;}
       else if(control.dataset.beforePending!==undefined) {control.disabled=control.dataset.beforePending==='true';delete control.dataset.beforePending;}
     }
@@ -58,7 +61,7 @@
       area.append(el('p', `${row.actor_id || 'Unknown actor'} at ${row.at || 'unknown time'}: ${(row.fields || []).concat(row.settlement_fields || []).join(', ') || 'Fields unknown'}. Latest writer: ${row.latest_writer_id || 'unknown'}.`));
     }
     if (err.details?.fields) for (const field of err.details.fields) area.append(el('p', `${field.field}: ${field.problem}`));
-    $('retry').hidden=!submitted; $('review').hidden=!!submitted; $('review').disabled=false;
+    $('retry').hidden=!submitted; $('retry').disabled=!submitted; $('review').hidden=!!submitted; $('review').disabled=false;
     if (!submitted && (['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE','E_RECOVERY_PENDING'].includes(err.code) || err.details?.review?.command==='payment settlement changes')) {
       $('review').disabled=true;
       try {
@@ -372,7 +375,7 @@
     }
     if(!submitted) throw {message:'No submitted request to recover.'};
     const performed=submitted.command;
-    lockSubmitted(true);
+    lockSubmitted(true);$('retry').disabled=true;
     try {
       const out=await command(submitted.command,submitted.input,submitted.context);
       submitted=null;sessionStorage.removeItem(storageKey);lockSubmitted(false);invalidate();$('error').hidden=true;
