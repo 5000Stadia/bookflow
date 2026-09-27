@@ -15,6 +15,7 @@ import pytest
 from tests.test_reference_year import EXPECTED,reference_template,reference_client  # noqa: F401
 from tests.test_reference_year_browser import reference_site  # noqa: F401
 from tests.test_row5_browser_acceptance import CHROME,PASSWORD,_Cdp
+from tests.home_tiles import tile as home_tile
 
 pytestmark=pytest.mark.skipif(not CHROME.exists(),reason="Chrome is unavailable")
 
@@ -50,7 +51,7 @@ def open_report(browser,verb,heading):
     walk exists to notice -- and the destination's own address is checked once,
     on arrival, rather than used as the way in.
     """
-    tile="[...document.querySelectorAll('a.flow-tile')].find(a=>a.querySelector('.flow-tile-title')?.textContent==='Reports')"
+    tile=home_tile("Reports")
     browser.wait_for("!!"+tile)
     browser.evaluate(tile+".click()")
     link="[...document.querySelectorAll('.nav-group a')].find(a=>a.textContent===%s)" % json.dumps(verb)
@@ -72,7 +73,7 @@ def test_statements_from_navigation_paging_and_current_ledger(reference_site,tmp
             document.querySelector('form[hx-post="/login"]').requestSubmit();})()""" % (json.dumps(site.login),json.dumps(PASSWORD)))
         browser.wait_for("[...document.querySelectorAll('main a')].some(a=>a.textContent==='Reference Plumbing Co')")
         browser.evaluate("[...document.querySelectorAll('main a')].find(a=>a.textContent==='Reference Plumbing Co').click()")
-        browser.wait_for("document.querySelector('h1')?.textContent==='Reference Plumbing Co'")
+        browser.wait_for("document.querySelector('h1')?.textContent==='Overview' && document.querySelector('.current-company')?.textContent==='Reference Plumbing Co'")
         company_path=browser.evaluate("location.pathname").rstrip("/")
 
         open_report(browser,"profit-and-loss","Profit and loss")

@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Registers · {{ company.display_name }}{% endblock %}{% block body %}
+{% set home = company.info.home_currency %}
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/banking">Banking</a></nav>
+<h1>Registers</h1>
+<p class="muted">Choose an account to open its register and enter or review its transactions.</p>
+{% for label, accounts in register_groups %}<section class="nav-group register-choices" aria-labelledby="registers-{{ loop.index }}">
+<h2 id="registers-{{ loop.index }}">{{ label }}</h2>
+<ul>{% for account in accounts %}<li><a href="/c/{{ company_id }}/account/{{ account.id }}/register"><span class="register-choice-name">{{ account.number ~ ' · ' if account.number }}{{ account.full_name }}</span><span class="num">{{ account.balance | money(home=home) }}</span></a></li>{% endfor %}</ul>
+</section>{% else %}<p>No balance-sheet accounts yet. <a href="/c/{{ company_id }}/account/create">Add an account</a> to open its register.</p>{% endfor %}
+{% if register_tools %}{% set base = noun_base(company_id, 'register') %}<section class="register-tools" aria-labelledby="register-tools-title"><h2 id="register-tools-title">Other register tools</h2><p class="actions">
+{% for v in register_tools %}{% if not v.verb %}<a href="{{ base }}">Open</a>{% elif v.verb == "list" %}<a href="{{ base }}">View list</a>{% elif v.verb == "show" and not record_selector(v, 'register') %}<a href="{{ base }}/self">View details</a>{% elif not v.version_source %}<a href="{{ base }}/{{ v.verb }}">{{ ui_heading('register', v.verb) }}</a>{% endif %}{% endfor %}</p></section>{% endif %}
+{% endblock %}

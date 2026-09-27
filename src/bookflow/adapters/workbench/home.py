@@ -13,15 +13,20 @@ a command can be registered and routed while its handler fails or while no brows
 for it, so the navigation witness in ``tests/test_home_window.py`` is the third condition and
 adding a tile without one is how this contract is broken.
 
-Resolution reads the registry only. It never executes a command, so rendering the home window
-runs no business command beyond the company lookup the page already needs.
+Resolution reads the registry only. It never executes a command. The figures, the attention
+list and the recent activity above the tiles come from `overview`, which runs registered read
+commands as the signed-in reader and shows what they return.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
+from typing import Any, Callable
+from urllib.parse import urlencode
 
 from bookflow.core import registry
+from bookflow.core.money import Money
 
 READ = "read"
 WRITE = "write"
@@ -387,6 +392,31 @@ MENU: tuple[MenuGroup, ...] = (
 
 MENU_BY_SLUG: dict[str, MenuGroup] = {entry.slug: entry for entry in MENU}
 
+# The register chooser lists balance-sheet accounts in the order a bookkeeper reaches for them.
+REGISTER_TYPES: tuple[tuple[str, str], ...] = (
+    ("bank", "Bank accounts"),
+    ("credit_card", "Credit cards"),
+    ("accounts_receivable", "Accounts receivable"),
+    ("accounts_payable", "Accounts payable"),
+    ("other_current_asset", "Other current assets"),
+    ("fixed_asset", "Fixed assets"),
+    ("other_asset", "Other assets"),
+    ("other_current_liability", "Other current liabilities"),
+    ("long_term_liability", "Long-term liabilities"),
+    ("equity", "Equity"),
+)
+
+
+def register_groups(accounts: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Group `account list` rows that have a register (balance-sheet accounts) under their type."""
+    labels = dict(REGISTER_TYPES)
+    grouped: dict[str, list[dict]] = {}
+    for account in accounts:
+        if account.get("statement_family") == "balance_sheet":
+            grouped.setdefault(account["type"], []).append(account)
+    order = [kind for kind, _ in REGISTER_TYPES] + sorted(set(grouped) - set(labels))
+    return [(labels.get(kind, kind.replace("_", " ").capitalize()), grouped[kind]) for kind in order if kind in grouped]
+
 
 @dataclass(frozen=True)
 class ResolvedStep:
@@ -488,3 +518,98 @@ def _check_map() -> None:
 
 
 _check_map()
+
+
+# ---------------------------------------------------------------- the figures above the tiles
+
+Ask = Callable[[str, dict[str, Any]], "dict[str, Any] | None"]
+ATTENTION_ROWS = 5
+_PAGE = 200
+_MAX_PAGES = 20
+
+
+def _pages(ask: Ask, name: str, raw: dict[str, Any], *, stop=None) -> list[dict] | None:
+    """Every row of a paged report, or None when it is not readable or too long to total here.
+
+    `stop(row)` ends the walk early once the report's own order says no later row can matter.
+    """
+    rows: list[dict] = []
+    cursor = None
+    for _ in range(_MAX_PAGES):
+        page = ask(name, {**raw, "limit": _PAGE, **({"cursor": cursor} if cursor else {})})
+        if page is None:
+            return None
+        for row in page["rows"]:
+            if stop and stop(row):
+                return rows
+            rows.append(row)
+        cursor = page.get("next_cursor")
+        if not cursor:
+            return rows
+    return None
+
+
+def _total(rows: list[dict], key: str, currency: str) -> dict[str, Any] | None:
+    """The sum of rows' home-currency amounts as returned; None if any row is in another currency."""
+    if any(row[key]["currency"] != currency for row in rows):
+        return None
+    return Money(sum(row[key]["minor_units"] for row in rows), currency).to_dict()
+
+
+def overview(company_id: str, today: str, home_currency: str, ask: Ask) -> dict[str, Any]:
+    """The Overview's figures, what needs attention and recent activity, from read commands.
+
+    `ask(name, input)` runs a registered command as the signed-in reader and answers None when
+    that reader may not run it or it fails, so a figure the reader cannot read is simply absent.
+    Every amount is one a command returned, or a sum of the home-currency amounts on its rows.
+    """
+    base = f"/c/{company_id}"
+    report = lambda slug, **fields: f"{base}/report/{slug}?" + urlencode({f"f:{k}": v for k, v in fields.items()}, safe=":")
+    week = (date.fromisoformat(today) + timedelta(days=7)).isoformat()
+    figures: list[dict[str, Any]] = []
+    attention: dict[str, Any] = {}
+
+    sheet = _pages(ask, "report balance-sheet", {"date_to": today})
+    banks = [row for row in sheet or () if row["account_type"] == "bank"]
+    cash = _total(banks, "amount", home_currency) if sheet is not None else None
+    if cash is not None:
+        figures.append(dict(key="cash", label="Cash in bank", value=cash,
+                            note="As of today",
+                            href=report("balance-sheet", date_to=today)))
+
+    aging = ask("report ar-aging", {"as_of": today, "limit": 1})
+    if aging is not None:
+        figures.append(dict(key="receivable", label="Owed to you", value=aging["totals"]["total"],
+                            note="Open receivables", href=report("ar-aging", as_of=today)))
+
+    overdue = ask("report open-invoices", {"as_of": today, "past_due_only": True, "limit": _PAGE})
+    if overdue is not None:
+        count = f"{overdue['count']}{'+' if overdue.get('next_cursor') else ''}"
+        figures.append(dict(key="overdue", label="Overdue", value=overdue["totals"]["balance"],
+                            note=f"{count} invoice{'s' if count != '1' else ''} past due" if overdue["rows"] else "Nothing past due",
+                            href=report("open-invoices", as_of=today, past_due_only="true")))
+        attention["overdue"] = [dict(row, href=f"{base}/{row['document_type'].replace('_', '-')}/{row['transaction_id']}")
+                                for row in overdue["rows"][:ATTENTION_ROWS]]
+        attention["overdue_more"] = len(overdue["rows"]) > ATTENTION_ROWS or bool(overdue.get("next_cursor"))
+        attention["overdue_href"] = figures[-1]["href"]
+
+    # Unpaid bills come oldest due date first, so the walk stops at the first one due after the week.
+    due = _pages(ask, "report unpaid-bills", {"as_of": today}, stop=lambda row: row["due_date"] > week)
+    due_total = _total(due, "balance", home_currency) if due is not None else None
+    if due_total is not None:
+        figures.append(dict(key="bills", label="Bills due in 7 days", value=due_total,
+                            note=f"{len(due)} bill{'s' if len(due) != 1 else ''}, including overdue" if due else "Nothing due",
+                            href=report("unpaid-bills", as_of=today)))
+        attention["bills"] = [dict(row, href=f"{base}/bill/{row['transaction_id']}") for row in due[:ATTENTION_ROWS]]
+        attention["bills_more"] = len(due) > ATTENTION_ROWS
+        attention["bills_href"] = figures[-1]["href"]
+
+    month = ask("report profit-and-loss", {"date_from": today[:8] + "01", "date_to": today, "limit": 1})
+    if month is not None:
+        figures.append(dict(key="income", label="Income this month", value=month["totals"]["income"],
+                            note=month["totals"]["net_income"], note_label="Net income",
+                            href=report("profit-and-loss", date_from=today[:8] + "01", date_to=today)))
+
+    events = ask("audit list", {"limit": ATTENTION_ROWS})
+    activity = None if events is None else [dict(event, href=f"{base}/audit/{event['id']}") for event in events["items"]]
+    return dict(figures=figures, attention=attention, activity=activity, today=today)

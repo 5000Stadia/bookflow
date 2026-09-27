@@ -14,12 +14,12 @@ from tests.test_service_sales_browser import _choose, _fill, _value
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
 NAV = 'document.querySelector("#workspace-navigation")'
-TRIGGER = '#workspace-navigation > summary'
+TRIGGER = '#menu-toggle'
 
 
 def _menu(browser, expanded):
-    browser.wait_for(f'{NAV}.open === {json.dumps(expanded)} && '
-                     f'{NAV}.querySelector("summary").getAttribute("aria-expanded") === '
+    browser.wait_for(f'{NAV}.hasAttribute("data-open") === {json.dumps(expanded)} && '
+                     f'document.querySelector("{TRIGGER}").getAttribute("aria-expanded") === '
                      f'{json.dumps(str(expanded).lower())}')
 
 
@@ -48,7 +48,7 @@ def test_mobile_workspace_keyboard_and_single_current_route(register_browser):
     _menu(b, False)
     _current(b, '/_group/customers')
     _tab_to(b, TRIGGER)
-    # Native summary Space activation, including the character event.
+    # Native button Space activation, including the character event.
     b.call('Input.dispatchKeyEvent', {'type':'keyDown', 'key':' ', 'code':'Space',
                                     'windowsVirtualKeyCode':32, 'text':' '})
     b.call('Input.dispatchKeyEvent', {'type':'keyUp', 'key':' ', 'code':'Space',
@@ -59,7 +59,7 @@ def test_mobile_workspace_keyboard_and_single_current_route(register_browser):
     _menu(b, False)
     assert b.evaluate(f'document.activeElement.matches({json.dumps(TRIGGER)})')
     # Crossing the sidebar breakpoint must not leave focus on a hidden control.
-    # The mobile summary has focus after Escape; desktop restores the current section.
+    # The header menu button has focus after Escape; desktop restores the current section.
     b.viewport(1440, 1000)
     _menu(b, True)
     b.wait_for('document.activeElement.matches("#workspace-navigation [data-section=customers]")')

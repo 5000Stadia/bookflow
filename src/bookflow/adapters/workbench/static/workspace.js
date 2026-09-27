@@ -43,16 +43,54 @@
     if (phone.matches) { box.focus({preventScroll:true}); box.scrollIntoView({block:'center'}); }
   };
   for (const name of ['htmx:sendError', 'htmx:timeout', 'htmx:responseError']) document.addEventListener(name, connectionError, {signal:feedback.signal});
+  // A form that replaces the whole page leaves focus nowhere, so the next Tab lands on the skip link
+  // wherever the page happens to be scrolled. Move focus to what the submit produced instead.
+  document.addEventListener('htmx:beforeSwap', event => {
+    if (event.detail.target === document.body) window.bookflowPageSwapped = true;
+  }, {signal:feedback.signal});
+  document.addEventListener('htmx:afterSettle', () => {
+    if (!window.bookflowPageSwapped) return;
+    window.bookflowPageSwapped = false;
+    requestAnimationFrame(() => {
+      const focused = document.activeElement;
+      if (focused && focused !== document.body && focused.isConnected) return;
+      const main = document.getElementById('main-content');
+      if (!main) return;
+      const shown = element => element.getClientRects().length > 0;
+      // An error first; then the first section that is a result rather than a form's wrapper.
+      let target = [...main.querySelectorAll('[data-submit-error], [data-submit-error-top], [role=alert]')].find(shown);
+      if (!target) {
+        const section = [...main.querySelectorAll('section')].find(s => shown(s) && !s.querySelector('form') && !s.closest('nav'));
+        target = section ? ([...section.querySelectorAll('h2, h3')].find(shown) || section) : main.querySelector('h1');
+      }
+      if (!target) return;
+      if (!target.hasAttribute('tabindex')) target.tabIndex = -1;
+      target.dataset.swapFocus = '';
+      target.focus({preventScroll:true});
+      target.scrollIntoView({block: phone.matches && target.matches('[data-submit-error]') ? 'center' : 'start'});
+    });
+  }, {signal:feedback.signal});
   const navigation = document.getElementById('workspace-navigation');
-  if (!navigation) return;
-  const trigger = navigation.querySelector('summary');
+  const trigger = document.getElementById('menu-toggle');
+  if (!navigation || !trigger) return;
   const desktop = window.matchMedia('(min-width: 1100px)');
+  const isOpen = () => navigation.hasAttribute('data-open');
+  // Phones and tablets open the menu from the header button; the desktop sidebar is always shown.
+  const setOpen = open => {
+    navigation.toggleAttribute('data-open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+    trigger.querySelector('use').setAttribute('href', open ? '#i-close' : '#i-menu');
+  };
+  // Chrome may drop focus from a control the new layout hides before the breakpoint change
+  // reaches us, so remember what last had focus and hand that on.
+  let lastFocused = document.activeElement;
+  document.addEventListener('focusin', event => { lastFocused = event.target; }, {signal:feedback.signal});
   const sync = () => {
-    const focused = document.activeElement;
-    const leavingLinks = !desktop.matches && navigation.querySelector('nav').contains(focused);
+    const active = document.activeElement;
+    const focused = active && active !== document.body ? active : lastFocused;
+    const leavingLinks = !desktop.matches && navigation.contains(focused);
     const leavingTrigger = desktop.matches && focused === trigger;
-    navigation.open = desktop.matches;
-    trigger.setAttribute('aria-expanded', String(navigation.open));
+    setOpen(desktop.matches);
     if (leavingLinks) trigger.focus();
     if (leavingTrigger) (navigation.querySelector('a[aria-current]') || navigation.querySelector('a')).focus();
   };
@@ -81,19 +119,21 @@
     layout();
   });
   flip('menuCollapsed', collapse); flip('menuTop', top);
-  desktop.addEventListener('change', layout);
+  desktop.addEventListener('change', layout, {signal:feedback.signal});
   layout();
-  navigation.addEventListener('toggle', () => trigger.setAttribute('aria-expanded', String(navigation.open)));
-  desktop.addEventListener('change', sync);
+  trigger.addEventListener('click', () => setOpen(!isOpen()));
+  desktop.addEventListener('change', sync, {signal:feedback.signal});
   sync();
+  const close = () => { setOpen(false); trigger.focus(); };
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !desktop.matches && navigation.open) {
-      navigation.open = false;
-      trigger.focus();
-    }
-  });
+    if (event.key === 'Escape' && !desktop.matches && isOpen()) close();
+  }, {signal:feedback.signal});
   document.addEventListener('click', event => {
-    if (!desktop.matches && navigation.open && !navigation.contains(event.target)) navigation.open = false;
+    if (!desktop.matches && isOpen() && !navigation.contains(event.target) && !trigger.contains(event.target)) setOpen(false);
+  }, {signal:feedback.signal});
+  // Tabbing past the last section closes the open menu rather than wandering the page beneath it.
+  navigation.addEventListener('focusout', event => {
+    if (!desktop.matches && isOpen() && event.relatedTarget && !navigation.contains(event.relatedTarget) && event.relatedTarget !== trigger) setOpen(false);
   });
   const path = window.location.pathname.replace(/\/$/, '');
   const sections = {
@@ -101,11 +141,12 @@
     'receive-payments':'customers', 'sales-receipt':'customers', 'credit-memo':'customers',
     'customer-refund':'customers', vendor:'vendors', bill:'vendors', 'purchase-order':'vendors',
     'item-receipt':'vendors', 'vendor-credit':'vendors', 'pay-bills':'vendors',
-    employee:'employees', item:'items', inventory:'items', deposit:'banking', register:'banking',
+    employee:'employees', item:'items', inventory:'items', deposit:'banking', register:'banking', _registers:'banking',
     reconcile:'banking', account:'accounting', journal:'accounting', report:'reports',
     company:'company', audit:'audit'
   };
-  const noun = path.split('/')[3];
+  // An account register belongs to Banking, wherever its account sits in the chart.
+  const noun = /^\/c\/[^/]+\/account\/[^/]+\/register$/.test(path) ? 'register' : path.split('/')[3];
   for (const link of navigation.querySelectorAll('a')) {
     if (link.getAttribute('href').replace(/\/$/, '') === path || (noun !== '_group' && sections[noun] && link.dataset.section === sections[noun])) {
       link.setAttribute('aria-current', 'page');

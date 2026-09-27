@@ -762,9 +762,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company=show,
             company_id=show["company_id"],
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
+            overview=overview_summary(request, show),
         )
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
+
+    def overview_summary(request: Request, show: dict[str, Any]) -> dict[str, Any]:
+        """The Overview's figures and lists, each from a read command this reader may run."""
+        permits = company_permits(request, show)
+
+        def ask(name: str, raw: dict[str, Any]) -> dict[str, Any] | None:
+            cmd = registry.get(name)
+            if cmd is None or not permits(cmd):
+                return None
+            try:
+                return run(request, name, raw, show["company_id"])
+            except BookflowError:
+                return None
+
+        return Home.overview(show["company_id"], DateDefaults.company_today(show), show["info"]["home_currency"], ask)
 
     @app.get("/c/{company_id}/_all", response_class=HTMLResponse)
     @permission_read_package(host)
@@ -806,6 +822,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company_id=show["company_id"],
             page_title=entry.label,
             groups=selected,
+            menu_group=slug,
+        )
+
+    @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
+    @permission_read_package(host)
+    def company_registers(company_id: str, request: Request):
+        """Choose an account to open its register; the generated register commands stay listed below."""
+        try:
+            show = run(request, "company show", {}, company_id)
+            accounts = run(request, "account list", {}, company_id)["items"]
+        except BookflowError as e:
+            return page_error(request, e)
+        permits = company_permits(request, show)
+        tools = [cmd for cmd in _verbs("register", "company") if permits(cmd)]
+        return render(
+            "registers.html",
+            request,
+            company=show,
+            company_id=show["company_id"],
+            register_groups=Home.register_groups(accounts),
+            register_tools=tools,
         )
 
     @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)

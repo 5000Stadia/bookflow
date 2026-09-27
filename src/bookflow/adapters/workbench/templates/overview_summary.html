@@ -1,0 +1,17 @@
+{# The Overview's figures, what needs attention and recent activity. Every amount is one a read
+   command returned (or the sum of its rows); a figure this reader cannot read is left out. #}
+{% set o = overview %}{% set home = company.info.home_currency %}
+{% if o.figures %}<section class="overview-figures" aria-label="Key figures"><ul>
+{% for f in o.figures %}<li><a href="{{ f.href }}" data-figure="{{ f.key }}"><span class="figure-label">{{ f.label }}</span><strong class="figure-value">{{ f.value | money(home=home) }}</strong><span class="figure-note">{% if f.note_label %}{{ f.note_label }} {{ f.note | money(home=home) }}{% else %}{{ f.note }}{% endif %}</span></a></li>{% endfor %}
+</ul></section>{% endif %}
+<div class="overview-panels">
+{% set a = o.attention %}{% if a.overdue is defined or a.bills is defined %}<section class="overview-card overview-attention" aria-labelledby="attention-title"><h2 id="attention-title">Needs attention</h2>
+{% if a.overdue %}<h3>Overdue invoices</h3><ul class="overview-rows">{% for row in a.overdue %}<li><a href="{{ row.href }}"><span class="overview-row-main"><span class="overview-row-name">{{ row.display_customer_label }}</span><span class="overview-row-meta">{{ 'Charge' if row.document_type == 'statement_charge' else 'Invoice' }} {{ row.number }} · {{ row.days_past_due }} day{{ 's' if row.days_past_due != 1 }} overdue</span></span><span class="num">{{ row.balance | money(home=home) }}</span></a></li>{% endfor %}</ul>{% if a.overdue_more %}<p class="overview-more"><a href="{{ a.overdue_href }}">All overdue invoices</a></p>{% endif %}{% endif %}
+{% if a.bills %}<h3>Bills due soon</h3><ul class="overview-rows">{% for row in a.bills %}<li><a href="{{ row.href }}"><span class="overview-row-main"><span class="overview-row-name">{{ row.display_vendor_label }}</span><span class="overview-row-meta">Bill {{ row.number }} · {% if row.days_past_due > 0 %}{{ row.days_past_due }} day{{ 's' if row.days_past_due != 1 }} overdue{% else %}due {{ row.due_date | day }}{% endif %}</span></span><span class="num">{{ row.balance | money(home=home) }}</span></a></li>{% endfor %}</ul>{% if a.bills_more %}<p class="overview-more"><a href="{{ a.bills_href }}">All unpaid bills</a></p>{% endif %}{% endif %}
+{% if not a.overdue and not a.bills %}<p class="muted">Nothing overdue, and no bills due in the next 7 days.</p>{% endif %}
+</section>{% endif %}
+{% if o.activity is not none %}<section class="overview-card overview-activity" aria-labelledby="activity-title"><h2 id="activity-title">Recent activity</h2>
+{% if o.activity %}<ul class="overview-rows">{% for event in o.activity %}<li><a href="{{ event.href }}"><span class="overview-row-main"><span class="overview-row-name">{{ event.summary or event.command }}</span><span class="overview-row-meta">{{ event.on_behalf_of_name or event.actor_name }}{% if event.on_behalf_of_name %} (by {{ event.actor_name }}){% endif %}</span></span><time class="overview-when" datetime="{{ event.at }}">{{ event.at | ago }}</time></a></li>{% endfor %}</ul>
+<p class="overview-more"><a href="/c/{{ company_id }}/audit">Open the audit trail</a></p>{% else %}<p class="muted">Nothing recorded yet.</p>{% endif %}
+</section>{% endif %}
+</div>
