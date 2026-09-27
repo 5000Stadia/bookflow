@@ -47,11 +47,15 @@ def test_structured_integer_money_object_exact_bytes_and_core_rejection(register
     assert shown_schema==MoneyInput.model_json_schema()
     _contained(b,width)
     _click(b,'submit')
-    b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
+    # The calculation answers on its own page, under the entries that asked for it.
+    b.wait_for('document.readyState === "complete" && !!document.querySelector("#command-result summary")')
+    assert b.evaluate('location.pathname').endswith('/register/calculate')
+    assert not b.evaluate('!!document.querySelector(".save-feedback")')
+    assert b.evaluate(f'document.getElementsByName({json.dumps(key("amount"))})[0].value')==json.dumps(money)
     assert captures[-1]=={'account':env.bank['id'],'direction':'decrease','allocations':[{'account':env.expense['id'],'amount':money}]}
-    b.evaluate('document.querySelector(".save-feedback summary").click()')
+    b.evaluate('document.querySelector("#command-result summary").click()')
     # Parse text in Python; JSON.parse would itself round the very integer tested.
-    result=json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))
+    result=json.loads(b.evaluate('document.querySelector("#command-result pre").textContent'))
     assert result['amount']['minor_units']==units and result['amount']['amount']=='90071992547409.93'
     assert company_snapshot(root)==baseline
     _contained(b,width)
@@ -98,11 +102,15 @@ def test_top_level_money_object_nullable_branch_and_complete_calculation(registe
     assert json.loads(b.evaluate('document.getElementsByName("f:amount")[0].closest(".form-field").querySelector(".structured-input-help pre").textContent'))==SalesMoneyInput.model_json_schema()
     _contained(b,width)
     _click(b,'submit')
-    b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
+    # A read-only calculation answers on its own page -- never a notice on the Overview.
+    b.wait_for('document.readyState === "complete" && !!document.querySelector("#command-result summary")')
     assert captures[-1]==raw
-    assert b.evaluate('document.querySelector(".save-feedback > b").textContent')=='Completed'
-    b.evaluate('document.querySelector(".save-feedback summary").click()')
-    assert json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))==expected
+    assert b.evaluate('location.pathname').endswith('/payment/calculate')
+    assert not b.evaluate('!!document.querySelector(".save-feedback")')
+    assert b.evaluate('document.getElementsByName("f:amount")[0].value')==json.dumps(raw['amount'])
+    assert '$1.25' in b.evaluate('document.querySelector("#command-result").textContent')
+    b.evaluate('document.querySelector("#command-result summary").click()')
+    assert json.loads(b.evaluate('document.querySelector("#command-result pre").textContent'))==expected
     assert company_snapshot(root)==baseline
     _contained(b,width)
     prepare('null')

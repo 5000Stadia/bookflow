@@ -53,10 +53,10 @@ def test_nested_collection_model_object_null_and_full_error(register_browser,tmp
         return key('party')
     def submit_result():
         _click(b,'submit')
-        b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
-        b.evaluate('document.querySelector(".save-feedback summary").click()')
-        assert b.evaluate('document.querySelector(".save-feedback details").open')
-        return json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))
+        b.wait_for('document.readyState === "complete" && !!document.querySelector("#command-result summary")')
+        b.evaluate('document.querySelector("#command-result summary").click()')
+        assert b.evaluate('document.querySelector("#command-result details").open')
+        return json.loads(b.evaluate('document.querySelector("#command-result pre").textContent'))
     party_name=prepare(json.dumps(raw['allocations'][0]['party']))
     assert submit_result()==expected
     assert captured[-1]==raw
