@@ -41,6 +41,7 @@ from bookflow.core.money import Money
 from bookflow.adapters.workbench import bills as Bills
 from bookflow.adapters.workbench import credits as Credits
 from bookflow.adapters.workbench import document_form as Document
+from bookflow.adapters.workbench import display as Display
 from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.adapters.workbench import list_paging as Paging
 from bookflow.adapters.workbench import naming as Naming
@@ -64,6 +65,8 @@ env.globals["noun_base"] = Routing.base
 env.globals["ui_heading"] = Naming.heading
 env.globals["ui_words"] = Naming.words
 env.filters["when"] = Naming.when
+# Money and dates as a person reads them; display only, never input or export.
+env.filters.update(Display.FILTERS)
 # Whether a noun's show command is about one record or about the whole thing, so the
 # navigation grid sends each to the page that can actually open. Registered after the
 # function it calls; see `_record_selector`.
