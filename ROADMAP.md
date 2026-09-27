@@ -30,7 +30,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
 - [ ] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
 - [x] R73 repair the stale tests the acceptance checks found across rows 5, 7, 8, 9, 22 and 24 — notes/NOW.md
-- [ ] R75 investigate three suspected defects: deposit coordinate work E_INTERNAL "Unsupported source aggregate identity", a progress-billing schema constraint mismatch that differs between runs, and Find rates answering with a JSON flash on the Overview — notes/stale-tests-20260927.md
+- [~] R75 investigate three suspected defects: deposit coordinate work E_INTERNAL "Unsupported source aggregate identity", a progress-billing schema constraint mismatch that differs between runs, and Find rates answering with a JSON flash on the Overview — notes/stale-tests-20260927.md
 - [x] R15 Customer work, service sales, progress and work billing — design/customer-work.md
 - [x] R16 Purchasing, receiving with shipping allocation, bills and vendor payments — design/architecture.md
 - [x] R17 Deposits and bank reconciliation — design/architecture.md
