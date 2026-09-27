@@ -44,7 +44,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 ## M4 — V2 functional roadmap (each increment selected with the human)
 
 - [~] R31 Human-directed improved UI — design/V2-ROADMAP.md item 1
-- [?] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
+- [x] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
 - [?] R56 R31 the form first on document forms, recent documents as compact rows (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
 - [?] R64 R31 a quieter document form — sticky save bar, Class and unit columns only when used, picker and date tidying, recording details folded (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
 - [?] R57 R31 reports open with their numbers — one-line filters, date chips, headline figure, statement-shaped layout on desktop (live on the demo; waiting for your look) — notes/mobile-audit-response-20260927.md
