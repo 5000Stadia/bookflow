@@ -98,3 +98,28 @@ def test_complete_work_tax_and_five_custom_kinds_persist_and_page(client,tax_sal
             assert denied.value.code=='E_PERMISSION' and denied.value.details=={}
         assert ('customer-work','standard') in checks and ('customer-work','member') in checks
         assert tuple(s.company.raw.iterdump())==final
+
+
+def test_stock_moving_receipt_is_refused_with_a_typed_error_and_writes_nothing(client,sale,driver):
+    """A deposited receipt that sells stock cannot be coordinated; the refusal is typed, not E_INTERNAL."""
+    from bookflow import BookflowError
+    item=client.run('item show',{'item':'Brass Shutoff Valve'},company=COMPANY)['id']
+    client.run('inventory adjust',dict(item=item,date='2026-01-01',adjustment_account='Opening Balance Equity',
+        quantity_change='10',value_change='100.00',memo='Opening stock'),company=COMPANY,reason='stock')
+    exempt=next(row['id'] for row in client.run('sales-tax-code list',{},company=COMPANY)['items'] if not row['taxable'])
+    receipt=client.run('sales-receipt post',dict(customer=sale['customer'],date='2026-06-02',deposit_to=uf(client),
+        payment_method='Check',lines=[dict(item=item,quantity='1',unit_price='60',tax_code=exempt)]),company=COMPANY)
+    doc=additional_document(client,sale,'1')
+    doc['sources']=[dict(source_type='sales_receipt',source=receipt['id'],expected_version=1)]
+    deposited=driver.run('post',dict(operation_key='C-stock-post',document=doc))
+    body=replacement(deposited,doc);body['sources']=[dict(source_result=True,source=receipt['id'])]
+    inp=CoordinateInput(deposit=deposited.current.id,expected_version=1,operation_key='C-stock-coordinate',
+        source_action=dict(kind='sales_receipt_update',input=dict(sales_receipt=receipt['id'],expected_version=2,memo='Coordinated memo')),
+        replacement=dict(mode='document',document=body))
+    ctx=Context.new(Interface.python,'C stock refusal',reason='Correct a stocked receipt memo')
+    before=driver.dump()
+    with driver.session() as s:
+        with pytest.raises(BookflowError) as caught:prepare(s,ctx,inp)
+    assert caught.value.code=='E_VALIDATION'
+    assert caught.value.details['reason']=='coordinated_sale_moves_stock'
+    assert driver.dump()==before

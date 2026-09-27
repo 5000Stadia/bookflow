@@ -6,7 +6,7 @@ from bookflow.core.errors import BookflowError
 
 # Each full owner payload is preserved. New producer fields need a disposition.
 PAYMENT_FIELDS = frozenset('input operation header before pending changed_headers event operation_id selected custom_plan sequence context targets fingerprint at funding old_allocations semantic originals cancellation_set'.split())
-SALES_FIELDS = frozenset('input operation document_type changed header before old_revision pending sequence event custom_plan billing_source semantic billing_allocations'.split())
+SALES_FIELDS = frozenset('input operation document_type changed header before old_revision pending sequence event custom_plan billing_source semantic billing_allocations stock'.split())
 TABLES = frozenset('application_allocations applications document_line_identities document_lines payment_component_keys payment_components payment_profiles posting_batches posting_line_sources posting_lines sales_line_profiles sales_profiles sales_tax_attribution_lines sales_tax_attributions sales_tax_components sales_tax_line_keys settlement_line_keys transaction_revisions'.split())
 
 
@@ -39,10 +39,17 @@ def _plain(value):
     return value
 
 
+def _empty_stock(stock):
+    return stock is None or (not stock.movements and not stock.corrections and not stock.costs)
+
+
 def source_identity_map(plan, *, payment):
     data = plan.data
     _require(set(data) <= (PAYMENT_FIELDS if payment else SALES_FIELDS))
     _require(set(data.get('pending', {})) <= TABLES)
+    # A sales source carries its stock plan. One that moves stock is refused with a typed error
+    # before this point (sales.refuse_coordinated_stock); what remains here holds no facts.
+    _require(_empty_stock(data.get('stock')))
     entries = []
     for table, rows in sorted(data.get('pending', {}).items()):
         for index, row in enumerate(rows):
@@ -88,6 +95,7 @@ def canonical_source_data(plan, *, payment):
     manifest = source_identity_map(plan, payment=payment)
     mapping = {entry.physical_id: f'{entry.owner_kind}/{entry.logical_key}' for entry in manifest.entries}
     data = _plain(plan.data)
+    data.pop('stock', None)  # Proven empty by source_identity_map above; carries no facts.
     if payment:
         data['input'].pop('operation_key', None)  # Ordinary envelope only; never business facts.
     at = plan.data.get('at') or (plan.data.get('header') or {}).get('updated_at')
@@ -190,6 +198,9 @@ def prepare_source_overlay(s, ctx, inp, source, binding):
     else:
         validator = sales_validation.validate
     validator(source.plan, s, ctx)
+    if not source.action.kind.startswith('payment_'):
+        from bookflow.company.sales import refuse_coordinated_stock
+        refuse_coordinated_stock(source.plan)
     source_identity_map(source.plan, payment=source.action.kind.startswith('payment_'))
     if data.get('before') is not None:
         _require(data['before'] == header)
