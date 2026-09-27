@@ -13,7 +13,8 @@ from tests import provenance
 
 
 @pytest.mark.parametrize('width',[1280,390])
-@pytest.mark.timeout(180)
+# An activated (new-install) root checks policy on every command, about 3x the legacy cost.
+@pytest.mark.timeout(540)
 @pytest.mark.skipif(not CHROME.exists(),reason='Chrome unavailable')
 def test_installed_mcp_file_browser_and_agent_continuation(register_browser,tmp_path,width):
     from mcp import ClientSession

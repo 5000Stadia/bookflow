@@ -5,6 +5,7 @@ import bookflow
 from tests.test_tax_policy_sales import sale, tax_sale, request, COMPANY
 from tests.test_payment_receipts import method
 from tests.test_tax_policy_migration import co14_root
+from bookflow.core.config import os_login
 
 
 def attach(client, company, tmp_path):
@@ -15,7 +16,7 @@ def attach(client, company, tmp_path):
     target.organization.new(name='Tax portability')
     destination = root/'organizations'/'Tax portability'/'Imported'
     shutil.copytree(source, destination)
-    identity = target.company.attach(path=str(destination))['company_id']
+    identity = target.company.attach(path=str(destination), administrator=os_login())['company_id']
     return target, identity
 
 

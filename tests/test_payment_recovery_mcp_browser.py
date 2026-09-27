@@ -6,11 +6,8 @@ from pathlib import Path
 from uuid import uuid4
 import anyio
 import pytest
-from bookflow.core import clock
 from bookflow.core.config import Config
-from bookflow.hub import schema as h
-from tests.conftest import make_actor
-from tests.test_row7_credentials import writer
+from tests.conftest import browser_call, make_agent
 from tests.test_row5_browser_acceptance import browser_site
 from tests.test_row8_register_browser import register_browser
 from tests.test_payment_review_gui import setup,invoice_setup
@@ -29,10 +26,7 @@ def test_actual_mcp_recovery_human_confirmation_and_original_operation(register_
     method=b.evaluate("document.querySelector('#payment-method').value")
     root=Path(os.environ['BOOKFLOW_DATA_ROOT'])
     principal=Config.load(root/'config.toml').user_table(register_browser.site.login)['user_id']
-    agent=make_actor(root,'recovery-mcp-agent',kind='agent',owner_user_id=principal,company_role=(register_browser.site.company_id,'owner'))
-    with writer(root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent,epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,principal_user_id=principal,assigned_by=principal,assigned_at=clock.now_iso()))
+    agent=make_agent(browser_call(b),'recovery-mcp-agent',principals=principal,company=register_browser.site.company_id,role='owner')
     issuance=b.evaluate("fetch('/commands/token.issue',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Bookflow-Workbench':'1'},body:JSON.stringify("+json.dumps(dict(user=agent,principal=principal,label='Disposable recovery MCP'))+")}).then(r=>r.json())",await_promise=True)
     calls=[]
     binary=launcher()

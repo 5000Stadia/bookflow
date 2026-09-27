@@ -56,18 +56,10 @@ def test_standard_user_delete_without_post_and_revoked_permanent_retry(office,bo
 
 
 def test_revoked_bound_principal_cannot_replay_permanent_agent_delete(office,books,monkeypatch):
-    from tests.conftest import make_actor
-    from tests.test_row7_credentials import writer
-    from bookflow.hub import schema as h, identity_admin as admin
-    from bookflow.core import clock, identity_admin_binding as producer
+    from tests.conftest import make_agent
     from bookflow.core.config import Config
-    from bookflow.core.publication import OSBinding
-    from bookflow.hub.permission_admin_audit import AuditContext
     principal=Config.load(office.root/'config.toml').user_table(office.login)['user_id']
-    agent=make_actor(office.root,'delete-agent',kind='agent',owner_user_id=principal,company_role=(books['company'],'standard'))
-    with writer(office.root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent,epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,principal_user_id=principal,assigned_by=principal,assigned_at=clock.now_iso()))
+    agent=make_agent(lambda name,body:office.admin(name.replace(' ','.'),body),'delete-agent',principals=principal,company=books['company'])
     post=office.admin('check.post',dict(account=books['bank'],date='2017-01-01',amount='1',expenses=[dict(account=books['freight'],amount='1')]),company=books['company'])
     state=office.admin('permission.show')
     office.admin('permission.activate',dict(expected_generation=state['generation'],expected_catalog_sha256=state['catalog_sha256']))
@@ -75,17 +67,8 @@ def test_revoked_bound_principal_cannot_replay_permanent_agent_delete(office,boo
     for user in (principal,agent):
         member=next(x for x in memberships if x['user_id']==user and x['scope_type']=='company')
         office.admin('membership.grant',dict(user=user,company=books['company'],role=member['role'],expected_version=member['version'],grants=['transaction.check.delete'],denies=['ledger.post']))
-    with sqlite3.connect(office.root/'hub.db') as db:
-        version,epoch=db.execute('SELECT version,epoch FROM agent_authority WHERE agent_user_id=?',(agent,)).fetchone()
-    bound=OSBinding.capture(office.handle.host,office.login)
-    def authorize_agent(session):
-        request='delete-agent-fixture'
-        audit=AuditContext(clock.now_iso(),'python','delete fixture','1','owned','fixture',request,reason='Confirm scoped fixture agent use')
-        with session.commits.operation('dispatch.apply',session.hub):
-            with producer.hosted_operation(office.handle.host,bound,request_id=request,purpose='apply') as operation:
-                operation.apply(admin.AuthorizeAgent(agent,version,epoch,True,True),audit=audit)
-                session.commits.commit(session.hub,'dispatch.apply')
-    office.handle.host.run_write(principal,office.login,authorize_agent)
+    # Narrowing the principal's policy suspended the agent; authorize it again, acknowledging the fresh context.
+    office.admin('agent.authorize',dict(agent=agent,confirm_permitted_use=True,acknowledge_fresh_context=True))
     issued=office.admin('token.issue',dict(user=agent,principal=principal,label='Delete principal witness'))
     headers={'Authorization':'Bearer '+issued['secret'],'X-Bookflow-Reason':'Delete by scoped agent'}
     # A separate unauthenticated HTTP client ensures the bearer is the actual producer.

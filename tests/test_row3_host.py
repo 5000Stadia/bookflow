@@ -1071,7 +1071,7 @@ def test_filesystem_operations_release_every_affected_pooled_company(hosted):
     # object if detach came from an older process or interrupted release path.
     host.submit(lambda: host._companies.__setitem__(cid, Database(folder / "company.db", True)))
     assert is_pooled(cid)
-    hosted.ok("company.attach", {"path": str(folder)})
+    hosted.ok("company.attach", {"path": str(folder), "administrator": hosted.login})
     assert not is_pooled(cid)
 
     pool_company("555-6105")
@@ -1103,7 +1103,7 @@ def test_a_durable_write_error_still_checkpoints_and_wakes_subscribers(hosted, r
 
     try:
         with pytest.raises(BookflowError) as caught:
-            host.run_write(_admin_id(root), "", committed_then_failed)
+            host.run_write(_admin_id(root), os_login(), committed_then_failed)
         assert caught.value.code == "E_PARTIAL_WRITE"
         assert event.wait(0.5), "the durable audit event did not wake its subscriber"
         assert hosted.info()["info"]["fax"] == "555-6199"
@@ -1284,15 +1284,31 @@ def test_the_stream_drains_a_burst_and_resumes_from_last_event_id(hosted, live):
     hosted.ok("company.update", {"fax": "555-0999"}, company=cid)
 
 
-def test_the_stream_ends_with_an_error_when_its_credential_is_revoked(hosted, live):
+def test_the_stream_closes_without_another_batch_when_its_credential_is_revoked(hosted, live):
+    """Blueprint 4.3: event-stream batches pass a current-authority fence before publication,
+    and a revoked stream closes without another data batch (spec 7: application-buffered data
+    is dropped after revocation). Nothing written promises a final error frame, and the fence
+    releases no frame at all after revocation, so the client sees the connection end; it must
+    treat that as an interruption, not the end of history (blueprint 7)."""
+    import httpx
     cid = hosted.company_id
     issued = hosted.ok("token.issue", {"label": "streamer"})
-    ended = []
+    seen, ended = [], []
 
     def read():
+        kind = None
         try:
-            ended.extend(_collect(live, f"/companies/{cid}/events",
-                                  {"Authorization": f"Bearer {issued['secret']}"}, 1, timeout=12.0))
+            with httpx.stream("GET", f"{live}/companies/{cid}/events",
+                              headers={"Authorization": f"Bearer {issued['secret']}"}, timeout=12.0) as r:
+                assert r.status_code == 200
+                for line in r.iter_lines():
+                    if line.startswith("event: "):
+                        kind = line[7:]
+                    elif line.startswith("data: "):
+                        seen.append((kind, json.loads(line[6:])))
+            ended.append("closed")
+        except httpx.RemoteProtocolError:
+            ended.append("closed")
         except Exception as e:  # noqa: BLE001 - reported through the assertion below
             ended.append(("raised", repr(e)))
 
@@ -1302,9 +1318,10 @@ def test_the_stream_ends_with_an_error_when_its_credential_is_revoked(hosted, li
     hosted.ok("token.revoke", {"token": issued["token_id"]})
     hosted.ok("company.update", {"fax": "555-7777"}, company=cid)  # wakes it up
     reader.join(timeout=10)
-    assert ended, "the stream never ended"
-    kind, payload = ended[0]
-    assert kind == "error" and payload["code"] == "E_UNAUTHENTICATED", ended
+    assert ended == ["closed"], (ended, seen)
+    # No data batch after revocation: the waking commit is never delivered. An error frame,
+    # were one released, could only say the credential is gone.
+    assert all(kind == "error" and payload["code"] == "E_UNAUTHENTICATED" for kind, payload in seen), seen
 
 
 def test_invalid_stream_cursors_are_ordinary_validation_documents(hosted):
@@ -1400,7 +1417,7 @@ def test_commit_between_first_drain_and_subscription_is_not_missed(hosted, live,
         if not raced:
             raced = True
             ctx = Context.new(Interface.http, "race-witness")
-            host.run_write(_admin_id(root), "", lambda s: execute(
+            host.run_write(_admin_id(root), os_login(), lambda s: execute(
                 registry.get("company update"), {"fax": "555-5151"}, ctx, s,
                 company_selector=cid, company_source="option"))
         return original(key, loop, event)
@@ -1780,7 +1797,7 @@ def test_the_wal_stays_bounded_with_a_reader_attached(hosted, root):
                 pinned.close()
                 pinned = None
             ctx = Context.new(Interface.http, "wal-fixture")
-            host.run_write(admin, "", lambda s, i=i, ctx=ctx: execute(
+            host.run_write(admin, os_login(), lambda s, i=i, ctx=ctx: execute(
                 cmd, {"phone": f"555-{i:04d}"}, ctx, s, company_selector=cid, company_source="option"))
         assert (db.parent / "company.db-wal").exists()
     finally:
@@ -1887,26 +1904,15 @@ def test_the_timers_run_on_their_own(tmp_path, monkeypatch, caplog):
 def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, root):
     """Blueprint 4.3: an agent's token names the human it acts for; every write it makes records on_behalf_of."""
     import sqlalchemy as sa
-    from bookflow.core import clock
-    from bookflow.core.ids import new_id
     from bookflow.hub import schema as h
-    from bookflow.hub.users import common
     from bookflow.storage.engine import open_database
     admin_id = hosted.ok("company.list", {})  # any call proves the fixture credential works
     with open_database(root / "hub.db", writable=False) as db:
         admin = dict(db.conn.execute(sa.select(h.users).where(h.users.c.username == hosted.login)).mappings().first())
-        org_id = db.conn.execute(sa.select(h.companies.c.organization_id).where(h.companies.c.id == hosted.company_id)).scalar_one()
-    aid = new_id()
-    hosted.handle.host.submit(lambda: None)  # writer idle; insert through the writer's own hub connection to respect the single-writer rule
-    def insert():
-        hub = hosted.handle.host._hub
-        hub.raw.execute("BEGIN IMMEDIATE")
-        hub.conn.execute(h.users.insert().values(id=aid, kind="agent", username="ledger-bot", display_name="Ledger Bot", owner_user_id=admin["id"], password_hash=None, hub_admin=True, timezone=None, active=True, **common(admin["id"], "system")))
-        hub.conn.execute(h.agent_authority.insert().values(agent_user_id=aid, epoch=1, suspended_at=None, suspension_reason=None))
-        hub.conn.execute(h.agent_principals.insert().values(agent_user_id=aid, principal_user_id=admin["id"], assigned_by=admin["id"], assigned_at=clock.now_iso(), revoked_at=None))
-        hub.conn.execute(h.memberships.insert().values(id=new_id(), user_id=aid, scope_type="organization", scope_id=org_id, role="admin", granted_by=admin["id"], granted_at=clock.now_iso(), revoked_at=None))
-        hub.raw.execute("COMMIT")
-    hosted.handle.host.submit(insert)
+    from tests.conftest import hosted_call, make_agent
+    # The agent is created and authorized through the public agent commands, acting for the installer.
+    make_agent(hosted_call(hosted), "ledger-bot", principals=admin["id"], company=hosted.company_id, role="admin",
+               display_name="Ledger Bot")
     faceless = hosted.call("token.issue", {"user": "ledger-bot", "label": "faceless"})
     assert faceless.status_code == 422 and faceless.json()["details"]["fields"][0]["field"] == "principal"
     issued = hosted.ok("token.issue", {"user": "ledger-bot", "label": "bot-token", "principal": hosted.login})

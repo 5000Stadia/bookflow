@@ -18,7 +18,7 @@ import pytest
 from bookflow.core import clock
 from bookflow.core.config import Config
 from bookflow.hub import schema as h
-from tests.conftest import make_actor
+from tests.conftest import hosted_call, make_actor, make_agent
 from tests.test_row3_host import hosted, live, PASSWORD
 from tests.test_row7_credentials import writer
 from tests.test_row5_browser_acceptance import CHROME, _Cdp
@@ -31,18 +31,15 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
     principal = Config.load(hosted.root / 'config.toml').user_table(hosted.login)['user_id']
-    other = make_actor(hosted.root, 'weekly-other', company_role=(hosted.company_id, 'owner'))
-    agent = make_actor(hosted.root, 'weekly-shared-agent', kind='agent', owner_user_id=principal,
-                       company_role=(hosted.company_id, 'owner'))
-    second = make_actor(hosted.root, 'weekly-second-agent', kind='agent', owner_user_id=other,
-                        company_role=(hosted.company_id, 'owner'))
+    # A shared agent's principals must hold identical permissions, so the second person is,
+    # like the installer, an installation administrator and owner of this company.
+    other = make_actor(hosted.root, 'weekly-other', hub_admin=True, company_role=(hosted.company_id, 'owner'))
+    agent = make_agent(hosted_call(hosted), 'weekly-shared-agent', principals=[principal, other],
+                       company=hosted.company_id, role='owner')
+    second = make_agent(hosted_call(hosted), 'weekly-second-agent', principals=other, owner=other,
+                        company=hosted.company_id, role='owner')
     with writer(hosted.root) as db:
         db.conn.execute(h.users.update().where(h.users.c.id == principal).values(timezone='Europe/Berlin'))
-        for actor in (agent, second):
-            db.conn.execute(h.agent_authority.insert().values(agent_user_id=actor, epoch=1))
-        for actor, person in ((agent, principal), (agent, other), (second, other)):
-            db.conn.execute(h.agent_principals.insert().values(agent_user_id=actor, principal_user_id=person,
-                assigned_by=principal, assigned_at=clock.now_iso()))
     tokens = {key: hosted.ok('token.issue', {'user': actor, 'principal': person, 'label': 'Weekly fixture'})['secret']
               for key, actor, person in [('a1', agent, principal), ('a2', agent, other), ('b2', second, other)]}
     current = [datetime.fromisoformat('2027-03-21T22:59:59+00:00')]

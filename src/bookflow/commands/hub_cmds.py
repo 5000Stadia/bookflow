@@ -142,6 +142,12 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                         me = users.create_human(s, username=username, display_name=display_name, created_by=system["id"], via=VIA(ctx), hub_admin=True)
                         touched = [Touched("user", system["id"], "create", None, 1, system), Touched("user", me["id"], "create", None, 1, me)]
                         audit.write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
+                        # A new root starts in the current permission mode, as
+                        # `permission activate` would leave it, so no agent can
+                        # ever hold authority under the legacy rules.
+                        from bookflow.hub.permission_activation import activate_new_root
+                        from bookflow.hub.permission_setup import audit_context
+                        activate_new_root(hub, actor_id=me["id"], context=audit_context(ctx, "permission activate"))
                         s.config.set_user(s.os_login, me["id"])
                         s.config.stage_pending(hub, request_id=ctx.request_id)
                         s.commits.commit(hub, "hub.init")
@@ -254,13 +260,19 @@ def plan_org_new(inp: NameInput, ctx: Context, s: Session) -> Plan:
     folder = choose_folder_name(s.organizations_dir, name)
     at = now_iso()
     row = {"id": new_id(), "display_name": name, "name_key": name_key(name), "path": f"organizations/{folder}", "pending_path": None, "is_demo": False, **users.common(s.actor.id, VIA(ctx), at)}
-    return Plan(preview=OrganizationNewOutput(**organization_output(s, row).model_dump()), data={"name": name})
+    return Plan(preview=_new_org_output(s, row), data={"name": name})
+
+
+def _new_org_output(s: Session, row: dict[str, Any]) -> OrganizationNewOutput:
+    """The creator owns the new organization; the output reports that access."""
+    out = organization_output(s, row).model_dump()
+    return OrganizationNewOutput(**{**out, "access": "organization", "role": "owner"})
 
 
 @org_new.applier
 def apply_org_new(plan: Plan, ctx: Context, s: Session) -> Applied:
-    row, touched = org.create(s, plan.data["name"], VIA(ctx))
-    return Applied(OrganizationNewOutput(**organization_output(s, row).model_dump()), [touched], f"created organization {row['display_name']}")
+    row, touched = org.create(s, plan.data["name"], VIA(ctx), owner_membership=True)
+    return Applied(_new_org_output(s, row), touched, f"created organization {row['display_name']}")
 
 
 org_list = command("organization list", scope="hub", description="List the organizations the acting user can see.",
@@ -915,7 +927,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
             audit.write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
         orow, t_org = org.create(s, normalize_display_name(seed["organization"]["display_name"]), VIA(ctx), is_demo=True)
         rows = []
-        touched = [t_org]
+        touched = list(t_org)
         seeds = [seed] + ([plan.data["reference"]] if plan.data["reference"] else [])
         for company_seed in seeds:
             inp = CompanyNewInput.model_validate({k: v for k, v in company_seed["company"].items()} | {"organization": orow["id"]})
@@ -951,6 +963,8 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
             for company_seed, row in zip(seeds, rows):
                 try:
                     _apply_seed_history(s, ctx, company_seed, row)
+                    if row is primary:
+                        _seed_demo_agent(s, ctx, row)
                 except Exception as error:
                     raise BookflowError(
                         "E_PARTIAL_WRITE",
@@ -1056,6 +1070,46 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
     finally:
         s.close_company()
         s.company_row, s.company = saved_row, saved_company
+
+
+DEMO_AGENT = "demo-assistant"
+
+
+def _seed_demo_agent(s: Session, ctx: Context, company: dict[str, Any]) -> None:
+    """The demo's dedicated agent identity, through the registered agent commands.
+
+    Its retention scope is exactly this one identity: it is created once, assigned to the
+    human running the reset, given standard access to the new demo company and authorized.
+    A reset trashes the old company, which suspends it (its access shrank), so re-authorizing
+    it acknowledges the fresh context. No token is issued: a secret is shown only at
+    issuance, to whoever asks for one. No other user is touched.
+    """
+    from bookflow.core import registry as _registry
+    from bookflow.core.dispatch import run_in_session
+    from bookflow.hub.permission_access import activated
+    if not activated(s):
+        s.warnings.append(f"the demo agent {DEMO_AGENT} needs activated permissions; run `permission activate`")
+        return
+    hub_ctx = ctx.model_copy(update={"company_id": None})
+
+    def run(name: str, raw: dict[str, Any]) -> dict[str, Any]:
+        cmd = _registry.get(name)
+        return run_in_session(cmd, cmd.input_model.model_validate(raw), hub_ctx, s)
+
+    existing = users.find_user(s, username=DEMO_AGENT)
+    if existing is not None and existing["kind"] != "agent":
+        s.warnings.append(f"the username {DEMO_AGENT} belongs to a person, so the demo has no agent")
+        return
+    if existing is None:
+        run("agent create", {"username": DEMO_AGENT, "display_name": "Demo Assistant"})
+    shown = run("agent show", {"agent": DEMO_AGENT})
+    if s.actor.id not in {p["user_id"] for p in shown["principals"]}:
+        run("agent assign", {"agent": DEMO_AGENT, "principal": s.actor.id, "confirm_permitted_use": True})
+    run("membership grant", {"user": DEMO_AGENT, "company": company["id"], "role": "standard"})
+    shown = run("agent show", {"agent": DEMO_AGENT})
+    if shown["authority"]["suspended"]:
+        run("agent authorize", {"agent": DEMO_AGENT, "confirm_permitted_use": True,
+                                "acknowledge_fresh_context": shown["authority"]["fresh_context_required"]})
 
 
 _SEED_CAPTURE = re.compile(r"^[a-z][a-z0-9_]*$")

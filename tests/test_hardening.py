@@ -199,7 +199,7 @@ def test_portability_names_are_real(client, root, tmp_path, monkeypatch):
     c2 = bookflow.connect(data_root=str(r2)); c2.init(username="other", display_name="Other Person"); c2.organization.new(name="Demo Holdings LLC")
     dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
     shutil.copytree(src["path"], dst)
-    c2.company.attach(path=str(dst))
+    c2.company.attach(path=str(dst), administrator="other")
     s2 = c2.company.show(company="Demo Plumbing Co")
     assert s2["info_created_by_name"] is not None and s2["info_created_by_name"] == src["info_created_by_name"]
     assert s2["registered_by_name"] == "Other Person"
@@ -265,7 +265,10 @@ def test_org_hop_completed_by_rerun(client, root):
     out = client.organization.rename(organization=orow["id"], name=name.upper(), move=True)
     assert out["moved"] and not hop.exists() and (root / new_rel).exists()
     ev = client.hub.audit.list(command="organization move")["items"][0]
-    assert ev["entry_count"] == 2, "the organization row and the one company row it rewrote"
+    # The organization row, the one company row it rewrote, and (the root being activated)
+    # the permission generation a scope-structure change recomputes in the same event.
+    entries = client.hub.audit.show(event=ev["id"])["entries"]
+    assert [e["record_type"] for e in entries] == ["organization", "company", "permission_state"]
 
 
 @pytest.mark.parametrize("platform,fn,mocked,expected", [

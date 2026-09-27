@@ -91,6 +91,7 @@ def _credential(client, actor, principal):
                       actor_kind='agent', secret=issued['secret'])
 
 
+@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 @pytest.mark.parametrize('case', ['principal_switch', 'renewal', 'revoked', 'expired', 'epoch', 'principal_loss', 'missing_principal'])
 def test_actual_agent_credential_and_principal_matrix(root, client, sale, driver, monkeypatch, bound_people, case):
     from tests.test_row7_credentials import writer
@@ -199,6 +200,7 @@ def test_os_remapping_invalidates_the_existing_execution_producer(root,client,sa
     assert _storage(root,database_path(client))==before
 
 
+@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(root,client,sale,driver,monkeypatch,bound_people):
     from dataclasses import replace
     from bookflow.company import deposit_lifecycle as lifecycle, deposit_persistence as persistence

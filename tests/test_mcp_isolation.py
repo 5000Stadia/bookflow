@@ -10,11 +10,8 @@ import sys
 import anyio
 import pytest
 
-from bookflow.core import clock
-from bookflow.hub import schema as h
-from tests.conftest import make_actor
+from tests.conftest import hosted_call, make_actor, make_agent
 from tests.test_row3_host import hosted, live
-from tests.test_row7_credentials import writer
 from tests import provenance
 
 GHOST = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -30,13 +27,8 @@ def test_actual_mcp_siblings_foreign_org_readonly_and_intent_ownership(hosted, l
     foreign_org = hosted.ok('organization.new', {'name': 'Private organization 4729'})['organization_id']
     foreign = hosted.ok('company.new', {'legal_name': 'Private foreign 2857', 'home_currency': 'USD', 'organization': foreign_org})['company_id']
     principal = make_actor(hosted.root, 'limited-principal', company_role=(hosted.company_id, 'owner'))
-    agent = make_actor(hosted.root, 'limited-agent', kind='agent', owner_user_id=principal,
-                       company_role=(hosted.company_id, 'owner'))
+    agent = make_agent(hosted_call(hosted), 'limited-agent', principals=principal, company=hosted.company_id, role='owner')
     readonly = make_actor(hosted.root, 'limited-reader', company_role=(hosted.company_id, 'readonly'))
-    with writer(hosted.root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent, principal_user_id=principal,
-            assigned_by=principal, assigned_at=clock.now_iso()))
     tokens = {name: hosted.ok('token.issue', {'user': actor, 'label': 'Isolation fixture', **options})['secret']
               for name, actor, options in [('agent', agent, {'principal': principal}), ('reader', readonly, {})]}
     binary = provenance.launcher()

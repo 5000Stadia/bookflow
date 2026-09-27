@@ -164,6 +164,7 @@ def test_read_inspection_marker_is_honest_in_help(commands, verb):
     assert 'explicit_grant_only' not in doc['input_schema']['properties']
 
 
+@pytest.mark.legacy_permissions  # pins legacy hub-admin company admission for its test-registered commands
 def test_real_roles_core_cli_http_and_mcp_admission(root, commands, monkeypatch, tmp_path, capsys):
     """Real fixture identities/default resolver; actual adapters, no network listener."""
     import bookflow

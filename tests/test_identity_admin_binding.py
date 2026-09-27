@@ -161,6 +161,7 @@ def test_wrong_purpose_request_root_thread_and_transaction(prepared):
     finally:host.stop()
 
 
+@pytest.mark.legacy_permissions  # the legacy refusal itself
 def test_legacy_mode_stays_closed(root,client):
     cid=client.company.list()['items'][0]['company_id'];uid=Config.load(root/'config.toml').user_table(os_login())['user_id']
     before=storage(root)

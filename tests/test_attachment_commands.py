@@ -125,6 +125,7 @@ def test_target_errors_precede_consumption(client, target):
         assert error.value.code == code
 
 
+@pytest.mark.legacy_permissions  # an agent written without authority acts unbound only before activation
 def test_permissions_and_agent_reason_precede_consumption(client, target, root):
     company = client.company.show(company=COMPANY)
     make_actor(root, "attachment_reader", company_role=(company["company_id"], "readonly"))

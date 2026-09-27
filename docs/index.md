@@ -16,6 +16,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`account`](cli/account.md)
 - [`account query`](cli/account-query.md)
 - [`activity`](cli/activity.md)
+- [`agent`](cli/agent.md)
 - [`application`](cli/application.md)
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)

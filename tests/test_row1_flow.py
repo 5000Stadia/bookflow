@@ -8,6 +8,7 @@ import pytest
 
 from bookflow import BookflowError
 from tests.conftest import as_user, make_actor
+from bookflow.core.config import os_login
 
 ULID = re.compile(r"^[0-9A-Z]{26}$")
 TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$")
@@ -99,12 +100,16 @@ def test_portability(client, root, tmp_path, monkeypatch):
     c2 = bookflow.connect(data_root=str(r2)); c2.init(); c2.organization.new(name="Demo Holdings LLC")
     dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
     shutil.copytree(src["path"], dst)
-    out = c2.company.attach(path=str(dst))
+    out = c2.company.attach(path=str(dst), administrator=os_login())
     assert out["warnings"] == []
     show2 = c2.company.show(company="Demo Holdings LLC/Demo Plumbing Co")
     excluded = {"organization_id", "organization_name", "path", "access", "role", "registered_by_name", "is_demo", "id", "version", "created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via"}
     for k in show1:
         if k in excluded:
+            continue
+        if k == "preference_changes":  # "seconds since" is relative to when each show ran
+            strip = lambda rows: [{f: v for f, v in row.items() if f != "seconds_since_update"} for row in rows]
+            assert strip(show1[k]) == strip(show2[k]), k
             continue
         assert show1[k] == show2[k], k
     assert show2["info_created_by_name"] == show1["info_created_by_name"]

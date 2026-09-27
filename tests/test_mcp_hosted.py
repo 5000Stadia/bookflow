@@ -178,19 +178,12 @@ def agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
     """Real MCP business calls; deterministic integration witness, not blind J8."""
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
-    from bookflow.core import clock
     from bookflow.core.config import Config
-    from bookflow.hub import schema as h
-    from tests.conftest import make_actor
-    from tests.test_row7_credentials import writer
+    from tests.conftest import hosted_call, make_agent
 
     principal = Config.load(hosted.root / "config.toml").user_table(hosted.login)["user_id"]
-    agent = make_actor(hosted.root, "mcp-business-agent", kind="agent", owner_user_id=principal,
-                       company_role=(hosted.company_id, "owner"))
-    with writer(hosted.root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,
-            principal_user_id=principal, assigned_by=principal, assigned_at=clock.now_iso()))
+    agent = make_agent(hosted_call(hosted), "mcp-business-agent", principals=principal,
+                       company=hosted.company_id, role="owner")
     issued = hosted.ok("token.issue", {"user": agent, "principal": principal, "label": "MCP business witness"})
 
     async def witness():

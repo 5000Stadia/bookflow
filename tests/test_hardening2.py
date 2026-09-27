@@ -14,6 +14,7 @@ from bookflow import BookflowError
 from bookflow.hub import schema as h
 from bookflow.storage.engine import open_database
 from tests.conftest import as_user, make_actor
+from bookflow.core.config import os_login
 
 
 def _hub(root, writable=False):
@@ -347,7 +348,7 @@ def test_rollout_failure_after_folder_is_named(client, root, monkeypatch):
         client.company.new(legal_name="Half Made Co", home_currency="USD", organization="Demo Holdings LLC", timezone="UTC")
     assert e.value.code == "E_ROLLOUT_INCOMPLETE" and e.value.details["state"] == "unregistered" and e.value.details["path"].endswith("Half Made Co")
     monkeypatch.undo()
-    out = client.company.attach(path=e.value.details["path"])
+    out = client.company.attach(path=e.value.details["path"], administrator=os_login())
     assert out["display_name"] == "Half Made Co"
 
 
@@ -359,7 +360,7 @@ def test_attach_tightens_modes(client, root, tmp_path, monkeypatch):
     dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
     shutil.copytree(src, dst)
     dst.chmod(0o755); (dst / "company.db").chmod(0o644)
-    out = c2.company.attach(path=str(dst))
+    out = c2.company.attach(path=str(dst), administrator=os_login())
     assert out["warnings"] and "tightened" in out["warnings"][0]
     import stat
     assert stat.S_IMODE(dst.stat().st_mode) == 0o700 and stat.S_IMODE((dst / "company.db").stat().st_mode) == 0o600
@@ -400,7 +401,7 @@ def test_attach_never_follows_symlinks(client, root, tmp_path, monkeypatch):
     outside = tmp_path / "outside.txt"; outside.write_text("x"); outside.chmod(0o644)
     (dst / "exports" / "link").symlink_to(outside)
     with pytest.raises(BookflowError) as e:
-        c2.company.attach(path=str(dst))
+        c2.company.attach(path=str(dst), administrator=os_login())
     assert e.value.code == "E_ATTACH_INVALID" and e.value.details["check"] == "symlink"
     import stat
     assert stat.S_IMODE(outside.stat().st_mode) == 0o644, "nothing outside the folder was touched"
@@ -496,6 +497,7 @@ def test_recheck_findings(client, root, tmp_path, monkeypatch):
     assert e2.value.code != "E_IDEMPOTENCY_MISMATCH", e2.value.to_dict()
 
 
+@pytest.mark.legacy_permissions  # an agent written without authority acts unbound only before activation
 def test_re_recheck_findings(client, root, tmp_path, monkeypatch):
     """Codex re-recheck (2026-09-04, F2-F4)."""
     from bookflow.core import registry

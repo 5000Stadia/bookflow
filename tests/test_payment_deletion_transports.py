@@ -216,17 +216,11 @@ def test_payment_deletion_crosses_cli_http_and_source_bound_mcp_with_exact_books
 
 
 def _agent_delete_authority(books, *, missing=None):
-    from bookflow.core import clock
-    from bookflow.hub import schema as h
-    from tests.conftest import make_actor
-    from tests.test_row7_credentials import writer
-
     client, company = books['client'], books['company']
     root = Path(client.data_root)
     principal = client.user.add(username='deletion-human', display_name='Deletion human')['user_id']
-    agent = make_actor(root, 'deletion-agent', kind='agent', owner_user_id=principal)
-    with writer(root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1))
+    agent = client.run('agent create', dict(username='deletion-agent', owner=principal))['agent']['agent_id']
+    client.run('agent assign', dict(agent=agent, principal=principal, confirm_permitted_use=True))
     for user in (principal, agent):
         client.membership.grant(user=user, company=company, role='standard')
     state = client.permission.show()
@@ -241,16 +235,9 @@ def _agent_delete_authority(books, *, missing=None):
             grants=[] if missing == ('agent' if user == agent else 'principal') else
                 ['transaction.payment.delete', 'transaction.journal_entry.delete'],
             denies=['ledger.post', *(['ledger.read'] if missing == 'ledger' and user == principal else [])])
-    with writer(root) as db:
-        # Fixture authorization follows completed policy setup, just as credential
-        # fixtures bind authority before issue; no public agent-authorize verb exists.
-        db.conn.execute(h.agent_authority.update().where(
-            h.agent_authority.c.agent_user_id == agent).values(
-                suspended_at=None, suspension_reason=None))
-        epoch = db.raw.execute('SELECT epoch FROM agent_authority WHERE agent_user_id=?',
-                               (agent,)).fetchone()[0]
-        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,
-            principal_user_id=principal, assigned_by=principal, assigned_at=clock.now_iso()))
+    # Authorization follows the completed policy setup, which narrowed the principal.
+    epoch = client.run('agent authorize', dict(agent=agent, confirm_permitted_use=True,
+                                               acknowledge_fresh_context=True))['agent']['authority']['epoch']
     issued = client.token.issue(user=agent, principal=principal, label='Agent delete witness')
     with sqlite3.connect(root / 'hub.db') as db:
         assert db.execute('SELECT user_id,on_behalf_of,authority_epoch FROM api_tokens '

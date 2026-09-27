@@ -27,6 +27,7 @@ def hub_snapshot(root):
         return tuple(db.iterdump())
 
 
+@pytest.mark.legacy_permissions  # installation-wide listing of a person whose access was revoked exists only before activation
 @pytest.mark.timeout(300)
 def test_identity_lifecycle_full_documents_owned_password_and_rejected_state(root, tmp_path):
     seed = bookflow.connect(data_root=str(root))

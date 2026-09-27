@@ -913,8 +913,13 @@ def republish_membership(inp, ctx: Context, s: Session, *, revoke: bool) -> None
     this request's own audit, by the permit's membership reconciliation, so asking
     again here would refuse every honest self-revocation. Anyone acting on someone
     else is re-checked in full against current state.
+
+    Only the caller's own identity is recognized before that re-check, and never
+    by looking another name up: whether some other username exists is answered
+    only after the scope and the caller's authority over it are resolved, so an
+    unauthorized caller gets one refusal for a real name and an invented one.
     """
-    if _membership_target(s, inp.user)["id"] == s.actor.id:
+    if _is_self(s, inp.user):
         return
     if revoke:
         authorize_membership_revoke(inp, ctx, s)
@@ -1362,7 +1367,8 @@ token_issue = command("token issue", scope="hub",
                       description="Issue a bearer token; the secret is shown once. Agents require an active assigned human principal and unsuspended authority. One agent identity per principal is recommended.",
                       input_model=TokenIssueInput, output_model=TokenIssueOutput, writes={"hub"},
                       error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"],
-                      authorization="human self-service; a human hub administrator may issue for another user")
+                      authorization=("human self-service; a human hub administrator may issue for another user; "
+                                     "an agent token needs an activated installation and an authorized agent"))
 
 
 def authorize_token_issue(inp: TokenIssueInput, ctx: Context, s: Session):
@@ -1371,6 +1377,9 @@ def authorize_token_issue(inp: TokenIssueInput, ctx: Context, s: Session):
         raise BookflowError("E_PERMISSION", details={"capability": "token", "required_role": "human"})
     target = _target_user(s, inp.user)
     obo = None
+    if target["kind"] == "agent":
+        from bookflow.commands.agent_cmds import require_activated
+        require_activated(s)
     if target["kind"] == "agent" and inp.principal is None:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "required for an agent token"}]})
     if inp.principal is not None:

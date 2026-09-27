@@ -120,8 +120,8 @@ class OSBinding:
 
 # Only these current lifecycle operations may account for their own membership
 # row additions/removals. Each substitution must be in this request's hub audit.
-MEMBERSHIP_EFFECTS = frozenset({"permission activate", "company new", "company attach", "company detach", "demo reset",
-                                "membership grant", "membership revoke"})
+MEMBERSHIP_EFFECTS = frozenset({"permission activate", "organization new", "company new", "company attach", "company detach",
+                                "demo reset", "membership grant", "membership revoke"})
 
 
 @dataclass(repr=False)
@@ -443,6 +443,9 @@ class PublicationPermit:
             host_cmds._target_user(s, self.inp.user)
         elif name == "token revoke":
             host_cmds.authorize_token_revoke(self.inp, self.ctx, s)
+        elif name.startswith("agent "):
+            from bookflow.commands import agent_cmds
+            agent_cmds.republish(name, self.inp, s)
 
     def authorize_initial_input(self, s):
         """Pure target predicates shared by preparation and result publication."""

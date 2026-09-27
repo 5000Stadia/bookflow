@@ -73,6 +73,16 @@ EXAMPLES: dict[str, Example] = {
                                  {"user": "jordan", "company": "Demo Plumbing Co"}),
     "user list": Example('bookflow user list --company "Demo Plumbing Co" --json', {"company": "Demo Plumbing Co"}),
     "membership list": Example('bookflow membership list --user jordan --json', {"user": "jordan"}),
+    "agent create": Example('bookflow agent create books-agent --display-name "Books agent" --owner jordan --json',
+                            {"username": "books-agent", "display_name": "Books agent", "owner": "jordan"}),
+    "agent show": Example("bookflow agent show books-agent --json", {"agent": "books-agent"}),
+    "agent list": Example("bookflow agent list --principal jordan --json", {"principal": "jordan"}),
+    "agent assign": Example("bookflow agent assign books-agent --principal jordan --confirm-permitted-use --expected-version 1 --json",
+                            {"agent": "books-agent", "principal": "jordan", "confirm_permitted_use": True, "expected_version": 1}),
+    "agent unassign": Example("bookflow agent unassign books-agent --principal jordan --json",
+                              {"agent": "books-agent", "principal": "jordan"}),
+    "agent authorize": Example("bookflow agent authorize books-agent --confirm-permitted-use --acknowledge-fresh-context --json",
+                               {"agent": "books-agent", "confirm_permitted_use": True, "acknowledge_fresh_context": True}),
 }
 
 

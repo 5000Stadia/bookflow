@@ -25,7 +25,8 @@ def name_taken(s: Session, key: str, exclude_id: str | None = None) -> bool:
 
 
 @registry_write
-def create(s: Session, display_name: str, via: str, is_demo: bool = False) -> tuple[dict[str, Any], Touched]:
+def create(s: Session, display_name: str, via: str, is_demo: bool = False,
+           owner_membership: bool = False) -> tuple[dict[str, Any], list[Touched]]:
     key = name_key(display_name)
     if name_taken(s, key):
         raise BookflowError("E_NAME_TAKEN", details={"name": display_name})
@@ -43,7 +44,15 @@ def create(s: Session, display_name: str, via: str, is_demo: bool = False) -> tu
         import shutil
         shutil.rmtree(folder, ignore_errors=True)
         raise
-    return row, Touched("organization", oid, "create", None, 1, row)
+    touched = [Touched("organization", oid, "create", None, 1, row)]
+    if owner_membership:
+        # `organization new` makes its creator the organization's owner, as `company new`
+        # makes its creator the company's owner; the same hub event records both rows.
+        m = {"id": new_id(), "user_id": s.actor.id, "scope_type": "organization", "scope_id": oid, "role": "owner",
+             "granted_by": s.actor.id, "granted_at": now_iso(), "revoked_at": None}
+        s.hub.conn.execute(h.memberships.insert().values(**m))
+        touched.append(Touched("membership", m["id"], "create", None, None, m))
+    return row, touched
 
 
 def get(s: Session, organization_id: str) -> dict[str, Any] | None:

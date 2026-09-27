@@ -13,6 +13,9 @@ from tests.test_service_sales_lifecycle import sale,COMPANY
 from tests.test_row8_journal import journal_accounts,database_path
 from tests.conftest import make_actor,as_user
 
+# A new root starts activated; these reviews drive Delete through legacy sessions and the legacy gate.
+pytestmark = pytest.mark.legacy_permissions
+
 @pytest.fixture
 def grant(monkeypatch):
     monkeypatch.setattr(access,'require_explicit_grant',lambda *args,**kwargs:None)

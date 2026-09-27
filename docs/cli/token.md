@@ -12,7 +12,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human self-service; a human hub administrator may issue for another user |
+| Required role | human self-service; a human hub administrator may issue for another user; an agent token needs an activated installation and an authorized agent |
 | Capability | token |
 | Feature | — |
 | HTTP | `POST /commands/token.issue` |

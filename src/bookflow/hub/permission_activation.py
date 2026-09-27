@@ -141,3 +141,40 @@ def prepare(tx, *, actor_id, intent, catalog, context=None):
     return b.PreparedEdit(b.VisibleEdit('policy activate', '1', generation, True, preview),
         old, initiating, final, pair, reconciliation, old_tokens, final_tokens,
         old_state, final_state, old_users, old_users, catalog, tuple(mutations), event)
+
+
+def activate_new_root(tx, *, actor_id, context):
+    """Leave a brand-new data root exactly where `permission activate` would.
+
+    Called by `init` inside the transaction that creates the first administrator,
+    before any organization, company, agent or token exists, so there is nothing to
+    enroll and no authority to reconcile. It runs the same preparation, write-set
+    check and audit owner as the public command (one attributed `permission
+    activate` event), with the initializing administrator as the actor; `init`
+    has no bearer or mapped login yet, which is why this does not take a binding.
+    An existing root is never moved by this path; it stays as its operator left it.
+    """
+    b._require_tx(tx, True)
+    context.validate()
+    build = runtime.current_catalog()
+    state = audit.read_state(tx)
+    if state.mode != 'legacy':
+        fail('invalid_input', 'already_activated')
+    intent = b.ActivatePolicy(state.generation, build.MANIFEST.descriptor_sha256, ())
+    savepoint = 'b2_new_root_' + new_id()
+    tx.raw.execute('SAVEPOINT ' + savepoint)
+    try:
+        before = b._observe(tx)
+        prepared = prepare(tx, actor_id=actor_id, intent=intent, catalog=build.catalog_bundle(), context=context)
+        expected = b._expected_storage(tx, before, prepared)
+        for mutation in prepared.mutations:
+            b._write_mutation(tx, mutation)
+        if prepared.audit is not None:
+            audit.insert_audit(tx, prepared.audit)
+        b._verify_final(tx, prepared, expected)
+        tx.raw.execute('RELEASE SAVEPOINT ' + savepoint)
+    except BaseException:
+        tx.raw.execute('ROLLBACK TO SAVEPOINT ' + savepoint)
+        tx.raw.execute('RELEASE SAVEPOINT ' + savepoint)
+        raise
+    return prepared

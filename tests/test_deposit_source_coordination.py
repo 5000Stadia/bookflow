@@ -481,6 +481,7 @@ def test_coordinate_noeffect_forward_date_and_closed_period_guard(client,sale,dr
 from tests.test_deposit_dependency_binding import bound_people,_credential,observe as binding_observe,_storage
 
 
+@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 def test_coordinate_actual_fixed_principal_and_transfer_denials(root,client,sale,driver,monkeypatch,bound_people):
     from bookflow.company import deposit_coordination as coordinator
     from bookflow.company.deposit_coordinate_models import CoordinateInput

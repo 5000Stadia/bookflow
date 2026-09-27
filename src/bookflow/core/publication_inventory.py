@@ -30,6 +30,12 @@ HUB = {
     "user list": "returned_listing_audience_and_current_scope_administration",
     "membership list": "returned_listing_audience_and_current_scope_administration",
     "upgrade": "returned_company_registrations_and_shared_may_write",
+    "agent create": "current_hub_admin_on_activated_root",
+    "agent show": "current_hub_admin_and_resolved_agent",
+    "agent list": "current_hub_admin_and_returned_agents",
+    "agent assign": "current_hub_admin_on_activated_root_and_resolved_agent_principal",
+    "agent unassign": "current_hub_admin_on_activated_root_and_resolved_agent_principal",
+    "agent authorize": "current_hub_admin_on_activated_root_and_resolved_agent",
 }
 
 

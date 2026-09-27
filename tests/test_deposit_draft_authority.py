@@ -9,6 +9,9 @@ from tests.test_deposit_lifecycle import driver
 from tests.test_service_sales_lifecycle import sale,COMPANY
 from tests.test_deposit_dependency_binding import observe,bound_people,_credential
 
+# A new root starts activated; these witnesses pin legacy company opening (hub-admin admission) through directly built bound sessions.
+pytestmark = pytest.mark.legacy_permissions
+
 
 def test_actual_bound_principal_and_revocation_precede_all_private_reads(root,client,cash,driver,run,bound_people,monkeypatch):
     from tests.test_row7_credentials import writer

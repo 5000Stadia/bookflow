@@ -118,6 +118,12 @@ account query
 account show
 account update
 activity
+agent assign
+agent authorize
+agent create
+agent list
+agent show
+agent unassign
 attachment add
 attachment get
 attachment link
@@ -546,6 +552,7 @@ def execution_map():
     from tests.test_mcp_registry_payments import COMMANDS as PAYMENT_FINANCIAL
     from tests.test_mcp_registry_deposits import COMMANDS as DEPOSIT_COMMANDS
     from tests.test_mcp_registry_identity import COMMANDS as IDENTITY_COMMANDS
+    from tests.test_mcp_registry_agent import COMMANDS as AGENT_COMMANDS
     from tests.test_money_out_documents import COMMANDS as MONEY_OUT_COMMANDS
     from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
     from tests.test_bill_payment import COMMANDS as BILL_PAYMENT_COMMANDS
@@ -590,6 +597,7 @@ def execution_map():
                    'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
                    'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger' if cmd.name in RECONCILE_COMMANDS else
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
+                   'tests/test_mcp_registry_agent.py::test_agent_administration_full_documents_on_four_actual_surfaces' if cmd.name in AGENT_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else

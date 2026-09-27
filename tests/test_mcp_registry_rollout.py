@@ -6,6 +6,7 @@ import anyio
 import pytest
 from tests.mcp_matrix_support import Matrix, normalize
 from tests.test_mcp_registry_work import GHOST
+from bookflow.core.config import os_login
 
 COMMANDS = frozenset({'organization new', 'organization rename', 'company new', 'chart apply', 'profile apply', 'company detach', 'company attach'})
 
@@ -67,13 +68,13 @@ def test_rollout_chart_profile_detach_reattach_full_documents(root, tmp_path):
                 with sqlite3.connect((here/'hub.db').as_uri()+'?mode=ro', uri=True) as db:
                     assert db.execute('SELECT id FROM companies WHERE id=?',(cid,)).fetchone() is None
                 assert (await call('company detach', {'company':cid}, rejected=True))['code'] == 'E_COMPANY_NOT_FOUND'
-                await call('company attach', {'path':str(folder)}, dry_run=True)
-                attached = await call('company attach', {'path':str(folder)})
+                await call('company attach', {'path':str(folder),'administrator':os_login()}, dry_run=True)
+                attached = await call('company attach', {'path':str(folder),'administrator':os_login()})
                 assert attached['company_id'] == cid
-                assert (await call('company attach', {'path':str(folder)}, rejected=True))['code'] == 'E_ALREADY_ATTACHED'
+                assert (await call('company attach', {'path':str(folder),'administrator':os_login()}, rejected=True))['code'] == 'E_ALREADY_ATTACHED'
                 # Hub commands reject execution-company context rather than applying a fallback.
                 for name, payload in [('organization new',orgraw),('organization rename',rename),('company new',raw),
-                                      ('company detach',{'company':cid}),('company attach',{'path':str(folder)})]:
+                                      ('company detach',{'company':cid}),('company attach',{'path':str(folder),'administrator':os_login()})]:
                     assert (await call(name,payload,company=cid,rejected=True))['code'] == 'E_USAGE'
                 assert calls == COMMANDS
             expected = normalize(matrix.documents['python'], matrix.roots['python'], ids)

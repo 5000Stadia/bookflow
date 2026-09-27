@@ -29,7 +29,7 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 475
+    assert len(rows) == 481
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven

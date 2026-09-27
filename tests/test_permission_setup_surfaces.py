@@ -20,6 +20,9 @@ def test_permission_setup_crosses_all_four_actual_transports(root,client,tmp_pat
     from tests.mcp_matrix_support import Matrix
     company=client.company.list()['items'][0]['company_id']
     person=client.user.add(username='transport-clerk',company=company)
+    # A new root starts activated; the activation witnessed here is an upgraded older install's.
+    from tests.conftest import make_legacy
+    make_legacy(root)
 
     async def witness():
         matrix=Matrix()

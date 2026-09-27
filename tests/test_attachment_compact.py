@@ -13,6 +13,7 @@ from bookflow.core.context import Context, Interface
 from bookflow.core.ids import new_id
 from bookflow.core.session import now_iso
 from bookflow.storage.engine import open_database
+from bookflow.core.config import os_login
 
 COMPANY = "Demo Plumbing Co"
 
@@ -362,10 +363,10 @@ def test_live_host_lease_blocks_collection_before_selection(client, catalog, roo
             with monkeypatch.context() as patch:
                 patch.setattr(gc, "metadata_candidates", lambda *a: pytest.fail("selected before exclusion"))
                 with pytest.raises(BookflowError) as exc:
-                    host.run_write(actor, "", invoke)
+                    host.run_write(actor, os_login(), invoke)
             assert exc.value.code == "E_DB_BUSY"
             assert state(catalog) == before and path.exists()
-        result = host.run_write(actor, "", invoke)
+        result = host.run_write(actor, os_login(), invoke)
         assert result["collected_count"] == 1 and not path.exists()
         assert not host._filesystem_exclusive
     finally:

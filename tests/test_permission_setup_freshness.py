@@ -48,6 +48,7 @@ def test_retained_publication_rechecks_current_resource_without_replanning(hoste
 
 
 @pytest.mark.timeout(120)
+@pytest.mark.legacy_permissions  # witnesses the legacy-to-policy activation itself
 def test_agent_actor_floor_and_human_reduction_revoke_actual_bearer(hosted,monkeypatch):
     from tests.conftest import make_actor
     from tests.test_row7_credentials import writer

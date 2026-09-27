@@ -494,7 +494,7 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 - `user list` and `membership list` return every row their audience admits; neither pages, as no
   hub-scope `* list` command does.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
-- Agent creation, assignment and reauthorization commands are not yet exposed. Existing agents remain suspended after upgrade. Credential invariant tests provision eligible authority explicitly through isolated repository fixtures; direct dispatch reason/provenance tests also construct internal agent sessions. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
+- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. No command deactivates an agent (the general gap above); `agent unassign` of its last principal plus `membership revoke` of its access is the current way to retire one. Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
 - `--follow` on `audit tail` is CLI-only and polls under the data-root lock every two seconds until the host exists.
 - The idle checkpoint is `RESTART`, which resets the WAL but never shrinks the file. A reader that pins a snapshot across a long burst leaves the file at its high-water mark until the shutdown `TRUNCATE`.
@@ -2651,7 +2651,12 @@ Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membershi
 and aggregate agent-administration versions/provenance, fresh-context metadata,
 and private singleton `permission_state`, initially generation1 in `legacy` mode
 with no catalog. Migration neither changes capability defaults nor activates A's
-policy evaluator. Historical membership/assignment IDs, authority epochs,
+policy evaluator. A brand-new root does not stay there: `init` activates it in the
+transaction that creates its first administrator, before any organization, company,
+agent or token exists, through the same preparation, write-set check and audit owner
+as `permission activate` (one `permission activate` hub event attributed to that
+administrator, current catalog, generation 2). Only an upgraded root is ever in
+`legacy` mode, and it stays there until its operator runs `permission activate`. Historical membership/assignment IDs, authority epochs,
 credentials, raw overrides and audit values remain intact.
 
 Conditional initialization of suspended authorities is admitted on the migration

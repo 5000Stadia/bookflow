@@ -7,6 +7,7 @@ from bookflow.core.config import Config, os_login
 from tests.payment_raw_evidence import database as snapshot
 
 
+@pytest.mark.legacy_permissions  # witnesses the legacy-to-policy activation itself
 def test_public_activation_grant_deny_and_version(root,client):
     company = client.company.list()['items'][0]['company_id']
     person = client.user.add(username='purchase-clerk',password='fixture password',company=company)

@@ -5,15 +5,12 @@ import threading
 from contextlib import contextmanager
 
 import pytest
-import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from bookflow.adapters.http import auth
 from bookflow.core import registry
 from bookflow.core import clock
-from bookflow.core.ids import new_id
 from bookflow.hub import schema as h
-from bookflow.hub.users import common
 from tests.test_row3_host import PASSWORD, WB, hosted
 
 
@@ -131,34 +128,12 @@ def test_queued_cookie_revocation_expiry_and_binding_change(hosted, monkeypatch,
 
 
 def provision_agent(hosted):
-    """Fixture administration while public Row7 provisioning is still pending."""
+    """An authorized agent acting for the installer, set up through the public agent commands."""
+    from tests.conftest import hosted_call, make_agent
     host = hosted.handle.host
-    agent = new_id()
-
-    def setup():
-        db = host._hub
-        human = auth.resolve_token(db, hosted.secret)['user_id']
-        org = db.conn.execute(sa.select(h.companies.c.organization_id).where(
-            h.companies.c.id == hosted.company_id)).scalar_one()
-        db.raw.execute('BEGIN IMMEDIATE')
-        try:
-            db.conn.execute(h.users.insert().values(id=agent, kind='agent', username='queue-agent',
-                display_name='Queue Agent', owner_user_id=human, password_hash=None, hub_admin=True,
-                timezone=None, active=True, **common(human, 'system')))
-            db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1,
-                suspended_at=None, suspension_reason=None))
-            db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent, principal_user_id=human,
-                assigned_by=human, assigned_at=clock.now_iso(), revoked_at=None))
-            db.conn.execute(h.memberships.insert().values(id=new_id(), user_id=agent,
-                scope_type='organization', scope_id=org, role='admin', granted_by=human,
-                granted_at=clock.now_iso(), revoked_at=None))
-            db.raw.execute('COMMIT')
-        except BaseException:
-            db.raw.execute('ROLLBACK')
-            raise
-        return human
-
-    human = host.submit(setup)
+    human = host.submit(lambda: auth.resolve_token(host._hub, hosted.secret)['user_id'])
+    agent = make_agent(hosted_call(hosted), 'queue-agent', principals=human, company=hosted.company_id,
+                       role='admin', display_name='Queue Agent')
     issued = hosted.ok('token.issue', {'user': 'queue-agent', 'principal': hosted.login, 'label': 'queued agent'})
     return human, agent, issued
 

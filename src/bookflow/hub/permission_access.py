@@ -32,4 +32,8 @@ def require(session, capability, required_role):
             return operation.require_company(session.company_row['id'],
                 catalog.Requirement(capability, required_role))
     except admin.AdministrationError as exc:
+        if exc.category == 'unavailable_target':
+            # Blueprint 4.3b: the refusal names the capability, in either mode.
+            raise BookflowError('E_PERMISSION', details={'capability': capability, 'required_role': required_role,
+                                                         'reason': exc.category, 'field': exc.field}) from None
         translate(exc)
