@@ -16,10 +16,10 @@ Double-entry accounting for small businesses, where people in the browser and th
 ## M2 — V1 accounting product
 
 - [x] R9 Lists: chart of accounts, customers and jobs, vendors, items, supporting lists (spec row 5; every done-definition clause checked 2026-09-27) — design/specs/5-lists.md
-- [~] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27: isolation and readonly hold on every surface; R66–R68 remain) — design/specs/7-identity-isolation.md
-- [~] R66 R10 membership grant/revoke over MCP stop revealing whether a username exists — design/specs/7-identity-isolation.md
-- [~] R67 R10 revocation always suspends agents: new installs start in the current permission mode, agent commands refuse in the legacy mode — design/permission-resolution.md
-- [~] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
+- [x] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27, gaps R66–R68 fixed and walked through by hand) — design/specs/7-identity-isolation.md
+- [x] R66 R10 membership grant/revoke over MCP stop revealing whether a username exists — design/specs/7-identity-isolation.md
+- [x] R67 R10 revocation always suspends agents: new installs start in the current permission mode, agent commands refuse in the legacy mode — design/permission-resolution.md
+- [x] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
 - [ ] R74 permission checks on activated roots cost about 3x (demo reset 104 s vs 33 s): reuse the hub permission snapshot across transactions only behind a fresh in-transaction version check — design/permission-resolution.md
 - [x] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; every done-definition clause checked 2026-09-27) — design/specs/8-general-ledger.md
 - [x] R12 MCP adapter and agent/GUI cooperation (spec row 9; every done-definition clause checked 2026-09-27) — design/specs/9-mcp-adapter.md
@@ -33,6 +33,8 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R75 investigate three suspected defects: deposit coordinate work E_INTERNAL "Unsupported source aggregate identity", a progress-billing schema constraint mismatch that differs between runs, and Find rates answering with a JSON flash on the Overview — notes/stale-tests-20260927.md
 - [x] R76 every read-only command shows its result on its own page (payment calculate/suggest/invoices, reconcile candidates/preview, register calculate, sales-tax liability, deposit sources/items, activity), never a JSON notice on the Overview — notes/NOW.md
 - [ ] R77 concurrent requests intermittently 500 with AdmissionCancelled "publication admission changed" (core/publication_admission.py): return a typed retryable error or retry, never E_INTERNAL; result tables show record names, not raw ids — notes/NOW.md
+- [ ] R78 agent administration reads like the rest of the product: a New agent button on the Agents panel, agents listed before they have a membership, the finder reaching installation commands (users, tokens, agents), the one-time token secret shown plainly with a copy button, names and dates instead of raw ids and codes on agent and token pages and errors, principal as a picker, and change history saying "Office assistant for k, via agent" — notes/manual-agent-walkthrough-20260927.md
+- [ ] R79 decide from the blind trials whether agent writes default what the browser prefills (today's date, the company's sales tax item, the only company) — notes/manual-agent-walkthrough-20260927.md
 - [x] R15 Customer work, service sales, progress and work billing — design/customer-work.md
 - [x] R16 Purchasing, receiving with shipping allocation, bills and vendor payments — design/architecture.md
 - [x] R17 Deposits and bank reconciliation — design/architecture.md
