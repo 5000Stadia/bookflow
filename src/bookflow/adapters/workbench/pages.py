@@ -2115,7 +2115,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       document=Document.context(noun, verb, described, originals, shown=shown,
                           result=result if result and 'revision' in result else None, preview=preview,
                           record_id=record_id, error=error,
-                          base=_document_base(company_id, noun)) if document_form else None,
+                          base=_document_base(company_id, noun),
+                          hidden=Document.hidden_columns(authorized_company)) if document_form else None,
                       form_groups=None if document_form else Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(

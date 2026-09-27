@@ -1,8 +1,16 @@
 {# The way back from a document to the documents already written. Included by form.html
    and record.html with `document_nav`; every destination is a real page, and a step that
-   has nowhere to go is disabled text rather than a link that goes nowhere. #}
+   has nowhere to go is disabled text rather than a link that goes nowhere. On a form it
+   sits below the form (n.form): the recent documents as rows, Find beside their heading. #}
 {% set n = document_nav %}
+{% if n.form %}<div class="document-others">
 <nav class="document-nav" aria-label="Other {{ n.plural | lower }}">
+<div class="document-others-head">{% if n.recent_url %}<h2 class="document-recent-title">Recent {{ n.plural | lower }}</h2>{% endif %}
+<span class="document-others-links"><a class="document-nav-find" href="{{ n.list_url }}">{{ n.find_label }}</a>
+{% if n.record_url %}<a class="document-nav-back" href="{{ n.record_url }}">Back to this {{ n.singular }}</a>{% endif %}</span></div>
+{% if n.recent_url %}<div class="document-recent" hx-get="{{ n.recent_url }}" hx-trigger="load" hx-swap="innerHTML"><span class="muted">Loading recent {{ n.plural | lower }}…</span></div>{% endif %}
+</nav></div>
+{% else %}<nav class="document-nav" aria-label="Other {{ n.plural | lower }}">
 <a class="document-nav-find" href="{{ n.list_url }}">{{ n.find_label }}</a>
 {% if n.record_url %}<a class="document-nav-back" href="{{ n.record_url }}">Back to this {{ n.singular }}</a>{% endif %}
 {% if n.steps %}<span class="document-nav-steps">
@@ -15,4 +23,4 @@
 
 {% if n.unavailable %}<span class="document-nav-order">{{ n.unavailable }}</span>{% endif %}
 {% if n.recent_url %}<div class="document-recent" hx-get="{{ n.recent_url }}" hx-trigger="load" hx-swap="innerHTML"><span class="muted">Recent {{ n.plural | lower }}…</span></div>{% endif %}
-</nav>
+</nav>{% endif %}

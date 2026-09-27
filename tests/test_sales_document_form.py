@@ -9,6 +9,8 @@ import re
 
 import pytest
 
+from bookflow.adapters.workbench import display as Display
+
 from bookflow.adapters.workbench import document_form as D
 from bookflow.adapters.workbench import forms as F
 from bookflow.core import registry
@@ -181,7 +183,7 @@ def test_the_line_grid_shows_one_row_per_line_and_a_read_only_computed_amount(ho
     body = re.search(r'(?s)<div class="line-body" data-collection-items>(.*?)</div>\s*<template', page.text)
     assert body.group(1).count('<div class="line-row" data-collection-item>') == len(saved['revision']['lines'])
     amounts = re.findall(r'<span class="line-amount">([^<]*)</span>', body.group(1))
-    assert amounts == [line['net']['amount'] for line in saved['revision']['lines']]
+    assert amounts == [Display.amount(line['net']['amount']) for line in saved['revision']['lines']]
     # A computed amount is read-only: no control of any kind sits inside that cell.
     for cell in re.findall(r'(?s)<span class="line-cell-label"[^>]*>Amount</span>(.*?)</div>', body.group(1)):
         assert '<input' not in cell and '<select' not in cell and '<textarea' not in cell
@@ -200,14 +202,16 @@ def test_the_footer_shows_the_servers_own_totals_and_only_an_invoice_has_a_balan
         pairs = dict(zip(re.findall(r'<dt>([^<]*)</dt>', totals.group(1)),
                          [re.sub(r'(?s)<[^>]*>', '', cell).strip()
                           for cell in re.findall(r'(?s)<dd>(.*?)</dd>', totals.group(1))]))
-        assert pairs['Subtotal'] == saved['revision']['subtotal']['amount']
-        assert pairs['Tax'] == saved['revision']['tax']['amount']
-        assert pairs['Total'].split()[0] == saved['revision']['total']['amount']
+        # The server's own figures, in the page's money format.
+        shown = lambda value: Display.money(value, saved['revision']['currency'], home='USD')
+        assert pairs['Subtotal'] == shown(saved['revision']['subtotal']['amount'])
+        assert pairs['Tax'] == shown(saved['revision']['tax']['amount'])
+        assert pairs['Total'] == shown(saved['revision']['total']['amount'])
         if noun == 'invoice':
             settlement = saved['settlement_current']
             currency = settlement['currency']
-            assert pairs['Payments Applied'] == Money(settlement['applied_minor_units'], currency).to_dict()['amount']
-            assert pairs['Balance Due'].split()[0] == Money(settlement['due_minor_units'], currency).to_dict()['amount']
+            assert pairs['Payments Applied'] == shown(Money(settlement['applied_minor_units'], currency).to_dict()['amount'])
+            assert pairs['Balance Due'] == shown(Money(settlement['due_minor_units'], currency).to_dict()['amount'])
         else:
             assert 'Balance Due' not in pairs and 'Payments Applied' not in pairs
 

@@ -52,6 +52,13 @@
     } else {
       tools=document.createElement('span'); tools.className='date-tools'; tools.dateInput=input;
       button=document.createElement('button'); button.type='button'; button.textContent='Calendar';
+      // In a form the calendar is an icon inside the field's own box, as a date field in the
+      // anchor product has; typing stays the main way in. Filter bars keep their own button.
+      if (input.closest('form[data-generated-form]') && !input.closest('.list-tools')) {
+        const field=document.createElement('span'); field.className='date-field';
+        input.before(field); field.append(input);
+        button.innerHTML='<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="14" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+      }
       picker=document.createElement('input'); picker.type='date'; picker.dataset.dateNative=''; picker.hidden=true;
       tools.append(button,picker); input.after(tools);
     }
@@ -108,7 +115,7 @@
         if(optional(start)&&optional(end)) select.add(new Option('Clear dates','clear'));
         wrapper.append(select);
         // In a filter bar the preset leads its pair as its own field, not nested in the From label.
-        if(bar) bar.before(wrapper); else controls.get(start).tools.after(wrapper);
+        if(bar) bar.before(wrapper); else { const tools=controls.get(start).tools; (tools.closest('.date-field')||tools).after(wrapper); }
         let setting=false;
         select.addEventListener('change',()=>{
           const values=range(select.value); if(!values) return;

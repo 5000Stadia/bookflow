@@ -66,6 +66,11 @@ def _block(measured, width):
     assert measured['actions']['bottom'] <= row['bottom'] + 1, measured
 
 
+def _full_grid(run):
+    """The block shape under test is the whole grid: a company that uses units and classes."""
+    run('company.update', {'use_classes': True, 'units_of_measure_mode': 'single_unit_per_item'})
+
+
 def _open(b, site, noun, verb):
     b.navigate(f'{site.base_url}/c/{site.company_id}/{noun}/{verb}')
     b.wait_for('!!document.querySelector("[data-sales-form]")')
@@ -81,6 +86,7 @@ def test_a_phone_never_scrolls_the_line_grid_sideways(register_browser, noun):
         return _command(b, env.site, name, payload)
 
     _fixture(run, 'Grid ' + noun)
+    _full_grid(run)
     b.viewport(PHONE, 844)
     _open(b, env.site, noun, NEW[noun])
 
@@ -104,6 +110,7 @@ def test_a_correction_form_is_the_same_stacked_card_on_a_phone(register_browser)
         return _command(b, env.site, name, payload)
 
     books = _fixture(run, 'Grid correction')
+    _full_grid(run)
     saved = run('invoice.post', dict(date='2026-05-04', customer=books['customer'],
                 ar_account=books['receivable'],
                 lines=[dict(item=books['item'], quantity='2')]))['id']
@@ -148,6 +155,7 @@ def test_a_desktop_still_gets_a_table_with_heads(register_browser):
         return _command(b, env.site, name, payload)
 
     _fixture(run, 'Grid desktop')
+    _full_grid(run)
     b.viewport(DESKTOP, 900)
     _open(b, env.site, 'invoice', 'post')
 

@@ -526,12 +526,36 @@ def _address_group(title, prefix, leaves, placed):
             'component_paths': [leaf['path'] for leaf in group]}
 
 
-def _grid(key, title, leaf, columns, hints):
+def hidden_columns(company):
+    """Line columns this company has not turned on, from its own saved settings.
+
+    Class and unit of measure are columns only for a company that uses them, as in the
+    anchor product. A hidden column's control is not removed: it moves into the row's own
+    "More on this line" panel, so the form still submits exactly what the command accepts.
+    Settings that cannot be read hide nothing.
+    """
+    info = (company or {}).get('info') if isinstance(company, dict) else None
+    if not isinstance(info, dict):
+        return ()
+    hidden = []
+    if info.get('use_classes') is False:
+        hidden.append('class_id')
+    if info.get('units_of_measure_mode') == 'disabled':
+        hidden.append('unit')
+    return tuple(hidden)
+
+
+def _grid(key, title, leaf, columns, hints, hidden=()):
     """One line grid: its columns in document order and the track widths they add up to.
 
     The grid's own hint map wins over the shared one, so a head that means one thing on the
     Items tab and another on the Expenses tab is explained as itself on each.
     """
+    # A line that already carries a value keeps its column, so nothing entered is tucked away.
+    values = leaf['collection'].get('values') or []
+    hidden = [name for name in hidden
+              if not any(isinstance(value, dict) and value.get(name) for value in values)]
+    columns = [column for column in columns if column[0] not in hidden]
     line_fields = list(leaf['collection']['item']['fields'])
     named = {name for name, _ in columns if not name.startswith('@')}
     built = [{'name': name, 'label': label, 'hint': hints.get(name, COLUMN_HINTS.get(name)),
@@ -548,7 +572,7 @@ def _grid(key, title, leaf, columns, hints):
             'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
 
 
-def layout(noun, leaves):
+def layout(noun, leaves, hidden=()):
     """Bands of the document window, and every leaf placed exactly once."""
     by_path, placed = {leaf['path']: leaf for leaf in leaves}, set()
     transfer = noun == TRANSFER
@@ -609,11 +633,11 @@ def layout(noun, leaves):
     if not transfer:
         primary_lines = by_path.get(primary_path)
         if primary_lines is not None:
-            grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}))
+            grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}, hidden))
         if (bill or money_out) and not matched:
             item_lines = by_path.get('items')
             if item_lines is not None:
-                grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS))
+                grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS, hidden))
     for band in grids:
         placed.add(band['lines']['path'])
     lines = grids[0]['lines'] if grids else None
@@ -658,7 +682,11 @@ def computed(record):
     lines = [{'line_id': line.get('line_id'), 'amount': _amount(line.get('net')),
               'tax': _amount(line.get('tax'))} for line in revision.get('lines', [])]
     subtotal = _amount(revision.get('subtotal')) or _amount(revision.get('net'))
+    profile = revision.get('profile') if isinstance(revision.get('profile'), dict) else {}
     out = {'currency': revision.get('currency'), 'subtotal': subtotal,
+           # The due date the core derived from the terms, when the document has one.
+           'due_date': profile.get('due_date'),
+           'terms': (profile.get('terms') or {}).get('label') if isinstance(profile.get('terms'), dict) else None,
            'tax': _amount(revision.get('tax')), 'total': _amount(revision.get('total')),
            'lines': lines, 'by_line': {row['line_id']: row for row in lines if row['line_id']}}
     settlement = record.get('settlement_current')
@@ -670,19 +698,23 @@ def computed(record):
     return out
 
 
-def _row(label, value, strong=False):
-    return {'label': label, 'value': value, 'strong': strong}
+def _row(label, value, strong=False, money=False):
+    # ``money`` marks a value that is an amount, for the page's money format; the value
+    # itself stays the server's exact string.
+    return {'label': label, 'value': value, 'strong': strong, 'money': money}
 
 
 def sale_totals(figures, settled):
     """The sales footer, unchanged: every figure copied from the server's own result."""
     if figures is None:
         return []
-    rows = [_row('Subtotal', figures['subtotal']), _row('Tax', figures['tax']),
-            _row('Total', f"{figures['total']} {figures['currency']}", True)]
+    currency = figures['currency']
+    rows = [_row('Subtotal', f"{figures['subtotal']} {currency}", money=True),
+            _row('Tax', f"{figures['tax']} {currency}", money=True),
+            _row('Total', f"{figures['total']} {currency}", True, money=True)]
     if settled and 'applied' in figures:
-        rows += [_row('Payments Applied', figures['applied']),
-                 _row('Balance Due', f"{figures['due']} {figures['currency']}", True)]
+        rows += [_row('Payments Applied', f"{figures['applied']} {currency}", money=True),
+                 _row('Balance Due', f"{figures['due']} {currency}", True, money=True)]
     return rows
 
 
@@ -817,7 +849,7 @@ def transfer_totals(result):
 
 
 def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=False,
-            record_id=None, base='', error=None):
+            record_id=None, base='', error=None, hidden=()):
     """Everything the document template needs, with money taken from the server alone."""
     transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
@@ -842,28 +874,28 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
 
     if transfer:
         totals, reconciliation, reconciled = transfer_totals(result)
-        empty = 'Preview to see what each of the two accounts does.'
+        empty = 'What each of the two accounts does shows here as you fill them in.'
     elif refund:
         totals, reconciliation, reconciled = refund_totals(result)
-        empty = 'Preview to see what the credits named above add up to.'
+        empty = 'What the credits named above add up to shows here as you enter them.'
     elif vendor_credit:
         totals, reconciliation, reconciled = vendor_credit_totals(result)
-        empty = ('Preview to see what the credited lines add up to and what the vendor is '
-                 'owed afterwards.')
+        empty = ('What the credited lines add up to, and what the vendor is owed afterwards, '
+                 'shows here as you enter them.')
     elif bill:
         totals, reconciliation, reconciled = bill_totals(result)
-        empty = ('Preview to see what the lines on both tabs add up to and when the terms '
-                 'make this bill due.')
+        empty = ('What the lines on both tabs add up to, and when the terms make this bill '
+                 'due, shows here as you enter them.')
     elif money_out:
         totals, reconciliation, reconciled = money_out_totals(noun, result, error)
-        empty = ('Preview to see what the expense and item lines add up to and whether it agrees '
-                 'with the amount above.')
+        empty = ('What the expense and item lines add up to, and whether it agrees with the '
+                 'amount above, shows here as you enter them.')
     else:
         totals = sale_totals(figures, noun == 'invoice')
         reconciliation, reconciled = None, None
-        empty = 'Preview to calculate totals.'
+        empty = 'Totals show here as you enter the customer and lines.'
 
-    return dict(layout(noun, leaves),
+    return dict(layout(noun, leaves, hidden),
                 noun=noun, verb=verb, title=TITLES[noun],
                 heading=heading(noun, verb, originals),
                 help=('Bill goods already received. Matched item lines transfer receipt-owned Accounts Payable to this bill without receiving inventory again. Product costs exclude retained receipt shipping, which is included once in the total. Shipping belongs to the same receipt vendor. Product price differences correct the receipt date and affected sale costs.' if bill and any(l['path'] == 'receipts' and l.get('collection', {}).get('values') for l in leaves) else HELP[noun]), computed=figures, line_amount=line_amount,

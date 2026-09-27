@@ -1,8 +1,7 @@
 {# The last few documents of this type, fetched after the form has rendered so that
-   writing a new one never waits on reading the old ones. #}
+   writing a new one never waits on reading the old ones. One row each, the whole row
+   the link: number, who, date, and the total the query returned, right-aligned. #}
 {% set n = document_recent %}
-{% if n.documents %}<span class="document-recent-title">Recent {{ n.plural | lower }}</span>
-<ul class="document-recent-list">{% for row in n.documents %}<li><a href="{{ row.url }}">{{ row.label }}</a></li>{% endfor %}</ul>
-<a class="document-recent-all" href="{{ n.list_url }}">All {{ n.plural | lower }}</a>
+{% if n.documents %}<ul class="document-recent-list">{% for row in n.documents %}<li><a class="document-recent-row" href="{{ row.url }}"><span class="recent-number">{{ row.number or '—' }}</span><span class="recent-party">{{ row.party or '' }}{% if row.state %} <span class="recent-state">{{ row.state }}</span>{% endif %}</span><span class="recent-date">{{ row.date | day }}</span><span class="recent-amount">{{ row.total | money(home=math_company_currency) if row.total else '' }}</span></a></li>{% endfor %}</ul>
 {% elif n.unavailable %}<span class="muted">{{ n.unavailable }}</span> <a href="{{ n.list_url }}">All {{ n.plural | lower }}</a>
 {% else %}<span class="muted">No {{ n.plural | lower }} yet.</span>{% endif %}

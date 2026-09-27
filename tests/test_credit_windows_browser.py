@@ -183,7 +183,7 @@ def test_the_credit_memo_tile_opens_a_window_that_posts_what_the_command_posts(r
     _pick(b, _name(b, 'lines', 0, 'class_id'), 'Memo job')
 
     _preview(b)
-    assert _totals(b) == {'Subtotal': CREDIT, 'Tax': '0.00', 'Total': f'{CREDIT} USD'}, _totals(b)
+    assert _totals(b) == {'Subtotal': f'${CREDIT}', 'Tax': '$0.00', 'Total': f'${CREDIT}'}, _totals(b)
 
     saved = _save(b, 'credit-memo', '.credit-lines')
     written = books['run']('credit-memo.show', {'credit_memo': saved})
@@ -408,7 +408,7 @@ def test_a_return_opens_from_the_invoice_and_is_priced_by_that_invoice(register_
     _set(b, 'f:date', '2026-04-05')
     _set(b, _name(b, 'lines', 0, 'quantity'), '1')
     _preview(b)
-    assert _totals(b) == {'Subtotal': UNIT, 'Tax': '0.00', 'Total': f'{UNIT} USD'}, _totals(b)
+    assert _totals(b) == {'Subtotal': f'${UNIT}', 'Tax': '$0.00', 'Total': f'${UNIT}'}, _totals(b)
 
     saved = _save(b, 'credit-memo', '.credit-lines')
     written = books['run']('credit-memo.show', {'credit_memo': saved})
@@ -451,6 +451,8 @@ def test_the_credit_windows_have_nothing_to_scroll_sideways_at_phone_width(regis
     env, b = register_browser, register_browser.browser
     b.viewport(390, 844)
     books = _books(b, env.site, 'Phone')
+    # The block shape under test is the whole grid, unit of measure included.
+    _command(b, env.site, 'company.update', {'units_of_measure_mode': 'single_unit_per_item'})
     base = f'{env.site.base_url}/c/{env.site.company_id}'
 
     # The credit memo window, with a line entered.

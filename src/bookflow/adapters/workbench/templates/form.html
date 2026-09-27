@@ -6,7 +6,6 @@
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun|replace("-", " ")|replace("_", " ")|capitalize }}</a> / {{ document.heading if document else heading }}</nav>
 <h1>{{ document.heading if document else heading }}</h1>
-{% if document_nav %}{% include "document_nav.html" %}{% endif %}
 {% if noun == "report" %}{% include "report_head.html" %}{% endif %}
 {% if receipt_choices %}<details class="workflow-note" data-receipt-chooser><summary>Bill goods already received</summary>
 <form method="get" action="{{ base }}/post"><p>Select receipts from the same vendor. Enter the bill date on the next form.</p>
@@ -16,7 +15,7 @@
 {% for order in order_choices %}<li><a href="{{ base }}/post?purchase_order={{ order.id }}">{{ order.number }} · {{ order.vendor_name }}</a></li>{% endfor %}
 </ul></details>{% endif %}
 {% if noun == 'item' and verb == 'create' %}<p class="workflow-note">For a service you sell, enter a description, income account, price and sales tax code. For an item you purchase, enable purchases and enter its purchase description, expense account and cost. Inventory uses a cost-of-goods-sold account instead of an expense account.</p>{% endif %}
-{% if document %}<details class="technical-details"><summary>About this {{ document.title|lower }}</summary><p>{% if noun == "invoice" %}Saving records this invoice; it does not email it.{% else %}{{ document.help }}{% endif %}</p></details>
+{% if document %}<details class="technical-details document-about"><summary>About this {{ document.title|lower }}</summary><p>{% if noun == "invoice" %}Saving records this invoice; it does not email it.{% else %}{{ document.help }}{% endif %}</p></details>
 {% elif noun == 'deposit' and verb == 'post' %}<p class="muted">Bank your received payments together as one deposit.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun == 'report' and verb == 'statement' and not (result and result.metadata) %}<p class="muted">Review the customer’s opening balance, activity and amount due.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>
@@ -72,7 +71,7 @@
 
 {% macro reference_control(reference, name, cur, id, current, clearable, help_id=none) %}
 {% set refid = "reference-" ~ id %}
-<div class="reference-picker" data-reference data-suggestions="{{ reference.suggestion_url }}{% if reference.target and '?' not in reference.suggestion_url %}?target={{ reference.target }}{% endif %}"
+<div class="reference-picker" data-reference{% if cur or attempted.get('label:' ~ name) %} data-has-value{% endif %} data-suggestions="{{ reference.suggestion_url }}{% if reference.target and '?' not in reference.suggestion_url %}?target={{ reference.target }}{% endif %}"
  {% if reference.include_closest %}data-ref-component="1"{% endif %}
  {% if reference.discriminator %}data-ref-discriminator="{{ reference.discriminator }}"{% endif %}
  {% if reference.version_field %}data-ref-version-field="{{ reference.version_field }}"{% endif %}
@@ -190,7 +189,11 @@
 {% elif l.runtime %}
 <input type="hidden" name="cf-kind:{{ l.definition_id }}" value="{{ l.wire_kind }}">
 <input type="hidden" name="cf-label:{{ l.definition_id }}" value="{{ l.label }}">
-<label>Action <select name="cf-state:{{ l.definition_id }}"><option value="keep"{% if l.state == 'keep' %} selected{% endif %}>{{ 'Keep stored value or absence' if l.update else 'Use creation default / omit' }}</option><option value="set"{% if l.state == 'set' %} selected{% endif %}>Set value (including empty text)</option><option value="clear"{% if l.state == 'clear' %} selected{% endif %}>Clear</option></select></label>
+{# Keep / Set / Clear is an edit control: on a new record there is nothing stored to keep,
+   so only the value shows. The state still travels, hidden, and becomes Set as you type.
+   An attempt at a field that is no longer available keeps the control: Keep or Clear is how
+   it is dropped. #}
+{% if record_id or l.unavailable %}<label>Action <select name="cf-state:{{ l.definition_id }}"><option value="keep"{% if l.state == 'keep' %} selected{% endif %}>{{ 'Keep stored value or absence' if l['update'] else 'Use creation default / omit' }}</option><option value="set"{% if l.state == 'set' %} selected{% endif %}>Set value (including empty text)</option><option value="clear"{% if l.state == 'clear' %} selected{% endif %}>Clear</option></select></label>{% else %}<input type="hidden" name="cf-state:{{ l.definition_id }}" value="{{ l.state }}">{% endif %}
 {% if l.unavailable %}<strong role="alert">Unavailable field attempt</strong>{% if l.current_kind and l.current_kind != l.wire_kind %}<button type="button" data-custom-adopt="{{ l.definition_id }}" data-current-kind="{{ l.current_kind }}">Use {{ l.current_kind }} type and preview</button>{% endif %}{% endif %}
 {% if l.wire_kind in ('choice', 'bool') %}
 <select id="control-{{ index }}"{% if l.description %} aria-describedby="control-{{ index }}-help"{% endif %} name="{{ form_name }}" style="min-width:0;max-width:100%">
@@ -251,15 +254,20 @@
 {% else %}{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}{% endif %}
 {% if runtime_fields %}<fieldset class="runtime-fields" style="min-width:0;max-width:100%;overflow-wrap:anywhere"><legend>Custom fields</legend>{% for l in runtime_fields %}{{ field(l, "custom-" ~ loop.index) }}{% endfor %}</fieldset>{% endif %}
 {% if captured_custom_fields %}<details><summary>Captured custom fields (stored revision)</summary><dl>{% for f in captured_custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl></details>{% endif %}
-{% if document %}<section class="document-band document-context" aria-label="Recording context">
+{% if document %}{# Why and on whose behalf this is recorded: optional unless this is an invoice
+   correction, so it stays folded away until it is needed or already holds something. #}
+{% set ctx_entered = namespace(any=false) %}{% for c in ctx_fields %}{% if attempted.get('ctx:' ~ c) %}{% set ctx_entered.any = true %}{% endif %}{% endfor %}
+<details class="document-band document-context"{% if invoice_correction_reason or ctx_entered.any or (error and error.code == 'E_REASON_REQUIRED') %} open{% endif %}><summary>Recording details</summary>
 {% for c in ctx_fields %}{% if c == 'reason' %}<div class="row form-field"><label for="ctx-{{ c }}">{% if invoice_correction_reason %}Reason for this correction (required)<small>Say what changed and why before previewing or saving.</small>{% else %}Reason<small>Recorded with this change in the audit trail.</small>{% endif %}</label><div class="control-stack"><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"{% if invoice_correction_reason %} required maxlength="140"{% endif %}></div><span></span></div>{% endif %}{% endfor %}
-{% if ctx_fields | reject('equalto', 'reason') | list %}<details class="technical-details"><summary>More recording context</summary>{% for c in ctx_fields %}{% if c != 'reason' %}<div class="row form-field"><label for="ctx-{{ c }}">{{ document.context_labels.get(c, c) }}<small>Recorded with this change.</small></label><div class="control-stack"><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"></div><span></span></div>{% endif %}{% endfor %}</details>{% endif %}
-</section>
+{% for c in ctx_fields %}{% if c != 'reason' %}<div class="row form-field"><label for="ctx-{{ c }}">{{ document.context_labels.get(c, c) }}<small>Recorded with this change.</small></label><div class="control-stack"><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"></div><span></span></div>{% endif %}{% endfor %}
+</details>
 {% else %}{% for c in ctx_fields %}<div class="row"><label for="ctx-{{ c }}">{% if c == 'reason' and invoice_correction_reason %}Reason for invoice correction (required)<small>Explain the correction before previewing or saving.</small>{% else %}{{ c.replace("_", " ")|capitalize }}{% if c == "reason" %}<small>Explain this change.</small>{% endif %}{% endif %}</label><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"{% if c == 'reason' and invoice_correction_reason %} required maxlength="140"{% endif %}><span></span></div>{% endfor %}{% endif %}
 {% if sales_form %}<p data-sales-preview-status aria-live="polite">{{ "Preview checked. Save these values." if sales_fingerprint else "" }}</p>{% endif %}
 {% include "submit_error.html" %}
 {% if document %}<div class="document-actions"><button name="action" value="preview">Preview</button><button name="action" value="submit" class="primary-action">Save</button>{% if document.creating %}<button name="action" value="submit-new">Save &amp; New</button>{% endif %}<a class="cancel-action" href="{{ (base ~ '/' ~ record_id) if record_id else base }}">Cancel</a></div>
 {% else %}<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ ('Complete work' if verb == 'complete' else 'Create copy' if verb == 'copy' else 'Create estimate' if verb == 'estimate' else 'Create work order' if verb == 'work-order' else 'Create invoice' if verb == 'invoice' else 'Create sales receipt' if verb == 'sales-receipt' else 'Save' if cmd.is_write else 'Find work') if work_form else 'Run report' if noun == 'report' else ('Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Save deposit' if noun == 'deposit' and verb == 'post' else 'Submit') }}</button></span></div>{% endif %}</form>
+{# The form first; the documents already written below it. #}
+{% if document_nav %}{% include "document_nav.html" %}{% endif %}
 
 {% if noun == "report" %}{% if not report_full %}{% include "report_result.html" %}{% else %}{{ result_presentation }}{% endif %}{% endif %}
 {% include "annotations.html" %}
