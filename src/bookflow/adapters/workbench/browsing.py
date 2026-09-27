@@ -80,11 +80,16 @@ def page(request, company_id, noun, definition, verbs, meta, run, render):
     current_sort = definition.resolve_sort(raw.get('sort'), raw.get('direction', 'asc'))[0]
     headings = {item['key']: url(sort=item['sort_key'], direction='desc' if current_sort.field == item['sort_key'] and current_sort.direction == 'asc' else 'asc')
                 for item in selected if item['sortable']}
+    from bookflow.adapters.workbench import list_layout as Layout
+    opened = {'limit': '50', 'custom_filters': '[]', 'direction': 'asc', 'columns': ','.join(metadata['default_columns'])}
+    list_state = Layout.state(query, opened, quiet=('query', 'sort', 'direction', 'columns', 'limit', 'metadata_active_only'))
+    # On a phone the Filters button counts what narrows the list: criteria and inactive records.
+    list_state['filters'] = len(criteria) + (1 if raw['include_inactive'] else 0)
     return render('master_list.html', request, company_id=company_id, noun=noun, meta=meta, verbs=verbs,
+        list_state=list_state, sorts=definition.sorts,
         result=result, options=metadata, filter_options=filters, criteria=criteria, raw=raw, headings=headings, metadata_active_only=active_only,
         current_sort=current_sort,
         next_url=url(cursor=result['next_cursor']) if result['next_cursor'] else None,
-        inactive_toggle=url(include_inactive=None if raw['include_inactive'] else '1'),
         browser_data={'columns': selected, 'options': metadata, 'filters': filters, 'criteria': criteria,
             'defaults': metadata['default_columns'], 'endpoint': f'/c/{company_id}/_browse/{noun}'})
 

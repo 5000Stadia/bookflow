@@ -1,46 +1,69 @@
 {% extends "base.html" %}{% block title %}{{ heading }}{% endblock %}{% block body %}
 {% set base = noun_base(company_id or None, noun) %}
+{% set work_on = work_filters is defined and work_filters is not none %}
+{% set sales_on = sales_filters is not none and noun in ('invoice', 'sales-receipt') %}
+{% set bill_on = bill_filters is not none and noun == 'bill' %}
+{% set rate_on = noun == 'rate' %}
+{% set generic_on = true if meta.definition else false %}
+{% set has_sort = work_on or sales_on or bill_on or generic_on %}
+{% set compact = not (has_sort or rate_on) %}
+{% set deleted_on = deletable | default(false) %}
+{% set creates = [] %}{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}{% if loop.first %}{% set _ = creates.append(v) %}{% endif %}{% endfor %}
+<link rel="stylesheet" href="{{ static_urls['browsing.css'] }}"><script src="{{ static_urls['browsing.js'] }}" defer></script>
 <h1>{{ heading }}</h1>
-<p class="actions list-actions">{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}"{% if loop.first %} class="primary-action"{% endif %}>{{ ui_heading(noun, v.verb, meta) }}</a>{% endfor %}
-{% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "Hide" if include else "Include" }} inactive records</a>{% endif %}</p>
-{% if deletable | default(false) %}
-{% if request.query_params.get('deleted') %}<p role="status">{{ deleted_label }} deleted. <a href="{{ base }}/{{ request.query_params.get('deleted') }}?include_deleted=1&history=1">View retained record and history</a></p>{% endif %}
-{# The list command reads this flag through the typed translator, which spells a flag
-   "true"/"false"; only the record page reads the raw "1" its row links carry. #}
-<p><a href="{{ base }}{{ '' if request.query_params.get('include_deleted') else '?include_deleted=true' }}">{{ 'Hide' if request.query_params.get('include_deleted') else 'Include' }} deleted records</a></p>
-{% endif %}
-{% if work_filters is defined and work_filters is not none %}<form method="get" class="list-tools" aria-label="Customer work filters"><label>Title contains<input name="title" value="{{ work_filters.get('title', '') }}"></label><label>Number contains<input name="number" value="{{ work_filters.get('number', '') }}"></label><label>From date<input type="text" data-date name="date_from" value="{{ work_filters.get('date_from', '') }}"></label><label>Through date<input type="text" data-date name="date_to" value="{{ work_filters.get('date_to', '') }}"></label><label>Status<select name="status"><option value="">All</option>{% for status in work_statuses|default(()) %}<option {% if work_filters.get('status') == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>{% set availability = work_filters.get('active', true) %}<label>Availability<select name="active"><option value="true" {% if availability is sameas true %}selected{% endif %}>Active</option><option value="false" {% if availability is sameas false %}selected{% endif %}>Inactive</option><option value="unset" {% if availability is none %}selected{% endif %}>All</option></select></label><label>Order<select name="direction"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label><button>Apply</button><a href="{{ base }}">Reset</a><a href="{{ base }}/query">More filters</a></form>{% endif %}
-{% if sales_filters is not none and noun in ('invoice', 'sales-receipt') %}<form method="get" class="list-tools" aria-label="Sales filters">
+{% if creates or verbs %}<p class="actions list-actions{% if not compact and creates %} has-list-bar{% endif %}">{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}"{% if loop.first %} class="primary-action"{% endif %}>{{ ui_heading(noun, v.verb, meta) }}</a>{% endfor %}</p>{% endif %}
+{% if deleted_on and request.query_params.get('deleted') %}<p role="status">{{ deleted_label }} deleted. <a href="{{ base }}/{{ request.query_params.get('deleted') }}?include_deleted=1&history=1">View retained record and history</a></p>{% endif %}
+{% if noun == 'rate' %}<p><a href="{{ base }}/query">Query rates</a></p>{% endif %}
+{% if search or not compact or has_inactive or deleted_on %}
+{# One GET form: without JavaScript it is submitted as before; browsing.js applies it as it changes. #}
+<form method="get" class="list-tools list-form{% if compact %} list-form-compact{% endif %}" id="list-form" data-live-list aria-label="{{ heading }} search and filters">
+{% if search %}<label class="list-search">{{ 'Search' if search == 'query' else 'Search by ' ~ search }}<input type="search" name="{{ search }}" value="{{ request.query_params.get(search, '') }}" placeholder="{{ 'Search ' ~ heading | lower if search == 'query' else ('Title contains' if search == 'title' else 'Number contains') }}" data-live="type" autocomplete="off"></label>{% endif %}
+{% if not compact %}<div class="list-bar"><a href="#list-sheet" class="list-bar-button" data-sheet-open aria-controls="list-sheet">Filters<span id="list-filter-count" data-list-sync>{% if list_state.filters %} ({{ list_state.filters }}){% endif %}</span></a>{% if has_sort %}<a href="#list-sheet" class="list-bar-button" data-sheet-open=".list-sort select" aria-controls="list-sheet">Sort</a>{% endif %}{% if creates %}<a href="{{ base }}/{{ creates[0].verb }}" class="list-bar-add" aria-label="{{ ui_heading(noun, creates[0].verb, meta) }}" title="{{ ui_heading(noun, creates[0].verb, meta) }}">+</a>{% endif %}</div>{% endif %}
+{# class list-tools: date presets (dates.js) lead a date pair that sits directly in a filter bar. #}
+<div class="list-sheet list-tools" id="list-sheet" role="group" aria-label="Filters and sort">
+{% if not compact %}<div class="list-sheet-head"><h2>Filters and sort</h2><a href="#" class="list-sheet-close" data-sheet-close>Close</a></div>{% endif %}
+{% if work_on %}{% if search != 'number' %}<label>Number contains<input name="number" value="{{ work_filters.get('number', '') }}" data-live="type"></label>{% endif %}<label>From date<input type="text" data-date name="date_from" value="{{ work_filters.get('date_from', '') }}"></label><label>Through date<input type="text" data-date name="date_to" value="{{ work_filters.get('date_to', '') }}"></label><label>Status<select name="status"><option value="">All</option>{% for status in work_statuses|default(()) %}<option {% if work_filters.get('status') == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>{% set availability = work_filters.get('active', true) %}<label>Availability<select name="active"><option value="true" {% if availability is sameas true %}selected{% endif %}>Active</option><option value="false" {% if availability is sameas false %}selected{% endif %}>Inactive</option><option value="unset" {% if availability is none %}selected{% endif %}>All</option></select></label><label class="list-sort">Order<select name="direction" data-default="desc"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label><a href="{{ base }}/query" class="list-more">More filters</a>{% endif %}
+{% if sales_on %}
 <label>Customer or job<input name="customer" value="{{ sales_filters.get('customer', '') }}" placeholder="Exact name or ID"></label>
-<label>Number contains<input name="number" value="{{ sales_filters.get('number', '') }}"></label>
+{% if search != 'number' %}<label>Number contains<input name="number" value="{{ sales_filters.get('number', '') }}" data-live="type"></label>{% endif %}
 <label>From date<input type="text" data-date name="date_from" value="{{ sales_filters.get('date_from', '') }}"></label>
 <label>Through date<input type="text" data-date name="date_to" value="{{ sales_filters.get('date_to', '') }}"></label>
 <label>Status<select name="status"><option value="">All</option>{% for value in ('posted', 'voided') %}<option value="{{ value }}"{% if sales_filters.get('status') == value %} selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></label>
-<label>Order<select name="direction"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
-<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
-{% if bill_filters is not none and noun == 'bill' %}<form method="get" class="list-tools" aria-label="Bill filters">
+<label class="list-sort">Order<select name="direction" data-default="desc"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
+{% endif %}
+{% if bill_on %}
 <label>Vendor<input name="vendor" value="{{ bill_filters.get('vendor', '') }}" placeholder="Exact name or ID"></label>
-<label>Number contains<input name="number" value="{{ bill_filters.get('number', '') }}"></label>
-<label>Ref. No.<input name="supplier_reference" value="{{ bill_filters.get('supplier_reference', '') }}"></label>
+{% if search != 'number' %}<label>Number contains<input name="number" value="{{ bill_filters.get('number', '') }}" data-live="type"></label>{% endif %}
+<label>Ref. No.<input name="supplier_reference" value="{{ bill_filters.get('supplier_reference', '') }}" data-live="type"></label>
 <label>From date<input type="text" data-date name="date_from" value="{{ bill_filters.get('date_from', '') }}"></label>
 <label>Through date<input type="text" data-date name="date_to" value="{{ bill_filters.get('date_to', '') }}"></label>
 <label>Due on or after<input type="text" data-date name="due_from" value="{{ bill_filters.get('due_from', '') }}"></label>
 <label>Due on or before<input type="text" data-date name="due_to" value="{{ bill_filters.get('due_to', '') }}"></label>
 <label>Status<select name="status"><option value="">All</option>{% for value in ('posted', 'voided') %}<option value="{{ value }}"{% if bill_filters.get('status') == value %} selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></label>
-<label>Order<select name="direction"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
-<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
-{% if noun == 'rate' %}<p><a href="{{ base }}/query">Query rates</a></p><form method="get" class="list-tools" aria-label="Rate filters">
+<label class="list-sort">Order<select name="direction" data-default="desc"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
+{% endif %}
+{% if rate_on %}
 <label>From date<input type="text" data-date name="date_from" value="{{ rate_filters.get('date_from', '') }}"></label>
 <label>Through date<input type="text" data-date name="date_to" value="{{ rate_filters.get('date_to', '') }}"></label>
 <label>Original currency<input name="from_currency" value="{{ rate_filters.get('from_currency', '') }}" maxlength="3" placeholder="JPY"></label>
 <label>Page size<input name="limit" inputmode="numeric" data-math-scale="0" value="{{ rate_filters.get('limit', 50) }}"></label>
-<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
-{% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
+{% endif %}
+{% if generic_on %}
 <label>Filters{% for filter in filters %}<input name="filter" value="{{ filter }}" placeholder="field=value">{% endfor %}<input name="filter" value="" placeholder="field=value"></label>
-<label>Sort<select name="sort"><option value="">Default</option>{% for sort in meta.definition.sorts %}<option value="{{ sort }}" {% if selected_sort == sort %}selected{% endif %}>{{ sort }}</option>{% endfor %}</select></label>
-<label>Direction<select name="direction"><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Ascending</option><option value="desc" {% if selected_direction == 'desc' %}selected{% endif %}>Descending</option></select></label>
+<label class="list-sort">Sort<select name="sort"><option value="">Default</option>{% for sort in meta.definition.sorts %}<option value="{{ sort }}" {% if selected_sort == sort %}selected{% endif %}>{{ sort }}</option>{% endfor %}</select></label>
+<label class="list-sort">Direction<select name="direction" data-default="asc"><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Ascending</option><option value="desc" {% if selected_direction == 'desc' %}selected{% endif %}>Descending</option></select></label>
 <label>Columns<small>Comma-separated, in display order</small><input name="columns" value="{{ selected_columns }}"></label>
-{% if include %}<input type="hidden" name="include_inactive" value="1">{% endif %}<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
+{% endif %}
+{% if has_inactive %}<label class="list-toggle"><input type="checkbox" role="switch" name="include_inactive" value="1"{% if include %} checked{% endif %}> Include inactive records</label>{% endif %}
+{% if deleted_on %}{# The list command reads this flag through the typed translator, which spells a flag
+   "true"/"false"; only the record page reads the raw "1" its row links carry. #}<label class="list-toggle"><input type="checkbox" role="switch" name="include_deleted" value="true"{% if request.query_params.get('include_deleted') %} checked{% endif %}> Include deleted records</label>{% endif %}
+<button type="submit" class="list-apply">Show results</button>
+</div>
+{% if not compact %}<a href="#" class="list-sheet-backdrop" data-sheet-close tabindex="-1" aria-hidden="true"></a>{% endif %}
+<a href="{{ base }}" id="list-reset" class="list-reset" data-list-sync{% if not list_state.changed %} hidden{% endif %}>Reset</a>
+</form>
+{% endif %}
+<div id="list-results">
 <div class="table-wrap"><table class="list-table"><thead><tr>{% for c in columns or [] %}<th>{{ c | label }}</th>{% endfor %}{% if noun == "account" %}<th>Activity</th>{% endif %}</tr></thead><tbody>
 {% for it in items %}<tr>{% for c in columns %}{% set value = it.get(c) %}{% set money = value is mapping and "amount" in value and "currency" in value %}{% if money %}{% set value = value.amount ~ " " ~ value.currency %}{% elif c == "status" and value is string %}{% set value = ui_words(value) %}{% endif %}<td data-label="{{ c | label }}"{% if money %} class="num"{% endif %}>{% if loop.first and has_show and meta.identifier and it.get(meta.identifier) %}<a href="{{ base }}/{{ it[meta.identifier] }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% elif loop.first and noun == "company" and it.get("company_id") %}<a href="/c/{{ it.company_id }}/company/self">{{ value if value is not none else "" }}</a>{% elif loop.first and has_show and it.get("id") %}<a href="{{ base }}/{{ it.id }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% else %}{{ value if value is not none else "" }}{% endif %}</td>{% endfor %}{% if noun == "account" %}<td data-label="Activity">{% if it.type in ("income", "other_income", "expense", "other_expense", "cost_of_goods_sold") %}<a href="/c/{{ company_id }}/report/general-ledger?account={{ it.id }}">Ledger</a>{% elif it.type != "non_posting" %}<a href="{{ base }}/{{ it.id }}/register">Register</a>{% endif %}</td>{% endif %}</tr>{% endfor %}</tbody></table>
 </div>
@@ -50,4 +73,5 @@
 {% if paging.first_url and paging.page > 2 %}<a href="{{ paging.first_url }}">First page</a>{% endif %}
 <span class="pagination-place">Page {{ paging.page }}</span>
 {% if paging.next_url %}<a href="{{ paging.next_url }}" rel="next">Next page →</a>{% endif %}</nav>{% endif %}
-{% if extra.note %}<p class="muted">This area has no list. Use the actions above.</p>{% elif extra.count is defined and items %}<p class="muted list-count">Showing {{ extra.count }} {{ 'record' if extra.count == 1 else 'records' }}{% if extra.has_more %} on this page{% endif %}.</p>{% endif %}{% endblock %}
+{% if extra.note %}<p class="muted">This area has no list. Use the actions above.</p>{% elif extra.count is defined and items %}<p class="muted list-count">Showing {{ extra.count }} {{ 'record' if extra.count == 1 else 'records' }}{% if extra.has_more %} on this page{% endif %}.</p>{% endif %}
+</div>{% endblock %}
