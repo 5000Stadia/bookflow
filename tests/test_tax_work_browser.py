@@ -37,7 +37,7 @@ def test_work_policy_print_and_remaining_forecast(register_browser,width,tmp_pat
     b.navigate(base+'/work-order/'+order['id']+'/billing')
     b.wait_for('!!document.querySelector("[aria-label=\\"Remaining tax forecast\\"]")')
     assert 'Forecast for billing all remaining scope together' in b.evaluate('document.body.innerText')
-    assert 'Remaining net 0.05' in b.evaluate('document.body.innerText')
+    assert 'Remaining net $0.05' in b.evaluate('document.body.innerText')
     _contained(b,width)
     b.evaluate('document.querySelector("[aria-label^=Remaining]").scrollIntoView()')
     (tmp_path/f'work-tax-forecast-{width}.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot',dict(format='png'))['data']))

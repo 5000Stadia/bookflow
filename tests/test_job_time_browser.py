@@ -68,14 +68,14 @@ def test_record_correct_and_bill_time_in_the_browser(register_browser, width, tm
     # What a person reads back: whose time, how long, what it is charged as, and the charge.
     text = document_text(b)
     assert 'Time entry' in text and 'Dana Fitter' in text
-    assert 'Recorded' in text and '2026-01-12' in text
+    assert 'Recorded' in text and 'Jan 12, 2026' in text
     assert '1.5' in text and '12.34' in text and '18.51' in text
     assert 'Time labor' in text and 'Traced the leak' in text
     _contained(b, width)
 
     # The remaining-work panel is the same one an estimate has, because the hour is billed
     # through the same ledger.
-    assert 'Remaining net 18.51' in billing_text(b)
+    assert 'Remaining net $18.51' in billing_text(b)
     (tmp_path / f'time-billing-{width}.png').write_bytes(base64.b64decode(
         b.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})['data']))
 
@@ -122,7 +122,7 @@ def test_record_correct_and_bill_time_in_the_browser(register_browser, width, tm
     # Back on the entry: the hour is spoken for, and the page says so rather than offering it again.
     b.navigate(base + '/time-activity/' + entry)
     b.wait_for('!!document.querySelector(".work-document")')
-    assert 'Remaining net 0.00' in billing_text(b)
+    assert 'Remaining net $0.00' in billing_text(b)
     _contained(b, width)
 
     # Withdrawing time a sale is standing on is refused in the page, by name.

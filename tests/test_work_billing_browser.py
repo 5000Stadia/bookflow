@@ -54,7 +54,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     b.wait_for('!!document.querySelector("[aria-label=\\"Work billing\\"]")')
     assert b.evaluate(f'!!document.querySelector("a[href=\\"/c/{env.site.company_id}/work-order/{order["id"]}/invoice\\"]")')
     assert 'continue billing from that work order' in b.evaluate('document.body.innerText')
-    assert 'Total 10.01 USD · Amount due 10.01 USD' in b.evaluate("document.querySelector('[aria-label=\"Work billing\"]').innerText")
+    assert 'Total $10.01 · Amount due $10.01' in b.evaluate("document.querySelector('[aria-label=\"Work billing\"]').innerText")
     visit(b, base + '/work-order/' + order['id'] + '/sales-receipt')
     _fill(b, 'f:date', '2026-01-14'); _choose(b, 'f:deposit_to', 'CDP bank')
     _choose(b, 'f:payment_method', 'Billing cash'); _fill(b, 'f:payment_reference', 'Paid at kitchen')
@@ -74,7 +74,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     b.navigate(base + '/work-order/' + order['id'])
     b.wait_for('!!document.querySelector(".work-document")')
     receipt_row = b.evaluate(f"""document.querySelector('a[href="/c/{env.site.company_id}/sales-receipt/{receipt}"]').closest('li').innerText""")
-    assert 'Total 20.00 USD · Amount due 0.00 USD' in receipt_row
+    assert 'Total $20.00 · Amount due $0.00' in receipt_row
     visit(b, base + '/invoice/' + invoice + '/void')
     _fill(b, 'ctx:reason', 'Cancel first bill'); _click(b, 'submit'); _saved(b, 'invoice')
     assert 'Voided' in b.evaluate('document.querySelector(".sales-document").innerText')
@@ -105,7 +105,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     for noun, identity in [('estimate', source['id']), ('work-order', order['id'])]:
         visit(b, base + '/' + noun + '/' + identity + '/billing?limit=1')
         assert 'Existing bills' in b.evaluate('document.body.innerText')
-        assert 'Total 10.01 USD · Amount due 0.00 USD' in b.evaluate('document.body.innerText')
+        assert 'Total $10.01 · Amount due $0.00' in b.evaluate('document.body.innerText')
         assert b.evaluate('!!document.querySelector("a[rel=next]")')
         _contained(b, width)
     # The other two financial command forms also preview real destinations.

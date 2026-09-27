@@ -171,7 +171,7 @@ def test_progress_paid_receipt_and_zero_charge_scope(register_browser, width, tm
     assert state['lines'][0]['billed_tax_minor_units'] == state['lines'][0]['remaining_tax_minor_units'] == tax_cents
     visit(b, base + '/billing')
     assert 'Uncharged physical scope remains' in b.evaluate('document.body.innerText')
-    assert 'Amount due 0.00 USD' in b.evaluate('document.body.innerText')
+    assert 'Amount due $0.00' in b.evaluate('document.body.innerText')
     capture(b, tmp_path, 'zero-charge-physical-scope', width)
 
 

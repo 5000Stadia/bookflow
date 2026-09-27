@@ -115,7 +115,7 @@ def exercise_cap_browser(client,root,tmp_path,source,count,net,tax,started):
             recovery=state['forecast_eligibility_reasons'][0]['recovery']
             assert recovery in note
             footer=b.evaluate('document.querySelector(".billing-table").parentElement.nextElementSibling.innerText')
-            assert f'Remaining net {net//100}.{net%100:02d}' in footer
+            assert f'Remaining net ${net//100:,}.{net%100:02d}' in footer
             assert f'forecast tax {tax//100}.{tax%100:02d}' in footer
             _contained(b,width)
             b.evaluate('document.querySelector("[aria-label=\\"Remaining tax forecast\\"]").scrollIntoView({block:"center"})')
