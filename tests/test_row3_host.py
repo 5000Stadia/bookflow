@@ -1284,15 +1284,31 @@ def test_the_stream_drains_a_burst_and_resumes_from_last_event_id(hosted, live):
     hosted.ok("company.update", {"fax": "555-0999"}, company=cid)
 
 
-def test_the_stream_ends_with_an_error_when_its_credential_is_revoked(hosted, live):
+def test_the_stream_closes_without_another_batch_when_its_credential_is_revoked(hosted, live):
+    """Blueprint 4.3: event-stream batches pass a current-authority fence before publication,
+    and a revoked stream closes without another data batch (spec 7: application-buffered data
+    is dropped after revocation). Nothing written promises a final error frame, and the fence
+    releases no frame at all after revocation, so the client sees the connection end; it must
+    treat that as an interruption, not the end of history (blueprint 7)."""
+    import httpx
     cid = hosted.company_id
     issued = hosted.ok("token.issue", {"label": "streamer"})
-    ended = []
+    seen, ended = [], []
 
     def read():
+        kind = None
         try:
-            ended.extend(_collect(live, f"/companies/{cid}/events",
-                                  {"Authorization": f"Bearer {issued['secret']}"}, 1, timeout=12.0))
+            with httpx.stream("GET", f"{live}/companies/{cid}/events",
+                              headers={"Authorization": f"Bearer {issued['secret']}"}, timeout=12.0) as r:
+                assert r.status_code == 200
+                for line in r.iter_lines():
+                    if line.startswith("event: "):
+                        kind = line[7:]
+                    elif line.startswith("data: "):
+                        seen.append((kind, json.loads(line[6:])))
+            ended.append("closed")
+        except httpx.RemoteProtocolError:
+            ended.append("closed")
         except Exception as e:  # noqa: BLE001 - reported through the assertion below
             ended.append(("raised", repr(e)))
 
@@ -1302,9 +1318,10 @@ def test_the_stream_ends_with_an_error_when_its_credential_is_revoked(hosted, li
     hosted.ok("token.revoke", {"token": issued["token_id"]})
     hosted.ok("company.update", {"fax": "555-7777"}, company=cid)  # wakes it up
     reader.join(timeout=10)
-    assert ended, "the stream never ended"
-    kind, payload = ended[0]
-    assert kind == "error" and payload["code"] == "E_UNAUTHENTICATED", ended
+    assert ended == ["closed"], (ended, seen)
+    # No data batch after revocation: the waking commit is never delivered. An error frame,
+    # were one released, could only say the credential is gone.
+    assert all(kind == "error" and payload["code"] == "E_UNAUTHENTICATED" for kind, payload in seen), seen
 
 
 def test_invalid_stream_cursors_are_ordinary_validation_documents(hosted):

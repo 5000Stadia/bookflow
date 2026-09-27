@@ -241,6 +241,7 @@ def test_audit_failure_rolls_back_ddl_conversion_and_history(tmp_path, failure_t
 
 def test_interruption_before_ordinary_report_keeps_one_committed_security_event(tmp_path, monkeypatch):
     from bookflow.core import dispatch
+    from bookflow.core.commit_hooks import CommitHooks
 
     path = tmp_path / "hub.db"
     _make(path)
@@ -253,7 +254,7 @@ def test_interruption_before_ordinary_report_keeps_one_committed_security_event(
     monkeypatch.setattr(dispatch, "_record_migration", interrupt)
     ctx = Context.new(Interface.python, "row7-migration-test")
     with open_database(path, writable=True) as db:
-        session = SimpleNamespace(hub=db, data_root=tmp_path, hub_migrated=None)
+        session = SimpleNamespace(hub=db, data_root=tmp_path, hub_migrated=None, commits=CommitHooks())
         with pytest.raises(KeyboardInterrupt):
             dispatch._migrate_hub(session, ctx)
         assert not db.raw.in_transaction
@@ -263,7 +264,7 @@ def test_interruption_before_ordinary_report_keeps_one_committed_security_event(
         assert len(_security_events(db.raw)) == 1
         assert db.raw.execute("SELECT count(*) FROM audit_entries WHERE event_id != 'OLD'").fetchone() == (6,)
         assert db.raw.execute("SELECT count(*) FROM api_tokens WHERE user_id IN ('A','B') AND revoked_at IS NULL").fetchone() == (0,)
-        dispatch._migrate_hub(SimpleNamespace(hub=db, data_root=tmp_path, hub_migrated=None), ctx)
+        dispatch._migrate_hub(SimpleNamespace(hub=db, data_root=tmp_path, hub_migrated=None, commits=CommitHooks()), ctx)
         assert _dump(db.raw) == committed
         assert reports == [("hub0008", "hub0009")]
 
