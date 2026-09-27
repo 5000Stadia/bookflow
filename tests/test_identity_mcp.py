@@ -5,6 +5,8 @@ This file needs the `mcp` extra, exactly like the other MCP witnesses in this su
 
 import pytest
 
+import bookflow
+
 from tests.test_identity_commands import live, office  # noqa: F401 - fixtures
 from tests import provenance
 
@@ -83,3 +85,74 @@ def test_an_agent_over_mcp_can_set_a_workstation_up_end_to_end(office, live, tmp
     assert [row["company_id"] for row in office.ok(morgan, "company.list")["items"]] == [office.first]
     events = office.admin("hub.audit.list", {"command": "user add", "limit": 5})["items"]
     assert events[0]["interface"] == "mcp" and events[0]["reason"] == "Set up the front desk workstation"
+
+
+@pytest.mark.timeout(240)
+def test_a_member_who_cannot_administer_learns_nothing_about_usernames_on_any_surface(office, live, tmp_path):
+    """Membership administration resolves the scope and the caller's authority over it
+    before it looks the target person up, so a readonly member gets one refusal for a
+    real username and an invented one: over HTTP and over a real MCP client, whose shared
+    preparation re-checks the target before the command runs."""
+    import anyio
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+
+    from tests.test_identity_commands import add_jordan
+
+    add_jordan(office, role="readonly")
+    office.admin("user.add", {"username": "sam", "password": "a-long-enough-password",
+                              "company": office.first, "role": "standard"})
+    secret = office.admin("token.issue", {"user": "jordan", "label": "probe"})["secret"]
+    bodies = {"grant": {"company": office.first, "role": "standard"},
+              "grant-full": {"company": office.first, "role": "standard", "expected_version": 1,
+                             "grants": ["ledger.post"], "denies": ["ledger.read"]},
+              "revoke": {"company": office.first}}
+
+    def pairs():
+        for key, body in bodies.items():
+            command = "membership revoke" if key == "revoke" else "membership grant"
+            for name in ("sam", "nobody-at-all"):
+                yield key, name, command, {"user": name, **body}
+
+    answers = {"http": {}, "mcp": {}}
+    for key, name, command, body in pairs():
+        r = office.call(office.browser(), command.replace(" ", "."), body,
+                        headers={"Authorization": "Bearer " + secret, "X-Bookflow-Reason": "probe"})
+        answers["http"][key, name] = (r.status_code, r.json())
+
+    async def over_mcp():
+        params = StdioServerParameters(command=provenance.launcher(), args=["mcp", "--url", live],
+                                       env=provenance.child_env(BOOKFLOW_TOKEN=secret,
+                                                                BOOKFLOW_DATA_ROOT=str(tmp_path / "absent")),
+                                       cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                for key, name, command, body in pairs():
+                    reply = await session.call_tool("bookflow_run", {"command": command, "input": body,
+                                                                     "reason": "probe"})
+                    answers["mcp"][key, name] = (reply.is_error, reply.structured_content)
+    anyio.run(over_mcp)
+
+    for surface, seen in answers.items():
+        for key in bodies:
+            real, invented = seen[key, "sam"], seen[key, "nobody-at-all"]
+            assert real == invented, (surface, key, real, invented)
+            assert real[1]["code"] == "E_PERMISSION", (surface, key, real)
+
+
+def test_the_local_surface_answers_a_readonly_member_the_same_for_any_username(root):
+    """The CLI and Python dispatch the same preparation locally; no host is running."""
+    from tests.conftest import as_user, make_actor
+    company = bookflow.connect(data_root=str(root)).company.list()["items"][0]["company_id"]
+    make_actor(root, "ro-desk", company_role=(company, "readonly"))
+    make_actor(root, "sam-desk", company_role=(company, "standard"))
+    local = as_user(root, "ro-desk")
+    for command, body in (("membership grant", {"company": company, "role": "standard"}),
+                          ("membership revoke", {"company": company})):
+        seen = []
+        for name in ("sam-desk", "nobody-at-all"):
+            with pytest.raises(bookflow.BookflowError) as refused:
+                local.run(command, {"user": name, **body})
+            seen.append(refused.value.to_dict())
+        assert seen[0] == seen[1] and seen[0]["code"] == "E_PERMISSION", (command, seen)

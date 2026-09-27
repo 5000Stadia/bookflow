@@ -913,8 +913,13 @@ def republish_membership(inp, ctx: Context, s: Session, *, revoke: bool) -> None
     this request's own audit, by the permit's membership reconciliation, so asking
     again here would refuse every honest self-revocation. Anyone acting on someone
     else is re-checked in full against current state.
+
+    Only the caller's own identity is recognized before that re-check, and never
+    by looking another name up: whether some other username exists is answered
+    only after the scope and the caller's authority over it are resolved, so an
+    unauthorized caller gets one refusal for a real name and an invented one.
     """
-    if _membership_target(s, inp.user)["id"] == s.actor.id:
+    if _is_self(s, inp.user):
         return
     if revoke:
         authorize_membership_revoke(inp, ctx, s)
