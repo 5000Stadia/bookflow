@@ -1118,13 +1118,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
                    ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
-                   ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
+                   ["number", "date", "customer_name", "total", "open_balance", "status"] if noun == 'invoice' else
+                   ["number", "date", "customer_name", "due_date", "total", "status"] if noun == 'sales-receipt' else
                    # A statement charge has no terms and no due date, so the column an invoice
                    # list spends on one is spent here on what the charge was for.
                    ["number", "date", "customer_name", "memo", "total", "status"] if noun == 'statement-charge' else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
                    ["number", "date", "total", "status"] if noun == 'item-receipt' else
-                   ["number", "date", "vendor_name", "due_date", "total", "status"] if noun == 'bill' else
+                   ["number", "date", "vendor_name", "due_date", "total", "open_balance", "status"] if noun == 'bill' else
                    list(definition.summary_columns) if definition is not None else
                    # No rows means no keys to derive columns from; an empty list is a page,
                    # not a failure, so the table renders its heading and says so.
@@ -1150,6 +1151,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         # ships gains them in the same change.
         from bookflow.adapters.workbench.permissions import NOUNS as DELETABLE_NOUNS
         from bookflow.adapters.workbench import list_layout as Layout
+        items = Layout.open_balances(noun, items)
         fields = cmd.input_model.model_fields
         # The one text control that sits above the list and applies as a person types.
         search = next((name for name in ("query", "title", "number") if name in fields
@@ -1183,6 +1185,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             selected_direction=raw.get("direction", "asc"),
             selected_columns=",".join(columns),
             search=search,
+            layout=Layout.plan(noun, columns, items, defaults=opened_columns),
             list_state=Layout.state(request.query_params, opened, quiet=(search, "sort", "direction", "columns")),
             heading=Naming.list_heading(noun, meta),
             paging=Paging.controls(request.url.path, request.query_params, out.get("next_cursor")),

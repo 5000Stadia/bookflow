@@ -85,7 +85,7 @@ def _sort(b, width):
 
 
 def _results(width):
-    return '.master-mobile-results' if width == 390 else '#master-results'
+    return '.list-cards' if width == 390 else '#master-results'
 
 
 @pytest.mark.parametrize('width', [1280, 390])
@@ -145,8 +145,9 @@ def test_named_columns_filters_and_readable_collections(register_browser, width,
     b.wait_for("document.querySelector('.browse-count')?.textContent.includes('1 matching records')")
     assert customer['id'] in b.evaluate(f"document.querySelector('{_results(width)}').innerHTML")
     if width == 390:
-        assert 'Browsing example' in b.evaluate("document.querySelector('.master-mobile-record h2').innerText")
-        assert 'browse@example.invalid' in b.evaluate("document.querySelector('.master-mobile-record').innerText")
+        # A phone card: the name, and a column a person added on its muted second line.
+        assert 'Browsing example' in b.evaluate("document.querySelector('.list-card .list-card-link').innerText")
+        assert 'browse@example.invalid' in b.evaluate("document.querySelector('.list-card .list-card-sub').innerText")
     assert 'Yes' not in b.evaluate("document.querySelector('#active-criteria').textContent")
     # A sortable heading retains the selected filter and columns.
     _sort(b, width)
@@ -172,11 +173,11 @@ def test_named_columns_filters_and_readable_collections(register_browser, width,
     b.navigate(base + '/customer?' + urlencode({'query':'Browsing example','columns':'full_name,credit_limit'}))
     b.wait_for("!!document.querySelector('#master-results')")
     if width == 390:
-        assert b.evaluate("document.querySelector('.master-mobile-record').getBoundingClientRect().width > 0")
-        assert not b.evaluate("document.querySelector('.master-mobile-record details').open")
-        assert '90071992547409.93' not in b.evaluate("document.querySelector('.master-mobile-record').innerText")
-        _expand(b, '.master-mobile-record details')
-    assert '90071992547409.93' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
+        assert b.evaluate("document.querySelector('.list-card').getBoundingClientRect().width > 0")
+    else:
+        assert 'Credit limit (USD)' in b.evaluate("document.querySelector('#master-results thead').innerText")
+    # Grouped for reading, every digit kept.
+    assert '90,071,992,547,409.93' in b.evaluate(f"document.querySelector('{_results(width)}').innerText")
     vendor = command('vendor.create', {'name':'Browsing vendor', 'contacts':[{'role':'primary','display_name':'Readable Contact','work_phone':'555-0109'}]})
     b.navigate(base + '/vendor/' + vendor['id'])
     b.wait_for("!!document.querySelector('.master-sections')")
@@ -218,7 +219,7 @@ def test_reorder_reset_zero_missing_paging_and_stale_restart(register_browser, w
     assert b.evaluate("document.querySelector('#browse-columns').value")=='full_name,email'
     assert b.evaluate("document.activeElement.closest('li')===document.querySelector('#chosen-columns li:nth-child(2)')")
     _activate(b, '#reset-columns')
-    b.wait_for("document.querySelector('#browse-columns').value.startsWith('full_name,company_name')")
+    b.wait_for("document.querySelector('#browse-columns').value === 'full_name,phone,open_balance'")
     _customize(b, '#filter-controls')
     b.evaluate("document.querySelector('#filter-search').value='Browser zero criterion'")
     _activate(b, '#find-filters')

@@ -1,3 +1,13 @@
+/* A list row opens its record from anywhere on the row; the link in its first cell stays the
+   keyboard and screen-reader route, and a row's other links and controls keep their own clicks. */
+document.addEventListener('click', event => {
+  const row = event.target.closest('tr.is-linked');
+  if (!row || event.defaultPrevented || event.button || event.target.closest('a, button, input, select, textarea, label, summary')) return;
+  if (String(getSelection?.() || '')) return;
+  const link = row.querySelector('a.row-link');
+  if (!link) return;
+  if (event.ctrlKey || event.metaKey) window.open(link.href, '_blank', 'noopener'); else link.click();
+});
 /* Lists apply their controls as they change. Without JavaScript the same form is a plain GET
    submit and the URL carries the list state either way. Search applies as a person types;
    a discrete control applies on change; on a phone the Filters sheet applies once, on

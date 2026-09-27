@@ -76,3 +76,42 @@ def test_without_javascript_the_list_is_a_plain_get_form(register_browser):
     searched = page(base + '?number=DEMO&include_deleted=true')
     assert 'value="DEMO"' in searched and 'name="include_deleted" value="true" checked' in searched
     assert 'id="list-reset" class="list-reset" data-list-sync>' in searched
+
+
+def test_ledger_rows_on_a_wide_screen_and_cards_on_a_phone(register_browser):
+    """R59: fewer default columns, figures right-aligned under a heading that names the
+    currency and stays put, the whole row (or card) opens the record."""
+    env, b = register_browser, register_browser.browser
+    _command(b, env.site, 'customer.create', {'name': 'Ledger row customer', 'phone': '555-0142'})
+    _command(b, env.site, 'customer.create', {'name': 'Ledger row quiet'})
+    url = f'{env.site.base_url}/c/{env.site.company_id}/customer?query=Ledger+row'
+    b.viewport(1280, 850)
+    b.navigate(url)
+    b.wait_for("window.bookflowList?.idle() && !!document.querySelector('#master-results')")
+    heads = b.evaluate("[...document.querySelectorAll('#master-results th')].map(th => th.innerText.trim())")
+    assert heads == ['Name ↑', 'Phone', 'Open balance (USD)']
+    style = b.evaluate("""(() => {const th = document.querySelector('#master-results th.num'), td = document.querySelector('#master-results td.num'),
+        s = getComputedStyle(td), h = getComputedStyle(th);
+        return [s.textAlign, s.fontVariantNumeric, h.position, h.whiteSpace, td.innerText.trim()];})()""")
+    assert style == ['right', 'tabular-nums', 'sticky', 'nowrap', '0.00']
+    # A click anywhere on the row, not only on the name, opens the record.
+    b.evaluate("[...document.querySelectorAll('#master-results tbody tr')].find(r => r.textContent.includes('Ledger row customer')).querySelector('td.num').click()")
+    b.wait_for("document.querySelector('h1')?.textContent.includes('Ledger row customer')")
+
+    b.viewport(390, 850)
+    b.navigate(url)
+    b.wait_for("window.bookflowList?.idle() && document.querySelectorAll('.list-card').length === 2")
+    cards = b.evaluate("""[...document.querySelectorAll('.list-card')].map(c => {
+        const link = c.querySelector('.list-card-link').getBoundingClientRect(), amount = c.querySelector('.list-card-amount').getBoundingClientRect();
+        return {text: c.innerText, sameLine: Math.abs(link.top - amount.top) < 6, amountRight: amount.right > link.right};})""")
+    assert all(card['sameLine'] and card['amountRight'] for card in cards), cards
+    assert [t for t in cards[0]['text'].split('\n') if t.strip()] == ['Ledger row customer', '$0.00', '555-0142']
+    # An empty field says nothing at all ("Phone: —" is gone).
+    assert [t for t in cards[1]['text'].split('\n') if t.strip()] == ['Ledger row quiet', '$0.00']
+    assert b.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+    # The whole card is the tap target: its muted line opens the record too.
+    point = b.evaluate("""(() => {const r = document.querySelector('.list-card .list-card-sub').getBoundingClientRect();
+        return {x: r.right - 4, y: r.top + r.height / 2};})()""")
+    for event in ('mousePressed', 'mouseReleased'):
+        b.call('Input.dispatchMouseEvent', {'type': event, 'x': point['x'], 'y': point['y'], 'button': 'left', 'clickCount': 1})
+    b.wait_for("document.querySelector('h1')?.textContent.includes('Ledger row customer')")

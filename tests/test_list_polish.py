@@ -279,8 +279,10 @@ def test_the_invoice_list_names_its_columns_the_way_a_bookkeeper_does(hosted):
     books = _books(hosted)
     _write(hosted, books, 'invoice', '2026-04-01', 1)
     page = _browser(hosted).get(f"/c/{books['company']}/invoice")
+    # Amounts all in the home currency name it once, in the heading, and the open balance the
+    # invoice query already carries is shown beside the total.
     assert re.findall(r'<th[^>]*>([^<]*)</th>', page.text) == [
-        'Number', 'Date', 'Customer', 'Due date', 'Total', 'Status']
+        'Number', 'Date', 'Customer', 'Total (USD)', 'Open balance (USD)', 'Status']
 
 
 def test_a_stored_amount_column_is_headed_with_what_it_holds():

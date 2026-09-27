@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}{{ heading }}{% endblock %}{% block body %}
+{% extends "base.html" %}{% from 'browse_value.html' import plain with context %}{% block title %}{{ heading }}{% endblock %}{% block body %}
 {% set base = noun_base(company_id or None, noun) %}
 {% set work_on = work_filters is defined and work_filters is not none %}
 {% set sales_on = sales_filters is not none and noun in ('invoice', 'sales-receipt') %}
@@ -8,10 +8,11 @@
 {% set has_sort = work_on or sales_on or bill_on or generic_on %}
 {% set compact = not (has_sort or rate_on) %}
 {% set deleted_on = deletable | default(false) %}
-{% set creates = [] %}{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}{% if loop.first %}{% set _ = creates.append(v) %}{% endif %}{% endfor %}
+{# The phone's + is the create action: a verb that makes a new record, else the first action. #}
+{% set actions = [] %}{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}{% set _ = actions.append(v) %}{% endfor %}{% set creates = (actions | selectattr('verb', 'in', ('create', 'post', 'add', 'new')) | list or actions)[:1] %}
 <link rel="stylesheet" href="{{ static_urls['browsing.css'] }}"><script src="{{ static_urls['browsing.js'] }}" defer></script>
 <h1>{{ heading }}</h1>
-{% if creates or verbs %}<p class="actions list-actions{% if not compact and creates %} has-list-bar{% endif %}">{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}"{% if loop.first %} class="primary-action"{% endif %}>{{ ui_heading(noun, v.verb, meta) }}</a>{% endfor %}</p>{% endif %}
+{% if creates or verbs %}<p class="actions list-actions{% if not compact and creates %} has-list-bar{% endif %}">{% for v in verbs if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}"{% if loop.first or (creates and v.verb == creates[0].verb) %} class="{{ 'primary-action' if loop.first }}{{ ' list-create' if creates and v.verb == creates[0].verb }}"{% endif %}>{{ ui_heading(noun, v.verb, meta) }}</a>{% endfor %}</p>{% endif %}
 {% if deleted_on and request.query_params.get('deleted') %}<p role="status">{{ deleted_label }} deleted. <a href="{{ base }}/{{ request.query_params.get('deleted') }}?include_deleted=1&history=1">View retained record and history</a></p>{% endif %}
 {% if noun == 'rate' %}<p><a href="{{ base }}/query">Query rates</a></p>{% endif %}
 {% if search or not compact or has_inactive or deleted_on %}
@@ -64,9 +65,23 @@
 </form>
 {% endif %}
 <div id="list-results">
-<div class="table-wrap"><table class="list-table"><thead><tr>{% for c in columns or [] %}<th>{{ c | label }}</th>{% endfor %}{% if noun == "account" %}<th>Activity</th>{% endif %}</tr></thead><tbody>
-{% for it in items %}<tr>{% for c in columns %}{% set value = it.get(c) %}{% set money = value is mapping and "amount" in value and "currency" in value %}{% if money %}{% set value = value.amount ~ " " ~ value.currency %}{% elif c == "status" and value is string %}{% set value = ui_words(value) %}{% endif %}<td data-label="{{ c | label }}"{% if money %} class="num"{% endif %}>{% if loop.first and has_show and meta.identifier and it.get(meta.identifier) %}<a href="{{ base }}/{{ it[meta.identifier] }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% elif loop.first and noun == "company" and it.get("company_id") %}<a href="/c/{{ it.company_id }}/company/self">{{ value if value is not none else "" }}</a>{% elif loop.first and has_show and it.get("id") %}<a href="{{ base }}/{{ it.id }}{{ '?include_deleted=1' if it.status == 'deleted' else '' }}">{{ value if value is not none else "" }}</a>{% else %}{{ value if value is not none else "" }}{% endif %}</td>{% endfor %}{% if noun == "account" %}<td data-label="Activity">{% if it.type in ("income", "other_income", "expense", "other_expense", "cost_of_goods_sold") %}<a href="/c/{{ company_id }}/report/general-ledger?account={{ it.id }}">Ledger</a>{% elif it.type != "non_posting" %}<a href="{{ base }}/{{ it.id }}/register">Register</a>{% endif %}</td>{% endif %}</tr>{% endfor %}</tbody></table>
+{% set layout = layout | default({'money': {}, 'dates': [], 'name': columns[0] if columns else none, 'amount': none, 'secondary': [], 'prefix': {}}) %}
+{% set home = math_company_currency | default('') %}
+{# A money column shared by every row in the home currency names it once, in its heading. #}
+{% set heads = {} %}{% for key, currency in layout.money.items() if currency and currency == home %}{% set _ = heads.update({key: currency}) %}{% endfor %}
+{% set hrefs = [] %}{% for it in items %}{% if has_show and meta.identifier and it.get(meta.identifier) %}{% set _ = hrefs.append(base ~ '/' ~ it[meta.identifier] ~ ('?include_deleted=1' if it.status == 'deleted' else '')) %}{% elif noun == "company" and it.get("company_id") %}{% set _ = hrefs.append('/c/' ~ it.company_id ~ '/company/self') %}{% elif has_show and it.get("id") %}{% set _ = hrefs.append(base ~ '/' ~ it.id ~ ('?include_deleted=1' if it.status == 'deleted' else '')) %}{% else %}{% set _ = hrefs.append('') %}{% endif %}{% endfor %}
+<div class="table-wrap list-scroll{% if items %} list-desktop{% endif %}"><table class="list-table list-ledger"><thead><tr>{% for c in columns or [] %}<th scope="col"{% if c in layout.money %} class="num"{% endif %}>{{ c | label }}{% if c in heads %} ({{ heads[c] }}){% endif %}</th>{% endfor %}{% if noun == "account" %}<th scope="col">Activity</th>{% endif %}</tr></thead><tbody>
+{% for it in items %}{% set href = hrefs[loop.index0] %}<tr{% if href %} class="is-linked"{% endif %}>{% for c in columns %}{% set value = it.get(c) %}<td data-label="{{ c | label }}"{% if c in layout.money %} class="num"{% endif %}>{% if c in layout.money and value is mapping %}{% set value = value | amount if c in heads else value | money(home=home) %}{% elif c in layout.dates and value %}{% set value = value | day %}{% elif c == "status" and value is string %}{% set value = ui_words(value) %}{% endif %}{% if loop.first and href %}<a class="row-link" href="{{ href }}">{{ value if value is not none else "" }}</a>{% else %}{{ value if value is not none else "" }}{% endif %}</td>{% endfor %}{% if noun == "account" %}<td data-label="Activity">{% if it.type in ("income", "other_income", "expense", "other_expense", "cost_of_goods_sold") %}<a href="/c/{{ company_id }}/report/general-ledger?account={{ it.id }}">Ledger</a>{% elif it.type != "non_posting" %}<a href="{{ base }}/{{ it.id }}/register">Register</a>{% endif %}</td>{% endif %}</tr>{% endfor %}</tbody></table>
 </div>
+{# On a phone each row is one card: its name and figure on one line, the columns the list
+   declares as secondary on a muted line, empty fields left out, the whole card the target. #}
+{% if items %}<ul class="list-cards" aria-label="{{ heading }}">
+{% for it in items %}{% set href = hrefs[loop.index0] %}{% set name = it.get(layout.name) if layout.name else none %}<li class="list-card">
+<div class="list-card-main">{% if href %}<a class="list-card-link" href="{{ href }}">{{ name if name is not none else '' }}</a>{% else %}<span class="list-card-link">{{ name if name is not none else '' }}</span>{% endif %}{% if layout.amount and it.get(layout.amount) is mapping %}<span class="list-card-amount">{{ it.get(layout.amount) | money(home=home) }}</span>{% endif %}</div>
+{% set parts = [] %}{% for key in layout.secondary %}{% if key == 'status' %}{# the ordinary state is left unsaid on a card #}{% set text = ui_words(it.status) if it.status is string and it.status not in ('posted', 'active') else '' %}{% else %}{% set text = plain(it.get(key), key, key | label, 'date' if key in layout.dates else '', layout.prefix.get(key, ''), home) | trim %}{% endif %}{% if text %}{% set _ = parts.append(text) %}{% endif %}{% endfor %}
+{% if parts %}<p class="list-card-sub">{{ parts | join(' · ') }}</p>{% endif %}
+</li>{% endfor %}
+</ul>{% endif %}
 {% if not items %}<p>No matching records. Try a different search or include inactive records.</p>{% endif %}
 {% if paging.previous_url or paging.next_url %}<nav class="pagination" aria-label="Results pages">
 {% if paging.previous_url %}<a href="{{ paging.previous_url }}" rel="prev">← Previous page</a>{% endif %}

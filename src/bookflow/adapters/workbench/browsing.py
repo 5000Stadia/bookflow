@@ -25,7 +25,10 @@ def page(request, company_id, noun, definition, verbs, meta, run, render):
     metadata = run(f'{noun} query options', {'include_inactive': not active_only}, company_id)
     filters = run(f'{noun} query options', {'kind': 'filters', 'include_inactive': not active_only}, company_id)
     text = query.get('columns')
-    raw['columns'] = [key_for(noun, value.strip()) for value in text.split(',')] if text is not None else metadata['default_columns']
+    from bookflow.adapters.workbench import list_layout as Layout
+    # The workbench opens a list on fewer columns than the core offers; Customize list adds any other.
+    defaults = Layout.default_columns(noun, metadata['default_columns'])
+    raw['columns'] = [key_for(noun, value.strip()) for value in text.split(',')] if text is not None else defaults
     result = run(f'{noun} query', raw, company_id)
     selected = result['columns']
     criteria = []
@@ -80,18 +83,20 @@ def page(request, company_id, noun, definition, verbs, meta, run, render):
     current_sort = definition.resolve_sort(raw.get('sort'), raw.get('direction', 'asc'))[0]
     headings = {item['key']: url(sort=item['sort_key'], direction='desc' if current_sort.field == item['sort_key'] and current_sort.direction == 'asc' else 'asc')
                 for item in selected if item['sortable']}
-    from bookflow.adapters.workbench import list_layout as Layout
-    opened = {'limit': '50', 'custom_filters': '[]', 'direction': 'asc', 'columns': ','.join(metadata['default_columns'])}
+    opened = {'limit': '50', 'custom_filters': '[]', 'direction': 'asc', 'columns': ','.join(defaults)}
     list_state = Layout.state(query, opened, quiet=('query', 'sort', 'direction', 'columns', 'limit', 'metadata_active_only'))
     # On a phone the Filters button counts what narrows the list: criteria and inactive records.
     list_state['filters'] = len(criteria) + (1 if raw['include_inactive'] else 0)
     return render('master_list.html', request, company_id=company_id, noun=noun, meta=meta, verbs=verbs,
-        list_state=list_state, sorts=definition.sorts,
+        list_state=list_state, sorts=definition.sorts, default_columns=defaults,
+        layout=Layout.plan(noun, [item['key'] for item in selected], [row['values'] for row in result['items']],
+                           name=definition.display_field, kinds={item['key']: item['kind'] for item in selected}, defaults=defaults,
+                           words=[item['key'] for item in selected if item['kind'] == 'choice' and not item.get('definition')]),
         result=result, options=metadata, filter_options=filters, criteria=criteria, raw=raw, headings=headings, metadata_active_only=active_only,
         current_sort=current_sort,
         next_url=url(cursor=result['next_cursor']) if result['next_cursor'] else None,
         browser_data={'columns': selected, 'options': metadata, 'filters': filters, 'criteria': criteria,
-            'defaults': metadata['default_columns'], 'endpoint': f'/c/{company_id}/_browse/{noun}'})
+            'defaults': defaults, 'endpoint': f'/c/{company_id}/_browse/{noun}'})
 
 
 def details(request, noun, company_id, record, run):

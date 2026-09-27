@@ -122,12 +122,13 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
     b.navigate(base + '/rate?from_currency=JPY&date_from=2026-03-11&date_to=2026-03-12&limit=1')
     b.wait_for("!!document.querySelector('form.list-tools')")
     body = b.evaluate('document.querySelector("main").textContent')
-    assert DATE in body and 'EUR' not in body and '2026-03-12' not in body
+    # List dates read as a person says them ("Mar 11"); the filter inputs keep ISO dates.
+    assert 'Mar 11' in body and 'EUR' not in body and 'Mar 12' not in body
     assert b.evaluate("document.querySelector('[name=from_currency]').value") == 'JPY'
     next_url = b.evaluate("document.querySelector('a[rel=next]').href")
     assert 'from_currency=JPY' in next_url and 'limit=1' in next_url
     b.navigate(next_url)
-    b.wait_for("document.body.textContent.includes('2026-03-12')")
+    b.wait_for("document.querySelector('main').textContent.includes('Mar 12')")
     assert not b.evaluate("!!document.querySelector('a[rel=next]')")
     assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')
     _set(b, 'from_currency', 'EUR')
