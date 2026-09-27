@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from bookflow.adapters.workbench.display import amount
 from tests.test_reference_year import EXPECTED,reference_template,reference_client  # noqa: F401
 from tests.test_reference_year_browser import reference_site  # noqa: F401
 from tests.test_row5_browser_acceptance import CHROME,PASSWORD,_Cdp
@@ -24,17 +25,32 @@ FIRST_HALF_INCOME=EXPECTED["monthly"][5]["income"]
 NET_ASSETS=EXPECTED["annual"]["net_assets"]
 
 
-def money(minor):
-    """The amount string the statement prints for an integer minor-unit figure."""
+def raw(minor):
+    """The exact amount string the command returns for an integer minor-unit figure."""
     sign="-" if minor<0 else ""
     whole,cents=divmod(abs(minor),100)
     return f"{sign}{whole}.{cents:02d}"
 
 
+def money(minor):
+    """The figure the statement prints for it: grouped thousands, minus for a negative."""
+    return amount(raw(minor))
+
+
 def fill(browser,fields):
-    browser.evaluate("""(() => { const form=document.querySelector('form[data-generated-form]');
+    """Run the report on these filters and wait for the page that answers them.
+
+    A report opens already run, so the page being replaced carries the same tables; it is
+    marked first so that no later wait can be satisfied by the page that was there before.
+    """
+    # A form submitted before the page has finished loading goes without the workbench
+    # header, so wait for the page first; a report page now arrives carrying its figures.
+    browser.wait_for("document.readyState === 'complete'")
+    browser.evaluate("""(() => { document.querySelector('main').dataset.stale='1';
+        const form=document.querySelector('form[data-generated-form]');
         for(const [key,value] of Object.entries(%s)) form.elements.namedItem('f:'+key).value=value;
         form.querySelector('button[value=submit]').click(); })()""" % json.dumps(fields))
+    browser.wait_for("!document.querySelector('main[data-stale]')")
 
 
 def total(browser,key):
@@ -97,7 +113,8 @@ def test_statements_from_navigation_paging_and_current_ledger(reference_site,tmp
         browser.wait_for("document.querySelector('[data-total=total_equity]')?.textContent.includes(%s)"
                          % json.dumps(money(NET_ASSETS)))
         # The sheet balances on its own terms, and its equity is the year's net assets.
-        assert total(browser,"difference") == money(0)
+        # A zero difference is not printed; the line appears only when the sheet does not balance.
+        assert browser.evaluate("!document.querySelector('[data-total=difference]')")
         assert total(browser,"assets") == total(browser,"liabilities_and_equity")
         assert browser.evaluate("document.documentElement.scrollWidth") <= width+1
         image=browser.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
@@ -109,7 +126,7 @@ def test_statements_from_navigation_paging_and_current_ledger(reference_site,tmp
         assert browser.evaluate("document.querySelector('[name=\"f:date_from\"]').value") == "0001-01-01"
         fill(browser,{"limit":"2"})
         browser.wait_for("document.querySelector('main pre')?.textContent.includes(%s)"
-                         % json.dumps(money(EXPECTED["annual"]["balances"]["Checking"])))
+                         % json.dumps(raw(EXPECTED["annual"]["balances"]["Checking"])))
         assert 'books changed' not in browser.evaluate("document.querySelector('#report-source-state').textContent")
         # A source watermark from an earlier information boundary must be explicit.
         # The next-page form carries one of its own and comes first in the document,

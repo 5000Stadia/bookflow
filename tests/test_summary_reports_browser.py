@@ -44,9 +44,19 @@ _CELLS = """[...document.querySelectorAll('%s tbody tr')].map(
 
 
 def _fill(browser, fields):
-    browser.evaluate("""(() => { const form=document.querySelector('form[data-generated-form]');
+    """Run the report on these filters and wait for the page that answers them.
+
+    A report opens already run, so the page being replaced carries the same tables; it is
+    marked first so that no later wait can be satisfied by the page that was there before.
+    """
+    # A form submitted before the page has finished loading goes without the workbench
+    # header, so wait for the page first; a report page now arrives carrying its figures.
+    browser.wait_for("document.readyState === 'complete'")
+    browser.evaluate("""(() => { document.querySelector('main').dataset.stale='1';
+        const form=document.querySelector('form[data-generated-form]');
         for(const [key,value] of Object.entries(%s)) form.elements.namedItem('f:'+key).value=value;
         form.querySelector('button[value=submit]').click(); })()""" % json.dumps(fields))
+    browser.wait_for("!document.querySelector('main[data-stale]')")
 
 
 def _no_sideways_scroll(browser):
@@ -105,13 +115,13 @@ def test_an_owner_reaches_all_four_summaries_and_reads_the_money(browser_site, t
         browser.wait_for("!!document.querySelector('#summary-rows')")
         assert browser.evaluate(_CELLS % "#summary-rows") == CUSTOMER_ROWS
         assert browser.evaluate(_CELLS % "#summary-totals") == [["625.00"]]
-        assert "4 customers on this page" in browser.evaluate(
-            "document.querySelector('#summary-page-count').textContent")
+        # Every customer fits on this page, so no page count is printed.
+        assert browser.evaluate("!document.querySelector('#summary-page-count')")
         assert browser.evaluate("!document.querySelector('#summary-next-page')")
         _no_sideways_scroll(browser)
 
         # The customer's own statement for the same period, opened from the row. The
-        # link carries the filter into the next report's form rather than running it.
+        # link carries the filter into the next report, which opens already run on it.
         browser.evaluate("""[...document.querySelectorAll('#summary-rows a')]
             .find(a => a.textContent.trim() === 'Summary Ridge Builders').click()""")
         browser.wait_for("!!document.querySelector('[name=\"f:customer\"]')")

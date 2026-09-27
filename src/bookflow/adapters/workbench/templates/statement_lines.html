@@ -1,0 +1,12 @@
+{# One statement as a single column: account rows under their section, section totals, and
+   the ruled subtotals and bold last line the command's own totals supply. #}
+<div class="table-wrap statement-wrap"><table id="statement-accounts" class="statement">
+<caption class="report-sr-only">{{ heading }} · {{ statement.metadata.currency }}</caption>
+<thead><tr><th scope="col">Account</th><th scope="col" class="num">{{ statement.metadata.currency }}</th></tr></thead>
+<tbody>
+{% for line in statement.lines %}{% if line.kind == 'section' %}<tr class="statement-section" data-section="{{ line.section }}"><th scope="rowgroup" colspan="2">{{ line.label }}</th></tr>
+{% elif line.kind == 'account' %}{% set row = line.row %}<tr class="statement-account" data-account="{{ row.account_id }}" data-section="{{ line.section }}"><th scope="row" title="{{ row.current_account_label }}">{{ row.display_account_label }}{% if not row.active %} (inactive){% endif %}</th><td class="num" data-value="amount"><a href="{{ row.ledger_url }}" title="Open the general ledger for {{ row.display_account_label }}">{{ line.amount|amount }}</a></td></tr>
+{% else %}<tr class="statement-{{ line.kind }}" data-total="{{ line.total }}"><th scope="row">{{ line.label }}</th><td class="num">{{ line.amount|amount }}</td></tr>
+{% endif %}{% else %}<tr><td colspan="2">No matching account balances.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if statement.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ statement.count }} accounts on this page; more on the next page. Section totals already include them.</p>{% endif %}

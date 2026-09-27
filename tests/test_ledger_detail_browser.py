@@ -8,6 +8,7 @@ import base64
 
 import pytest
 
+from bookflow.adapters.workbench.display import amount, day
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import register_browser, _command  # noqa: F401
 from tests.test_financial_statements_browser import fill
@@ -41,10 +42,10 @@ def detail_expectation(result):
     rows = []
     for row in result['rows']:
         values = {'party': row['party_name'] or '', 'split': row['split_account_label'] or '',
-                  'debit': row['debit']['amount'], 'credit': row['credit']['amount'],
-                  'balance': row['balance']['amount']}
+                  'debit': amount(row['debit']), 'credit': amount(row['credit']),
+                  'balance': amount(row['balance'])}
         if row['date']:
-            values['date'] = row['date']
+            values['date'] = day(row['date'])
         rows.append({'account': row['account_id'], 'kind': row['kind'], 'values': values})
     return rows
 
@@ -124,8 +125,7 @@ def test_transaction_detail_and_missing_checks_pages(register_browser, tmp_path)
     assert b.evaluate('document.querySelector(`[name="c:accounts:0:value"]`).value') == env.bank['id']
     submit(b, dict(date_from=detail['date_from'], date_to=detail['date_to'], limit='3'))
     usable(b, tmp_path, 'transaction-detail', detail_expectation(expected), expected['count'])
-    assert totals_shown(b) == {key: f"{value['amount']} {value['currency']}"
-                               for key, value in expected['totals'].items()}
+    assert totals_shown(b) == {key: amount(value) for key, value in expected['totals'].items()}
     visible = b.evaluate('document.querySelector("#report-lines").innerText')
     assert 'CDP Plumbing Supply' in visible, visible
     assert 'Check 1001 to the supplier' in visible, visible

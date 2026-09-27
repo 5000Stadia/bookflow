@@ -388,8 +388,8 @@ def test_the_host_and_the_workbench_serve_the_statement(hosted):  # noqa: F811
     page = result.text[result.text.index('id="customer-statement"'):]
     assert 'id="statement-lines"' in page and 'id="statement-aging"' in page
     assert "Rowan Fabrication:Shop Floor" in page
-    assert '<div data-total="closing"><dt>Balance due</dt><dd>630.00 USD</dd></div>' in page, page[:2000]
-    assert '<div data-aging="days_1_30"><dt>1-30</dt><dd>-20.00 USD</dd></div>' in page, page[:2000]
+    assert '<div data-total="closing"><dt>Balance due</dt><dd>$630.00</dd></div>' in page, page[:2000]
+    assert '<div data-aging="days_1_30"><dt>1-30</dt><dd>-$20.00</dd></div>' in page, page[:2000]
     for heading in ("Current", "1-30", "31-60", "61-90", "Over 90", "Total"):
         assert f"<dt>{heading}</dt>" in page, heading
     assert "Balance forward" in page and "Balance due" in page
@@ -411,5 +411,5 @@ def test_the_host_and_the_workbench_serve_the_statement(hosted):  # noqa: F811
     paged = api.post(f"/c/{cid}/report/statement",
                      data={"f:date_from": FROM, "f:date_to": TO, "f:limit": "4"}, headers=WB)
     assert 'id="customer-statement-next-page"' in paged.text
-    assert '<div data-total="closing"><dt>Balance due</dt><dd>630.00 USD</dd></div>' in paged.text
+    assert '<div data-total="closing"><dt>Balance due</dt><dd>$630.00</dd></div>' in paged.text
     hosted.handle.stop()

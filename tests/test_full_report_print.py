@@ -185,11 +185,15 @@ def test_browser_full_filtered_report_desktop_phone_and_multipage_pdf(print_site
             document.querySelector('form[hx-post="/login"]').requestSubmit();})()''' % (json.dumps(print_site.login), json.dumps(PASSWORD)))
         b.wait_for("!!document.querySelector('.nav-group')")
         b.navigate(f'{print_live}/c/{print_site.company}/report/general-ledger')
+        # The ledger opens already run on its defaults; running it again on these filters
+        # replaces that page, so wait for the new one rather than the first 50 rows.
+        b.wait_for("!!document.querySelector('#report-result')")
+        b.evaluate("document.querySelector('#report-result').dataset.stale='1'")
         fields = {**PERIOD, 'account': print_site.bank, 'limit': '50'}
         b.evaluate('''(() => {const f=document.querySelector('form[data-generated-form]');
             for(const [k,v] of Object.entries(%s)) f.elements.namedItem('f:'+k).value=v;
             f.querySelector('button[value=submit]').click();})()''' % json.dumps(fields))
-        b.wait_for("document.querySelectorAll('#report-lines tbody tr[data-account]').length===50")
+        b.wait_for("!document.querySelector('#report-result[data-stale]') && document.querySelectorAll('#report-lines tbody tr[data-account]').length===50")
         assert b.evaluate("!!document.querySelector('#statement-next-page')")
         link = b.evaluate("document.querySelector('#report-print-all').getAttribute('href')")
         assert Export.inputs_from(registry.get('report general-ledger'), QueryParams(urlsplit(link).query)) == {**PERIOD, 'account': print_site.bank, 'basis': 'accrual'}
@@ -198,7 +202,7 @@ def test_browser_full_filtered_report_desktop_phone_and_multipage_pdf(print_site
         assert b.evaluate("document.querySelectorAll('#report-lines tbody tr[data-account]').length") == 232
         assert b.evaluate("[...document.querySelectorAll('#report-lines .report-description')].map(n=>n.textContent).filter(t=>t.startsWith('PRINT-ROW')).map(t=>t.split(' ')[0])") == [f'PRINT-ROW-{i:03d}' for i in range(230)]
         assert not b.evaluate("document.body.innerText.includes('EXCLUDED-DATE') || document.body.innerText.includes('EXCLUDED-ACCOUNT')")
-        assert b.evaluate("document.querySelector('[data-total=period_debits] dd').textContent") == '123457018.01 USD'
+        assert b.evaluate("document.querySelector('[data-total=period_debits] dd').textContent") == '123,457,018.01'
         for width in (1280, 390):
             b.viewport(width, 900)
             assert b.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1')
@@ -217,7 +221,7 @@ def test_browser_full_filtered_report_desktop_phone_and_multipage_pdf(print_site
             assert all('Account' in page.extract_text() and 'Running balance' in ' '.join(page.extract_text().split())
                        for page in pages if 'PRINT-' in page.extract_text())
             for value in ('Complete Report Company', 'General ledger', 'Accrual', 'USD', '2026-09-01',
-                          '2026-09-30', 'Audit watermark', 'All 232 matching rows', '123457018.01', '123457028.01'):
+                          '2026-09-30', 'Audit watermark', 'All 232 matching rows', '123,457,018.01', '123,457,028.01'):
                 assert re.sub(r'\s+', '', value) in compact, (value, text[:1800])
             assert 'Print / save PDF' not in text and 'EXCLUDED-' not in text
         # Explicit print action, no automatic dialog; test wiring without opening a modal.

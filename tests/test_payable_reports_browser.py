@@ -5,37 +5,56 @@ A/P aging summary, one vendor's own open bills, and the bill itself. Every figur
 asserted here is read off the rendered page, not off the command's JSON.
 """
 import json
+import re
 
 import pytest
 
+from bookflow.adapters.workbench.display import amount, day
 from tests.test_row5_browser_acceptance import CHROME, PASSWORD, _Cdp, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command
 from tests.test_payable_reports import AS_OF, build
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason="Chrome is unavailable")
 
-AGING_TOTALS = ["925.00", "515.50", "310.00", "615.00", "1100.00", "3465.50"]
-AGING_ROWS = [
+
+def _shown(row):
+    """A row as the page prints it: dates as a person reads them, figures grouped."""
+    return [day(cell) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", cell)
+            else amount(cell) if re.fullmatch(r"-?\d+\.\d{2}", cell) else cell for cell in row]
+
+
+AGING_TOTALS = _shown(["925.00", "515.50", "310.00", "615.00", "1100.00", "3465.50"])
+AGING_ROWS = [_shown(row) for row in [
     ["Aging Freight LLC", "0.00", "275.00", "310.00", "0.00", "0.00", "585.00"],
     ["Aging Parts Inc", "0.00", "0.00", "0.00", "0.00", "1100.00", "1100.00"],
     ["Aging Supply Co", "925.00", "240.50", "0.00", "615.00", "0.00", "1780.50"],
-]
+]]
 # due, days past due, column, bill, vendor, bill date, reference, amount, applied, open
-SUPPLY_BILLS = [
+SUPPLY_BILLS = [_shown(row) for row in [
     ["2026-04-01", "90", "61-90", "AP-90", "Aging Supply Co", "2026-03-15", "", "615.00", "0.00", "615.00"],
     ["2026-05-31", "30", "1-30", "AP-30", "Aging Supply Co", "2026-05-01", "SUP-51", "240.50", "0.00", "240.50"],
     ["2026-06-30", "0", "Current", "AP-TODAY", "Aging Supply Co", "2026-06-02", "", "800.00", "0.00", "800.00"],
     ["2026-07-15", "-15", "Current", "AP-CURRENT", "Aging Supply Co", "2026-06-01", "SUP-77", "125.00", "0.00", "125.00"],
-]
+]]
 
 _CELLS = """[...document.querySelectorAll('%s tbody tr')].map(
     row => [...row.cells].map(cell => cell.textContent.trim()))"""
 
 
 def _fill(browser, fields):
-    browser.evaluate("""(() => { const form=document.querySelector('form[data-generated-form]');
+    """Run the report on these filters and wait for the page that answers them.
+
+    A report opens already run, so the page being replaced carries the same tables; it is
+    marked first so that no later wait can be satisfied by the page that was there before.
+    """
+    # A form submitted before the page has finished loading goes without the workbench
+    # header, so wait for the page first; a report page now arrives carrying its figures.
+    browser.wait_for("document.readyState === 'complete'")
+    browser.evaluate("""(() => { document.querySelector('main').dataset.stale='1';
+        const form=document.querySelector('form[data-generated-form]');
         for(const [key,value] of Object.entries(%s)) form.elements.namedItem('f:'+key).value=value;
         form.querySelector('button[value=submit]').click(); })()""" % json.dumps(fields))
+    browser.wait_for("!document.querySelector('main[data-stale]')")
 
 
 def _no_sideways_scroll(browser):
@@ -83,8 +102,8 @@ def test_a_bookkeeper_reaches_both_payables_reports_and_reads_the_money(browser_
         assert browser.evaluate("!document.querySelector('#payables-next-page')")
 
         # One vendor's own open bills, opened from that vendor's aging row. The
-        # link carries the filter into the next report's form rather than
-        # running it, so the reader sees what they are about to run.
+        # link carries the filter into the next report, which opens already run
+        # on it, with the filter in its form to change.
         browser.evaluate("""[...document.querySelectorAll('#payables-aging a')]
             .find(a => a.textContent.trim() === 'Aging Supply Co').click()""")
         browser.wait_for("!!document.querySelector('[name=\"f:vendor\"]')")
@@ -94,7 +113,7 @@ def test_a_bookkeeper_reaches_both_payables_reports_and_reads_the_money(browser_
         _fill(browser, {"limit": "200"})
         browser.wait_for("!!document.querySelector('#payables-unpaid')")
         assert browser.evaluate(_CELLS % "#payables-unpaid") == SUPPLY_BILLS
-        assert browser.evaluate(_CELLS % "#payables-totals") == [["1780.50", "0.00", "1780.50"]]
+        assert browser.evaluate(_CELLS % "#payables-totals") == [_shown(["1780.50", "0.00", "1780.50"])]
         _no_sideways_scroll(browser)
 
         # The bill itself, opened from its number.
@@ -114,7 +133,7 @@ def test_a_bookkeeper_reaches_both_payables_reports_and_reads_the_money(browser_
         browser.wait_for("!!document.querySelector('[name=\"f:as_of\"]')")
         _fill(browser, {"as_of": AS_OF, "limit": "200"})
         browser.wait_for("!!document.querySelector('#payables-unpaid')")
-        assert browser.evaluate(_CELLS % "#payables-totals") == [["3465.50", "0.00", "3465.50"]]
+        assert browser.evaluate(_CELLS % "#payables-totals") == [_shown(["3465.50", "0.00", "3465.50"])]
         assert browser.evaluate("""[...document.querySelectorAll('#payables-unpaid tbody tr')]
             .map(row => row.cells[3].textContent.trim())""") == [
             "AP-OLD", "AP-91", "AP-90", "AP-31", "AP-30", "AP-FIXED", "AP-TODAY", "AP-CURRENT"]

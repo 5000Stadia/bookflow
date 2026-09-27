@@ -1,12 +1,9 @@
 {% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
-{% macro occupant(use) %}{% if use.document_url %}<a href="{{ use.document_url }}">{{ use.number }}</a>{% else %}{{ use.number }}{% endif %} · {{ use.date }} · {{ use.party_name or 'No name' }} · {{ use.amount.amount }} {{ use.amount.currency }}{% if use.status != 'posted' %} <span class="report-state">{{ use.status|capitalize }}</span>{% endif %}{% endmacro %}
+{% macro occupant(use) %}{% if use.document_url %}<a href="{{ use.document_url }}">{{ use.number }}</a>{% else %}{{ use.number }}{% endif %} · {{ use.date|day(report_view.today_date if report_view else none) }} · {{ use.party_name or 'No name' }} · {{ use.amount|money }}{% if use.status != 'posted' %} <span class="report-state">{{ use.status|capitalize }}</span>{% endif %}{% endmacro %}
 <section id="basic-report" class="document-detail basic-report missing-checks" aria-label="Missing checks">
-<p>{{ company_label }} · {{ missing_checks.metadata.currency }} · Checks dated on or before {{ missing_checks.as_of }}</p>
-<h2>Whole-report totals — all pages</h2>
 <dl class="report-totals">
 {% for key, heading in missing_checks.total_columns %}<div data-total="{{ key }}"><dt>{{ heading }}</dt><dd>{{ missing_checks.totals[key] }}</dd></div>{% endfor %}
 </dl>
-<p id="report-page-count">{{ missing_checks.count }} rows on this page{% if missing_checks.next_cursor %}; more available{% endif %}. A voided check still occupies its number, because the cheque it was written on is still gone. A check numbered some other way than by digits has no place in a sequence and is counted rather than placed. A number a correction gave up is accounted for and is never handed out again, so it is listed rather than counted as missing.</p>
 {% if missing_checks.disclosure %}<p id="report-disclosure" class="report-state" role="note">{{ missing_checks.disclosure }}</p>{% endif %}
 <div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="report-lines" role="table">
 <caption>Gaps, repeats and given-up numbers in each bank account's check numbers</caption>
@@ -33,6 +30,11 @@
 {% for name, value in missing_checks.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
 {% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 <button name="action" value="submit">Next check page</button></form>{% endif %}
-<p class="muted">Generated {{ missing_checks.metadata.generation_time }} · Change the filters below to start a new report. A check number belongs to the bank account it was written from, so a correction that moves a check to another account moves it here too.</p>
-<details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+{% if missing_checks.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ missing_checks.count }} rows on this page; more on the next page.</p>{% endif %}
+{% set about %}
+<p>{{ company_label }} · {{ missing_checks.metadata.currency }} · Checks dated on or before {{ missing_checks.as_of|longday }}.</p>
+<p>A voided check still occupies its number, because the cheque it was written on is still gone. A check numbered some other way than by digits has no place in a sequence and is counted rather than placed. A number a correction gave up is accounted for and is never handed out again, so it is listed rather than counted as missing.</p>
+<p>A check number belongs to the bank account it was written from, so a correction that moves a check to another account moves it here too.</p>
+{% endset %}
+{% include "report_footer.html" %}
 </section>

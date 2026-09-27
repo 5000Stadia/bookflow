@@ -1,0 +1,11 @@
+{# Closes the filter summary opened in report_bar.html, then the date chips, the headline figure
+   and the report itself. #}
+{% set rv = report_view %}
+</details>
+{% if rv and rv.chips %}<nav class="report-presets" aria-label="Date range">{% for chip in rv.chips %}<a href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</nav>{% endif %}
+</div>
+{% if rv %}<div class="report-headline">
+<h2 id="report-result" tabindex="-1"{% if report_ran %} data-report-focus{% endif %}>{{ rv.headline or heading }}</h2>
+{% if rv.figure %}<p class="report-figure" data-headline="{{ rv.figure.amount }}">{{ rv.figure|money }}</p>{% endif %}
+</div>{% endif %}
+{{ result_presentation }}

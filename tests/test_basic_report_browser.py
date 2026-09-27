@@ -3,6 +3,7 @@ import base64
 
 import pytest
 
+from bookflow.adapters.workbench.display import amount
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import register_browser, _command  # noqa: F401
 from tests.test_financial_statements_browser import fill
@@ -23,10 +24,12 @@ def compare(browser, expected):
         values:[...row.querySelectorAll('[data-value]')].map(cell => {
             const copy=cell.cloneNode(true);copy.querySelectorAll('.document-cell-label').forEach(e=>e.remove());return copy.textContent.trim();})}))''')
     assert actual == [dict(account_id=row['account_id'], kind=row.get('kind','account'),
-        values=[row['debit']['amount'],row['credit']['amount'],row.get('signed_balance',row.get('signed_net'))['amount']]) for row in expected['rows']]
+        values=[amount(row['debit']),amount(row['credit']),amount(row.get('signed_balance',row.get('signed_net')))]) for row in expected['rows']]
     for key, money in expected['totals'].items():
-        assert browser.evaluate(f'document.querySelector("[data-total={key}] dd").textContent') == money['amount']+' '+money['currency']
-    assert str(expected['count'])+' rows on this page' in browser.evaluate('document.querySelector("#report-page-count").textContent')
+        assert browser.evaluate(f'document.querySelector("[data-total={key}] dd").textContent') == amount(money)
+    # The page count is said only when there is a next page to go to.
+    count=browser.evaluate('document.querySelector("#report-page-count")?.textContent || ""')
+    assert (str(expected['count'])+' rows on this page' in count) == bool(expected['next_cursor'])
     assert bool(browser.evaluate('!!document.querySelector("#statement-next-page")')) == bool(expected['next_cursor'])
     for row in expected['rows']:
         assert row['display_account_label'] in browser.evaluate('document.querySelector("#report-lines").innerText')

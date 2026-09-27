@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from bookflow.adapters.workbench.display import amount
 from tests.test_row5_browser_acceptance import CHROME, PASSWORD, _Cdp, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command
 
@@ -34,8 +35,10 @@ ENTRIES = (("2026-03-02", "500.00", "CF checking", "CF service fees"),
            ("2026-03-05", "1000.00", "CF equipment", "CF equipment loan"),
            ("2026-03-06", "45.00", "CF sundry", "CF checking"))
 
-_CELLS = """[...document.querySelectorAll('#statement-accounts tbody tr')].map(
-    row => [...row.cells].map(cell => cell.textContent.trim()))"""
+# An account row of either statement: the cash flow statement marks its account rows, the
+# tax summary marks every row with its kind. Section headings and total lines are not rows here.
+_CELLS = """[...document.querySelectorAll('#statement-accounts tbody tr.statement-account, #statement-accounts tbody tr[data-kind]')].map(
+    row => [...(row.dataset.section ? [row.dataset.section] : []), ...[...row.cells].map(cell => cell.textContent.trim())])"""
 _TOTAL = "document.querySelector('[data-total=%s] td').textContent.trim()"
 
 
@@ -49,9 +52,19 @@ def _login(browser, site):
 
 
 def _fill(browser, fields):
-    browser.evaluate("""(() => { const form=document.querySelector('form[data-generated-form]');
+    """Run the report on these filters and wait for the page that answers them.
+
+    A report opens already run, so the page being replaced has the same tables; it is marked
+    first so no wait below can be satisfied by the page that was there before.
+    """
+    # A form submitted before the page has finished loading goes without the workbench
+    # header, so wait for the page first; a report page now arrives carrying its figures.
+    browser.wait_for("document.readyState === 'complete'")
+    browser.evaluate("""(() => { document.querySelector('main').dataset.stale='1';
+        const form=document.querySelector('form[data-generated-form]');
         for(const [key,value] of Object.entries(%s)) form.elements.namedItem('f:'+key).value=value;
         form.querySelector('button[value=submit]').click(); })()""" % json.dumps(fields))
+    browser.wait_for("!document.querySelector('main[data-stale]')")
 
 
 def _contained(browser):
@@ -103,7 +116,8 @@ def test_a_bookkeeper_reaches_both_new_reports_and_reads_money_that_reconciles(b
 
         money = lambda key: browser.evaluate(_TOTAL % key)
         # The report's own reconciliation, read off the page.
-        assert money("difference") == "0.00"
+        # A zero difference is not printed; the line appears only when the books do not tie.
+        assert browser.evaluate("!document.querySelector('[data-total=difference]')")
         value = lambda key: int(round(float(money(key).replace(",", "")) * 100))
         assert value("opening_cash") + value("net_change_in_cash") == value("closing_cash")
         assert (value("net_income") + value("operating_adjustments") + value("investing")
@@ -118,15 +132,14 @@ def test_a_bookkeeper_reaches_both_new_reports_and_reads_money_that_reconciles(b
         assert value("net_income") == profit["totals"]["net_income"]["minor_units"]
 
         # Each account lands in the section its type declares, with its own sign.
-        # Section, account, opening, closing, cash effect. Opening and closing
-        # read on the account's own normal side, so the loan reads as what is owed.
+        # Section, account, cash effect; opening and closing are in the CSV and structured data.
         rows = {row[1]: row for row in browser.evaluate(_CELLS)}
-        assert rows["CF prepaid cover"] == ["Operating", "CF prepaid cover", "0.00", "80.00", "-80.00"]
-        assert rows["CF equipment"] == ["Investing", "CF equipment", "0.00", "1000.00", "-1000.00"]
-        assert rows["CF equipment loan"] == ["Financing", "CF equipment loan", "0.00", "1000.00", "1000.00"]
+        assert rows["CF prepaid cover"] == ["operating", "CF prepaid cover", "-80.00"]
+        assert rows["CF equipment"] == ["investing", "CF equipment", "-1,000.00"]
+        assert rows["CF equipment loan"] == ["financing", "CF equipment loan", "1,000.00"]
         assert "CF checking" not in rows, "cash is what the statement explains, not a row in it"
         sections = [row[0] for row in browser.evaluate(_CELLS)]
-        assert sections == sorted(sections, key=["Operating", "Investing", "Financing"].index)
+        assert sections == sorted(sections, key=["operating", "investing", "financing"].index)
         _contained(browser)
         (tmp_path / f"cash-flows-{width}.png").write_bytes(base64.b64decode(
             browser.call("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": True})["data"]))
@@ -144,7 +157,7 @@ def test_a_bookkeeper_reaches_both_new_reports_and_reads_money_that_reconciles(b
         _fill(browser, {"date_from": DATE_FROM, "date_to": DATE_TO, "limit": "200"})
         browser.wait_for("!!document.querySelector('#statement-accounts')")
         assert not browser.evaluate("document.querySelector('.error')?.textContent")
-        assert browser.evaluate(_TOTAL % "net_income") == profit["totals"]["net_income"]["amount"]
+        assert browser.evaluate(_TOTAL % "net_income") == amount(profit["totals"]["net_income"])
 
         listed = browser.evaluate("""[...document.querySelectorAll('#statement-accounts tbody tr')].map(
             row => [row.dataset.kind, row.dataset.taxLine, ...[...row.cells].map(c => c.textContent.trim())])""")
@@ -158,8 +171,8 @@ def test_a_bookkeeper_reaches_both_new_reports_and_reads_money_that_reconciles(b
         assert accounts["CF sundry"][1] == "Unassigned" and accounts["CF sundry"][4] == "45.00"
         # Every group total is the accounts printed under it.
         for line, group in groups.items():
-            members = [float(row[4]) for row in listed if row[0] == "account" and row[1] == line]
-            assert round(sum(members), 2) == float(group[4]), line
+            members = [float(row[4].replace(",", "")) for row in listed if row[0] == "account" and row[1] == line]
+            assert round(sum(members), 2) == float(group[4].replace(",", "")), line
         _contained(browser)
         (tmp_path / f"income-tax-summary-{width}.png").write_bytes(base64.b64decode(
             browser.call("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": True})["data"]))
@@ -176,7 +189,7 @@ def test_both_reports_page_and_restart_a_stale_continuation_in_the_browser(brows
         _login(browser, site)
         run = lambda command, body: _command(browser, site, command, body)
         _build(run)
-        for report, totals in (("cash-flows", "difference"), ("income-tax-summary", "net_income")):
+        for report, totals in (("cash-flows", "closing_cash"), ("income-tax-summary", "net_income")):
             browser.navigate(f"{site.base_url}/c/{site.company_id}/report/{report}")
             browser.wait_for("!!document.querySelector('[name=\"f:date_from\"]')")
             _fill(browser, {"date_from": DATE_FROM, "date_to": DATE_TO, "limit": "1"})
