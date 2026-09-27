@@ -203,7 +203,7 @@ def test_the_furniture_a_person_used_to_reach_the_report_is_not_printed(printed)
         "the filter form": "form[data-generated-form]",
         "the next-page button": "form#statement-next-page",
         "the structured-data panel": "details.report-structured",
-        "the download link": "p.report-tools",
+        "the print and download buttons and the date chips": "div.report-tools",
     }
     for description, selector in furniture.items():
         present = [node for node in nodes if matches(node, selector)]

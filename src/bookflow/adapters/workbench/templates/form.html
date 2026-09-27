@@ -7,22 +7,7 @@
 <nav class="crumbs"><a href="{{ base }}">{{ noun|replace("-", " ")|replace("_", " ")|capitalize }}</a> / {{ document.heading if document else heading }}</nav>
 <h1>{{ document.heading if document else heading }}</h1>
 {% if document_nav %}{% include "document_nav.html" %}{% endif %}
-{% set report_presentation %}
-{% if result and result.metadata and result.metadata.basis == "cash" %}<p class="workflow-note">Cash-basis view using current payment matching. Later matching or corrections can change an earlier period. Opening the ledger shows the original accrual entries.{% if verb == 'sales-by-item' %} Item quantities show physical activity; cash-basis average selling price is not calculated.{% endif %}</p>{% endif %}
-{% if report_page and result and result.metadata %}<div class="report-print-heading"><h2>{{ heading }}</h2><p>{{ company_label or '' }}</p><p>{% if result.metadata.period.date_from %}{{ result.metadata.period.date_from }} through {{ result.metadata.period.date_to }}{% else %}As of {{ result.metadata.period.date_to }}{% endif %} · {{ result.metadata.basis|capitalize }} basis · {{ result.metadata.currency }}</p><p>Generated {{ result.metadata.generation_time }} · Audit watermark {{ result.metadata.audit_watermark }}{% if not report_full %} · Displayed-page copy only. Use Print full filtered report for all matching rows.{% endif %}</p></div>{% endif %}
-{% if report_print_url %}<p class="report-tools"><a href="{{ report_print_url }}" id="report-print-all">Print full filtered report</a></p>{% endif %}
-{% if report_full %}
-<link rel="stylesheet" href="{{ static_urls['report-full.css'] }}"><script src="{{ static_urls['report-print.js'] }}" defer></script>
-<section id="report-print-scope" aria-label="Printed report scope">
-<p><strong>Complete filtered report · All {{ result.count }} matching rows</strong></p>
-<p>Current books · Generated {{ result.metadata.generation_time }} · Audit watermark {{ result.metadata.audit_watermark }}.</p>
-<dl class="report-print-filters">{% for label, value in report_full.filters %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>
-</section>
-<p class="report-tools"><button type="button" id="report-print-dialog">Print / save PDF</button> <a id="report-print-return" href="{{ report_full.return_url }}">Back to report filters</a></p>
-{% endif %}
-{% if report_export_url %}<p class="report-tools"><a href="{{ report_export_url }}" download id="report-export">Download CSV · all matching rows</a></p>{% endif %}
-{% endset %}
-{{ report_presentation }}
+{% if noun == "report" %}{% include "report_head.html" %}{% endif %}
 {% if receipt_choices %}<details class="workflow-note" data-receipt-chooser><summary>Bill goods already received</summary>
 <form method="get" action="{{ base }}/post"><p>Select receipts from the same vendor. Enter the bill date on the next form.</p>
 {% for receipt in receipt_choices %}<label><input type="checkbox" name="receipt" value="{{ receipt.id }}"> {{ receipt.number }} · {{ receipt.profile.vendor.label }} · {{ receipt.date }}</label><br>{% endfor %}
@@ -33,9 +18,9 @@
 {% if noun == 'item' and verb == 'create' %}<p class="workflow-note">For a service you sell, enter a description, income account, price and sales tax code. For an item you purchase, enable purchases and enter its purchase description, expense account and cost. Inventory uses a cost-of-goods-sold account instead of an expense account.</p>{% endif %}
 {% if document %}<details class="technical-details"><summary>About this {{ document.title|lower }}</summary><p>{% if noun == "invoice" %}Saving records this invoice; it does not email it.{% else %}{{ document.help }}{% endif %}</p></details>
 {% elif noun == 'deposit' and verb == 'post' %}<p class="muted">Bank your received payments together as one deposit.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
-{% elif noun == 'report' and verb == 'statement' %}<p class="muted">Review the customer’s opening balance, activity and amount due.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
+{% elif noun == 'report' and verb == 'statement' and not (result and result.metadata) %}<p class="muted">Review the customer’s opening balance, activity and amount due.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>
-{% elif verb in ("void", "delete", "remove", "unapply") %}<p class="workflow-note">{{ cmd.description }}</p>{% else %}<details class="technical-details"><summary>About this {{ "report" if noun == "report" else "form" }}</summary><p>{{ cmd.description }}</p></details>{% endif %}
+{% elif verb in ("void", "delete", "remove", "unapply") %}<p class="workflow-note">{{ cmd.description }}</p>{% elif noun == "report" and result and result.metadata %}{# a report explains itself under About at its foot #}{% else %}<details class="technical-details"><summary>About this {{ "report" if noun == "report" else "form" }}</summary><p>{{ cmd.description }}</p></details>{% endif %}
 {% if noun == 'journal' and verb in ('post', 'update') %}<p class="workflow-note">Enter a currency with an amount, such as <code>2345 JPY</code>. Rates mean home-currency units per one foreign unit. Leave Rate empty to use saved conversions or the exact-date rate. Changing a saved entry's date or memo preserves unchanged conversions; choose Refresh rates to reprice them.</p>{% endif %}
 {% if captured_foreign_lines %}<details><summary>Saved currency conversions</summary><div class="table-wrap"><table><thead><tr><th>Line</th><th>Original</th><th>Home amount</th><th>Rate</th><th>Source</th></tr></thead><tbody>{% for line in captured_foreign_lines %}<tr><td>{{ line.position }}</td><td>{{ line.original_amount.amount }} {{ line.original_currency }}</td><td>{{ line.amount.amount }} {{ line.currency }}</td><td>{{ line.rate_used }}</td><td>{{ line.rate_source }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
 {% if error %}<div class="error" data-submit-error-top><b>{{ error.code }}</b> {% if invoice_correction_reason and error.code == 'E_REASON_REQUIRED' %}Enter a reason for this invoice correction.{% else %}{{ error.message }}{% endif %}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{# A refusal that names no field still says why: a dependency refusal carries its reason as `problem`, and without this the page shows only the generic sentence for the code. #}{% if error.details.problem and not error.details.fields %}<p>{{ error.details.problem|capitalize }}.</p>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
@@ -225,7 +210,7 @@
 </div>
 {% endmacro %}
 
-{% if noun == "report" and not report_full %}<details class="form-section report-tools" aria-label="Report filters"{% if not result or error %} open{% endif %}><summary>Report filters</summary>{% endif %}
+{% if noun == "report" and not report_full %}{% include "report_bar.html" %}{% endif %}
 <form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form{% if sales_form %} data-sales-form data-sales-scope="{{ sales_scope }}"{% endif %}>
 {% if noun == 'invoice' and verb == 'update' %}
 <input type="hidden" name="f:operation_key" value="{{ attempted.get('f:operation_key', '') }}">
@@ -276,6 +261,6 @@
 {% if document %}<div class="document-actions"><button name="action" value="preview">Preview</button><button name="action" value="submit" class="primary-action">Save</button>{% if document.creating %}<button name="action" value="submit-new">Save &amp; New</button>{% endif %}<a class="cancel-action" href="{{ (base ~ '/' ~ record_id) if record_id else base }}">Cancel</a></div>
 {% else %}<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ ('Complete work' if verb == 'complete' else 'Create copy' if verb == 'copy' else 'Create estimate' if verb == 'estimate' else 'Create work order' if verb == 'work-order' else 'Create invoice' if verb == 'invoice' else 'Create sales receipt' if verb == 'sales-receipt' else 'Save' if cmd.is_write else 'Find work') if work_form else 'Run report' if noun == 'report' else ('Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Save deposit' if noun == 'deposit' and verb == 'post' else 'Submit') }}</button></span></div>{% endif %}</form>
 
-{% if noun == "report" %}{% if not report_full %}</details>{% endif %}{{ result_presentation }}{% endif %}
+{% if noun == "report" %}{% if not report_full %}{% include "report_result.html" %}{% else %}{{ result_presentation }}{% endif %}{% endif %}
 {% include "annotations.html" %}
 {% endblock %}

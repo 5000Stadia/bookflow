@@ -1,0 +1,11 @@
+{# The end of every report: when it ran, and everything that explains it, folded under About.
+   A report sets `about` to its own explanation before including this. #}
+{% set meta = result.metadata %}
+{% if not report_full %}<p class="muted report-generated">Generated <time datetime="{{ meta.generation_time }}">{{ meta.generation_time|ago }}</time></p>{% endif %}
+<details class="technical-details report-about" id="report-about"><summary>About this report</summary>
+<p>{{ cmd.description }}</p>
+{% if meta.basis == "cash" %}<p>Cash-basis view using current payment matching. Later matching or corrections can change an earlier period. Opening the ledger shows the original accrual entries.{% if verb == 'sales-by-item' %} Item quantities show physical activity; cash-basis average selling price is not calculated.{% endif %}</p>{% endif %}
+{{ about }}
+<p>Totals at the top cover the whole report, every page. Generated {{ meta.generation_time }} at audit watermark {{ meta.audit_watermark }}. If anyone changes the books while you page through, Bookflow stops and asks you to run the report again rather than mixing two versions of the books.</p>
+<details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</details>

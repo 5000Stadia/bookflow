@@ -32,9 +32,19 @@ _CELLS = """[...document.querySelectorAll('%s tbody tr')].map(row => [...row.cel
 
 
 def _fill(browser, fields):
-    browser.evaluate("""(() => { const form=document.querySelector('form[data-generated-form]');
+    """Run the report on these filters and wait for the page that answers them.
+
+    A report opens already run, so the page being replaced carries the same tables; it is
+    marked first so that no later wait can be satisfied by the page that was there before.
+    """
+    # A form submitted before the page has finished loading goes without the workbench
+    # header, so wait for the page first; a report page now arrives carrying its figures.
+    browser.wait_for("document.readyState === 'complete'")
+    browser.evaluate("""(() => { document.querySelector('main').dataset.stale='1';
+        const form=document.querySelector('form[data-generated-form]');
         for(const [key,value] of Object.entries(%s)) form.elements.namedItem('f:'+key).value=value;
         form.querySelector('button[value=submit]').click(); })()""" % json.dumps(fields))
+    browser.wait_for("!document.querySelector('main[data-stale]')")
 
 
 def _no_sideways_scroll(browser):
@@ -108,7 +118,7 @@ def test_a_bookkeeper_reaches_all_four_reports_and_reads_the_money(site_with_a_m
         ["Dimension Alpha", "325.00"], ["Dimension Alpha:Phase one", "150.00"],
         ["Dimension Beta", "75.00"], ["Unassigned", "-50.00"], ["Total — net income", "500.00"]]
     assert browser.evaluate(
-        "document.querySelector('#dimensional-totals [data-total=net_income] dd').textContent") == "500.00 USD"
+        "document.querySelector('#dimensional-totals [data-total=net_income] dd').textContent") == "500.00"
     assert browser.evaluate(
         "document.querySelector('[data-column-net-income=total]').textContent").endswith("500.00")
     # Wide on purpose: the table scrolls inside its own wrapper, the page never does.
@@ -151,9 +161,9 @@ def test_a_bookkeeper_reaches_all_four_reports_and_reads_the_money(site_with_a_m
     _fill(browser, {"as_of": WORK_AS_OF, "customer": made["work"]["job"], "limit": "200"})
     browser.wait_for("!!document.querySelector('#receivables-unbilled')")
     assert browser.evaluate(_CELLS % "#receivables-unbilled") == [
-        ["Unbilled Customer:Site A", "UB-EST-OPEN", "2027-04-02",
+        ["Unbilled Customer:Site A", "UB-EST-OPEN", "Apr 2, 2027",
          "Unbilled service Unbilled income", "Two days on site", "Not billed", "2", "0.00", "200.00"],
-        ["Unbilled Customer:Site A", "UB-EST-PARTIAL", "2027-04-02",
+        ["Unbilled Customer:Site A", "UB-EST-PARTIAL", "Apr 2, 2027",
          "Unbilled service Unbilled income", "Phase one of two", "Partly billed", "4", "400.00", "400.00"],
         ["Unbilled Customer:Site A subtotal", "", "", "", "", "", "", "400.00", "600.00"],
     ]
@@ -177,7 +187,7 @@ def test_a_bookkeeper_reaches_all_four_reports_and_reads_the_money(site_with_a_m
         ["customer", "Aging Beta"], ["invoice", "AGE-PARTLY 61-90"],
         ["customer", "Aging Gamma"], ["invoice", "AGE-OLD Over 90"]]
     assert browser.evaluate(_CELLS % "#receivables-totals") == [
-        ["900.00", "150.00", "300.00", "900.00", "1100.00", "3350.00", "2450.00"]]
+        ["900.00", "150.00", "300.00", "900.00", "1,100.00", "3,350.00", "2,450.00"]]
     # The contact details, as links a person can actually press.
     alpha = browser.evaluate("""(() => {const row=document.querySelector(
         '#receivables-collections tbody tr[data-kind=customer]');
@@ -211,7 +221,7 @@ def test_a_wide_report_pages_its_rows_and_restarts_when_the_books_move(site_with
         ["Dimension income Income", "300.00", "200.00", "100.00", "0.00", "600.00"]]
     # Whole-statement totals on every page, not this page's own arithmetic.
     assert browser.evaluate(
-        "document.querySelector('#dimensional-totals [data-total=net_income] dd').textContent") == "500.00 USD"
+        "document.querySelector('#dimensional-totals [data-total=net_income] dd').textContent") == "500.00"
     assert browser.evaluate("!!document.querySelector('#statement-next-page')")
     browser.evaluate("document.querySelector('#statement-next-page button').click()")
     browser.wait_for("""document.querySelector('#dimensional-lines')
@@ -219,7 +229,7 @@ def test_a_wide_report_pages_its_rows_and_restarts_when_the_books_move(site_with
     assert browser.evaluate(_CELLS % "#dimensional-lines") == [
         ["Dimension swing Income", "25.00", "0.00", "-25.00", "0.00", "0.00"]]
     assert browser.evaluate(
-        "document.querySelector('#dimensional-totals [data-total=net_income] dd').textContent") == "500.00 USD"
+        "document.querySelector('#dimensional-totals [data-total=net_income] dd').textContent") == "500.00"
 
     # A company write while the reader is mid-report stales the continuation, and
     # the visible filter form still restarts a fresh report from here.
@@ -237,7 +247,7 @@ def test_a_wide_report_pages_its_rows_and_restarts_when_the_books_move(site_with
         "[...document.querySelectorAll('#dimensional-lines thead th')].map(th => th.textContent.trim())") == [
         "Account", "Dimension Alpha", "Other (2)", "Unassigned", "Total"]
     assert "added together in the Other column" in browser.evaluate(
-        "document.querySelector('#report-page-count').textContent")
+        "document.querySelector('#dimensional-report .statement-note').textContent")
     assert browser.evaluate(_CELLS % "#dimensional-lines") == [
         ["Dimension income Income", "300.00", "300.00", "0.00", "600.00"],
         ["Dimension swing Income", "25.00", "-25.00", "0.00", "0.00"],

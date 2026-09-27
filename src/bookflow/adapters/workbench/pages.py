@@ -31,6 +31,7 @@ from bookflow.adapters.workbench import transaction_detail as Detail
 from bookflow.adapters.workbench import missing_checks as MissingChecks
 from bookflow.adapters.workbench import report_export as Export
 from bookflow.adapters.workbench import report_print as ReportPrint
+from bookflow.adapters.workbench import report_page as ReportPage
 from bookflow.adapters.workbench import purchases as Purchases
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
@@ -565,7 +566,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -1831,6 +1832,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             DateDefaults.seed(cmd.name, DateDefaults.company_today(authorized_company),
                 initial_get=initial_date_get, query=request.query_params,
                 originals=originals, attempted=attempted)
+        if (request.method == 'GET' and Export.is_report(cmd) and company_id and record_id is None
+                and result is None and error is None and report_full is None):
+            # A report opens with its numbers: run it on the values the form opened with,
+            # which are the company-calendar defaults or the filters the link carried.
+            result, report_input, error = ReportPage.open_report(
+                cmd, attempted, lambda raw: run(request, cmd.name, raw, company_id))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
         if noun == 'invoice' and verb == 'update':
             described = [leaf for leaf in described if leaf['path'] not in ('operation_key', 'settlement_guard', 'settlement_versions')]
@@ -1868,6 +1875,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # filter change would submit last page's continuation with it and be
             # refused as mismatched instead of running the report asked for.
             described = [leaf for leaf in described if leaf["path"] != "cursor"]
+        if noun == "report":
+            # A range is asked from-then-to, whatever order the command declares it in.
+            described.sort(key=lambda leaf: leaf["path"] != "date_from")
         document_form = Document.is_document(noun, verb)
         if document_form:
             described = Document.describe(described, noun)
@@ -2089,6 +2099,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       # and a link that saves what is on the screen as a file -- is decided by the
                       # registry calling this command a report rather than by naming any of them.
                       report_page=report_page, report_full=report_full,
+                      report_view=ReportPage.context(cmd, company_id, authorized_company, result, report_input)
+                          if report_page and not report_full else None,
+                      report_ran=request.method == 'POST',
                       report_print_url=(ReportPrint.print_url(company_id, verb, report_input)
                           if report_page and result and report_input is not None and company_id and not report_full else None),
                       report_export_url=(Export.export_url(company_id, verb, report_input)

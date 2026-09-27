@@ -2,6 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from bookflow.adapters.workbench import display
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import database
 from tests.test_full_report_print import PERIOD, Print, print_site as _seed_print_site
@@ -105,10 +106,10 @@ def test_full_print_restarts_after_real_hosted_write(changing_print_site, monkey
         row['description'].strip() for row in result['rows'] if row['kind'] == 'posting']
     for key in ('period_debits', 'period_credits'):
         assert [node['text'].strip() for node in rendered.select(f'[data-total={key}] dd')] == [
-            result['totals'][key]['amount'] + ' USD']
+            display.amount(result['totals'][key])]
     balances = rendered.select('#report-lines [data-value=balance]')
     assert [node['text'].strip() for node in balances] == [
-        'Running balance' + row['signed_balance']['amount'] for row in result['rows']]
+        'Running balance' + display.amount(row['signed_balance']) for row in result['rows']]
     scope = rendered.select('#report-print-scope')
     assert len(scope) == 1 and f'Audit watermark {new_watermark}.' in scope[0]['text']
     assert 'EXCLUDED-DATE' not in response.text and 'EXCLUDED-ACCOUNT' not in response.text

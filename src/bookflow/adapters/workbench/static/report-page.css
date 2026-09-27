@@ -1,0 +1,62 @@
+/* A report page: its filters folded into one line, the figure it is opened for, then the
+   statement itself set as a statement -- a readable column, figures aligned on the right,
+   subtotals ruled and the last line bold. Linked only by report pages. */
+/* Print and CSV sit at the top right of the summary line whether or not the filters are open. */
+.workbench .report-bar{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:-.4rem 0 18px;max-width:none}
+.workbench .report-bar .report-filters{flex:1 1 100%;min-width:0;margin:0;padding:0;border:0;background:none;box-shadow:none}
+.workbench .report-bar .report-actions{position:absolute;top:0;right:0;display:flex;gap:8px;margin:0}
+.workbench .report-bar .report-actions~.report-filters>summary{padding-right:128px}
+.workbench .report-bar .report-presets{flex:1 0 100%}
+.workbench .report-actions .button{display:inline-flex;align-items:center;min-height:32px;padding:4px 12px;font-size:13px;text-decoration:none}
+.workbench .report-filters>summary{cursor:pointer;list-style:none;display:flex;min-height:32px;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;font-size:15px;font-weight:600;color:var(--ink)}
+.workbench .report-filters>summary::-webkit-details-marker{display:none}
+.workbench .report-filters>summary::before{content:none}
+.workbench .report-edit{font-size:14px;font-weight:550;color:#14634c;text-decoration:underline;text-underline-offset:3px}
+.workbench .report-filters[open]>summary{margin-bottom:8px}
+.workbench .report-filters[open]>form{padding:14px 16px 4px;border:1px solid var(--line);border-radius:var(--radius);background:white}
+.workbench .report-presets{display:flex;flex-wrap:wrap;gap:8px}
+.workbench .report-presets a{border:1px solid #c9d6d0;border-radius:999px;background:white;padding:4px 12px;font-size:13px;text-decoration:none;color:var(--ink)}
+.workbench .report-presets a:hover{background:#edf3f0}
+.workbench .report-presets a[aria-current]{background:var(--accent-soft);border-color:var(--accent);color:#12573f;font-weight:650}
+
+.workbench .report-headline{margin:6px 0 18px}
+.workbench .report-headline h2{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;scroll-margin-top:84px}
+.workbench .report-headline h2:focus{outline:none}
+.workbench .report-figure{margin:2px 0 0;font-size:34px;line-height:1.15;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.workbench .report-generated{margin:14px 0 6px;font-size:13px}
+.workbench .report-about{max-width:760px}
+.workbench .report-about p{max-width:70ch}
+
+/* Figures in any report table: right-aligned, digits of equal width, never broken. */
+.workbench[data-report-page] th.num,.workbench[data-report-page] td.num{text-align:right;font-variant-numeric:tabular-nums}
+.workbench[data-report-page] table:not(.document-lines) td.num{white-space:nowrap}
+
+/* A statement: one column of about 640px on a desktop, the full width on a phone. */
+.workbench .table-wrap.statement-wrap{max-width:640px}
+.workbench table.statement{width:100%}
+.workbench table.statement th,.workbench table.statement td{white-space:normal;font-size:14px;padding:8px 12px;background:white;color:var(--ink);font-weight:400}
+.workbench table.statement thead th{font-size:12px;font-weight:650;color:#52616b;background:#f6f8f8}
+.workbench table.statement .num{text-align:right;white-space:nowrap;width:1%}
+.workbench table.statement tr.statement-section th{padding-top:18px;font-weight:650;border-bottom:0}
+.workbench table.statement tr.statement-account th{padding-left:28px}
+.workbench table.statement tr.statement-account td.num a{text-decoration:none}
+.workbench table.statement tr.statement-account td.num a:hover{text-decoration:underline}
+.workbench table.statement tr.statement-total th,.workbench table.statement tr.statement-total td{font-weight:600}
+.workbench table.statement tr.statement-subtotal th,.workbench table.statement tr.statement-subtotal td{border-top:1px solid #8fa1aa;font-weight:650;background:#f6f8f8}
+.workbench table.statement tr.statement-final th,.workbench table.statement tr.statement-final td{border-top:2px solid var(--ink);border-bottom:3px double var(--ink);font-weight:750;font-size:15px}
+.workbench table.statement tr.statement-group th,.workbench table.statement tr.statement-group td{font-weight:600}
+.workbench .statement-note{margin:10px 0;font-size:13px}
+@media(max-width:700px){
+  /* A report table that becomes labelled cards on a phone lets its figures wrap with it. */
+  .workbench[data-report-page] .document-lines th.num,.workbench[data-report-page] .document-lines td.num{white-space:normal;text-align:left}
+  .workbench .report-figure{font-size:28px}
+  .workbench .table-wrap.statement-wrap{max-width:none}
+  .workbench table.statement th,.workbench table.statement td{padding:8px 10px;font-size:14px}
+  .workbench table.statement tr.statement-account th{padding-left:18px}
+}
+@media print{
+  [data-report-page] .report-headline h2{color:#000}
+  [data-report-page] .statement-wrap{max-width:none}
+  [data-report-page] .report-generated{display:none}
+}
+.workbench .report-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
