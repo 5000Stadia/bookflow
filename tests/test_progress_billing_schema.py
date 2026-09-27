@@ -21,6 +21,7 @@ from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests import provenance
 
 MIGRATION = importlib.import_module('bookflow.storage.company_migrations.versions.0012_progress_billing')
+COMPANY_HEAD = HEADS['company']  # read before the autouse fixture pins this module to co0012
 BASE = '45cfd75e95eccdc41881bea82fbafc17c8e604b9'
 TABLES = ('sales_line_profiles', 'work_billing_allocations')
 
@@ -376,27 +377,29 @@ def test_unknown_schema_or_late_failure_rolls_back_atomically(prior, monkeypatch
         assert raw.execute('PRAGMA foreign_keys').fetchone()[0] == 1
 
 
-def test_fresh_schema_matches_declarations_and_frozen_migration(tmp_path):
+def test_fresh_schema_matches_declarations_and_frozen_migration(tmp_path, monkeypatch):
     from sqlalchemy.schema import CreateTable
     from sqlalchemy.dialects.sqlite import dialect
+    # The declarations describe the current head, not co0012: later migrations (co0016) changed
+    # work_billing_allocations again. So the fresh chain is migrated to the real head here.
     # Preservation appends new columns after existing columns. Compare columns and complete named
     # constraints independently of their order, plus foreign keys and indexes.
+    monkeypatch.setitem(HEADS, 'company', COMPANY_HEAD)
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db, sqlite3.connect(':memory:') as declared:
-        assert migrate_to_head(db,'company',None) == (None,'co0012')
+        assert migrate_to_head(db,'company',None) == (None,COMPANY_HEAD)
         for table in (c.sales_line_profiles,c.work_billing_allocations):
             declared.execute(str(CreateTable(table).compile(dialect=dialect())))
             normalize = lambda rows: sorted(tuple(row)[1:] for row in rows)
             assert normalize(db.raw.execute(f'PRAGMA table_info({table.name})')) == normalize(declared.execute(f'PRAGMA table_info({table.name})'))
             actual = db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?',(table.name,)).fetchone()[0]
-            for constraint in table.constraints:
-                if isinstance(constraint,sa.CheckConstraint):
-                    assert f'CONSTRAINT {constraint.name} CHECK ({constraint.sqltext})' in actual
+            checks = sorted(f'CONSTRAINT {constraint.name} CHECK ({constraint.sqltext})'
+                            for constraint in table.constraints if isinstance(constraint,sa.CheckConstraint))
+            assert [check for check in checks if check not in actual] == []
             fks = lambda raw: sorted(tuple(row)[2:] for row in raw.execute(f'PRAGMA foreign_key_list({table.name})'))
             assert fks(db.raw) == fks(declared)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
     source = inspect.getsource(MIGRATION)
     assert 'bookflow.company' not in source and '0011_work_billing' not in source
-    assert HEADS['company'] == 'co0012'
 
 
 @pytest.mark.parametrize(('basis','quantity','base','price','valid'), [
