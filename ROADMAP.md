@@ -16,25 +16,11 @@ Double-entry accounting for small businesses, where people in the browser and th
 ## M2 — V1 accounting product
 
 - [x] R9 Lists: chart of accounts, customers and jobs, vendors, items, supporting lists (spec row 5; every done-definition clause checked 2026-09-27) — design/specs/5-lists.md
-- [x] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27, gaps R66–R68 fixed and walked through by hand) — design/specs/7-identity-isolation.md
-- [x] R66 R10 membership grant/revoke over MCP stop revealing whether a username exists — design/specs/7-identity-isolation.md
-- [x] R67 R10 revocation always suspends agents: new installs start in the current permission mode, agent commands refuse in the legacy mode — design/permission-resolution.md
-- [x] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
-- [ ] R74 permission checks on activated roots cost about 3x (demo reset 104 s vs 33 s): reuse the hub permission snapshot across transactions only behind a fresh in-transaction version check — design/permission-resolution.md
 - [x] R11 General ledger, register entry, closing date, foreign-tagged entry (spec row 8; every done-definition clause checked 2026-09-27) — design/specs/8-general-ledger.md
 - [x] R12 MCP adapter and agent/GUI cooperation (spec row 9; every done-definition clause checked 2026-09-27) — design/specs/9-mcp-adapter.md
-- [~] R13 Customer payments and invoice settlement (spec row 22; checked 2026-09-27: ledger, corrections, concurrency, permissions and agent/human continuation hold; R69–R70 remain) — design/specs/22-customer-payments.md
-- [x] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
-- [ ] R70 R13 the blind fresh-agent payment exercise with its interview, fixes and retest; the payment workflow doc gains the MCP and browser journeys — design/specs/22-customer-payments.md
-- [~] R14 Sales-tax calculation policies (spec row 24; checked 2026-09-27: policies, arithmetic, migration and every surface hold; R71–R72 remain) — design/specs/24-sales-tax-policy.md
-- [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
-- [ ] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
 - [x] R73 repair the stale tests the acceptance checks found across rows 5, 7, 8, 9, 22 and 24 — notes/NOW.md
 - [x] R75 investigate three suspected defects: deposit coordinate work E_INTERNAL "Unsupported source aggregate identity", a progress-billing schema constraint mismatch that differs between runs, and Find rates answering with a JSON flash on the Overview — notes/stale-tests-20260927.md
 - [x] R76 every read-only command shows its result on its own page (payment calculate/suggest/invoices, reconcile candidates/preview, register calculate, sales-tax liability, deposit sources/items, activity), never a JSON notice on the Overview — notes/NOW.md
-- [ ] R77 concurrent requests intermittently 500 with AdmissionCancelled "publication admission changed" (core/publication_admission.py): return a typed retryable error or retry, never E_INTERNAL; result tables show record names, not raw ids — notes/NOW.md
-- [ ] R78 agent administration reads like the rest of the product: a New agent button on the Agents panel, agents listed before they have a membership, the finder reaching installation commands (users, tokens, agents), the one-time token secret shown plainly with a copy button, names and dates instead of raw ids and codes on agent and token pages and errors, principal as a picker, and change history saying "Office assistant for k, via agent" — notes/manual-agent-walkthrough-20260927.md
-- [ ] R79 decide from the blind trials whether agent writes default what the browser prefills (today's date, the company's sales tax item, the only company) — notes/manual-agent-walkthrough-20260927.md
 - [x] R15 Customer work, service sales, progress and work billing — design/customer-work.md
 - [x] R16 Purchasing, receiving with shipping allocation, bills and vendor payments — design/architecture.md
 - [x] R17 Deposits and bank reconciliation — design/architecture.md
@@ -51,11 +37,26 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R25 Company-local dates and mobile submit feedback — design/specs/ui-submit-dates.md
 - [x] R26 V1 polish: menu, icons, login feedback, version guard, public docs, drifted tests — notes/NOW.md
 - [x] R27 GitHub main current with the live release (d85e43f) — notes/status.sh
-- [~] R28 Remaining failing browser tests and AdmissionCancelled reported as E_INTERNAL (with Codex) — notes/NOW.md
-- [ ] R29 Revoked stream gets an error frame; disconnect cleanup faster than the keep-alive — notes/NOW.md
-- [ ] R30 Human desktop and phone walkthrough of live V1, with a recorded verdict — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 
-## M4 — V2 functional roadmap (each increment selected with the human)
+## M3.5 — V1.5: finished and proven
+
+- [x] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27, gaps R66–R68 fixed and walked through by hand) — design/specs/7-identity-isolation.md
+- [x] R66 R10 membership grant/revoke over MCP stop revealing whether a username exists — design/specs/7-identity-isolation.md
+- [x] R67 R10 revocation always suspends agents: new installs start in the current permission mode, agent commands refuse in the legacy mode — design/permission-resolution.md
+- [x] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
+- [~] R13 Customer payments and invoice settlement (spec row 22; checked 2026-09-27: ledger, corrections, concurrency, permissions and agent/human continuation hold; R69–R70 remain) — design/specs/22-customer-payments.md
+- [x] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
+- [ ] R70 R13 the blind fresh-agent payment exercise with its interview, fixes and retest; the payment workflow doc gains the MCP and browser journeys — design/specs/22-customer-payments.md
+- [~] R14 Sales-tax calculation policies (spec row 24; checked 2026-09-27: policies, arithmetic, migration and every surface hold; R71–R72 remain) — design/specs/24-sales-tax-policy.md
+- [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
+- [ ] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
+- [ ] R77 concurrent requests intermittently fail with AdmissionCancelled "publication admission changed" reported as E_INTERNAL (absorbs R28, the same bug): a typed retryable error or retry, never E_INTERNAL; the remaining failing browser tests with it — notes/NOW.md
+- [~] R29 revoked streams: a revoked stream closes with no further data (the contract, witnessed in c116267); left: disconnect cleanup faster than the 15 s keep-alive — notes/NOW.md
+- [ ] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report); interview it on where it hesitated or guessed, fix what is material, retest once — notes/mcp-blind-acceptance-runbook.md
+- [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
+- [ ] R81 release v1.5: docs current, the demo resets cleanly, tag v1.5 — README.md
+
+## M4 — V2 functional roadmap (held until after v1.5; each increment chosen by the person)
 
 - [x] R31 Human-directed improved UI (phone and desktop audit round, R55–R65) — design/V2-ROADMAP.md item 1
 - [x] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
@@ -86,7 +87,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R46 Payroll and filing — design/V2-ROADMAP.md item 16
 - [ ] R47 Duplicate-record merge — design/V2-ROADMAP.md item 17
 
-## M5 — Later: unselected candidates and hardening
+## M5 — Later: held until after v1.5
 
 - [ ] R48 Acknowledged opportunities awaiting selection (mileage, depreciation, finance charges, intercompany, OCR and others) — design/V2-ROADMAP.md
 - [ ] R49 Multi-currency ledgers and non-US tax regimes, after a new design pass — design/V2-ROADMAP.md
@@ -95,3 +96,8 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R52 Encryption at rest (parked) — notes/open-questions.md
 - [ ] R53 Windows port with authenticated local hand-off — notes/open-questions.md
 - [ ] R54 Hosted disposable demo sessions — notes/demo-session-preflight.md
+- [ ] R74 permission checks on activated roots cost about 3x (demo reset 104 s vs 33 s): reuse the hub permission snapshot across transactions only behind a fresh in-transaction version check — design/permission-resolution.md
+- [ ] R78 agent administration reads like the rest of the product: a New agent button on the Agents panel, agents listed before they have a membership, the finder reaching installation commands (users, tokens, agents), the one-time token secret shown plainly with a copy button, names and dates instead of raw ids and codes on agent and token pages and errors, principal as a picker, and change history saying "Office assistant for k, via agent" — notes/manual-agent-walkthrough-20260927.md
+- [ ] R79 decide from the blind trials whether agent writes default what the browser prefills (today's date, the company's sales tax item, the only company) — notes/manual-agent-walkthrough-20260927.md
+- [ ] R82 negative amounts in parentheses as a company setting — notes/mobile-audit-response-20260927.md
+- [ ] R83 re-date the demo documents dated after today — notes/stale-tests-20260927.md
