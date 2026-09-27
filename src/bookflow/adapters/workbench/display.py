@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+from jinja2 import pass_context
+
 # The home-currency symbols a bookkeeper expects to see. A currency not listed keeps its code.
 SYMBOLS = {"USD": "$", "CAD": "$", "AUD": "$", "NZD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -99,6 +101,15 @@ def day(value: Any, today: date | None = None) -> str:
     return shown if when.year == current else f"{shown}, {when.year}"
 
 
+@pass_context
+def _day_on_page(context, value: Any, today: Any = None) -> str:
+    """`day` in a template: "this year" is the company's calendar year when the page knows the company.
+
+    A template that already holds the date to read against passes it, as a report does.
+    """
+    return day(value, _as_date(today) or _as_date(context.get("company_today") or None))
+
+
 def longday(value: Any) -> str:
     """A date on a detail page: "Nov 12, 2026"."""
     when = _as_date(value)
@@ -125,4 +136,4 @@ def ago(value: Any, now: datetime | None = None) -> str:
     return longday(then.date())
 
 
-FILTERS = {"money": money, "amount": amount, "day": day, "longday": longday, "ago": ago}
+FILTERS = {"money": money, "amount": amount, "day": _day_on_page, "longday": longday, "ago": ago}
