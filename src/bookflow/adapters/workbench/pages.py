@@ -806,6 +806,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company_id=show["company_id"],
             page_title=entry.label,
             groups=selected,
+            menu_group=slug,
+        )
+
+    @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
+    @permission_read_package(host)
+    def company_registers(company_id: str, request: Request):
+        """Choose an account to open its register; the generated register commands stay listed below."""
+        try:
+            show = run(request, "company show", {}, company_id)
+            accounts = run(request, "account list", {}, company_id)["items"]
+        except BookflowError as e:
+            return page_error(request, e)
+        permits = company_permits(request, show)
+        tools = [cmd for cmd in _verbs("register", "company") if permits(cmd)]
+        return render(
+            "registers.html",
+            request,
+            company=show,
+            company_id=show["company_id"],
+            register_groups=Home.register_groups(accounts),
+            register_tools=tools,
         )
 
     @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)

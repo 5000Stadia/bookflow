@@ -8,7 +8,8 @@
 <div class="flow-board">
 {% for row in panels %}<section class="nav-group flow-panel" aria-labelledby="flow-panel-{{ row.panel.id }}">
 <div class="flow-panel-head">{{ icon(row.panel.id) }}<h2 id="flow-panel-{{ row.panel.id }}">{{ row.panel.title }}</h2></div>
-<ul class="flow-steps">{% for item in row.chain if item.live %}<li class="flow-step">{{ tile(item) }}</li>{% endfor %}</ul>
+{# Create an invoice is the first quick action above, so its panel tile would repeat it. #}
+<ul class="flow-steps">{% for item in row.chain if item.live and item.step.id != 'invoice' %}<li class="flow-step">{{ tile(item) }}</li>{% endfor %}</ul>
 {% if row.asides | selectattr('live') | list %}<ul class="flow-asides">{% for item in row.asides if item.live %}<li>{{ tile(item) }}</li>{% endfor %}</ul>{% endif %}
 </section>{% endfor %}
 </div>

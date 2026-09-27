@@ -387,6 +387,31 @@ MENU: tuple[MenuGroup, ...] = (
 
 MENU_BY_SLUG: dict[str, MenuGroup] = {entry.slug: entry for entry in MENU}
 
+# The register chooser lists balance-sheet accounts in the order a bookkeeper reaches for them.
+REGISTER_TYPES: tuple[tuple[str, str], ...] = (
+    ("bank", "Bank accounts"),
+    ("credit_card", "Credit cards"),
+    ("accounts_receivable", "Accounts receivable"),
+    ("accounts_payable", "Accounts payable"),
+    ("other_current_asset", "Other current assets"),
+    ("fixed_asset", "Fixed assets"),
+    ("other_asset", "Other assets"),
+    ("other_current_liability", "Other current liabilities"),
+    ("long_term_liability", "Long-term liabilities"),
+    ("equity", "Equity"),
+)
+
+
+def register_groups(accounts: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Group `account list` rows that have a register (balance-sheet accounts) under their type."""
+    labels = dict(REGISTER_TYPES)
+    grouped: dict[str, list[dict]] = {}
+    for account in accounts:
+        if account.get("statement_family") == "balance_sheet":
+            grouped.setdefault(account["type"], []).append(account)
+    order = [kind for kind, _ in REGISTER_TYPES] + sorted(set(grouped) - set(labels))
+    return [(labels.get(kind, kind.replace("_", " ").capitalize()), grouped[kind]) for kind in order if kind in grouped]
+
 
 @dataclass(frozen=True)
 class ResolvedStep:

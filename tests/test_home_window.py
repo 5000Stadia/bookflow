@@ -171,7 +171,10 @@ def test_unavailable_steps_stay_off_daily_home_and_remain_in_future_features(hos
     board = resolved(hosted.company_id)
     for panel in board:
         for item in panel.steps:
-            if item.live:
+            if item.live and item.step.id == "invoice":
+                # Offered once, as the first quick action above the panels.
+                assert f'href="{item.href}"' in _main(page.text)
+            elif item.live:
                 element, markup = tiles[item.step.action.label]
                 assert element == "a" and f'href="{item.href}"' in markup
             else:
@@ -273,7 +276,9 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
     navigate_witness(browser, real, "invoice")
 
     page = browser.get(f"/c/{hosted.company_id}/").text
-    assert _tiles(page)[invoice.action.label][0] == "a"
+    # Create an invoice is offered once, as the first quick action, not again as a panel tile.
+    assert f'href="{real.href}"' in _main(page)
+    assert invoice.action.label not in _tiles(page)
     # The board filled up at V1: every declared tile is live, so the "still planned" half of this
     # pair was retired rather than kept alive with an invented placeholder.
     assert all(item.live or not item.offered for panel in home.resolve(hosted.company_id) for item in panel.steps)
