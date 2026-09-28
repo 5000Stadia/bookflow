@@ -80,7 +80,7 @@ def test_help_views_carry_one_complete_worked_example():
             cmd.input_model.model_validate(example["input"])
         assert "```json" in command_help(name)["documentation"]
     receive = command_help("payment receive")["example"]["input"]
-    assert receive["applications"]["items"][0]["amount"] == "150.00"
+    assert receive["applications"]["items"][0]["amount"] == "147.00"  # the example takes a 3.00 early-payment discount (R132)
     assert command_help("customer query")["example"]["input"]["query"] == "Riverside"
     assert "opening_id" not in command_help("reconcile start")["example"]["input"]
     assert "example" not in command_help("invoice post", "output_schema")
@@ -117,7 +117,8 @@ def test_list_commands_first_lines_make_the_plumbers_questions_findable():
     assert 'strategy "exact_then_oldest"' in rows["payment receive"] and "oldest invoice first" in rows["payment receive"]
     assert "oldest invoices first" in rows["payment suggest"] and "applications.items" in rows["payment suggest"]
     assert "exact_then_oldest" in rows["payment apply"]
-    assert rows["sales-tax liability"].startswith("How much sales tax is owed, by agency, as of a date")
+    assert rows["sales-tax liability"].startswith("How much sales tax is owed, by agency")
+    assert "for a period" in rows["sales-tax liability"]
     assert 'For open/unpaid invoices set settlement to "open"' in rows["invoice query"]
     assert rows["payment invoices"].startswith("Open (unpaid) invoices a customer can pay")
     assert "omitted, the current fiscal year to today" in rows["register query"]
@@ -129,7 +130,7 @@ def test_list_commands_first_lines_make_the_plumbers_questions_findable():
 def test_a_wrong_payment_method_names_the_list_command(client):
     error = _refusal(client, "payment receive",
                      {"customer": "Commercial Example Customer", "date": "2026-09-27", "amount": "10.00",
-                      "operation_key": "r86-method", "payment_method": "Credit Card"},
+                      "operation_key": "r86-method", "payment_method": "Store Voucher"},
                      dry_run=True, reason="Record card payment")
     assert error.code == "E_RECORD_NOT_FOUND"
     assert error.details["list_command"] == "payment-method list"
