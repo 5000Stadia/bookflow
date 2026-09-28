@@ -111,6 +111,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.REFUND_HISTORY_POLICY_VERSION: '2cde0560b88c952260a309e5e2b22c242e0202a766ddfc6677b483ee1426c983',
     c.AGENT_ADMIN_POLICY_VERSION: 'c15675d00ce1b01aa628eaa2424ee0d8e402957c5eb669da5f9f0384d55add25',
     c.EVERYDAY_REPORTS_POLICY_VERSION: '4159308ce66339b8414fe62261e8510b460ce11be04ad5bf99c335cdf7836255',
+    c.DEACTIVATION_POLICY_VERSION: 'a5e10f03110728d2f6f83519b010e0a7925d2715068e1b067e4b29f235aa16cd',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -203,6 +204,7 @@ def known_catalog(version):
     from . import permission_job_time_catalog
     from . import permission_journal_deletion_catalog, permission_refund_history_catalog
     from . import permission_agent_catalog, permission_everyday_reports_catalog
+    from . import permission_deactivation_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -218,6 +220,7 @@ def known_catalog(version):
         c.REFUND_HISTORY_POLICY_VERSION: permission_refund_history_catalog,
         c.AGENT_ADMIN_POLICY_VERSION: permission_agent_catalog,
         c.EVERYDAY_REPORTS_POLICY_VERSION: permission_everyday_reports_catalog,
+        c.DEACTIVATION_POLICY_VERSION: permission_deactivation_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -228,7 +231,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.EVERYDAY_REPORTS_POLICY_VERSION)
+    return known_catalog(c.DEACTIVATION_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

@@ -280,7 +280,7 @@ The same example as complete `bookflow_run` arguments:
 | `user` | `--user` | string \| null | no | yes | null | Only this person's access; username or id |
 | `company` | `--company` | string \| null | no | yes | null | Only access reaching this company; name or id |
 | `organization` | `--organization` | string \| null | no | yes | null | Only access reaching this organization; name or id |
-| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked |
+| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked, and the access of deactivated accounts |
 
 ### Command and context options
 
@@ -322,6 +322,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].organization_id` | string | yes | no | — | — |
 | `items[].role` | literal["readonly", "standard", "admin", "owner"] | yes | no | — | Role at that scope: readonly reads, standard does the bookkeeping, admin also manages members, owner is the final say |
 | `items[].active` | boolean | yes | no | — | Whether this access is in force; false once it has been revoked |
+| `items[].account_active` | boolean | no | no | true | Whether the person's account is active; false once it has been deactivated |
 | `items[].granted_at` | string \| null | yes | yes | — | — |
 | `items[].granted_by_name` | string \| null | yes | yes | — | — |
 | `items[].revoked_at` | string \| null | yes | yes | — | — |

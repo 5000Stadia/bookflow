@@ -88,6 +88,16 @@ MATRIX = {
     "agent authorize": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
                         "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "no --confirm-permitted-use, no principals, or a required --acknowledge-fresh-context missing",
                         "E_VERSION_CONFLICT": "stale --expected-version", "E_AGENT_PRINCIPAL_MISMATCH": "the assigned principals do not hold identical permissions"},
+    "agent deactivate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                         "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "malformed input", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "agent activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                       "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "malformed input", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user deactivate": {"E_PERMISSION": "not a human hub administrator, a never-activated installation, or the last active installation administrator",
+                        "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent deactivate), or yourself",
+                        "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                      "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent activate)",
+                      "E_VERSION_CONFLICT": "stale --expected-version"},
     "token revoke": {"E_TOKEN_NOT_FOUND": "unknown token id", "E_PERMISSION": "another user's token, as a non-admin"},
 }
 

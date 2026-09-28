@@ -486,15 +486,17 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 
 ## Known gaps carried to later rows
 
-- No command deactivates a user account or maps an OS login to one; `active` is enforced everywhere a
-  credential is resolved, and `user list` reports it and hides an inactive principal unless
-  `--include-inactive` asks for it, but only a direct write sets it, which is why tests still create
-  actors through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
-  `membership revoke`.
+- `user deactivate` and `user activate` (human installation administrators, activated installations only,
+  catalog `identity-deactivation-v1`) retire and restore a person: deactivation revokes their sessions
+  and tokens and suspends every agent acting for them in one audited change, and the last active human
+  installation administrator cannot be deactivated. `active` is enforced everywhere a credential is
+  resolved; `user list` and `membership list` hide an inactive principal unless `--include-inactive`
+  asks for it (`membership list` then reports `account_active`). No command maps an OS login to a user,
+  which is why tests still create actors through the repository layer (tests/conftest.py::make_actor).
 - `user list` and `membership list` return every row their audience admits; neither pages, as no
   hub-scope `* list` command does.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
-- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. No command deactivates an agent (the general gap above); `agent unassign` of its last principal plus `membership revoke` of its access is the current way to retire one. Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
+- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent deactivate`, `agent activate`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. `agent deactivate` retires one: it is suspended, every token it holds is revoked in the same audited change, and it leaves the default lists; `agent activate` brings it back still suspended, to be authorized again (catalog `identity-deactivation-v1`). Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
 - `--follow` on `audit tail` is CLI-only and polls under the data-root lock every two seconds until the host exists.
 - The idle checkpoint is `RESTART`, which resets the WAL but never shrinks the file. A reader that pins a snapshot across a long burst leaves the file at its high-water mark until the shutdown `TRUNCATE`.

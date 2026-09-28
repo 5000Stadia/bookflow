@@ -1,4 +1,5 @@
-"""Agent identities and their authority: `agent create/show/list/assign/unassign/authorize`.
+"""Agent identities and their authority: `agent create/show/list/assign/unassign/authorize`,
+`agent deactivate/activate`, and the same retirement for people: `user deactivate/activate`.
 
 An agent is a user of kind `agent` that acts only on behalf of assigned humans (blueprint 4.3).
 Every command here is an installation administrator's act (catalog `admin:agents`). Owning an
@@ -62,16 +63,20 @@ def republish(name: str, inp, s: Session) -> None:
     """The publication re-check: the caller still administers agents, and what it named still resolves."""
     require_agent_administration(s, activated_only=name not in ("agent show", "agent list"))
     if name in ("agent show", "agent assign", "agent unassign", "agent authorize"):
-        _find_agent(s, inp.agent)
+        _find_agent(s, inp.agent, include_inactive=name == "agent show")
+    if name in ("agent deactivate", "agent activate"):
+        _find_agent(s, inp.agent, include_inactive=True)
+    if name in ("user deactivate", "user activate"):
+        _find_person(s, inp.user)
     if name in ("agent assign", "agent unassign"):
         _find_principal(s, inp.principal)
     if name == "agent list" and inp.principal is not None:
         _find_principal(s, inp.principal)
 
 
-def _find_agent(s: Session, selector: str, field: str = "agent") -> dict[str, Any]:
+def _find_agent(s: Session, selector: str, field: str = "agent", *, include_inactive: bool = False) -> dict[str, Any]:
     from bookflow.commands.host_cmds import _find_user
-    row = _find_user(s, selector)
+    row = _find_user(s, selector, include_inactive=include_inactive)
     if row is None or row["kind"] != "agent":
         raise BookflowError("E_USER_NOT_FOUND", details={field: selector})
     return row
@@ -287,7 +292,7 @@ agent_show = command("agent show", scope="hub", capability="user", required_role
 @agent_show
 def plan_agent_show(inp: AgentSelector, ctx: Context, s: Session) -> Plan:
     require_agent_administration(s, activated_only=False)
-    return Plan(_stored(s, _find_agent(s, inp.agent)))
+    return Plan(_stored(s, _find_agent(s, inp.agent, include_inactive=True)))
 
 
 class AgentListInput(BaseModel):
@@ -393,6 +398,8 @@ def plan_agent_unassign(inp: AgentUnassignInput, ctx: Context, s: Session) -> Pl
 
 def _write_out(s: Session, agent: dict[str, Any], prepared, message: str) -> AgentWriteOutput:
     changed = prepared.visible.changed
+    final = next((x for x in prepared.final_users if x.id == agent["id"]), None)
+    agent = {**agent, "active": final.active} if final is not None else agent
     return AgentWriteOutput(agent=_prepared(s, agent, prepared), changed=changed,
                             revoked_token_count=_revoked(prepared, agent["id"]),
                             message=message if changed else f"{agent['username']} was already in that state.")
@@ -402,7 +409,7 @@ def _apply(plan: Plan, ctx: Context, s: Session) -> Applied:
     agent = plan.data["agent"]
     prepared = _edit(s, ctx, plan.data["intent"], preview=False)
     out = _write_out(s, agent, prepared, plan.data["message"])
-    out = out.model_copy(update={"agent": _stored(s, agent)})
+    out = out.model_copy(update={"agent": _stored(s, _find_agent(s, agent["id"], include_inactive=True))})
     return Applied(out, [], "Updated agent authority.", audited=out.changed)
 
 
@@ -446,3 +453,197 @@ def plan_agent_authorize(inp: AgentAuthorizeInput, ctx: Context, s: Session) -> 
 
 
 agent_authorize.applier(_apply)
+
+
+# ---------------------------------------------------------------- deactivate / activate
+
+class AgentStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    agent: str = Field(description="Agent username or id", max_length=64)
+    expected_version: int | None = Field(None, ge=1, description="Observed record version (`version` from `agent show`); stale requests refuse")
+
+
+def _status_intent(s: Session, row: dict[str, Any], expected_version: int | None, active: bool):
+    from bookflow.hub import identity_admin as b
+    if expected_version is not None and expected_version != row["version"]:
+        raise BookflowError("E_VERSION_CONFLICT", details={"field": "expected_version"})
+    return b.SetUserActive(row["id"], row["version"], active)
+
+
+def _status_edit(s: Session, ctx: Context, intent, *, preview: bool):
+    """One owner for both nouns: the last active installation administrator is kept."""
+    from bookflow.hub import identity_admin as b
+    try:
+        return _edit(s, ctx, intent, preview=preview)
+    except BookflowError as exc:
+        if (exc.details or {}).get("field") == "last_administrator":
+            raise BookflowError("E_PERMISSION", message=(
+                "This is the last active installation administrator, so it cannot be deactivated. "
+                "Add another installation administrator first."),
+                details={"reason": "protected_identity", "field": "last_administrator"}) from None
+        raise
+
+
+agent_deactivate = command("agent deactivate", scope="hub", capability="user", required_role="hub_admin",
+                           description=("Retire an agent: it stops acting at once, every token it holds is revoked in the same "
+                                        "audited change, and it leaves the default lists. Its history stays. Reactivating it "
+                                        "revives no token; it must be authorized again."),
+                           input_model=AgentStatusInput, output_model=AgentWriteOutput, writes={"hub"}, positional=["agent"],
+                           error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
+                           authorization=ADMIN_ONLY)
+
+
+@agent_deactivate
+def plan_agent_deactivate(inp: AgentStatusInput, ctx: Context, s: Session) -> Plan:
+    require_agent_administration(s)
+    agent = _find_agent(s, inp.agent, include_inactive=True)
+    intent = _status_intent(s, agent, inp.expected_version, False)
+    prepared = _status_edit(s, ctx, intent, preview=True)
+    message = (f"{agent['username']} is deactivated: it cannot act, its tokens are revoked and it is hidden from lists "
+               f"(`agent list --include-inactive` shows it). Its history stays. `agent activate {agent['username']}` "
+               f"brings it back suspended, to be authorized again.")
+    out = _write_out(s, agent, prepared, message)
+    if not out.changed:
+        out = out.model_copy(update={"message": f"{agent['username']} was already deactivated."})
+    return Plan(out, data={"agent": agent, "intent": intent, "message": message})
+
+
+agent_activate = command("agent activate", scope="hub", capability="user", required_role="hub_admin",
+                         description=("Bring a deactivated agent back. It returns suspended with no tokens: authorize it with "
+                                      "`agent authorize`, then issue a new token."),
+                         input_model=AgentStatusInput, output_model=AgentWriteOutput, writes={"hub"}, positional=["agent"],
+                         error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
+                         authorization=ADMIN_ONLY)
+
+
+@agent_activate
+def plan_agent_activate(inp: AgentStatusInput, ctx: Context, s: Session) -> Plan:
+    require_agent_administration(s)
+    agent = _find_agent(s, inp.agent, include_inactive=True)
+    intent = _status_intent(s, agent, inp.expected_version, True)
+    prepared = _status_edit(s, ctx, intent, preview=True)
+    message = (f"{agent['username']} is active again and stays suspended; no old token works. Authorize it with "
+               f"`agent authorize {agent['username']} --confirm-permitted-use`, then issue a new token.")
+    out = _write_out(s, agent, prepared, message)
+    if not out.changed:
+        out = out.model_copy(update={"message": f"{agent['username']} was already active."})
+    return Plan(out, data={"agent": agent, "intent": intent, "message": message})
+
+
+def _apply_status(plan: Plan, ctx: Context, s: Session) -> Applied:
+    agent = plan.data["agent"]
+    prepared = _status_edit(s, ctx, plan.data["intent"], preview=False)
+    out = _write_out(s, agent, prepared, plan.data["message"])
+    out = out.model_copy(update={"agent": _stored(s, _find_agent(s, agent["id"], include_inactive=True))})
+    return Applied(out, [], "Updated agent status.", audited=out.changed)
+
+
+agent_deactivate.applier(_apply_status)
+agent_activate.applier(_apply_status)
+
+
+# ---------------------------------------------------------------- user deactivate / activate
+
+class UserStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    user: str = Field(description="Username or id of the person", max_length=64)
+    expected_version: int | None = Field(None, ge=1, description="Observed record version (`version` from `user list`); stale requests refuse")
+
+
+class UserStatusOutput(WriteOutput):
+    user_id: str
+    username: str
+    display_name: str
+    active: bool
+    changed: bool
+    revoked_token_count: int = Field(0, description="Their tokens and sessions this change revoked; reactivating never revives them")
+    suspended_agents: list[str] = Field(default_factory=list, description="Usernames of agents acting for them that this change suspended")
+    message: str
+
+
+def _find_person(s: Session, selector: str) -> dict[str, Any]:
+    from bookflow.commands.host_cmds import _find_user
+    row = _find_user(s, selector, include_inactive=True)
+    if row is None or row["kind"] == "system":
+        raise BookflowError("E_USER_NOT_FOUND", details={"user": selector})
+    if row["kind"] != "human":
+        raise BookflowError("E_VALIDATION", details={"fields": [
+            {"field": "user", "problem": "this is an agent; use `agent deactivate` or `agent activate`"}]})
+    return row
+
+
+def _user_status_out(s: Session, person: dict[str, Any], prepared, message: str) -> UserStatusOutput:
+    final = next(x for x in prepared.final_users if x.id == person["id"])
+    before = {x.id: x for x in prepared.old_tokens}
+    revoked = sum(1 for x in prepared.final_tokens if x.user_id == person["id"] and x.revoked_at is not None
+                  and before[x.id].revoked_at is None)
+    was = {x.agent_user_id: x for x in prepared.old.authorities}
+    newly = {x.agent_user_id for x in prepared.final.root.authorities
+             if x.suspended_at is not None and was[x.agent_user_id].suspended_at is None}
+    names = sorted(r["username"] for r in s.hub.conn.execute(sa.select(h.users.c.username).where(
+        h.users.c.id.in_(newly))).mappings()) if newly else []
+    changed = prepared.visible.changed
+    return UserStatusOutput(user_id=person["id"], username=person["username"], display_name=person["display_name"],
+                            active=bool(final.active), changed=changed, revoked_token_count=revoked,
+                            suspended_agents=names, message=message)
+
+
+user_deactivate = command("user deactivate", scope="hub", capability="user", required_role="hub_admin",
+                          description=("Retire a person's account: they can no longer log in or act, their sessions and tokens "
+                                       "are revoked, every agent acting for them is suspended, all in one audited change, and "
+                                       "they leave the default lists. Their history stays. The last active installation "
+                                       "administrator cannot be deactivated."),
+                          input_model=UserStatusInput, output_model=UserStatusOutput, writes={"hub"}, positional=["user"],
+                          error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
+                          authorization=ADMIN_ONLY)
+
+
+@user_deactivate
+def plan_user_deactivate(inp: UserStatusInput, ctx: Context, s: Session) -> Plan:
+    require_agent_administration(s)
+    person = _find_person(s, inp.user)
+    intent = _status_intent(s, person, inp.expected_version, False)
+    prepared = _status_edit(s, ctx, intent, preview=True)
+    if person["id"] == s.actor.id:
+        # Checked after the owner's own last-administrator guard, which answers first.
+        raise BookflowError("E_VALIDATION", details={"fields": [
+            {"field": "user", "problem": "you cannot deactivate yourself; ask another installation administrator"}]})
+    message = (f"{person['username']} is deactivated: they cannot log in or act, their sessions and tokens are revoked, "
+               f"and agents acting for them are suspended. Their history stays. `user activate {person['username']}` "
+               f"brings the account back; agents must be authorized again.")
+    out = _user_status_out(s, person, prepared, message)
+    if not out.changed:
+        out = out.model_copy(update={"message": f"{person['username']} was already deactivated."})
+    return Plan(out, data={"person": person, "intent": intent, "message": message})
+
+
+user_activate = command("user activate", scope="hub", capability="user", required_role="hub_admin",
+                        description=("Bring a deactivated person back: they can log in again with their password. Old sessions "
+                                     "and tokens stay revoked, and agents suspended by the deactivation stay suspended until authorized."),
+                        input_model=UserStatusInput, output_model=UserStatusOutput, writes={"hub"}, positional=["user"],
+                        error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
+                        authorization=ADMIN_ONLY)
+
+
+@user_activate
+def plan_user_activate(inp: UserStatusInput, ctx: Context, s: Session) -> Plan:
+    require_agent_administration(s)
+    person = _find_person(s, inp.user)
+    intent = _status_intent(s, person, inp.expected_version, True)
+    prepared = _status_edit(s, ctx, intent, preview=True)
+    message = (f"{person['username']} is active again and can log in. Old sessions and tokens stay revoked; "
+               f"authorize any suspended agent again with `agent authorize`.")
+    out = _user_status_out(s, person, prepared, message)
+    if not out.changed:
+        out = out.model_copy(update={"message": f"{person['username']} was already active."})
+    return Plan(out, data={"person": person, "intent": intent, "message": message})
+
+
+def _apply_user_status(plan: Plan, ctx: Context, s: Session) -> Applied:
+    prepared = _status_edit(s, ctx, plan.data["intent"], preview=False)
+    out = _user_status_out(s, plan.data["person"], prepared, plan.data["message"])
+    return Applied(out, [], "Updated account status.", audited=out.changed)
+
+
+user_deactivate.applier(_apply_user_status)
+user_activate.applier(_apply_user_status)

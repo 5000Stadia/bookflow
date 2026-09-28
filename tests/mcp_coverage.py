@@ -118,9 +118,11 @@ account query
 account show
 account update
 activity
+agent activate
 agent assign
 agent authorize
 agent create
+agent deactivate
 agent list
 agent show
 agent unassign
@@ -479,7 +481,9 @@ unit-of-measure query
 unit-of-measure show
 unit-of-measure update
 upgrade
+user activate
 user add
+user deactivate
 user list
 user set-password
 vendor activate

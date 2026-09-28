@@ -83,6 +83,10 @@ EXAMPLES: dict[str, Example] = {
                               {"agent": "books-agent", "principal": "jordan"}),
     "agent authorize": Example("bookflow agent authorize books-agent --confirm-permitted-use --acknowledge-fresh-context --json",
                                {"agent": "books-agent", "confirm_permitted_use": True, "acknowledge_fresh_context": True}),
+    "agent deactivate": Example('bookflow agent deactivate books-agent --reason "retired" --json', {"agent": "books-agent"}),
+    "agent activate": Example("bookflow agent activate books-agent --json", {"agent": "books-agent"}),
+    "user deactivate": Example('bookflow user deactivate jordan --reason "left the company" --json', {"user": "jordan"}),
+    "user activate": Example("bookflow user activate jordan --json", {"user": "jordan"}),
 }
 
 

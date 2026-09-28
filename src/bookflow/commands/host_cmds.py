@@ -42,14 +42,14 @@ DEFAULT_BIND = "127.0.0.1:8765"
 
 # ---------------------------------------------------------------- shared lookups
 
-def _find_user(s: Session, selector: str) -> dict[str, Any] | None:
-    """A user by id or username; inactive users are not found."""
+def _find_user(s: Session, selector: str, *, include_inactive: bool = False) -> dict[str, Any] | None:
+    """A user by id or username; inactive users are not found unless asked for."""
     row = None
     if is_ulid(selector):
         row = users.find_user(s, id=normalize_ulid(selector))
     if row is None:
         row = users.find_user(s, username=selector)
-    return row if row and row["active"] else None
+    return row if row and (row["active"] or include_inactive) else None
 
 
 def _is_self(s: Session, selector: str) -> bool:
@@ -1134,6 +1134,7 @@ class MembershipRow(BaseModel):
     organization_id: str
     role: RoleName = Field(description=ROLE_HELP)
     active: bool = Field(description="Whether this access is in force; false once it has been revoked")
+    account_active: bool = Field(True, description="Whether the person's account is active; false once it has been deactivated")
     granted_at: str | None
     granted_by_name: str | None
     revoked_at: str | None
@@ -1144,7 +1145,7 @@ class MembershipListInput(BaseModel):
     user: str | None = Field(None, description="Only this person's access; username or id", max_length=64)
     company: str | None = Field(None, description="Only access reaching this company; name or id")
     organization: str | None = Field(None, description="Only access reaching this organization; name or id")
-    include_inactive: bool = Field(False, description="Also list access that has been revoked")
+    include_inactive: bool = Field(False, description="Also list access that has been revoked, and the access of deactivated accounts")
 
 
 membership_list = command("membership list", scope="hub",
@@ -1178,7 +1179,8 @@ def plan_membership_list(inp: MembershipListInput, ctx: Context, s: Session) -> 
     granters = users.user_names(s, {r["granted_by"] for r in rows})
     items = [_membership_row_out(s, row, people[row["user_id"]], scopes[(row["scope_type"], row["scope_id"])], handles, granters)
              for row in rows
-             if row["user_id"] in people and (row["scope_type"], row["scope_id"]) in scopes]
+             if row["user_id"] in people and (row["scope_type"], row["scope_id"]) in scopes
+             and (inp.include_inactive or people[row["user_id"]]["active"])]
     items.sort(key=lambda row: (row.scope_name, row.username))
     return Plan(preview=ListOutput[MembershipRow](items=items, count=len(items)))
 
@@ -1191,6 +1193,7 @@ def _membership_row_out(s: Session, row: dict[str, Any], user: dict[str, Any], s
                          acts_for=handles.get(user["owner_user_id"]) if user["owner_user_id"] else None,
                          scope_type=scope.scope_type, scope_id=scope.scope_id, scope_name=scope.scope_name,
                          organization_id=scope.organization_id, role=row["role"], active=row["revoked_at"] is None,
+                         account_active=bool(user["active"]),
                          granted_at=localize(s, row["granted_at"]), granted_by_name=granters.get(row["granted_by"]),
                          revoked_at=localize(s, row["revoked_at"]))
 
