@@ -1651,7 +1651,7 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # CoordinateOutput re-pinned for early-payment discounts: the receipt request gained optional
 # `discounts`/`discount_account` (a discount row may carry expected_version) and the payment effect
 # optional discount fields (omitted when absent).
-CODECS = {'CoordinateOutput': 'a9cc8735d31af29746d76c1b6f17acd66cf4d9124955817d9e69c665c08b3a0a', 'Effect': '2459fecc3964de9d19380152bfdf4f0732a8e8a1055884ab347d1b7e23b3a06d', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'bbf9b0d895d08daf1e24611d334d7bd8d41fe87bcbf33b935cd92dafab8f34fd', 'Manifest': '8753528651e3ddaa96582656f34eae8e8f1641120603eb4e34f074a7395508dd', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+CODECS = {'CoordinateOutput': '6275ce5681afa7c0ec8825a9e3eb99f1313a242df18cb9519345a5563a899a4f', 'Effect': '2459fecc3964de9d19380152bfdf4f0732a8e8a1055884ab347d1b7e23b3a06d', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'bbf9b0d895d08daf1e24611d334d7bd8d41fe87bcbf33b935cd92dafab8f34fd', 'Manifest': '8753528651e3ddaa96582656f34eae8e8f1641120603eb4e34f074a7395508dd', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

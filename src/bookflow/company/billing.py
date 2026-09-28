@@ -200,6 +200,9 @@ def billed_lines(s, rev, selected, profile):
                 share = sum(math.portion(target.amount_minor_units, a, b, d) for a, b in spans)
                 cut = (None if target.taxable_minor_units is None else
                        sum(math.portion(target.taxable_minor_units, a, b, d) for a, b in spans))
+                if cut is not None and item.proof is not None:
+                    # Taxable sales come down to zero and no further, on the part billed too.
+                    cut = min(cut, lines[placed[target.position - 1] - 1]['net_minor_units'] + share)
                 targets.append((placed[target.position - 1], share, cut))
             targets = [row for row in targets if row[1] or row[2]]
             if not targets:

@@ -159,22 +159,11 @@ def apply(lines: list[dict], policy: str) -> None:
             # non-taxable lines reduces taxable sales by the whole discount. The reduction is
             # taken from the taxable lines it applies to, shared by their taxable bases the way
             # the discount itself is shared by nets.
+            # Taxable sales come down to zero and no further (gate g06a647): what is left of the
+            # discount comes off non-taxable sales, and no sale ever shows negative tax.
             bases = {j: shown[j] - reduced[j] for j in weights if taxed(j) and shown[j] - reduced[j] > 0}
-            if not bases:
-                raise _invalid(_where(index), (
-                    'a taxable discount applies here only to non-taxable lines, so there are no taxable '
-                    'sales for it to reduce; use a non-taxable discount'))
-            if value > sum(bases.values()):
-                raise _invalid(_where(index), (
-                    'a taxable discount reduces taxable sales by its whole amount, and this one is larger '
-                    'than the taxable sales it applies to; use a non-taxable discount, or discount the '
-                    'taxable lines on their own'))
-            cuts = distribute(value, bases)
+            cuts = dict(bases) if value >= sum(bases.values()) else distribute(value, bases)
         for j, share in shares.items():
-            if cuts is None and share and taxable and not taxed(j):
-                raise _invalid(_where(index), (
-                    'a taxable discount applies here only to non-taxable lines, so there are no taxable '
-                    'sales for it to reduce; use a non-taxable discount'))
             nets[j] -= share
             if taxable:
                 reduced[j] += share if cuts is None else cuts.get(j, 0)
@@ -217,8 +206,13 @@ def check(profiles: list, amounts: list[int], nets: list[int], taxable: list[boo
             if taxable[index]:
                 taxed_cut[j] += reduction
         if split:
-            require(sum(target.taxable_minor_units for target in profile.adjustment.targets)
-                    == -profile.adjustment.amount_minor_units, 'a taxable discount reduces taxable sales by its whole amount')
+            cut_total = sum(target.taxable_minor_units for target in profile.adjustment.targets)
+            require(cut_total <= -profile.adjustment.amount_minor_units, 'a taxable reduction beyond the discount')
+            if cut_total < -profile.adjustment.amount_minor_units and profile.adjustment.applies_to != 'billed':
+                # Clamped at zero: every taxable line it applies to has no taxable sales left.
+                require(all(amounts[t.position - 1] - taxed_cut[t.position - 1] == 0
+                            for t in profile.adjustment.targets if taxable[t.position - 1]),
+                        'a clamped taxable discount left taxable sales above zero')
     bases = []
     for index, profile in enumerate(profiles):
         if kind(profile) in ('subtotal', 'discount'):

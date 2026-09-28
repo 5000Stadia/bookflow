@@ -49,9 +49,7 @@ Percentage amounts round with the document's captured policy: half-even under
 ## Refusals
 
 Discount or charge with nothing above it, directly under a discount, or on a negative
-base; a discount larger than the nets it applies to; a taxable discount that applies only to
-non-taxable lines, or that is larger than the taxable sales it applies to (taxable sales cannot
-go below zero here); group members with zero quantity; group lines with anything but item and
+base; a discount larger than the nets it applies to; group members with zero quantity; group lines with anything but item and
 quantity; quantity other than 1 on subtotal, discount and charge lines.
 
 ## Edges
@@ -61,6 +59,14 @@ posting/validation/outputs, tax_attribution/tax_calculations (taxable base), wor
 validation, billing resolution/selection/validation, credit memos, sales-by-item attribution,
 cash basis, printing, workbench line grid, demo seed. Payments, bill payments and deposits are
 not modified.
+
+## Taxable sales stop at zero (gate g06a647, answer a)
+
+A taxable discount brings taxable sales down to zero and no further; the rest comes off
+non-taxable sales, and no invoice or sales receipt shows negative tax. This covers a taxable
+discount under only non-taxable lines and one larger than the taxable sales it applies to
+(both refused before). Returns are unaffected: credit memos still refund tax on returned items.
+A partly billed line keeps the same floor on the part billed.
 
 ## Decided by the person (gate g7f6adb)
 
