@@ -229,8 +229,12 @@ def test_refusals(books):
     sale = invoice(books, '100.00')
     other = invoice(books, '100.00')
     cases = [
-        # A discount on an invoice this receipt does not pay.
+        # A discount on an invoice given no cash must name that invoice's version.
         dict(applications=[(sale, 1, '98.00')], discounts=[dict(invoice=other['id'], amount='2.00')]),
+        # ...and a stale one is refused.
+        dict(applications=[(sale, 1, '98.00')], discounts=[dict(invoice=other['id'], amount='2.00', expected_version=9)]),
+        # A discount alone cannot exceed what is due either.
+        dict(applications=[(sale, 1, '98.00')], discounts=[dict(invoice=other['id'], amount='100.01', expected_version=1)]),
         # Cash plus discount beyond what is due.
         dict(applications=[(sale, 1, '98.00')], discounts=[dict(invoice=sale['id'], amount='2.01')]),
         # A discount of nothing.
@@ -239,7 +243,7 @@ def test_refusals(books):
     for case in cases:
         with pytest.raises(BookflowError) as refused:
             receive(books, '98.00', case['applications'], discounts=case['discounts'], key='refused')
-        assert refused.value.code in ('E_VALIDATION', 'E_APPLICATION_CAPACITY')
+        assert refused.value.code in ('E_VALIDATION', 'E_APPLICATION_CAPACITY', 'E_VERSION_CONFLICT')
     with pytest.raises(BookflowError):
         receive(books, '98.00', [(sale, 1, '98.00')], key='revenue-account',
                 discounts=[dict(invoice=sale['id'], amount='2.00')], discount_account=books['bank'])
@@ -368,6 +372,10 @@ def test_vendor_partial_edited_and_late_discounts(books):
     with pytest.raises(BookflowError) as refused:
         pay(books, [dict(bill=bill(books, '100.00')['id'], amount='99.00', discount='2.00')])
     assert refused.value.code == 'E_APPLICATION_CAPACITY'
+    # A payment must still pay some money: a discount alone, to a vendor paid nothing, is refused.
+    with pytest.raises(BookflowError) as refused:
+        pay(books, [dict(bill=bill(books, '100.00')['id'], amount='0.00', discount='2.00')])
+    assert refused.value.code == 'E_VALIDATION'
 
 
 def test_vendor_unapply_and_void_reverse_the_discount(books):
@@ -440,3 +448,97 @@ def test_deleting_a_discounted_receipt_cancels_the_discount(books):
     assert deleted['status'] == 'deleted' and deleted['cancelled_posting_lines'] == 3
     assert balances(books) == {account(books, 'Accounts Receivable'): 100000, books['income']: -100000}
     assert reports(books) == (100000, 100000, 100000)
+
+
+
+# ------------------------------------------------------------------ a discount with no cash beside it
+#
+# The anchor's windows take a discount on a document the payment gives no money: a customer
+# short-pays one invoice and takes the discount on another. The payment itself still records cash.
+
+
+def test_customer_discount_on_an_invoice_given_no_cash(books):
+    first = invoice(books, '500.00')
+    second = invoice(books, '300.00')
+    # 490.00 settles the first with its 10.00 discount; the second takes its 6.00 discount alone.
+    paid = receive(books, '490.00', [(first, 1, '490.00')], discounts=[
+        dict(invoice=first['id'], amount='10.00'), dict(invoice=second['id'], amount='6.00', expected_version=1)])
+    assert paid['warnings'] == []
+    edges = {row['invoice_id']: (row['amount']['minor_units'], row['discount']['minor_units'])
+             for row in paid['effect']['applications']}
+    assert edges == {first['id']: (50000, 1000), second['id']: (600, 600)}
+    assert paid['current']['received_minor_units'] == 49000 and paid['current']['discount_minor_units'] == 1600
+    assert settlement(books, first)['due_minor_units'] == 0
+    assert settlement(books, second)['due_minor_units'] == 29400          # 300.00 - 6.00
+    given, receivable = account(books, 'Discounts Given'), account(books, 'Accounts Receivable')
+    # Bank 490.00, discounts 16.00; receivable 800.00 - 500.00 - 6.00 = 294.00; Sales -800.00.
+    assert balances(books) == {books['bank']: 49000, given: 1600, receivable: 29400, books['income']: -80000}
+    assert reports(books) == (29400, 29400, 29400)
+    # The rest of the second invoice arrives later with no discount.
+    receive(books, '294.00', [(second, version(books, second), '294.00')], date='2026-03-20', key='rest')
+    assert balances(books) == {books['bank']: 78400, given: 1600, books['income']: -80000}
+    # Unapplied, the discount-only edge gives its 6.00 back to the receipt as the customer's
+    # credit, and the second invoice has those 6.00 open again.
+    shown = books['run']('payment show', dict(payment=paid['id']))
+    edge = next(row['application_id'] for row in paid['effect']['applications'] if row['invoice_id'] == second['id'])
+    freed = books['run']('payment unapply', dict(payment=paid['id'], expected_version=shown['version'],
+        operation_key='free-second', applications=[dict(application_id=edge, invoice_expected_version=version(books, second))]),
+        reason='Discount not allowed after all')
+    assert freed['current']['available_minor_units'] == 600
+    assert settlement(books, second)['due_minor_units'] == 600
+
+
+def test_a_job_discounted_with_no_cash_and_the_receipt_deposited(books):
+    """The payer's cash settles its own invoice; its job's invoice takes only a discount.
+
+    The job's receipt component then carries no cash at all, which is what a deposit reads: the
+    deposit takes the 196.00 cash, not the 196.00 + 4.00 + 2.00 the components carry.
+    """
+    run = books['run']
+    job = run('customer create', dict(name='Kitchen remodel', parent_id=books['customer'],
+                                      terms_id=books['terms'][TERMS]))['id']
+    own = invoice(books, '200.00')
+    theirs = run('invoice post', dict(customer=job, date='2026-03-01',
+                 lines=[dict(item=books['item'], quantity='1', unit_price='100.00')]), reason='Bill the job')
+    paid = run('payment receive', dict(customer=books['customer'], date='2026-03-08', amount='196.00',
+               payment_method=books['methods']['Check'], operation_key='job-discount',
+               applications=dict(mode='inline', items=[dict(invoice=own['id'], expected_version=1, amount='196.00')]),
+               discounts=[dict(invoice=own['id'], amount='4.00'), dict(invoice=theirs['id'], amount='2.00', expected_version=1)]),
+               reason='Parent paid; the job took its discount')
+    assert {row['party_id']: row['received_minor_units'] for row in paid['current']['components']} == {
+        books['customer']: 20000, job: 200}
+    available = run('deposit sources', dict(date='2026-03-09'))
+    row = next(item for item in available['items'] if item['source'] == paid['id'])
+    assert row['eligible'] and row['amount']['minor_units'] == 19600
+    run('deposit post', dict(operation_key='bank-it', document=dict(mode='inline', deposit_to=books['bank'],
+        date='2026-03-09', sources=[dict(source_type='payment', source=paid['id'], expected_version=row['expected_version'])])),
+        reason='Bank the check')
+    given, receivable = account(books, 'Discounts Given'), account(books, 'Accounts Receivable')
+    # Bank 196.00, discounts 6.00, receivable 300.00 - 200.00 - 2.00 = 98.00, Sales -300.00.
+    assert balances(books) == {books['bank']: 19600, given: 600, receivable: 9800, books['income']: -30000}
+
+
+def test_vendor_discount_on_a_bill_given_no_money(books):
+    first = bill(books, '500.00')
+    second = bill(books, '300.00')
+    # 490.00 pays the first with its 10.00 discount; the second takes its 6.00 discount alone.
+    paid = pay(books, [dict(bill=first['id'], amount='490.00', discount='10.00'),
+                       dict(bill=second['id'], amount='0.00', discount='6.00')])
+    assert paid['group_count'] == 1 and paid['paid_minor_units'] == 49000 and paid['discount_minor_units'] == 1600
+    lines = {line['bill_id']: (line['amount_minor_units'], line['discount_minor_units'])
+             for line in paid['payments'][0]['revision']['lines']}
+    assert lines == {first['id']: (50000, 1000), second['id']: (600, 600)}
+    assert bill_row(books, second)['settlement_current']['open_minor_units'] == 29400
+    taken, payable = account(books, 'Discounts Taken'), account(books, 'Accounts Payable')
+    # Parts 800.00; bank -490.00; Discounts Taken -16.00; payable 800.00 - 506.00 = -294.00.
+    assert balances(books) == {books['parts']: 80000, books['bank']: -49000, taken: -1600, payable: -29400}
+    assert payables(books) == (29400, 29400, 29400)
+    # A discount with no amount and nothing else left open pays nothing on that row.
+    third = bill(books, '100.00')
+    implied = pay(books, [dict(bill=third['id'], discount='100.00'), dict(bill=second['id'])], date='2026-03-09')
+    assert implied['paid_minor_units'] == 29400 and implied['discount_minor_units'] == 10000
+    payment = implied['payments'][0]
+    freed = books['run']('bill payment unapply', dict(payment=payment['id'], expected_version=payment['version']),
+                         reason='Undo')
+    books['run']('bill payment void', dict(payment=payment['id'], expected_version=freed['version']), reason='Undo')
+    assert balances(books)[payable] == -29400 - 10000

@@ -45,7 +45,9 @@ class BillSelectionInput(_Input):
     is settled by the money paid plus the discount, and the discount is credited to the discount
     account. It is never taken unless named -- ``bill query`` and a dry run show what the bill's
     terms suggest -- and with a discount and no ``amount`` the money paid is what is open less
-    the discount. Only ``bill pay`` takes a discount.
+    the discount. A bill may take its discount with no money at all -- ``"amount": "0.00"`` --
+    as long as the payment pays its vendor some money on another bill. Only ``bill pay`` takes a
+    discount.
     """
 
     bill: _Selector
@@ -53,7 +55,8 @@ class BillSelectionInput(_Input):
     discount: str | MoneyInput | None = Field(default=None, description=(
         'Early-payment discount taken on this bill in addition to amount; the bill is settled by '
         'amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is '
-        '{"bill": "4410", "amount": "980.00", "discount": "20.00"}.'))
+        '{"bill": "4410", "amount": "980.00", "discount": "20.00"}. A discount alone is '
+        '{"bill": "4411", "amount": "0.00", "discount": "6.00"} beside money paid on another bill.'))
     expected_version: _Version | None = None
 
 

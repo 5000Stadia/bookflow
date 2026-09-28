@@ -1648,8 +1648,9 @@ IMMUTABLE_OWNERS = (('deposit_draft_revisions', 'id', 'deposit_draft_revision'),
 SOURCE_TABLES = ('transaction_revisions', 'posting_batches', 'posting_lines', 'posting_line_sources', 'document_lines', 'payment_profiles', 'payment_components', 'payment_component_keys', 'sales_profiles', 'sales_line_profiles', 'sales_tax_components')
 DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_identities', 'deposit_row_keys', 'document_lines', 'deposit_component_keys', 'deposit_components', 'posting_batches', 'posting_lines', 'posting_line_sources', 'deposit_cash_cells', 'deposit_memberships', 'bank_effect_keys', 'bank_effect_versions', 'deposit_current_memberships', 'deposit_operations')
 # CoordinateOutput re-pinned for early-payment discounts: the receipt request gained optional
-# `discounts`/`discount_account` and the payment effect optional discount fields (omitted when absent).
-CODECS = {'CoordinateOutput': '708102a28e625e67074484da273bc010e1bb25edf4f851c73b244d6e3c587029', 'Effect': 'f752f461dcfa8b8b44193f9823908d685360eb837d98fe1174d4bafedc5bce42', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '6bb1cc08e0ea03728ec43c3f8ed83172d08fae07fa3d0e0aeeec93d5c5229b47', 'Manifest': '3e2f877cf58c1d47d896f68a98f2fb707e21d54dd471e46402b44aaec46a9747', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# `discounts`/`discount_account` (a discount row may carry expected_version) and the payment effect
+# optional discount fields (omitted when absent).
+CODECS = {'CoordinateOutput': 'bf58b3a634fb017999937224275c732ca9db766754a7989041e265ecd8cbdad3', 'Effect': 'f752f461dcfa8b8b44193f9823908d685360eb837d98fe1174d4bafedc5bce42', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '6bb1cc08e0ea03728ec43c3f8ed83172d08fae07fa3d0e0aeeec93d5c5229b47', 'Manifest': '3e2f877cf58c1d47d896f68a98f2fb707e21d54dd471e46402b44aaec46a9747', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

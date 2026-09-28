@@ -230,21 +230,31 @@ def discounts_by_invoice(s, invoice_ids):
     return totals
 
 
-def _discounts(s, inp, targets, currency):
-    """Each named discount, bound to the application that pays the same invoice.
+def _discounts(s, inp, targets, currency, context_):
+    """Each named discount, bound to the settlement edge of the same invoice.
 
-    A discount rides an application: the invoice is settled by the cash plus the discount, so
-    the invoice has to be one this receipt also pays, and the two together cannot exceed what is
-    due on it.
+    The invoice is settled by the cash applied to it plus the discount, and the two together
+    cannot exceed what is due. An invoice the receipt gives no cash -- the anchor's short-paid
+    customer who takes the discount on another invoice -- is settled by the discount alone, on an
+    edge of its own; it has to be the payer's family's invoice, as any application does, and
+    its expected version is required because nothing else in the request names it.
     """
     by_invoice = {row['facts']['header']['id']: row for row in targets}
     for index, entry in enumerate(inp.discounts):
         field = f'discounts.{index}'
         header = sales.resolve(s, entry.invoice, SETTLEABLE)
         target = by_invoice.get(header['id'])
+        if entry.expected_version is not None:
+            sales._version(s, header, entry.expected_version)
         if target is None:
-            raise _invalid(field + '.invoice', f'{header["type"].replace("_", " ")} {header["number"]} takes a '
-                                               'discount only beside cash applied to it in this receipt')
+            if entry.expected_version is None:
+                raise _invalid(field + '.expected_version', f'{header["type"].replace("_", " ")} {header["number"]} '
+                               'receives no cash in this receipt, so its discount needs the invoice expected_version')
+            facts = query.invoice_facts(s, header['id'], write=True)
+            selection.compatible(s, context_, facts)
+            target = dict(facts=facts, amount=0)
+            targets.append(target)
+            by_invoice[header['id']] = target
         if target.get('discount'):
             raise _invalid(field + '.invoice', 'name each discounted invoice once')
         units = money(entry.amount, currency, field + '.amount').minor_units
@@ -342,7 +352,7 @@ def prepare(s, ctx, inp, operation):
         repeated = repeated_reference(s, context_['customer_id'], inp.reference)
         targets, selected = _applications(s, inp, context_, amount=amount)
         _capacity('source', sum(row['amount'] for row in targets), amount, context_['currency'], context_['customer_id'])
-        targets = _discounts(s, inp, targets, context_['currency'])
+        targets = _discounts(s, inp, targets, context_['currency'], context_)
         discounted = sum(row['discount'] for row in targets)
         discount_account = account_mutation = None
         if discounted:
@@ -411,7 +421,9 @@ def prepare(s, ctx, inp, operation):
             pending['payment_components'].append(component)
             ar = leg(profile.ar_account, capacity, False, party, position)
             discount = party_discounts.get(party_id, 0)
-            shares = [(cash, capacity - discount), (ar, capacity)]
+            # A customer whose invoices this receipt settles only by discount puts no cash in.
+            shares = [(cash, capacity - discount)] if capacity > discount else []
+            shares.append((ar, capacity))
             if discount:
                 shares.append((discount_legs[party_id], discount))
             for posting, units in shares:
@@ -602,7 +614,8 @@ def apply(plan, ctx, s):
     collections = {('effect_applications' if kind == 'applications' else kind): complete_effect[kind]
                    for kind in ('source_components', 'applications', 'allocations', 'document_changes')}
     collections['request_applications'] = [dict(invoice=row['facts']['header']['id'],
-        expected_version=row['facts']['header']['version'], amount=Money(row['amount'], data['context']['currency']).to_dict()) for row in data['targets']]
+        expected_version=row['facts']['header']['version'], amount=Money(row['amount'], data['context']['currency']).to_dict())
+        for row in data['targets'] if row['amount']]
     for kind, values in collections.items():
         for ordinal, value in enumerate(values, 1):
             item = dict(id=new_id(), operation_id=operation['id'], kind=kind, ordinal=ordinal,

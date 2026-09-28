@@ -265,7 +265,8 @@ def _document(s, ctx, payments, data, document, currency, operation):
         part = taken['amount_minor_units'] if taken else 0
         paid = [source for source in sources if source['posting_line_id'] == funding[0]['id']
                 and source['document_line_id'] == component['document_line_id']]
-        require(len(paid) == 1 and paid[0]['amount_minor_units'] == component['amount_minor_units'] - part,
+        paid_out = component['amount_minor_units'] - part
+        require(paid_out >= 0 and [row['amount_minor_units'] for row in paid] == ([paid_out] if paid_out else []),
                 'a line pays something other than its capacity less its discount')
         if taken is None:
             continue
@@ -275,7 +276,7 @@ def _document(s, ctx, payments, data, document, currency, operation):
                 and application['obligation_transaction_id'] == taken['bill_id']
                 and source is not None and source['posting_line_id'] == rest[0]['id']
                 and source['document_line_id'] == component['document_line_id']
-                and source['amount_minor_units'] == part < component['amount_minor_units']
+                and source['amount_minor_units'] == part <= component['amount_minor_units']
                 and taken['transaction_id'] == header['id'] and taken['revision_id'] == revision['id']
                 and taken['currency'] == currency and amount(taken['suggested_minor_units']) >= 0,
                 'a discount does not name its own line, edge and attribution')

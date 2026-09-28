@@ -111,7 +111,7 @@ def validate(plan, s, ctx):
         app = apps_by_id.get(row['application_id'])
         require(app is not None and app['paid_transaction_id'] == row['invoice_id']
                 and app['source_component_key_id'] == row['component_key_id']
-                and type(row['amount_minor_units']) is int and 0 < row['amount_minor_units'] < app['amount_minor_units']
+                and type(row['amount_minor_units']) is int and 0 < row['amount_minor_units'] <= app['amount_minor_units']
                 and row['transaction_id'] == header['id'] and row['currency'] == data['context']['currency']
                 and row['audit_event_id'] == data['event'] and row['created_by'] == s.actor.id,
                 'discount is not part of its own application')
@@ -151,9 +151,10 @@ def validate(plan, s, ctx):
         debit = [row for row in own if row['posting_line_id'] in debit_ids]
         credit = [row for row in own if row['posting_line_id'] not in debit_ids]
         cash = [row for row in debit if row['posting_line_id'] == cash_legs[0]['id']]
+        paid_in = component['amount_minor_units'] - discounted.get(party, 0)
         require(len(credit) == 1 and credit[0]['amount_minor_units'] == component['amount_minor_units']
-                and len(cash) == 1 and cash[0]['amount_minor_units'] == component['amount_minor_units'] - discounted.get(party, 0)
-                and len(debit) == (2 if discounted.get(party) else 1)
+                and paid_in >= 0 and [row['amount_minor_units'] for row in cash] == ([paid_in] if paid_in else [])
+                and len(debit) == (1 if paid_in else 0) + (1 if discounted.get(party) else 0)
                 and sum(row['amount_minor_units'] for row in debit) == component['amount_minor_units']
                 and all(row['tax_component_id'] is None for row in own), 'component must attribute cash, discount and AR exactly')
     custom.validate(s.company, data['custom_plan'], header['id'], data['custom_plan'].snapshot, record_type='payment')

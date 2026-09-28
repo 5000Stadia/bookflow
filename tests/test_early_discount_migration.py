@@ -49,7 +49,10 @@ def test_the_frozen_ddl_is_what_the_shipped_metadata_declares():
                           for name in TABLES)
     assert set(M.INDEXES) == {str(CreateIndex(index).compile(dialect=dialect()))
                               for name in TABLES for index in schema.metadata.tables[name].indexes}
-    assert M.GUARDS == tuple(discount_schema.guard_statements())
+    # co0061 replaced the two edge guards; everything else co0060 created is still current.
+    edges = ('CREATE TRIGGER payment_discounts_edge', 'CREATE TRIGGER bill_payment_discounts_edge')
+    assert tuple(g for g in M.GUARDS if not g.startswith(edges)) == tuple(
+        g for g in discount_schema.guard_statements() if not g.startswith(edges))
     shipped = {index.name for index in schema.metadata.tables['company_info'].indexes}
     assert {'ix_company_info_customer_discount_account_id', 'ix_company_info_vendor_discount_account_id'} <= shipped
 
@@ -121,3 +124,24 @@ def test_discount_history_is_immutable_and_bound_to_its_edge(tmp_path):
         conn.execute("PRAGMA foreign_keys=OFF")
         with pytest.raises(sqlite3.IntegrityError, match='discount must be part of its own receipt settlement'):
             conn.execute("INSERT INTO payment_discounts VALUES ('D','P','K','A','I','X',100,'USD',0,NULL,NULL,'t','u','cli','E')")
+
+
+N = importlib.import_module("bookflow.storage.company_migrations.versions.0061_whole_edge_discounts")
+
+
+def test_co0061_lets_a_discount_be_the_whole_edge(tmp_path):
+    """The head guards are the shipped ones, and a discount equal to its edge now passes them."""
+    assert N.down_revision == M.revision and N.revision <= HEADS["company"]
+    path = tmp_path / "whole.db"
+    _at(path, M.revision)
+    with sqlite3.connect(path) as conn:
+        before = _objects(conn)
+    _at(path, N.revision)
+    with sqlite3.connect(path) as conn:
+        after = _objects(conn)
+        assert set(after) == set(before)
+        assert {k: v for k, v in after.items() if k not in N.REPLACED} == \
+            {k: v for k, v in before.items() if k not in N.REPLACED}
+        shipped = {g.split()[2]: g for g in discount_schema.guard_statements()}
+        for name in N.REPLACED:
+            assert after[name] == shipped[name] and '>= NEW.amount_minor_units' in after[name]

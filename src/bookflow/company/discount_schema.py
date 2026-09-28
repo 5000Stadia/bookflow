@@ -95,7 +95,10 @@ IMMUTABLE = ('payment_discounts', 'bill_payment_discounts')
 
 
 def guard_statements():
-    """Immutable rows, and each discount smaller than the settlement edge it was taken on."""
+    """Immutable rows, and each discount no larger than the settlement edge it was taken on.
+
+    An edge may be all discount: a document the payment gives no money settles by its discount.
+    """
     for name in IMMUTABLE:
         for event in ('UPDATE', 'DELETE'):
             yield (f'CREATE TRIGGER {name}_immutable_{event.lower()} BEFORE {event} ON {name} '
@@ -104,11 +107,11 @@ def guard_statements():
            'WHEN NOT EXISTS (SELECT 1 FROM applications a WHERE a.id = NEW.application_id '
            "AND a.kind = 'apply' AND a.paying_transaction_id = NEW.transaction_id "
            'AND a.paid_transaction_id = NEW.invoice_id AND a.source_component_key_id = NEW.component_key_id '
-           'AND a.currency = NEW.currency AND a.amount_minor_units > NEW.amount_minor_units) '
+           'AND a.currency = NEW.currency AND a.amount_minor_units >= NEW.amount_minor_units) '
            "BEGIN SELECT RAISE(ABORT, 'discount must be part of its own receipt settlement'); END")
     yield ('CREATE TRIGGER bill_payment_discounts_edge BEFORE INSERT ON bill_payment_discounts '
            'WHEN NOT EXISTS (SELECT 1 FROM ap_applications a WHERE a.id = NEW.application_id '
            "AND a.kind = 'apply' AND a.source_transaction_id = NEW.transaction_id "
            'AND a.source_component_id = NEW.source_component_id AND a.obligation_transaction_id = NEW.bill_id '
-           'AND a.currency = NEW.currency AND a.amount_minor_units > NEW.amount_minor_units) '
+           'AND a.currency = NEW.currency AND a.amount_minor_units >= NEW.amount_minor_units) '
            "BEGIN SELECT RAISE(ABORT, 'discount must be part of its own bill settlement'); END")
