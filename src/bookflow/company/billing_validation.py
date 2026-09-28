@@ -101,6 +101,8 @@ def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids
                 part = lambda whole: sum(round(Fraction(whole * b, d)) - round(Fraction(whole * a, d)) for a, b in spans)
                 share = part(quoted_share)
                 cut = None if quoted_cut is None else part(quoted_cut)
+                if cut is not None and proof is not None:
+                    cut = min(cut, row['net_minor_units'] + share)
                 wanted.append((placed[position], share, cut))
                 shares.setdefault(billed_envelope['id'], []).append((share, share if cut is None else cut, facts_posted))
             require([(t.position, t.amount_minor_units, t.taxable_minor_units) for t in adjustment.targets] ==

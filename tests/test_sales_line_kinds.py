@@ -253,9 +253,6 @@ def test_reports_attribute_income_to_items_and_tax_to_the_agency(client, kinds):
     (lambda k: [dict(item=k['off_taxed']), dict(item=k['labor'])], 'lines.0', 'directly above'),
     (lambda k: [dict(item=k['labor']), dict(item=k['off_taxed']), dict(item=k['five_off'])], 'lines.2', 'put a subtotal'),
     (lambda k: [dict(item=k['labor']), dict(item=k['off_taxed']), dict(item=k['fee'])], 'lines.2', 'put a subtotal'),
-    (lambda k: [dict(item=k['parts']), dict(item=k['off_taxed'])], 'lines.1', 'only to non-taxable lines'),
-    (lambda k: [dict(item=k['labor'], net_amount='0.10'), dict(item=k['parts']), dict(item=k['subtotal']),
-                dict(item=k['off_taxed'])], 'lines.3', 'larger than the taxable sales'),
     (lambda k: [dict(item=k['labor'], net_amount='1.00'), dict(item=k['five_off'])], 'lines.1', 'larger than'),
     (lambda k: [dict(item=k['kit'], unit_price='1.00')], 'lines.0.unit_price', 'group line'),
     (lambda k: [dict(item=k['labor']), dict(item=k['subtotal'], net_amount='1.00')], 'net_amount', 'subtotal'),
@@ -343,3 +340,40 @@ def test_a_billed_and_a_credited_mixed_discount_keep_the_whole_reduction(client,
     credited = client.run('credit-memo post', dict(customer=k['customer'], date=DATE, sales_tax_item=k['tax'],
         sales_tax_calculation='line_combined_half_up', lines=lines), company=COMPANY)
     assert shown(credited) == shown(billed)
+
+
+def _clamped_cases(k):
+    return [
+        # (1) A taxable 10% discount under only a non-taxable 50.00 line: 5.00 off. There are no
+        # taxable sales for it to reduce, so the whole 5.00 comes off non-taxable sales.
+        ([dict(item=k['parts']), dict(item=k['off_taxed'])],
+         [('item', 5000, 4500, 0, []), ('discount', -500, 0, 0, [])], 4500, 5000, 500),
+        # (2) Labor 0.10 (taxed) and parts 50.00 (not), subtotal 50.10, 10% taxable off = 5.01,
+        # shared by net 0.01 and 5.00. It is larger than the 0.10 of taxable sales, which it
+        # brings to zero and no further: tax 0, and the other 4.91 comes off non-taxable sales.
+        ([dict(item=k['labor'], net_amount='0.10'), dict(item=k['parts']), dict(item=k['subtotal']),
+          dict(item=k['off_taxed'])],
+         [('item', 10, 9, 0, [0]), ('item', 5000, 4500, 0, []), ('subtotal', 5010, 0, 0, []),
+          ('discount', -501, 0, 0, [])], 4509, 5010, 501),
+    ]
+
+
+@pytest.mark.parametrize('case', [0, 1])
+def test_a_taxable_discount_brings_taxable_sales_to_zero_and_no_further(client, cli, kinds, case):
+    k = kinds
+    lines, expected, total, income, given = _clamped_cases(k)[case]
+    for policy in ('line_component_half_even', 'line_combined_half_up', 'invoice_combined_half_up'):
+        result = post(client, k, lines, policy=policy)
+        assert shown(result) == expected
+        assert (result['subtotal_minor_units'], result['tax_minor_units'], result['total_minor_units']) == (total, 0, total)
+        # Taxable sales are the taxed lines' bases: zero. Non-taxable sales are the rest of the net.
+        taxable_sales = sum(c['taxable_minor_units'] for line in result['revision']['lines'] for c in line['tax_components'])
+        assert (taxable_sales, result['subtotal_minor_units'] - taxable_sales) == (0, total)
+        ar = result['revision']['profile']['control_account']['id']
+        assert_oracle(client, result['id'], {(DATE, ar): total, (DATE, k['income']): -income, (DATE, k['given']): given})
+    # The same sale through the CLI.
+    import json
+    through_cli = cli.json('invoice', 'post', '--company', COMPANY, '--date', DATE, '--customer', k['customer'],
+                           '--sales-tax-item', k['tax'], '--sales-tax-calculation', 'invoice_combined_half_up',
+                           '--lines', json.dumps(lines), '--reason', 'Clamped discount witness')
+    assert shown(through_cli) == expected and through_cli['tax_minor_units'] == 0

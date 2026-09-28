@@ -48,7 +48,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_level` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_basis_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
-| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. |
+| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | — |
 | `memo` | `--memo` | string \| null | no | yes | null | Memo written on every invoice in this batch. |

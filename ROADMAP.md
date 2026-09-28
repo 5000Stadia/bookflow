@@ -79,10 +79,10 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R89 agents and users can be deactivated (the gap recorded when R68 shipped) — notes/V1.5-resort-draft.md
 - [x] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
 - [x] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
-- [~] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
+- [x] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
 - [x] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
 - [x] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
-- [~] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
+- [?] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
 - [x] R95 small form polish: invoice and sales take today's date when none is given, as the browser does; the invoice form shows the default sales tax item before posting; "Clear Description" only when useful; register query dates and parameters consistent with other queries — notes/V1.5-resort-draft.md
 - [~] R96 diagnose and fix the older failing tests (FIRST the real defect that invoice and payment deletion is refused on activated installs even after an explicit grant; the concurrent recovery apply that errors instead of replaying; the demo-figure tests stale after R83; the ~30 tests pinned to a migration head or catalog; the error matrix missing rows for card-charge delete, check delete and item-receipt commands, the zero-value-items co45 upgrade test, the service-sales and work-billing demo tests pinned to stale whole-company figures, the Reference Plumbing Co demo option still fixed to 2026 dates, the 20 deposit authority tests that need the current permission rules, sales-tax-code list E_USAGE, delete admission, payment recheck, statement-charge surfaces, receivable report staleness, audit reachable when activated, history redirects, deleted-deposit page, routed-command delete forms): fix what is real, repair what is stale — notes/V1.5-resort-draft.md
 - [x] R97 payment calculate with auto-calculate off and no amount returns the field error row 22's spec describes — design/specs/22-customer-payments.md
@@ -103,7 +103,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R144 time activities have browser pages like other documents — notes/bug-sweep-20260928.md
 - [x] R145 report CSV export works over the CLI and MCP as in the browser — notes/bug-sweep-20260928.md
 - [x] R146 editing or voiding a transaction after its reconciliation is finished is fenced (warn plainly as QuickBooks does; the reconciliation report shows the difference; approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
-- [~] R147 discount, subtotal and group items and percentage charges work on sales as QuickBooks does: a subtotal sums the lines above, a percentage charge or discount applies to the line or subtotal above, a discount posts to its item's account and reduces taxable sales by its tax code, a group expands into its members (approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
+- [x] R147 discount, subtotal and group items and percentage charges work on sales as QuickBooks does: a subtotal sums the lines above, a percentage charge or discount applies to the line or subtotal above, a discount posts to its item's account and reduces taxable sales by its tax code, a group expands into its members (approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 - [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current (the README says demo dates follow the reset day), the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
 
@@ -148,3 +148,4 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
 - [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
+- [ ] R157 a saved invoice billed from a very long quote (hundreds of installments) opens faster: its technical-details section repeats every billed line's proofs (~1.5 MB, ~32 s at 201 installments)

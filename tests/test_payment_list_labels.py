@@ -181,6 +181,14 @@ def test_original_combined_page_fields_and_canonical_cursors(client, labels, mon
     def compared(inp, ctx, session):
         expected = old.payment_page(session, inp)
         calls['old'] += 1
+        # The reference predates early-payment discounts (R132): a discount is capacity beside the cash.
+        from bookflow.company import schema as c
+        import sqlalchemy as sa
+        for row in expected['items']:
+            if row['status'] == 'posted':
+                row['unapplied_minor_units'] += session.company.conn.execute(sa.select(sa.func.coalesce(
+                    sa.func.sum(c.payment_discounts.c.amount_minor_units), 0)).where(
+                    c.payment_discounts.c.transaction_id == row['id'])).scalar()
         plan = registered(inp, ctx, session)
         calls['new'] += 1
         actual = plan.preview.model_dump(mode='json')

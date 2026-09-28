@@ -73,7 +73,7 @@ def test_quote_refusals_write_nothing(client, kinds):
     k = kinds
     before = snapshot(client)
     for lines in ([dict(item=k['off_taxed'])],
-                  [dict(item=k['parts']), dict(item=k['off_taxed'])]):
+                  [dict(item=k['labor']), dict(item=k['off_taxed']), dict(item=k['five_off'])]):
         with pytest.raises(BookflowError) as caught:
             estimate(client, k, lines)
         assert caught.value.code == 'E_VALIDATION'

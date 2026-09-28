@@ -9,7 +9,7 @@ Database: `company`.
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Immutable allocation ULID. |
-| `transaction_id` | VARCHAR(26) | no | — | — | — | sales_line_profiles.transaction_id | Stable consuming sale. |
+| `transaction_id` | VARCHAR(26) | no | — | — | ix_work_billing_allocation_transaction | sales_line_profiles.transaction_id | Stable consuming sale. |
 | `revision_id` | VARCHAR(26) | no | — | unique with revision_id + root_document_id + root_line_id | — | sales_line_profiles.revision_id | Exact consuming sales revision. |
 | `document_line_id` | VARCHAR(26) | no | — | — | — | sales_line_profiles.document_line_id | Revision-local consuming sale line. |
 | `source_document_id` | VARCHAR(26) | no | — | — | ix_work_billing_allocation_source | work_lines.document_id | Captured work document. |

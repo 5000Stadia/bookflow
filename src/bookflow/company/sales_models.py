@@ -122,7 +122,9 @@ class SalesLineInput(StrictModel):
     percent: str | None = Field(default=None, description=(
         "Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line "
         "directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; "
-        "give net_amount instead for a fixed amount."))
+        "give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole "
+        "amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes "
+        "off non-taxable sales, so a sale never shows negative tax."))
     refresh_defaults: bool = False
     use_defaults: list[SalesLineDefault] = Field(default_factory=list, max_length=7)
 
