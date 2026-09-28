@@ -21,6 +21,11 @@ makes the report's total the account's own balance for the same date: every post
 exactly one row, and the columns of a row add up to its balance. Both identities are checked
 in Python on every row, where an integer is exact and unbounded.
 
+**A period, the way the anchor's report takes a date range.** With ``date_from`` the four
+activity columns count only effects dated inside ``date_from..date_to`` and everything before
+it lands in ``beginning_balance``, so a row still adds up: beginning balance plus the period's
+charges and adjustments, less its credits and remittances, is the balance at ``date_to``.
+
 **Accrual only, and deliberately.** ``company_info.sales_tax_liability_basis`` has two
 settings. On ``invoice_date`` the liability is recorded when the invoice is, which is what
 every posting above already says. On ``payment_receipt`` the liability would fall due when the
@@ -35,7 +40,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
@@ -43,25 +48,37 @@ from bookflow.core.errors import BookflowError
 
 NO_AGENCY = "Not attributed to an agency"
 
-COLUMNS = ("tax_charged", "tax_credited", "remitted", "unattributed", "balance")
+COLUMNS = ("beginning_balance", "tax_charged", "tax_credited", "remitted", "unattributed", "balance")
 
 
 class SalesTaxLiabilityInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; tax effects on or before it are counted.")
+    as_of: str | None = Field(default=None, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD: the balance owed on this date. The same as date_to; pass one or the other.")
+    date_from: str | None = Field(default=None, min_length=10, max_length=10, description="Optional inclusive first accounting date, YYYY-MM-DD. With it, the charged, credited, remitted and adjustment columns cover only the period date_from..date_to (a month's tax: 2026-09-01..2026-09-30), beginning_balance is what was owed the day before it, and balance is what is owed at date_to. Without it, the columns run from the start of the books.")
+    date_to: str | None = Field(default=None, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD; another name for as_of.")
     basis: Literal["accrual"] = "accrual"
     agency: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional tax agency vendor ID or name; omit for every agency with a balance.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
 
-    _as_of = field_validator("as_of")(iso_date)
+    _dates = field_validator("as_of", "date_from", "date_to")(
+        lambda value: None if value is None else iso_date(value))
 
-    @property
-    def date_to(self) -> str:
-        """The report period's single inclusive bound, named as every report names it."""
-        return self.as_of
+    @model_validator(mode="after")
+    def _period(self):
+        # One end date under either name: as_of is how this read has always been asked,
+        # date_to is how every period report names the same bound.
+        if self.as_of is None and self.date_to is None:
+            raise ValueError("as_of (or date_to) is required: the date the balance is read on")
+        if self.as_of is not None and self.date_to is not None and self.as_of != self.date_to:
+            raise ValueError("as_of and date_to name the same date; pass one of them")
+        self.date_to = self.as_of = self.date_to or self.as_of
+        if self.date_from is not None and self.date_from > self.date_to:
+            raise ValueError("date_from must be on or before date_to")
+        return self
 
 
 class SalesTaxLiabilityTotals(StrictModel):
+    beginning_balance: MoneyOutput | None = None
     tax_charged: MoneyOutput
     tax_credited: MoneyOutput
     remitted: MoneyOutput
@@ -75,6 +92,7 @@ class SalesTaxLiabilityRow(StrictModel):
     display_agency_label: str
     active: bool | None
     is_tax_agency: bool | None
+    beginning_balance: MoneyOutput | None = None
     tax_charged: MoneyOutput
     tax_credited: MoneyOutput
     remitted: MoneyOutput
@@ -97,7 +115,8 @@ class SalesTaxLiabilityOutput(ledger.Page):
 # A sale's reversal keeps `tax_component_id` verbatim, so that branch needs no such follow.
 _EFFECTS = """
 WITH liability AS (
- SELECT l.id AS line, l.debit_minor_units AS debit, l.credit_minor_units AS credit
+ SELECT l.id AS line, l.debit_minor_units AS debit, l.credit_minor_units AS credit,
+        (:date_from IS NULL OR b.effective_date>=:date_from) AS in_period
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
  JOIN accounts a ON a.id=l.account_id
  WHERE a.system_role='sales_tax_payable' AND b.effective_date<=:as_of
@@ -114,17 +133,20 @@ WITH liability AS (
       ON pp.liability_posting_source_id=coalesce(ps.reversed_source_id, ps.id)
 ), cells AS (
  SELECT n.agency AS party,
-        CASE WHEN n.origin='charged' THEN l.credit-l.debit ELSE 0 END AS tax_charged,
-        CASE WHEN n.origin='credited' THEN l.debit-l.credit ELSE 0 END AS tax_credited,
-        CASE WHEN n.origin='remitted' THEN l.debit-l.credit ELSE 0 END AS remitted,
+        CASE WHEN l.in_period THEN 0 ELSE l.credit-l.debit END AS beginning_balance,
+        CASE WHEN l.in_period AND n.origin='charged' THEN l.credit-l.debit ELSE 0 END AS tax_charged,
+        CASE WHEN l.in_period AND n.origin='credited' THEN l.debit-l.credit ELSE 0 END AS tax_credited,
+        CASE WHEN l.in_period AND n.origin='remitted' THEN l.debit-l.credit ELSE 0 END AS remitted,
         0 AS unattributed,
         l.credit-l.debit AS balance
  FROM liability l JOIN attributed n ON n.line=l.line
  UNION ALL
- SELECT NULL, 0, 0, 0, l.credit-l.debit, l.credit-l.debit
+ SELECT NULL, CASE WHEN l.in_period THEN 0 ELSE l.credit-l.debit END, 0, 0, 0,
+        CASE WHEN l.in_period THEN l.credit-l.debit ELSE 0 END, l.credit-l.debit
  FROM liability l WHERE NOT EXISTS (SELECT 1 FROM attributed n WHERE n.line=l.line)
 ), agency_columns AS (
- SELECT party, bookflow_sum_int(tax_charged) AS tax_charged,
+ SELECT party, bookflow_sum_int(beginning_balance) AS beginning_balance,
+        bookflow_sum_int(tax_charged) AS tax_charged,
         bookflow_sum_int(tax_credited) AS tax_credited,
         bookflow_sum_int(remitted) AS remitted,
         bookflow_sum_int(unattributed) AS unattributed,
@@ -173,7 +195,8 @@ def agency_balances(db, as_of: str, *, agency_id: str | None = None) -> dict[str
     iso_date(as_of)
     ledger.register_ledger_functions(db)
     return {row["party"]: int(row["balance"]) for row in _rows(db.raw.execute(
-        _EFFECTS + "SELECT party, balance FROM selected", {"as_of": as_of, "agency": agency_id}))}
+        _EFFECTS + "SELECT party, balance FROM selected",
+        {"as_of": as_of, "date_from": None, "agency": agency_id}))}
 
 
 def sales_tax_liability(inp: SalesTaxLiabilityInput, s, *, principal_id=None) -> SalesTaxLiabilityOutput:
@@ -192,7 +215,7 @@ def sales_tax_liability(inp: SalesTaxLiabilityInput, s, *, principal_id=None) ->
         state, offset = ledger._state(s, inp, "sales-tax-liability", principal_id, agency_id,
                                       account_scoped=False)
         raw, currency = s.company.raw, state.metadata.currency
-        params = {"as_of": inp.as_of, "agency": agency_id}
+        params = {"as_of": inp.as_of, "date_from": inp.date_from, "agency": agency_id}
         totals = dict.fromkeys(COLUMNS, 0)
         # Stream every agency's column set, including rows past this page, so a page boundary
         # can never hide an amount from a total. The balance is a fifth independent sum rather
@@ -214,15 +237,23 @@ def sales_tax_liability(inp: SalesTaxLiabilityInput, s, *, principal_id=None) ->
             display_agency_label=_label(row["name"]),
             active=None if row["active"] is None else bool(row["active"]),
             is_tax_agency=None if row["is_tax_agency"] is None else bool(row["is_tax_agency"]),
-            **{name: money(int(row[name]), currency) for name in COLUMNS})
+            **{name: _cell(row[name], name, inp, currency) for name in COLUMNS})
             for row in page[:inp.limit]]
         return SalesTaxLiabilityOutput(metadata=state.metadata, rows=rows, count=len(rows),
-            totals=SalesTaxLiabilityTotals(**{name: money(totals[name], currency) for name in COLUMNS}),
+            totals=SalesTaxLiabilityTotals(**{name: _cell(totals[name], name, inp, currency)
+                                            for name in COLUMNS}),
             next_cursor=ledger._continuation(state, offset, len(rows), len(page) > inp.limit, s.company))
 
 
+def _cell(value, name, inp, currency):
+    """A column's money; a beginning balance only exists when a period has a beginning."""
+    if name == "beginning_balance" and inp.date_from is None:
+        return None
+    return money(int(value), currency)
+
+
 def _check(values):
-    if (values["tax_charged"] - values["tax_credited"] - values["remitted"]
+    if (values["beginning_balance"] + values["tax_charged"] - values["tax_credited"] - values["remitted"]
             + values["unattributed"] != values["balance"]):
         raise BookflowError("E_INTERNAL",
-                            message="A sales tax balance is not its charges less its credits and remittances")
+                            message="A sales tax balance is not its beginning balance plus its charges less its credits and remittances")

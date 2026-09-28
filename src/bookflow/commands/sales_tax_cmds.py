@@ -21,7 +21,13 @@ from bookflow.company.sales_tax_reports import (
 )
 
 _LIABILITY = (
-    'How much sales tax is owed, by agency, as of a date (as_of), from the tax the books recorded. Each'
+    'How much sales tax is owed, by agency, from the tax the books recorded -- for one date'
+    ' (as_of) or for a period (date_from and date_to). For one month\'s tax, such as September'
+    ' so far, pass date_from=2026-09-01 and date_to=2026-09-28: tax_charged is the tax collected'
+    ' in that period, tax_credited, remitted and unattributed (adjustments) are what moved in'
+    ' it, beginning_balance is what was owed the day before date_from and balance is what is'
+    ' owed at date_to. With as_of alone every column runs from the start of the books and'
+    ' balance is the running total owed, not one month\'s tax. Each'
     ' row is one agency with the tax charged on posted sales, the tax taken back by credit'
     ' memos, what has been remitted, and the balance still owed; an effect on the sales tax'
     ' payable account that names no agency -- a journal entry posted straight at it -- is its'

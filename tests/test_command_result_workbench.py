@@ -95,3 +95,17 @@ def test_result_tables_name_the_records_a_row_points_at(hosted):
     assert re.search(rf'<a href="{company}/vendor/\w+">[^<]*[a-z][^<]*</a>', orders)
     assert "Current revision" not in orders
     assert not re.search(r'<td[^>]*>[0-9A-Z]{26}</td>', orders)
+
+
+def test_sales_tax_owed_reads_a_period_as_the_anchor_report_does(hosted):
+    """The Sales tax owed page opens on a from/to range, not only an as-of date (R72)."""
+    browser = _browser(hosted)
+    company = f"/c/{hosted.company_id}"
+    opened = browser.get(f"{company}/sales-tax/liability", headers=HEADERS)
+    assert opened.status_code == 200
+    assert re.search(r'name="f:date_from"[^>]*value="\d{4}-01-01"', opened.text)
+    assert re.search(r'name="f:date_to"[^>]*value="\d{4}-\d{2}-\d{2}"', opened.text)
+    month = _submit(browser, f"{company}/sales-tax/liability",
+                    {"f:date_from": "2026-09-01", "f:date_to": "2026-09-30"})
+    assert "Technical result (JSON)" in _results(month.text, end='</details>')
+    assert "2026-09-01" in _results(month.text, end='</details>')

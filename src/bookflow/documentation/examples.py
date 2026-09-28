@@ -734,13 +734,14 @@ EXAMPLES.update({
 })
 
 
-# Sales tax is read before it is paid, so the liability example names the period end a bookkeeper
-# would actually ask about, and the remittance answers exactly that period.
+# Sales tax is read before it is paid, so the liability example names the period a bookkeeper
+# would actually ask about -- the quarter's tax and what is owed at its end -- and the remittance
+# answers exactly that period.
 EXAMPLES.update({
     "sales-tax liability": Example(
-        'bookflow sales-tax liability --as-of 2026-03-31 --limit 25'
+        'bookflow sales-tax liability --date-from 2026-01-01 --date-to 2026-03-31 --limit 25'
         ' --company "Demo Plumbing Co" --json',
-        {"as_of": "2026-03-31", "limit": 25}),
+        {"date_from": "2026-01-01", "date_to": "2026-03-31", "limit": 25}),
     "sales-tax pay": Example(
         'bookflow sales-tax pay --agency "State Board of Equalization" --date 2026-04-20'
         ' --through-date 2026-03-31 --funding-account "Checking" --method "Check"'

@@ -38,7 +38,9 @@ REPORTS = {
     'report balance-sheet': ('date_to',),
     'report trial-balance': ('date_to',),
     'report open-purchase-orders': ('date_to',),
-    'sales-tax liability': ('as_of',),
+    # Read over a period, as the anchor's Sales Tax Liability report is; as_of stays a
+    # synonym for date_to on the command, so the form leaves it empty.
+    'sales-tax liability': ('date_from', 'date_to'),
 }
 # Reports read over a whole calendar year that open, as the anchor's do, on the last one: a
 # 1099 summary is prepared in January for the year just ended.
