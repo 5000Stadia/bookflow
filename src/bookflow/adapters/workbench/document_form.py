@@ -680,7 +680,9 @@ def computed(record):
     if not isinstance(record, dict) or not isinstance(record.get('revision'), dict):
         return None
     revision = record['revision']
-    lines = [{'line_id': line.get('line_id'), 'amount': _amount(line.get('net')),
+    # The amount a line shows: a subtotal's sum, a discount's negative, a discounted line's
+    # own amount. The server says it as ``amount`` wherever it differs from ``net``.
+    lines = [{'line_id': line.get('line_id'), 'amount': _amount(line.get('amount') or line.get('net')),
               'tax': _amount(line.get('tax'))} for line in revision.get('lines', [])]
     subtotal = _amount(revision.get('subtotal')) or _amount(revision.get('net'))
     profile = revision.get('profile') if isinstance(revision.get('profile'), dict) else {}

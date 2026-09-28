@@ -29,6 +29,7 @@ HeaderDefault = Literal[
     "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method",
 ]
 LineDefault = Literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]
+SalesLineDefault = Literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]
 
 
 def _quantity(value):
@@ -118,12 +119,28 @@ class SalesLineInput(StrictModel):
     tax_code: Selector | None = None
     price_level: Selector | None = None
     price_basis_amount: str | SalesMoneyInput | None = None
+    percent: str | None = Field(default=None, description=(
+        "Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line "
+        "directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; "
+        "give net_amount instead for a fixed amount."))
     refresh_defaults: bool = False
-    use_defaults: list[LineDefault] = Field(default_factory=list, max_length=7)
+    use_defaults: list[SalesLineDefault] = Field(default_factory=list, max_length=7)
+
+    @model_serializer(mode="wrap")
+    def legacy_line_request(self, handler):
+        values = handler(self)
+        if "percent" not in self.model_fields_set:
+            values.pop("percent", None)
+        return values
 
     @model_validator(mode="after")
     def defaults(self):
         _default_conflicts(self)
+        if "percent" in self.model_fields_set:
+            if self.percent is None:
+                raise ValueError("percent cannot be null; use use_defaults for the item's percentage")
+            if self.model_fields_set & {"net_amount", "unit_price", "price_level", "price_basis_amount"}:
+                raise ValueError("percent conflicts with net_amount, unit_price, price_level or price_basis_amount")
         for field in ("unit_price", "price_basis_amount", "net_amount"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null; use use_defaults for a default price")

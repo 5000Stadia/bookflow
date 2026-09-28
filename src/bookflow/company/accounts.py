@@ -605,12 +605,12 @@ def _active_master_uses(db: Database, account_id: str) -> dict[str, int]:
 # Owned account slots only. Historical rows remain uses after removal or void.
 _CAPTURED_ACCOUNT_QUERIES = (
     ("co0009", (
-        "SELECT 1 FROM sales_line_profiles WHERE json_extract(item_snapshot, '$.income_account.id') = :account_id LIMIT 1",
+        "SELECT 1 FROM sales_line_profiles WHERE json_extract(item_snapshot, '$.income_account.id') = :account_id OR json_extract(item_snapshot, '$.adjustment.account.id') = :account_id LIMIT 1",
         "SELECT 1 FROM sales_profiles WHERE control_account_id = :account_id OR EXISTS (SELECT 1 FROM json_each(profile_snapshot, '$.tax_rules') WHERE json_extract(value, '$.liability_account.id') = :account_id) LIMIT 1",
         "SELECT 1 FROM sales_tax_components WHERE liability_account_id = :account_id LIMIT 1",
     )),
     ("co0010", (
-        "SELECT 1 FROM work_lines WHERE json_extract(facts_snapshot, '$.profile.income_account.id') = :account_id OR EXISTS (SELECT 1 FROM json_each(facts_snapshot, '$.taxes') WHERE json_extract(value, '$.rule.liability_account.id') = :account_id) LIMIT 1",
+        "SELECT 1 FROM work_lines WHERE json_extract(facts_snapshot, '$.profile.income_account.id') = :account_id OR json_extract(facts_snapshot, '$.profile.adjustment.account.id') = :account_id OR EXISTS (SELECT 1 FROM json_each(facts_snapshot, '$.taxes') WHERE json_extract(value, '$.rule.liability_account.id') = :account_id) LIMIT 1",
         "SELECT 1 FROM work_revisions WHERE EXISTS (SELECT 1 FROM json_each(facts_snapshot, '$.profile.tax_rules') WHERE json_extract(value, '$.liability_account.id') = :account_id) LIMIT 1",
     )),
     ("co0014", (

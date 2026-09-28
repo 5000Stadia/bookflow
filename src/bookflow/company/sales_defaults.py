@@ -24,9 +24,9 @@ from bookflow.company.sales_calculations import (
     adjusted_price, base_quantity, extension, nonnegative, selected_price, tax, total,
 )
 from bookflow.company.sales_facts import (
-    SELLABLE_ITEM_TYPES,
-    Account, CommercialProfile, Customer, Origin, Preferences, PriceRule, Reference, SalesLineProfile,
-    SalesProfile, TaxCode, TaxRule, Term, Unit,
+    ADJUSTMENT_ITEM_TYPES, DISCOUNT_ACCOUNT_TYPES, SELLABLE_ITEM_TYPES,
+    Account, CommercialProfile, Customer, LineAdjustment, Origin, Preferences, PriceRule, Reference,
+    SalesLineProfile, SalesProfile, TaxCode, TaxRule, Term, Unit,
 )
 from bookflow.company.sales_models import Address, SalesLineInput, _invalid, money
 from bookflow.core.errors import BookflowError
@@ -521,11 +521,52 @@ def _missing_tax_item(db, header):
     return _invalid('sales_tax_item', problem)
 
 
+def _percent_line(db, item, old, fields, inp, item_changed, refresh, currency):
+    """The percentage or fixed amount a discount or percentage-charge line starts from.
+
+    Returns ``(percent_millionths, fixed_minor_units, origin)``, or ``None`` for an other
+    charge that is an ordinary fixed line. An explicit ``percent`` or ``net_amount`` wins; a
+    retained line keeps what it captured; otherwise the item's own rate.
+    """
+    if 'percent' in fields.supplied:
+        value = parse_percentage_millionths(inp.percent, field='percent')
+        if not 0 <= value <= 100_000_000:
+            raise _invalid('percent', 'must be from 0 through 100')
+        return value, None, Origin(kind='explicit')
+    if 'net_amount' in fields.supplied:
+        if item['type'] == 'other_charge':
+            return None
+        return None, money(inp.net_amount, currency, 'net_amount').minor_units, Origin(kind='explicit')
+    saved = old.adjustment if old is not None else None
+    fresh = item_changed or refresh or 'percent' in fields.defaults or (
+        old is not None and old.item_type != item['type'])
+    if not fresh:
+        if saved is None:
+            return None
+        return saved.percent_millionths, saved.fixed_minor_units, fields.origins.get('percent', Origin(kind='default', source_id=item['id']))
+    if item['type'] == 'other_charge':
+        if item['other_charge_percent_millionths'] is None:
+            return None
+        return item['other_charge_percent_millionths'], None, Origin(kind='default', source_id=item['id'])
+    if item['type'] == 'subtotal':
+        return None, None, None
+    if item['discount_percent_millionths'] is not None:
+        return item['discount_percent_millionths'], None, Origin(kind='default', source_id=item['id'])
+    if item['discount_amount_currency'] != currency:
+        raise _invalid('item.discount_amount', 'item amounts must use home currency')
+    return None, item['discount_amount_minor_units'], Origin(kind='default', source_id=item['id'])
+
+
 def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict | None = None,
                  previous_header: SalesProfile | None = None, refresh: bool = False,
                  nonposting: bool = False, price_override: Callable | None = None,
-                 net_override: int | None = None, defer_tax: bool = False) -> tuple[dict, list[str]]:
-    """Resolve one commercial line using preserved rules for ordinary edits."""
+                 net_override: int | None = None, defer_tax: bool = False,
+                 line_kinds: bool = False) -> tuple[dict, list[str]]:
+    """Resolve one commercial line using preserved rules for ordinary edits.
+
+    ``line_kinds`` admits subtotal, discount and percentage-charge items, whose amounts the
+    caller then works out over the whole document with ``sales_adjustments.apply``.
+    """
     if not nonposting and (price_override is not None or net_override is not None):
         raise _invalid('unit_price', 'price hooks require non-posting resolution')
     db = s.company
@@ -553,20 +594,63 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         raise _invalid('price_basis_amount', 'amount pricing has no unit-price basis; select unit pricing first')
     item_changed = old is None or not _same(db, 'item', inp.item, old.item)
     item = _row(db, 'item', inp.item, active=item_changed or refresh)
+    item_type = item['type'] if item_changed or refresh else old.item_type
+    percent_line = None
+    if line_kinds and item_type in ('other_charge',) + ADJUSTMENT_ITEM_TYPES:
+        percent_line = _percent_line(db, item, old, fields, inp, item_changed, refresh, currency)
+    adjustment_role = (item_type if item_type in ADJUSTMENT_ITEM_TYPES else
+                       'charge' if percent_line is not None else None)
+    if adjustment_role is not None:
+        # Nothing on these lines is priced per unit: the amount comes from the lines above.
+        banned = sorted(fields.supplied & {'unit', 'unit_price', 'price_level', 'price_basis_amount'})
+        if adjustment_role == 'subtotal':
+            banned += sorted(fields.supplied & {'net_amount', 'percent', 'tax_code'})
+        if banned:
+            raise _invalid(banned[0], f'a {"percentage charge" if adjustment_role == "charge" else adjustment_role} '
+                                      'line takes no ' + banned[0].replace('_', ' '))
+        if 'quantity' in fields.supplied and parse_quantity_micro_units(inp.quantity) != 1_000_000:
+            raise _invalid('quantity', f'a {"percentage charge" if adjustment_role == "charge" else adjustment_role} '
+                                       'line has no quantity; leave it at 1')
+    elif 'percent' in fields.supplied:
+        raise _invalid('percent', 'only a discount or percentage other-charge line takes a percent')
     if item_changed or refresh:
         # A stock-carrying item sells out of the inventory ledger, and that ledger is written
         # by the document that posts, so only a real sale may name one. A quote or a work
         # order is descriptive history with no posting behind it: promising stock it cannot
         # issue would be a reservation nothing honours, so the older three families stand.
         allowed = ('service', 'non_inventory_part', 'other_charge') if nonposting else SELLABLE_ITEM_TYPES
+        if line_kinds:
+            allowed = allowed + ADJUSTMENT_ITEM_TYPES
+        if item['type'] == 'group':
+            raise _invalid('item', 'a group item is added as a new line, where it expands into its members')
         if item['type'] not in allowed:
             raise _invalid('item', 'this sale supports service, nonstock, and fixed-charge items only'
                            if nonposting else
                            'this sale supports service, nonstock, fixed-charge and stock items only')
         if not item['sales_enabled']:
             raise _invalid('item', 'item is not enabled for sales')
-        if item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None:
+        if (item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None
+                and not line_kinds and 'net_amount' not in fields.supplied):
             raise _invalid('item', 'percentage charges are not supported')
+    if adjustment_role in ADJUSTMENT_ITEM_TYPES and (item_changed or refresh or old.item_type != item_type):
+        # Neither line is sold: no income account, price or stock. A discount posts to the
+        # account its item names, captured here the way a sold line captures its income.
+        account = None
+        if adjustment_role == 'discount':
+            selector = item['income_account_id'] or item['expense_account_id']
+            account = _account(db, selector, 'item.discount_account', DISCOUNT_ACCOUNT_TYPES)
+        percent, fixed, _ = percent_line
+        profile = SalesLineProfile(item=_ref(item), item_type=item['type'], income_account=None,
+                                   adjustment=LineAdjustment(
+                                       kind=adjustment_role, account=account, amount_minor_units=0,
+                                       **({} if adjustment_role == 'subtotal' else dict(
+                                           applies_to='line', base_minor_units=0,
+                                           percent_millionths=percent, fixed_minor_units=fixed))))
+    elif adjustment_role in ADJUSTMENT_ITEM_TYPES:
+        profile = old.model_copy(deep=True)
+        if adjustment_role == 'discount':
+            profile.adjustment.percent_millionths, profile.adjustment.fixed_minor_units, _ = percent_line
+    elif item_changed or refresh:
         income = _account(db, item['income_account_id'], 'item.income_account', {'income', 'other_income'})
         for name in ('price', 'cost'):
             if item[name + '_minor_units'] is not None and item[name + '_currency'] != currency:
@@ -593,7 +677,10 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                                dependency=item_changed, saved=previous['description'] if previous else None)
 
     unit_needs = fields.needs('unit', item_changed) or refresh
-    if unit_needs:
+    if adjustment_role is not None:
+        profile.unit = None
+        fields.origins.pop('unit', None)
+    elif unit_needs:
         saved_unit = old.unit if old else None
         selector = fields.value('unit', lambda: (None, item['id']), dependency=item_changed,
                                 saved=saved_unit.id if saved_unit else None)
@@ -645,20 +732,51 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         setattr(profile, field, value)
     if info['use_classes'] and info['prompt_for_class'] and profile.class_id is None:
         warnings.append(f'class_id: line {inp.line_id or profile.item.label} has no effective class')
+    if adjustment_role == 'subtotal':
+        # A subtotal shows other lines' amounts and is taxed as nothing itself.
+        profile.tax_code = None
+        fields.origins.pop('tax_code', None)
+    if adjustment_role == 'discount' and percent_line[2] is not None:
+        fields.origins['percent'] = percent_line[2]
 
-    if amount_mode:
+    if adjustment_role in ADJUSTMENT_ITEM_TYPES:
+        amount_mode = False
+        price = 0
+        profile.schema_version = 1
+        profile.pricing_basis = 'unit'
+        profile.net_amount_minor_units = profile.price_rule = profile.price_basis_minor_units = None
+        profile.standard_price_minor_units = profile.cost_minor_units = None
+        for field in ('unit_price', 'price_level', 'price_basis_amount', 'net_amount'):
+            fields.origins.pop(field, None)
+    elif adjustment_role == 'charge':
+        # Worked out over the whole document once every line above has its amount.
+        amount_mode = True
+        percent, _, percent_origin = percent_line
+        profile.adjustment = LineAdjustment(kind='charge', applies_to='line', percent_millionths=percent,
+                                            base_minor_units=0, amount_minor_units=0)
+        fields.origins['percent'] = percent_origin
+    else:
+        profile.adjustment = None
+        fields.origins.pop('percent', None)
+    if adjustment_role in ADJUSTMENT_ITEM_TYPES:
+        pass
+    elif amount_mode:
         price = None
         profile.schema_version = 2
         profile.pricing_basis = 'amount'
         profile.net_amount_minor_units = (
+            0 if adjustment_role == 'charge' else
             money(inp.net_amount, currency, 'net_amount').minor_units
             if 'net_amount' in fields.supplied else old.net_amount_minor_units)
         profile.price_rule = None
         profile.price_basis_minor_units = None
         for field in ('unit_price', 'price_level', 'price_basis_amount'):
             fields.origins.pop(field, None)
-        fields.origins['net_amount'] = Origin(kind='explicit')
-        if old and (item_changed or old.unit != profile.unit):
+        if adjustment_role == 'charge':
+            fields.origins.pop('net_amount', None)
+        else:
+            fields.origins['net_amount'] = Origin(kind='explicit')
+        if old and (item_changed or old.unit != profile.unit) and adjustment_role != 'charge':
             warnings.append('net_amount: explicit amount retained after item or unit change')
     else:
         profile.schema_version = 1
@@ -722,7 +840,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             warnings.append('price_level: price levels disabled; standard/manual price is in use')
 
     profile.origins = fields.origins
-    net = (profile.net_amount_minor_units if amount_mode else
+    net = (0 if adjustment_role in ADJUSTMENT_ITEM_TYPES else profile.net_amount_minor_units if amount_mode else
            nonnegative(net_override, 'line.net') if net_override is not None else extension(quantity, price))
     exempt = header.customer_tax_code is not None and not header.customer_tax_code.taxable
     taxable = profile.tax_code is not None and profile.tax_code.taxable and not exempt
@@ -733,6 +851,11 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             profile.tax_code = None
         taxable = False
     taxes = []
+    adjustment_taxable = taxable
+    if adjustment_role in ADJUSTMENT_ITEM_TYPES:
+        # A discount's tax code says whether it comes out of taxable sales; the lines it
+        # applies to carry the tax. Neither kind is taxed as a line of its own.
+        taxable = False
     if taxable:
         if not header.tax_rules:
             raise _missing_tax_item(db, header)
@@ -742,8 +865,11 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                  for rule in header.tax_rules]
     tax_amount = total((component['tax_minor_units'] for component in taxes), 'line.tax')
     gross = total((net, tax_amount), 'line.gross')
-    return dict(item_id=profile.item.id, quantity_microunits=quantity,
-                unit_id=profile.unit.id if profile.unit else None, unit_factor_nanounits=factor,
-                base_quantity_microunits=base_qty, unit_price_minor_units=price,
-                net_minor_units=net, tax_minor_units=tax_amount, gross_minor_units=gross,
-                description=description, profile=profile, taxes=taxes), warnings
+    resolved = dict(item_id=profile.item.id, quantity_microunits=quantity,
+                    unit_id=profile.unit.id if profile.unit else None, unit_factor_nanounits=factor,
+                    base_quantity_microunits=base_qty, unit_price_minor_units=price,
+                    net_minor_units=net, tax_minor_units=tax_amount, gross_minor_units=gross,
+                    description=description, profile=profile, taxes=taxes)
+    if line_kinds:
+        resolved['adjustment_taxable'] = adjustment_taxable
+    return resolved, warnings

@@ -130,6 +130,9 @@ def _source_line(s, invoice_selector, line_selector, profile):
             'record_type': 'sales_line_profile', 'selector': line_selector,
             'next': 'Read the invoice with `invoice show` and use a current line_id from it.'})
     line = dict(lines[0])
+    if json.loads(line['item_snapshot'])['item_type'] in ('discount', 'subtotal'):
+        raise _invalid('source_line', 'a discount or subtotal line is not returned; return the lines it '
+                                      'applies to, whose nets already carry the discount')
     if line['base_quantity_microunits'] is None or line['base_quantity_microunits'] <= 0:
         raise _invalid('source_line', 'this invoice line carries no quantity to return against')
     taxes = effects.rows(s, c.sales_tax_components,
@@ -182,6 +185,8 @@ def _returned(s, entered, source, pending):
     captured = facts.model_dump()
     captured.update(schema_version=2, pricing_basis='amount', net_amount_minor_units=money['net_minor_units'])
     captured.pop('allocation_proof', None)
+    # A returned percentage charge is the amount returned, not a percentage of anything here.
+    captured.pop('adjustment', None)
     facts = SalesLineProfile.model_validate(captured)
     return dict(item_id=line['item_id'], quantity_microunits=wanted, unit_id=line['unit_id'],
                 unit_factor_nanounits=factor, base_quantity_microunits=base_wanted,
