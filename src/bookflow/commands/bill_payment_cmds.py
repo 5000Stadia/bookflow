@@ -26,8 +26,15 @@ _PAY = (
     ' a cheque out of that account\'s chequebook: it takes the account\'s next check number,'
     ' moves that number on, and is refused if the number is already on another cheque, exactly'
     ' as `check post` is. `check_number` writes a number you name instead of the next one, and'
-    ' is accepted only on such a payment and only when one payee is being paid. Purchase'
-    ' discounts and vendor credits are separate documents and are not entered here.'
+    ' is accepted only on such a payment and only when one payee is being paid. A row may also'
+    ' name an early-payment `discount`: the bill is then settled by the amount paid plus the'
+    ' discount, Accounts Payable falls by both and the discount is credited to `discount_account`'
+    ' (default: the company vendor discount account, else "Discounts Taken", created as an income'
+    ' account when missing). A discount is never taken unless named; `bill query` shows each'
+    ' bill\'s `discount_date` and the `early_discount` its terms still offer, a dry run shows'
+    ' `suggested_discount_minor_units` per line for the payment date, and a discount named after'
+    ' the discount date is taken with a warning. Vendor credits are separate documents and are'
+    ' not entered here.'
 )
 
 ERRORS = {
