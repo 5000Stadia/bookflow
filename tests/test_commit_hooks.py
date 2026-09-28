@@ -42,6 +42,9 @@ EXPECTED = {
     ('company/attachment_gc.py', '_finish'): ('attachments.finish', 1),
     ('company/attachment_gc.py', 'collect'): ('attachments.collect', 1),
     ('core/config.py', 'Config.flush_pending'): ('config.flush', 1),
+    # Claim, then record: entering memorized occurrences commits the claim (or a skip) before
+    # the entered documents run, and the outcome after them.
+    ('company/memorized_entry.py', 'apply_entry'): ('memorized.enter', 3),
 }
 
 

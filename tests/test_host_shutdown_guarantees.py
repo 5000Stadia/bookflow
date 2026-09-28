@@ -27,6 +27,9 @@ def test_forwarded_read_close_failure_releases_reader_count(cli, root, monkeypat
     try:
         with monkeypatch.context() as patch:
             patch.setattr(dispatch, "_close", close)
+            # The host's command execution holds its own reference to the closer.
+            from bookflow.adapters.http import execution
+            patch.setattr(execution, "_close", close)
             # A distinct CLI process discovers this root's actual Unix listener
             # and performs the forwarded read through its peer credentials.
             error, _status = cli.error("company", "show", "--company", "Demo Plumbing Co")

@@ -10,15 +10,21 @@ from tests.test_bill_payment_migration import _rebuilt_since
 
 
 def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monkeypatch):
+    """An invoice written at co0049 by that release; today's keyed delete is its first writer."""
     from bookflow.storage import migrate
-    with monkeypatch.context() as historical:
-        historical.setitem(migrate.HEADS,'company','co0049')
-        b=books.__wrapped__(tmp_path,historical)
-        item,post=sale(b)
-        b['run']('invoice update',dict(invoice=post['id'],memo='Historical correction'),reason='Keep history')
-        post=b['run']('invoice show',dict(invoice=post['id']))
-        path=location(b);enable(b,'invoice')
+    from tests.historical_books import books_at
+    from tests.payment_raw_evidence import preserved
+    # The historical release's own sale: two units bought on a bill, one sold on an invoice.
+    b=books_at(tmp_path,'co0049',
+        "run=b['run'];item=_inventory_part(b)\n"
+        "run('bill post',dict(vendor=b['vendor'],date='2017-01-01',items=[dict(item=item,quantity='2',unit_cost='8')]),reason='Receive two units')\n"
+        "post=run('invoice post',dict(customer=b['customer'],date='2017-01-02',lines=[dict(item=item,quantity='1',unit_price='12')]),reason='Sell one unit')\n"
+        "run('invoice update',dict(invoice=post['id'],memo='Historical correction'),reason='Keep history')\n"
+        "result['post']=run('invoice show',dict(invoice=post['id']))\n")
+    post=b['historical']['post']
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(tmp_path/'items'))
+    path=next((tmp_path/'items').rglob('company.db'))
+    enable(b,'invoice')
     before=database(path);observed=[];original=migrate.migrate_to_head
     def observing(db,chain,*args,**kwargs):
         result=original(db,chain,*args,**kwargs)
@@ -26,11 +32,12 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
         # is a pin that the next migration silently falsifies, and this observer would then
         # simply never fire while the assertion below still read as a passing check.
         if chain=='company' and result==('co0049',migrate.HEADS['company']):
+            # Retention through the chain: every stored value, read through the columns
+            # that existed at co0049 (later revisions add their own).
             for name,rows in before['tables'].items():
-                if name!='alembic_version':assert table(db.raw,name)==rows,name
+                if name!='alembic_version':assert preserved(db.raw,name,rows)==rows,name
             # Every co49 object survives except the ones a later revision deliberately
-            # rebuilds -- co0055 respells three CHECKs and the two guards that mirror them.
-            # Which those are is derived from the migrations themselves, never listed here.
+            # rebuilds or alters. Which those are is derived, never listed here.
             rebuilt=_rebuilt_since('co0049')
             kept={row for row in before['ddl'] if row[1] not in rebuilt}
             assert kept <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
@@ -52,8 +59,15 @@ def test_populated_co49_first_keyed_sales_delete_preserves_storage(tmp_path,monk
 def test_purchase_policy_needs_explicit_sales_catalog_transition(books,monkeypatch):
     from pathlib import Path
     # The tip descriptor is the one an activation stores, whichever delta it is.
-    from bookflow.hub import permission_journal_deletion_catalog as current, permission_deletion_catalog as previous
+    from bookflow.hub import permission_deletion_catalog as previous
+    from bookflow.hub.permission_runtime import current_catalog
+    current = current_catalog()
     _,post=sale(books);client=books['client'];company=books['company']
+    # An install upgraded from before activation existed, which then activated an older
+    # catalog: a new install starts at the tip, so the older state is built from legacy.
+    from pathlib import Path as _Path
+    from tests.conftest import make_legacy
+    make_legacy(_Path(client.data_root))
     with monkeypatch.context() as historical:
         historical.setattr(current,'CATALOG',previous.CATALOG)
         historical.setattr(current,'MANIFEST',previous.MANIFEST)
@@ -106,6 +120,10 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
     from bookflow.hub import permission_deposit_deletion_catalog as deposit
     from bookflow.hub import permission_job_time_catalog as jobtime
     from bookflow.hub import permission_journal_deletion_catalog as journal
+    from bookflow.hub import permission_refund_history_catalog as refunds
+    from bookflow.hub import permission_agent_catalog as agents
+    from bookflow.hub import permission_everyday_reports_catalog as everyday
+    from bookflow.hub import permission_catalog as c
     with sqlite3.connect(':memory:') as db:
         db.execute('CREATE TABLE permission_state(id INTEGER,mode TEXT,catalog_version TEXT)')
         db.execute('INSERT INTO permission_state VALUES(1,?,?)',('legacy','sales-deletion-v1'))
@@ -123,9 +141,13 @@ def test_catalog_selection_retains_literal_accepted_versions_and_legacy():
             ('deposit-deletion-v1',deposit),
             ('job-time-v1',jobtime),
             ('journal-deletion-v1',journal),
+            ('customer-refund-history-v1',refunds),
+            ('agent-administration-v1',agents),
+            ('everyday-reports-v1',everyday),
         ):
             db.execute("UPDATE permission_state SET mode='policy_v1',catalog_version=?",(version,))
             assert runtime.catalog_for_root(tx)==owner.catalog_bundle()
         db.execute("UPDATE permission_state SET catalog_version='unrecognized-future'")
         assert runtime.catalog_for_root(tx)==runtime.catalog_bundle()
-        assert runtime.current_catalog() is journal
+        # The tip is the newest accepted version (SCOPED_POLICY_VERSIONS lists newest first).
+        assert runtime.current_catalog() is runtime.known_catalog(c.SCOPED_POLICY_VERSIONS[0])

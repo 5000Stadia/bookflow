@@ -76,7 +76,8 @@ def test_actual_binding_readonly_and_revocation(root,client,cash,run_private,mon
         before=(tuple(s.company.raw.iterdump()),tuple(s.hub.raw.iterdump()))
         result=q.show(s,m.ShowInput(deposit=posted.current.id),binding=credential)
         assert result.totals.bank_total.minor_units==6000
-        assert q.query(s,m.QueryInput(),binding=credential).total_count==1
+        # The demo company banks a deposit of its own; this one is among them.
+        assert posted.current.id in {row.selected.pin.deposit for row in q.query(s,m.QueryInput(),binding=credential).items}
         assert before==(tuple(s.company.raw.iterdump()),tuple(s.hub.raw.iterdump()))
         return result
     observe(people['bot'],monkeypatch,read,people['company'])

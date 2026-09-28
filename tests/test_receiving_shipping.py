@@ -192,7 +192,10 @@ def test_co47_populated_receiving_contract_preserved_by_shipping_migration(books
             if kind=='table' and name in additions:
                 actual=old.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?',(name,)).fetchone()[0]
                 assert actual.replace(', '+additions[name], '', 1)==sql,name
+        from tests.test_bill_payment_migration import _rebuilt_since
+        rewritten=_rebuilt_since('co0048')  # what revisions after this one rewrite, derived
         for row in before['ddl']:
+            if row[1] in rewritten:continue
             if row[0]!='table' or row[1] not in {'item_receipt_lines','receipt_bill_claims'}:
                 assert row in afterddl,row
         assert old.raw.execute('PRAGMA foreign_key_check').fetchall()==[]

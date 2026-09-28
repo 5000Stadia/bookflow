@@ -23,7 +23,7 @@ import pytest
 from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import preserved, table
 from tests.test_bill_payment_migration import _rebuilt_since
 from tests.test_estimate_void_migration import _at, _chain
 
@@ -213,7 +213,9 @@ def test_a_populated_co0052_database_keeps_every_value_and_every_local_object(tm
 
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0052', HEADS['company'])
-        assert {name: table(db.raw, name) for name in names} == before, 'a value changed'
+        # Retention through the chain: every stored value, read through the columns that
+        # existed at co0052 (later revisions add their own).
+        assert {name: preserved(db.raw, name, before[name]) for name in names} == before, 'a value changed'
         after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())

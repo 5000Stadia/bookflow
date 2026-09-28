@@ -11,6 +11,7 @@ from bookflow.company.sales_facts import SalesProfile
 from bookflow.company.sales_models import InvoicePostInput
 from bookflow.company.work_defaults import resolve_header, resolve_line
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company.work_tax_facts import WorkFacts2, read_facts, read_line
 from bookflow.company.work_models import (
     EstimateCopyInput, EstimateCreateInput, EstimateUpdateInput, EstimateWorkOrderInput,
     ProposalCreateInput, ProposalEstimateInput, ProposalUpdateInput, WorkLineInput,
@@ -77,8 +78,11 @@ def test_exact_prices_and_nonposting_payment_policy(catalog, values, rate, net, 
             line.gross_minor_units, line.estimated_cost_minor_units) == (rate, net, tax, net + tax, cost)
     assert h.preferences.sales_tax_liability_basis == 'payment_receipt'
     assert not set(h.model_dump()) & {'control_account', 'due_date', 'payment_method', 'payment_reference'}
-    assert WorkLineFacts.model_validate_json(line.model_dump_json()) == line
-    assert WorkFacts.model_validate_json(WorkFacts(profile=h, issuer_snapshot={}).model_dump_json()).profile == h
+    # Facts dispatch on their stored version: a captured-tax-policy profile (version 2) is
+    # carried by WorkFacts2, a legacy one by WorkFacts. Both round-trip exactly.
+    assert read_line(line.model_dump_json()) == line
+    root = (WorkFacts2 if h.schema_version == 2 else WorkFacts)(profile=h, issuer_snapshot={})
+    assert read_facts(root.model_dump_json()).profile == h
     with open_database(catalog.path, writable=False) as db:
         s = SimpleNamespace(company=db)
         inp = InvoicePostInput(date='2026-01-01', customer=catalog.customer, lines=[{'item': catalog.item}])
@@ -233,6 +237,10 @@ def test_legacy_sales_profile_json_keys_order_and_roundtrip(catalog):
         'sales_tax_item tax_rules price_level payment_method payment_reference customer_message customer_message_item '
         'customer_purchase_order origins').split()
     serialized = profile.model_dump_json()
+    # A profile that captured its tax policy (version 2) keeps the legacy keys in their legacy
+    # order and appends its two captured fields after them.
+    if profile.schema_version == 2:
+        expected += ['sales_tax_calculation', 'tax_policy_origin']
     assert list(json.loads(serialized)) == expected
     assert SalesProfile.model_validate_json(serialized).model_dump_json() == serialized
     assert list(profile.model_dump(include={'customer', 'control_account'})) == ['customer', 'control_account']

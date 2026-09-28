@@ -288,7 +288,7 @@ def _has_queue(db):
         "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='statement_effect_pending'").fetchone() is not None
 
 
-def drain_in_command(db, *, commits=None, owner=None, observed=None):
+def drain_in_command(db, *, commits, owner, observed=None):
     """The single hook: bring storage level with the ledger inside the caller's transaction.
 
     Called by `core.dispatch._apply` around every company-writing command's apply, and by
@@ -311,8 +311,6 @@ def drain_in_command(db, *, commits=None, owner=None, observed=None):
         if db.write_transaction:
             db.raw.execute('ROLLBACK')
         raise
-    if commits is not None:
-        commits.commit(db, owner)
-    else:
-        db.raw.execute('COMMIT')
+    # Every commit goes through the caller's commit owner, never a bare COMMIT.
+    commits.commit(db, owner)
     return handled

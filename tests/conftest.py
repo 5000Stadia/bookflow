@@ -21,15 +21,7 @@ from tests.demo_oracle import DEMO_AS_OF  # noqa: E402
 BIN = Path(provenance.launcher())
 
 
-@pytest.fixture(scope="session")
-def _seeded_template(tmp_path_factory):
-    """One initialized, demo-seeded data root, built once per run and copied per test.
-
-    `init` + `demo reset` runs the company migration chain, applies a chart and seeds the demo
-    story, which takes minutes under load. Copying the finished tree takes milliseconds and yields
-    a byte-identical root, so every test still gets its own isolated data root. Use
-    `copy_seeded_root` to take a copy; never write to the template itself.
-    """
+def _build_seeded_template(tmp_path_factory) -> Path:
     src = tmp_path_factory.mktemp("seed") / "root"
     previous = os.environ.get("BOOKFLOW_DATA_ROOT")
     os.environ["BOOKFLOW_DATA_ROOT"] = str(src)
@@ -45,6 +37,36 @@ def _seeded_template(tmp_path_factory):
             os.environ["BOOKFLOW_DATA_ROOT"] = previous
     _checkpoint_databases(src)
     return src
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """Build the demo template before the first test starts, when any collected test uses it.
+
+    The per-test timeout covers a test's setup, so a template built lazily inside the first
+    test's setup would spend that one test's time budget on minutes of shared seeding.
+    """
+    if config.option.collectonly:
+        return
+    if getattr(config, "_bookflow_seeded_template", None) is None and any(
+            "_seeded_template" in getattr(item, "fixturenames", ()) for item in items):
+        config._bookflow_seeded_template = _build_seeded_template(config._tmp_path_factory)
+    if getattr(config, "_bookflow_reference_template", None) is None and any(
+            "reference_template" in getattr(item, "fixturenames", ()) for item in items):
+        from tests.test_reference_year import build_reference_template
+        config._bookflow_reference_template = build_reference_template(config._tmp_path_factory)
+
+
+@pytest.fixture(scope="session")
+def _seeded_template(request, tmp_path_factory):
+    """One initialized, demo-seeded data root, built once per run and copied per test.
+
+    `init` + `demo reset` runs the company migration chain, applies a chart and seeds the demo
+    story, which takes minutes under load. Copying the finished tree takes milliseconds and yields
+    a byte-identical root, so every test still gets its own isolated data root. Use
+    `copy_seeded_root` to take a copy; never write to the template itself.
+    """
+    built = getattr(request.config, "_bookflow_seeded_template", None)
+    return built if built is not None else _build_seeded_template(tmp_path_factory)
 
 
 def _checkpoint_databases(root: Path) -> None:

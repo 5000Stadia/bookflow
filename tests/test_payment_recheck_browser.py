@@ -4,6 +4,7 @@ from tests.test_row5_browser_acceptance import browser_site
 from tests.test_row8_register_browser import register_browser, _key, _type, _tab_to
 from tests.test_payment_review_gui import setup
 from tests.test_customer_payment_browser import click,wait,shot
+from tests.test_payment_recovery_browser import press
 
 @pytest.mark.parametrize('width',[1280,390])
 def test_pending_row_patch_survives_attempted_customer_switch(register_browser,tmp_path,width):
@@ -73,8 +74,10 @@ def test_stale_shared_amount_review_retains_my_entered_cash(register_browser,tmp
     error=b.evaluate("document.querySelector('#payment-error').innerText")
     assert 'E_VERSION_CONFLICT' in error,error
     click(b,'review')
-    facts={'error':error,'typed_after_review':b.evaluate("document.querySelector('#payment-amount').value"),'message':b.evaluate("document.querySelector('#payment-message').innerText"),'draft':run('payment selection show',dict(selection=selection))}
+    # Review shares the whole attempted edit as a recovery; the person confirms it.
     comparison=b.evaluate("document.querySelector('#payment-reviewed-comparisons').innerText")
+    press(b,'Confirm complete recovery')
+    facts={'error':error,'typed_after_review':b.evaluate("document.querySelector('#payment-amount').value"),'message':b.evaluate("document.querySelector('#payment-message').innerText"),'draft':run('payment selection show',dict(selection=selection))}
     assert '10.00' in comparison and '11.00' in comparison and '12 USD' in comparison
     # Review shares my retained entry as a complete recovery; the other writer's 11.00 stands
     # until I confirm it, and then the shared draft carries the 12 I entered.
@@ -83,7 +86,9 @@ def test_stale_shared_amount_review_retains_my_entered_cash(register_browser,tmp
     press(b,'Confirm complete recovery')
     assert run('payment selection show',dict(selection=selection))['amount']['minor_units']==1200
     (tmp_path/'stale-selection.json').write_text(json.dumps(facts,indent=2));shot(b,tmp_path,'stale-selection',width)
-    assert facts['typed_after_review']=='12',facts
+    # The entered cash is kept (money reads with its cents, e.g. 12.00).
+    from decimal import Decimal
+    assert Decimal(facts['typed_after_review'].replace(',',''))==Decimal('12'),facts
     assert run('payment query',dict(customer=payer))['items']==[]
     click(b,'preview');click(b,'save')
     assert [row['received_minor_units'] for row in run('payment query',dict(customer=payer))['items']]==[1200]

@@ -172,13 +172,18 @@ def install_deletion(app, *, run, render, page_error):
             except BookflowError as error:
                 try:return display(request,company_id,record_id,values,error=error.to_dict())
                 except BookflowError as refused:return page_error(request,refused,company_id=company_id)
-        def history(company_id:str,record_id:str):
-            return RedirectResponse(f'/c/{company_id}/{noun}/{record_id}?include_deleted=1&history=1',status_code=303)
+        def history(company_id:str,record_id:str,request:Request):
+            # The record page pages its revisions with the same limit and cursor, so a paged
+            # history link keeps its page through the redirect.
+            from urllib.parse import urlencode
+            carried=[(key,value) for key,value in request.query_params.multi_items() if key in ('limit','cursor')]
+            return RedirectResponse(f'/c/{company_id}/{noun}/{record_id}?'+urlencode([('include_deleted','1'),('history','1'),*carried]),status_code=303)
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',get,methods=['GET'])
         app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',post,methods=['POST'])
         # These nouns show their revisions on the record page itself, so /history is a
-        # redirect into it. A credit memo already has its own history page and its own
-        # link into one; shadowing that with a redirect would take the page away.
-        if not is_credit:
+        # redirect into it. A credit memo, an invoice and a sales receipt already have their
+        # own history page (a sale's shows each revision's billing sources and snapshots)
+        # and their own links into it; shadowing that with a redirect takes the page away.
+        if not is_credit and not is_sale:
             app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
     for noun in ('check','card-charge','invoice','sales-receipt','bill','credit-memo','journal'):routes(noun)

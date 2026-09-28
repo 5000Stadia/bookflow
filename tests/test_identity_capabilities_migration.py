@@ -23,6 +23,8 @@ from tests.test_migration_chain import (
     _role_capability_modules,
 )
 
+from bookflow.storage.migrate import known_revisions  # noqa: E402
+
 HUB0013 = importlib.import_module("bookflow.storage.hub_migrations.versions.0013_identity_capabilities")
 
 QUERY = "SELECT role,capability,required_role FROM main.role_capabilities ORDER BY role,capability,required_role"
@@ -49,6 +51,7 @@ def _previous_seed():
 
 def test_seed_is_exactly_the_registry_gap_and_nothing_else():
     assert HUB0013.revision == "hub0013" and HUB0013.down_revision == "hub0012"
+    assert HUB0013.revision in known_revisions("hub")
     assert "bookflow.core.registry" not in inspect.getsource(HUB0013)
     previous, projection = set(_previous_seed()), set(_registry_role_capability_projection())
     assert set(HUB0013.ROLE_CAPABILITY_SEED) == projection - previous

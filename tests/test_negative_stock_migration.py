@@ -47,9 +47,16 @@ def test_the_migration_follows_the_refund_revision():
         assert M.revision < HEADS["company"]
 
 
-def test_the_frozen_table_is_what_the_shipped_metadata_declares():
+def test_the_frozen_table_is_what_the_shipped_metadata_declares(tmp_path):
+    header = "CREATE TABLE " + M.TEMP + " ("
     if TABLE in _rebuilt_since(M.revision):
-        pytest.skip("a later revision rebuilt the inventory ledger; it owns this comparison now")
+        # A later revision owns today's metadata; hold the literal to this revision's own table.
+        from tests.test_bill_payment_migration import _at as stopped_at
+        stopped_at(tmp_path / "own.db", M.revision)
+        with sqlite3.connect(tmp_path / "own.db") as conn:
+            stored = conn.execute("SELECT sql FROM sqlite_schema WHERE name=?", (TABLE,)).fetchone()[0]
+        assert M.DDL.strip().replace(header, "", 1) == stored.split("(", 1)[1]
+        return
     expected = str(CreateTable(schema.metadata.tables[TABLE]).compile(dialect=dialect()))
     assert M.DDL == expected.replace(
         "CREATE TABLE " + TABLE + " (", "CREATE TABLE " + M.TEMP + " (", 1)

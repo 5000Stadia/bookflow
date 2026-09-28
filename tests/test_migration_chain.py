@@ -64,12 +64,15 @@ def _make_first_revision(path: Path, chain: str, populate) -> None:
 
 
 def _registry_role_capability_projection() -> tuple[tuple[str, str, str], ...]:
-    from bookflow.core.registry import all_commands, load_all
+    from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES, all_commands, load_all
 
     load_all()
     role_rank = {"readonly": 0, "standard": 1, "admin": 2, "owner": 3, "hub_admin": 4}
     required_rank = {"authenticated": 0, "member": 0, "standard": 1, "admin": 2, "owner": 3, "hub_admin": 4}
-    requirements = {(command.capability, command.required_role or "authenticated") for command in all_commands()}
+    # No role includes a Delete: each family's delete is admitted only by an explicit grant, so
+    # it never becomes a role default.
+    requirements = {(command.capability, command.required_role or "authenticated") for command in all_commands()
+                    if command.capability not in EXPLICIT_GRANT_ONLY_CAPABILITIES}
     return tuple(sorted(
         (role, capability, required_role)
         for capability, required_role in requirements

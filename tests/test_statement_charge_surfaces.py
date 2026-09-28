@@ -244,9 +244,13 @@ def test_a_paid_statement_charge_is_readable_and_navigable_as_a_paid_receivable(
                                                'f:customer': customer, 'f:limit': '200'})
     statement_rows = _table(statement, 'statement-lines')
     assert 'SURF-SC-PAID' in statement_rows, 'the statement does not print the charge'
-    assert _link_naming(statement_rows, 'SURF-SC-PAID') == \
-        f'/c/{company.id}/statement-charge/{paid["id"]}', (
+    # A report row's link carries the report's watermark (source_report_watermark), so the
+    # page it opens can say whether the report it came from is still current.
+    link = _link_naming(statement_rows, 'SURF-SC-PAID')
+    target, _, query = link.partition('?')
+    assert target == f'/c/{company.id}/statement-charge/{paid["id"]}', (
         'a statement charge on the statement opens somewhere other than the charge')
+    assert query == '' or query.startswith('source_report_watermark='), link
 
     # ------------------- 8. the charge's own page, which is where a person asks "was this paid?"
     # Every surface above sends a reader here, and until now the page said nothing about the

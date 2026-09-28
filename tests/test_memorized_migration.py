@@ -14,6 +14,8 @@ from bookflow.company import schema as c
 from bookflow.company.memorized_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
+from tests.test_bill_payment_migration import _revisions_after
+from tests.payment_raw_evidence import upgrade_to
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0038_memorized_transactions')
 
@@ -63,9 +65,11 @@ def test_the_revision_is_the_one_reserved_and_it_follows_the_chain_head():
     others = {module.down_revision for name, module in _versions().items() if name != M.revision}
     # Nothing but this revision claims its predecessor, and with it claimed there is one head.
     assert M.down_revision not in others, M.down_revision
-    heads = sorted(set(revisions) - others - {M.down_revision})
-    assert heads == [M.revision], heads
-    assert HEADS['company'] == M.revision
+    # With it claimed, the chain still has exactly one head, and this revision is on the
+    # path from that head -- not necessarily its newest step.
+    heads = sorted(set(revisions) - others - {M.down_revision} - {v.down_revision for v in _versions().values()})
+    assert heads == [HEADS['company']], heads
+    assert M.revision in _revisions_after(M.down_revision)
 
 
 def _versions():
@@ -97,7 +101,9 @@ def test_the_migration_adds_storage_and_rewrites_nothing_that_was_there(tmp_path
         db.raw.execute("INSERT INTO sequences (name, next_number, prefix) VALUES ('probe', 7, 'P')")
         db.raw.commit()
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None)[1] == HEADS['company']
+        # A claim about this transition is made at this transition: carried to today's head,
+        # every later revision's legitimate rewrite would read as this one's.
+        assert upgrade_to(db, M.revision) == M.revision
         after = _schema(db)
         assert {name: value for name, value in after.items() if name in before} == before
         assert set(after) - set(before) == set(M.OBJECTS)

@@ -21,7 +21,8 @@ from bookflow.company import schema as c
 from bookflow.company.credit_schema import settlement_guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.test_bill_payment_migration import _revisions_after
+from tests.payment_raw_evidence import preserved, table
 from tests.test_bill_payment_migration import _rebuilt_since, _superseded_after
 from tests.test_vendor_credit_migration import _at, _insert
 
@@ -31,12 +32,14 @@ PREVIOUS = M.down_revision
 
 def test_the_migration_sits_on_the_chain_and_creates_nothing():
     """Derived, never a second copy of the number: the chain is the only authority."""
-    assert M.revision in known_revisions('company') and M.revision == HEADS['company']
+    assert M.revision in known_revisions('company')
+    # On the chain every company is built to, not necessarily its newest step.
+    assert M.revision in _revisions_after(M.down_revision)
     assert M.down_revision in known_revisions('company')
     assert M.NEW_TABLES == () and M.DDL == () and M.OBJECTS == ()
 
 
-def test_the_rewritten_guard_is_the_schema_module_and_the_widened_checks_are_the_metadata():
+def test_the_rewritten_guard_is_the_schema_module_and_the_widened_checks_are_the_metadata(tmp_path):
     superseded = _superseded_after(M.revision) & {s.split()[2] for s in M.GUARDS}
     current = [s for s in settlement_guard_statements() if s.split()[2] in M.REPLACED]
     assert tuple(s for s in M.GUARDS if s.split()[2] not in superseded) == tuple(
@@ -44,10 +47,20 @@ def test_the_rewritten_guard_is_the_schema_module_and_the_widened_checks_are_the
     assert {s.split()[2] for s in M.GUARDS} >= set(M.REPLACED)
     # Each replacement's new text is today's metadata, and its old text is not: a pair whose
     # halves were both stale would rebuild a table into a constraint nobody wrote.
+    # A table a later revision widened again (custom_field_scopes gains each new record type)
+    # is held to the table this revision itself leaves behind, since today's metadata belongs
+    # to the later revision.
+    rewritten = _rebuilt_since(M.revision)
+    _at(tmp_path / 'own.db', M.revision)
+    with sqlite3.connect(tmp_path / 'own.db') as raw:
+        stored = {name: sql for name, sql in raw.execute("SELECT name, sql FROM sqlite_schema WHERE type='table'")}
     for name, pairs in M.REPLACEMENTS.items():
         table_ = c.metadata.tables[name]
         for old, new in pairs:
             constraint = new.split('CONSTRAINT ')[1].split(' ')[0]
+            if name in rewritten:
+                assert new.strip() in stored[name] and old.strip() not in stored[name], (name, constraint)
+                continue
             expression = str(next(x for x in table_.constraints
                                   if x.name == constraint).sqltext)
             assert expression in new and expression not in old, (name, constraint)
@@ -192,7 +205,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PREVIOUS, HEADS['company'])
         # Byte for byte, including the embedded NUL and the raw blob, and at the same rowids.
         for name in names:
-            assert table(db.raw, name) == before[name], name
+            # Retention through the whole chain: read through the columns that existed then.
+            assert preserved(db.raw, name, before[name]) == before[name], name
         objects_after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())

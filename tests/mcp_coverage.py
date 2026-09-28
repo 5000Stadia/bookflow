@@ -907,6 +907,12 @@ def payment_workspace_row(cmd, url, page_text, config):
         'applications.expected_version': ('shared_state', 'payment-invoices', 'durable draft.version'),
         'applications[].application_id': ('selected_rows', 'payment-invoices', 'selected recorded application identity'),
         'applications[].invoice_expected_version': ('captured_state', 'payment-invoices', 'selected application invoice version'),
+        # Early-payment discounts (R132): typed on an invoice row of the receive workspace.
+        'discounts[].invoice': ('selected_rows', 'payment-invoices', 'the invoice row the discount is typed on'),
+        'discounts[].amount': ('row_controls', 'payment-invoices', 'the row discount input, or its Take suggestion'),
+        'discounts[].expected_version': ('captured_state', 'payment-invoices', 'the discounted invoice row version'),
+        'discount_account': ('registry_alternative_not_emitted', None,
+                             "the company's customer discount account preference; the workspace does not choose one"),
     })
     for path in ('applications.items[].invoice', 'applications.items[].expected_version',
                  'applications.items[].amount', 'invoice_versions[].invoice', 'invoice_versions[].expected_version'):
@@ -1044,7 +1050,23 @@ def workbench_family_policies():
         'statement_continuation': ('tests/test_financial_statements_browser.py::test_statements_from_navigation_paging_and_current_ledger', 'statement paging and current-books drill-down'),
         'secret': ('tests/test_mcp_workbench_control_browser.py::test_generated_password_error_preview_and_save_never_echo_secret', 'owned password form error and preview never echo secret, save changes verified hash; other secret commands retain core permissions'),
         'local_invocation': ('tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute', 'no workbench route; execution_map links actual per-command local lifecycle witnesses separately from installed MCP/HTTP rejection'),
+        'dedicated_page': ('tests/test_company_backup.py::test_the_browser_backs_up_and_restores_from_the_company_menu', 'a command with a page of its own (backing up, restoring) takes its inputs as the controls of that page rather than a generated form'),
+        'delete_confirmation': ('tests/test_purchase_deletion_browser.py::test_confirmation_refresh_keeps_draft_and_requires_new_confirmation', 'a Delete is made from its own record: the confirmation page carries the record in its URL and its version, key and reason as controls; preview, confirm and refresh per family'),
     }
+
+
+def delete_confirmation_row(cmd, url, page_text, *, surface='record_confirmation', family='delete_confirmation'):
+    """A Delete has no generic form: it is confirmed on the record's own page (as a command
+    with a page of its own, such as a backup, takes its inputs there)."""
+    return {'command': cmd.name, 'url': url, 'surface': surface,
+            'input_paths': [{'path': field.path, 'control_family': family, 'schema_type': field.type,
+                             'required': field.required, 'nullable': field.nullable,
+                             'browser_acceptance': surface}
+                            for field in model_fields(cmd.input_model, leaves_only=True)],
+            'schema_variants': schema_variants(cmd.input_model.model_json_schema()),
+            'command_variant_witnesses': command_variant_witnesses(cmd.name),
+            'command_variant_limits': 'Authored cases at 1280/390; references are not stored results or exhaustive command acceptance.',
+            'form_witness': 'tests/test_row3_host.py::test_every_routed_command_has_a_form_with_one_control_per_input_leaf'}
 
 
 def workbench_family_map(rows):

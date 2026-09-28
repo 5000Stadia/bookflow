@@ -14,7 +14,8 @@ from sqlalchemy.dialects.sqlite import dialect
 from bookflow import BookflowError
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head
+from bookflow.storage.migrate import HEADS, migrate_to_head
+from tests.test_bill_payment_migration import _rebuilt_since
 from tests.payment_raw_evidence import table as raw_snapshot
 from tests import provenance
 
@@ -34,13 +35,24 @@ def co17(tmp_path_factory):
     return root
 
 
-def test_metadata_literal_migration_and_four_tables(tmp_path):
+@pytest.fixture
+def at_co18(monkeypatch):
+    """The runner stopped at this migration: a claim about co0018 is made at co0018."""
+    monkeypatch.setitem(HEADS,'company',M.revision)
+
+
+def test_metadata_literal_migration_and_four_tables(tmp_path,at_co18):
+    # Frozen text equals today's metadata only for the tables no later revision rebuilt (co0043
+    # rebuilds payment_selection_recovery_items); derived from the later migrations, not listed.
+    rebuilt=_rebuilt_since(M.revision)
     compiled=[]
     for name in TABLES:
         table=schema.metadata.tables[name]
-        compiled.append(str(CreateTable(table).compile(dialect=dialect())).strip())
+        if name not in rebuilt:
+            compiled.append(str(CreateTable(table).compile(dialect=dialect())).strip())
         compiled.extend(str(CreateIndex(index).compile(dialect=dialect())) for index in sorted(table.indexes,key=lambda i:i.name))
-    assert tuple(compiled)==M.DDL
+    assert tuple(compiled)==tuple(statement for statement in M.DDL
+                                  if not any(statement.startswith(f'CREATE TABLE {name} (') for name in rebuilt))
     with open_database(tmp_path/'company.db',writable=True,create=True) as db:
         assert migrate_to_head(db,'company',None)==(None,'co0018')
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
@@ -49,7 +61,7 @@ def test_metadata_literal_migration_and_four_tables(tmp_path):
 
 
 @pytest.mark.timeout(180)
-def test_every_old_row_storage_byte_ddl_attachment_and_failed_upgrade(co17,tmp_path):
+def test_every_old_row_storage_byte_ddl_attachment_and_failed_upgrade(co17,tmp_path,at_co18):
     root=tmp_path/'root';shutil.copytree(co17,root)
     path=next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
     with sqlite3.connect(path) as db:

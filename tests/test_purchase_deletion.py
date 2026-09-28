@@ -89,38 +89,44 @@ def test_late_tombstone_failure_rolls_back_all_cancellation(books,monkeypatch):
 
 
 def test_first_keyed_delete_upgrades_populated_co48_preserving_all_prior_storage(tmp_path,monkeypatch):
-    from bookflow.storage.migrate import HEADS
-    from bookflow.company import info
-    from tests.payment_raw_evidence import table
-    # Actual registered historical-compatible commands, not a synthetic schema pin.
-    with monkeypatch.context() as historical:
-        historical.setitem(HEADS,'company','co0048')
-        b=books.__wrapped__(tmp_path,historical)
-        item=_inventory_part(b)
-        post=b['run']('check post',dict(account=b['bank'],date='2017-03-03',amount='16',
-            items=[dict(item=item,quantity='2',unit_cost='8')]),reason='Existing co48 purchase')
-        b['run']('check update',dict(check=post['id'],memo='Captured prior revision'),reason='Existing correction')
-        post=b['run']('check show',dict(check=post['id']))
-        path=location(b);enable(b,'check')
-    # This witness owns the historical co48->co49 transition and its first writer.
-    monkeypatch.setitem(HEADS, 'company', 'co0049')
-    monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(tmp_path/'items'))
-    before=database(path)
+    """A check a customer entered at co0048, then the first keyed delete by today's release.
+
+    The company file is written by the release whose head was co0048 (tests/historical_books);
+    today's delete is the first writer to open it, so it carries the file through the whole
+    chain before deleting. Every value stored at co0048 must survive that, read through the
+    columns that existed then, and the delete must then cancel the check exactly.
+    """
     from bookflow.storage import migrate
+    from tests.historical_books import books_at
+    from tests.payment_raw_evidence import preserved
+    from tests.test_bill_payment_migration import _rebuilt_since
+    b=books_at(tmp_path,'co0048',
+        "item=_inventory_part(b)\n"
+        "post=b['run']('check post',dict(account=b['bank'],date='2017-03-03',amount='16',"
+        "items=[dict(item=item,quantity='2',unit_cost='8')]),reason='Existing co48 purchase')\n"
+        "b['run']('check update',dict(check=post['id'],memo='Captured prior revision'),reason='Existing correction')\n"
+        "result['post']=b['run']('check show',dict(check=post['id']))\n")
+    post=b['historical']['post']
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(tmp_path/'items'))
+    path=next((tmp_path/'items').rglob('company.db'))
+    enable(b,'check')
+    before=database(path)
+    rewritten=_rebuilt_since('co0048')
     original=migrate.migrate_to_head
     witnessed=[]
     def observing(db,chain,*args,**kw):
         result=original(db,chain,*args,**kw)
-        if chain=='company' and result==('co0048','co0049'):
+        if chain=='company' and result==('co0048',migrate.HEADS['company']):
             for name,value in before['tables'].items():
-                if name!='alembic_version':assert table(db.raw,name)==value,name
-            assert set(before['ddl']) <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+                if name!='alembic_version':assert preserved(db.raw,name,value)==value,name
+            kept={row for row in before['ddl'] if row[1] not in rewritten}
+            assert kept <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
             assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
             witnessed.append(result)
         return result
     monkeypatch.setattr(migrate,'migrate_to_head',observing)
     result=b['run']('check delete',dict(check=post['id'],expected_version=post['version']),
         reason='First migrated keyed delete',idempotency_key='co48-first-delete')
-    assert witnessed==[('co0048','co0049')]
+    assert witnessed==[('co0048',migrate.HEADS['company'])]
     assert result['status']=='deleted' and result['cancelled_stock_movements']==1
     assert _net(b)=={}

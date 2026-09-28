@@ -108,7 +108,8 @@ def test_xss_custom_falsy_addresses_and_revision_links(client, sale):
     assert baseline['custom_fields'] == {'0': False, '1': 0, '2': ''}
     html = render(record)
     assert '<script>' not in html and '&lt;script&gt;' in html
-    assert '<dd>false</dd>' in html and '<dd>0</dd>' in html and '<dd></dd>' in html
+    # A yes/no field reads Yes or No; zero and empty stay zero and empty, never dropped.
+    assert '<dd>No</dd>' in html and '<dd>0</dd>' in html and '<dd></dd>' in html
     assert 'Saved city' in html and 'Previous revision' in html and 'Current revision' in html
     assert '/x%3Fnext%3D%3Cscript%3E?revision_number=1' in html
     preview = render(record, preview=True)

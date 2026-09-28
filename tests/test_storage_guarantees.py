@@ -53,6 +53,9 @@ def test_reader_count_is_released_even_when_close_raises(hosted, monkeypatch):
         raise OSError("injected close failure")
 
     monkeypatch.setattr(dispatch, "_close", fail_after_close)
+    # The host's command execution holds its own reference to the closer.
+    from bookflow.adapters.http import execution
+    monkeypatch.setattr(execution, "_close", fail_after_close)
     response = hosted.call("company.list")
     assert response.json()["code"] == "E_IO"
     assert hosted.handle.host._readers_attached == 0
@@ -283,7 +286,9 @@ def test_failed_actor_resolution_closes_reader_handle(hosted, monkeypatch):
     monkeypatch.setattr(dispatch, "_load_actor_by_id", fail)
     response = hosted.call("company.list")
     assert response.status_code == 401
-    assert len(handles) == 1 and handles[0].conn.closed
+    # Every reader the refused request opened (the credential check and the command's own)
+    # is closed; none is left attached.
+    assert handles and all(handle.conn.closed for handle in handles)
     assert hosted.handle.host._readers_attached == 0
 
 

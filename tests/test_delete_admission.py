@@ -31,6 +31,10 @@ def commands(monkeypatch):
     monkeypatch.setattr(registry, 'REGISTRY', dict(registry.REGISTRY))
     nouns = registry.all_nouns()
     monkeypatch.setattr(registry, 'all_nouns', lambda: nouns + ['admission-fixture'])
+    from bookflow.documentation.examples import EXAMPLES, Example
+    for verb in ('delete', 'inspect', 'recover', 'resource', 'ordinary'):
+        monkeypatch.setitem(EXAMPLES, 'admission-fixture ' + verb,
+                            Example('bookflow admission-fixture ' + verb, {}))
     called = []
     result = {}
     for verb, capability, marker, write in (
@@ -71,7 +75,8 @@ def denied(fn):
 @pytest.mark.parametrize('role', ROLES)
 def test_default_resource_denies_all_delete_families_before_role_bypass(role):
     # No database/company lookup is possible here: activation must precede it.
-    s = SimpleNamespace(is_hub_admin=role == 'hub_admin', memberships=[], role=role)
+    # hub=None: a session with no activated root, the legacy default-deny route.
+    s = SimpleNamespace(is_hub_admin=role == 'hub_admin', memberships=[], role=role, hub=None)
     for capability in CAPABILITIES:
         denied(lambda: access.require_resource(s, capability, 'standard'))
 
@@ -92,6 +97,8 @@ def test_execute_denies_before_pending_maintenance(commands, monkeypatch):
     monkeypatch.setattr(dispatch, 'run_in_session', lambda *a, **kw: {'ordinary': True})
     session = SimpleNamespace(is_hub_admin=True, hub=SimpleNamespace(writable=True), commits=hooks,
                               config=SimpleNamespace(flush_pending=flush))
+    # This fake hub has no permission_state: it is a never-activated (legacy) root.
+    monkeypatch.setattr('bookflow.hub.permission_access.activated', lambda session: False)
     context = Context.new(Interface.python, 'g0-ordering')
     denied(lambda: dispatch.execute(cmds['delete'], {}, context, session))
     assert maintenance == [] and called == []
@@ -105,7 +112,7 @@ def test_early_recovery_precedes_saved_facts_and_company_open(commands, monkeypa
     def unexpected(*args, **kwargs):
         pytest.fail('Company authorization/opening preceded explicit activation denial')
     monkeypatch.setattr(dispatch, 'authorize', unexpected)
-    s = SimpleNamespace(is_hub_admin=True)
+    s = SimpleNamespace(is_hub_admin=True, hub=None)
     denied(lambda: dispatch._permanent_recovery(cmds['recover'], Input(),
         Context.new(Interface.python, 'g0'), s, 'private selector', 'option', dry_run))
     assert called == []
@@ -116,13 +123,13 @@ def test_ordinary_authorization_denies_before_company_resolution(commands, monke
     cmds, called = commands
     monkeypatch.setattr(dispatch, 'resolve_company', lambda *a: pytest.fail('Resolved hidden company'))
     denied(lambda: dispatch.authorize(cmds[verb], Context.new(Interface.python, 'g0'),
-                                     SimpleNamespace(is_hub_admin=True), company_selector='hidden'))
+                                     SimpleNamespace(is_hub_admin=True, hub=None), company_selector='hidden'))
     assert called == []
 
 
 def test_fixture_policy_is_local_and_does_not_skip_resource_roles(commands, monkeypatch):
     cmds, _ = commands
-    s = SimpleNamespace(company_row={'id': 'C', 'organization_id': 'O'}, is_hub_admin=False,
+    s = SimpleNamespace(company_row={'id': 'C', 'organization_id': 'O'}, is_hub_admin=False, hub=None,
         memberships=[{'scope_type': 'company', 'scope_id': 'C', 'role': 'readonly'}])
     calls = []
     # Test-local override, never a runtime/config/Context provider API.
@@ -138,12 +145,17 @@ def test_fixture_policy_is_local_and_does_not_skip_resource_roles(commands, monk
     denied(lambda: access.require_resource(s, CAPABILITIES[0], 'standard'))
 
 
-def test_marker_metadata_is_strict_and_only_purchase_deletes_are_registered():
+def test_marker_metadata_is_strict_and_only_family_deletes_are_registered():
+    from bookflow.core.deletion_families import FAMILIES, capability
     from bookflow.hub.permission_catalog import DELETE_NAMES
     registry.load_all()
     assert set(CAPABILITIES) == set(DELETE_NAMES)
-    assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES == set(CAPABILITIES) | {'transaction.check.delete','transaction.card_charge.delete'}
-    assert {c.name for c in registry.all_commands(include_standalone=True) if c.requires_explicit_grant} == {'check delete','card-charge delete'}
+    # Every finite deletion family, and nothing else, is explicit-grant only ...
+    assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES == {capability(family) for family in FAMILIES}
+    # ... and each such capability is held by exactly one command, that family's Delete.
+    marked = [c for c in registry.all_commands(include_standalone=True) if c.requires_explicit_grant]
+    assert sorted(c.capability for c in marked) == sorted(registry.EXPLICIT_GRANT_ONLY_CAPABILITIES)
+    assert all(c.name.endswith(' delete') and c.is_write for c in marked), [c.name for c in marked]
     for extra in ({'explicit_grant_only': False}, {'policy_provider': 'allow'}):
         with pytest.raises(ValidationError):
             Input.model_validate(extra)

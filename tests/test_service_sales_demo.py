@@ -95,7 +95,10 @@ def test_seed_sales_history_custom_facts_and_exact_effects(reference_client, com
     assert customer["current_balance"]["minor_units"] == 12800
     for noun, selector, tag in [("invoice", "invoice", "INV"), ("sales-receipt", "sales_receipt", "SR")]:
         page = client.run(noun + " query", {"customer": customer["id"]}, company=company)
-        assert page["count"] == 2 and not page["has_more"]
+        assert not page["has_more"]
+        # This arc's own documents; the demo's other arcs sell to this customer too.
+        page = dict(page, items=[r for r in page["items"] if r["number"].startswith(prefix + "-SALE-")])
+        assert len(page["items"]) == 2
         assert Counter(r["status"] for r in page["items"]) == {"posted": 1, "voided": 1}
         for state in ("ACTIVE", "VOID"):
             number = prefix + "-SALE-" + tag + "-" + state
@@ -134,24 +137,27 @@ def test_seed_sales_history_custom_facts_and_exact_effects(reference_client, com
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_seed_known_balances_counts_and_readonly_preview(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals = (624895, 708234, 10) if prefix == "DEMO" else (7267800, 8048639, 36)
+    # What the whole demo company comes to lives in one place (tests/demo_oracle.DEMO_POSITION);
+    # the fixed reference year keeps its own figures.
+    from tests.demo_oracle import DEMO_POSITION
+    if prefix == "DEMO":
+        checking, trial, journals = (DEMO_POSITION["balances"]["Checking"], DEMO_POSITION["trial_balance"],
+                                     DEMO_POSITION["journal_entries"])
+        receivable, tax = DEMO_POSITION["balances"]["Accounts Receivable"], -DEMO_POSITION["balances"]["Sales Tax Payable"]
+    else:
+        checking, trial, journals, receivable, tax = 7267800, 8048639, 36, 13839, 1604
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13839
-    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1604
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == receivable
+    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == tax
     balance = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)
     totals = balance["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
-    expected_balances = ({"Checking": 624895, "Accounts Receivable": 13839,
-                          "Payment Example Bank": 17000, "Payment Example Income": -18000,
-                          "Professional Fees": 52500, "Service Income": -185630,
-                          "Opening Balance Equity": -500000, "Business Credit Card": -3000,
-                          "Sales Tax Payable": -1604} if prefix == "DEMO"
-                         else EXPECTED["annual"]["balances"])
+    expected_balances = DEMO_POSITION["balances"] if prefix == "DEMO" else EXPECTED["annual"]["balances"]
     assert {r["current_account_label"]: r["signed_net"]["minor_units"] for r in balance["rows"]} == expected_balances
     profit = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")
     sheet = client.report.balance_sheet(company=company, date_to="2026-12-31")
-    assert profit["totals"]["net_income"]["minor_units"] == (151130 if prefix == "DEMO" else 6457035)
-    assert sheet["totals"]["total_equity"]["minor_units"] == (651130 if prefix == "DEMO" else 7457035)
+    assert profit["totals"]["net_income"]["minor_units"] == (DEMO_POSITION["net_income"] if prefix == "DEMO" else 6457035)
+    assert sheet["totals"]["total_equity"]["minor_units"] == (DEMO_POSITION["total_equity"] if prefix == "DEMO" else 7457035)
     assert sheet["totals"]["difference"]["minor_units"] == 0
     assert client.journal.query(company=company, limit=200)["count"] == journals
     database = Path(client.company.show(company=company)["path"]) / "company.db"
@@ -161,12 +167,14 @@ def test_seed_known_balances_counts_and_readonly_preview(reference_client, compa
                     for name in ("transactions", "transaction_revisions", "posting_batches", "posting_lines",
                                  "sales_profiles", "sales_line_profiles", "sales_tax_components", "audit_events")}
     before = counts()
-    assert before["transactions"] == journals + 23 + 7  # tax parent plus four payment invoices and three receipts
-    assert before["sales_profiles"] == 29 + 4
-    assert before["sales_line_profiles"] == 50 + 4
-    assert before["sales_tax_components"] == 45
-    assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (
-        (43 + 8, 71 + 11, 283 + 28) if prefix == "DEMO" else (66 + 8, 91 + 11, 316 + 28))
+    if prefix == "REF":
+        # The fixed reference year's whole-company row counts; the demo's whole company is the
+        # oracle's (it grows with every seeded arc, so it is not restated here).
+        assert before["transactions"] == journals + 23 + 7  # tax parent plus four payment invoices and three receipts
+        assert before["sales_profiles"] == 29 + 4
+        assert before["sales_line_profiles"] == 50 + 4
+        assert before["sales_tax_components"] == 45
+        assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (66 + 8, 91 + 11, 316 + 28)
     for noun in ("invoice", "sales-receipt"):
         args = dict(date="2026-09-07", customer="Commercial Example Customer",
                     sales_tax_item="Commercial Example Tax 8%", customer_tax_code="Tax",
@@ -194,5 +202,12 @@ def test_combined_active_tax_and_payment_samples_have_separate_exact_effects(ref
         payment = client.run('payment show', {'payment':prefix+'-PAY-'+suffix}, company=company)
         assert payment['status'] == 'posted'
         assert tuple(payment['current'][field+'_minor_units'] for field in ('received','applied','available')) == (received,applied,available)
-    assert client.account.show(account='Payment Example Bank',company=company)['balance']['minor_units'] == 17000
-    assert client.account.show(account='Accounts Receivable',company=company)['balance']['minor_units'] == 12800+39+1000
+    # The demo later banks this account's receipts (its deposit arc), so its whole balance is the
+    # oracle's; the reference year's stays as the payment arc left it.
+    from tests.demo_oracle import DEMO_POSITION
+    bank = DEMO_POSITION['balances']['Payment Example Bank'] if prefix == 'DEMO' else 17000
+    assert client.account.show(account='Payment Example Bank',company=company)['balance']['minor_units'] == bank
+    # The reference year's receivables are this arc's plus the tax and payment samples; the
+    # demo's whole receivable grows with later arcs (discounts, line kinds), so it is the oracle's.
+    receivable = DEMO_POSITION['balances']['Accounts Receivable'] if prefix == 'DEMO' else 12800+39+1000
+    assert client.account.show(account='Accounts Receivable',company=company)['balance']['minor_units'] == receivable

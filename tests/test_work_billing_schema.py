@@ -11,7 +11,7 @@ from bookflow import BookflowError
 from bookflow.company import schema as c
 from bookflow.core.ids import new_id
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import HEADS, migrate_to_head
+from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
 from tests.test_customer_work_lifecycle import make
 from tests.test_service_sales_lifecycle import sale, post, COMPANY  # noqa: F401
 from tests.test_row8_journal import database_path
@@ -245,7 +245,7 @@ def test_migration_failure_rolls_back_every_object_and_row(historical_client, mo
 
 def test_fresh_schema_and_revision_local_ddl(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
-        assert migrate_to_head(db, 'company', None) == (None, 'co0013')
+        assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
         for table in (c.work_billing_allocations, c.work_billing_conversions):
             # Preserving co0012 appends constraints without reordering old DDL.
             # Compare their full semantics, not CREATE TABLE clause order.
@@ -276,7 +276,7 @@ def test_fresh_schema_and_revision_local_ddl(tmp_path):
     ddl = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'DDL' for t in n.targets))
     assert ast.literal_eval(ddl) == MIGRATION.DDL
     assert 'bookflow.company' not in inspect.getsource(MIGRATION)
-    assert HEADS == {'company': 'co0013', 'hub': 'hub0011'}
+    assert MIGRATION.revision in known_revisions('company')
 
 
 @pytest.mark.parametrize(('basis', 'price', 'valid'), [

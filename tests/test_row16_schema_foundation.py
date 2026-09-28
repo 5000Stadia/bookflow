@@ -151,7 +151,13 @@ def test_fresh_frozen_ddl_matches_metadata_and_ignores_future_metadata(old, tmp_
     with open_database(fresh, writable=True, create=True) as db:
         migrate_to_head(db, 'company', None)
         fresh_objects = _normalized_schema(db.raw)
+        # Today's metadata describes a table as the newest revision to rewrite it leaves it;
+        # a table a later revision widened is that revision's to compare.
+        from tests.test_bill_payment_migration import _rebuilt_since
+        rewritten = _rebuilt_since('co0010')
         for name in NEW + CHANGED:
+            if name in rewritten:
+                continue
             actual = sa.Table(name, sa.MetaData(), autoload_with=db.conn)
             expected = schema.metadata.tables[name]
             assert [(c.name,str(c.type),c.nullable,c.primary_key) for c in actual.c] == [

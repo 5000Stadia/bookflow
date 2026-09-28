@@ -485,8 +485,10 @@ def test_workbench_pages_and_a_generated_form(hosted):
     assert hosted.ok("audit.list", {"command": "company update"}, company=hosted.company_id)["count"] == before
 
     # the record page carries the audit trail
+    # (its change history names the change in words: "Updated company info: phone")
     record = api.get(f"/c/{hosted.company_id}/company/self")
-    assert record.status_code == 200 and "555-9" in record.text and "company update" in record.text
+    assert record.status_code == 200 and "555-9" in record.text
+    assert re.search(r"(?i)updated company info: phone", record.text), "the record page shows no change history"
 
 
 def test_workbench_preview_runs_the_dry_run(hosted):
@@ -756,7 +758,60 @@ def _read_calls(hosted):
     for noun, column in dict((noun, column) for noun, column in COLLECTIONS).items():
         record = hosted.ok(f'{noun}.query', {'limit': 1, 'include_inactive': True}, company=cid)['items'][0]
         calls[f'{noun} query children'] = ({'record': record['id'], 'column': column, 'limit': 2}, cid)
+    documented = _documented_read_calls(hosted, set(calls))
+    DOCUMENTED_READS.clear()
+    DOCUMENTED_READS.update(documented)
+    calls.update(documented)
     return calls
+
+
+#: The reads `_read_calls` filled from their documented examples (not written out above).
+DOCUMENTED_READS = set()
+
+
+def _documented_read_calls(hosted, covered):
+    """Every other routed read, from its documented example and a real record of its own.
+
+    The documented example (documentation/examples.py) is the input an agent is shown; its
+    placeholder identifier is replaced by a record the demo company really holds, found
+    through the noun's own list, so the parity below compares real documents.
+    """
+    import copy
+    from bookflow.core import registry
+    from bookflow.documentation.examples import EXAMPLES, ID
+    cid = hosted.company_id
+    records = {}
+
+    def first(noun):
+        if noun not in records:
+            records[noun] = None
+            for verb in ("query", "list"):
+                lister = registry.get(f"{noun} {verb}")
+                if lister is None:
+                    continue
+                rows = hosted.ok(f"{noun} {verb}".replace(" ", "."), {},
+                                 company=cid if lister.scope == "company" else None).get("items", [])
+                if rows:
+                    row = rows[0].get("current", rows[0])
+                    records[noun] = row.get("id") or row.get("deposit_id") or row.get("agent_id")
+                break
+        return records[noun]
+
+    found = {}
+    for cmd in registry.routed_commands():
+        if cmd.kind != "read" or cmd.name in covered:
+            continue
+        body = copy.deepcopy(EXAMPLES[cmd.name].input)
+        # The examples name people of a fictional office; read as the people this one has.
+        body = {key: {"jordan": hosted.login, "books-agent": "demo-assistant"}.get(value, value)
+                if isinstance(value, str) else value for key, value in body.items()}
+        for field in cmd.positional:
+            if field in body:
+                # With no such record in the demo the example's own placeholder stays, and
+                # the parity compared is that of the refusal document.
+                body[field] = first(cmd.noun) or body[field]
+        found[cmd.name] = (body, cid if cmd.scope == "company" else None)
+    return found
 
 
 def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library(hosted, root, monkeypatch):
@@ -777,6 +832,7 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
     from tests.test_row1_flow import normalize
     registry.load_all()
     calls = _read_calls(hosted)
+    documented = set(DOCUMENTED_READS)
     routed_reads = {c.name for c in registry.routed_commands() if c.kind == "read"}
     assert routed_reads == set(calls), "every routed read command needs a parity call here"
     from bookflow.core.transfer_protocol import encode_input, decode_input
@@ -790,7 +846,11 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
             over_http[name] = decode_input(response.headers["X-Bookflow-Output"])
             bodies[name] = response.content
         else:
-            over_http[name] = hosted.ok(name.replace(" ", "."), body, company=company)
+            response = hosted.call(name.replace(" ", "."), body, company=company)
+            # A read of a record the demo does not hold is refused; the refusal is the
+            # document whose parity is compared. Everything the demo holds must succeed.
+            assert response.status_code == 200 or name in documented, (name, response.text)
+            over_http[name] = response.json()
     recovered = over_http["payment recovery show"]
     assert recovered["state"] == "sealed"
     assert (recovered["received_entry_count"], recovered["declared_entry_count"], recovered["missing_chunk_count"]) == (1, 1, 0)
@@ -802,7 +862,11 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
     for name, (body, company) in calls.items():
         sink = io.BytesIO()
         streams = {"output_stream": sink} if registry.get(name).transfer else {}
-        local = c.run(name, body, company=company, **streams)
+        try:
+            local = c.run(name, body, company=company, **streams)
+        except bookflow.BookflowError as refused:
+            assert name in documented, (name, refused.to_dict())
+            local = refused.to_dict()
         assert normalize(local) == normalize(over_http[name]), name
         if name.startswith("payment recovery "):
             assert local == over_http[name], name
@@ -924,8 +988,8 @@ def test_a_connection_from_another_uid_is_refused(hosted, monkeypatch):
     monkeypatch.setattr(local, "peer_login", lambda conn: "nobody-with-a-mapping")
     ctx = Context.new(Interface.cli, "bookflow-cli").model_dump(mode="json")
     reply = forward.call_host(str(hosted.handle.socket), {"command": "company list", "input": {}, "context": ctx})
-    assert reply["error"]["code"] == "E_UNAUTHENTICATED"
-    assert "not mapped" in reply["error"]["details"]["reason"]
+    assert reply["error"]["code"] == "E_UNAUTHENTICATED", reply
+    assert "not mapped" in reply["error"]["details"]["reason"], reply
 
 
 def test_serve_and_init_are_never_forwarded(hosted, root):
@@ -1390,9 +1454,10 @@ def test_more_than_forty_idle_streams_do_not_exhaust_read_workers(hosted, live):
         time.sleep(0.02)
     try:
         assert ready == count
-        began = time.monotonic()
-        assert httpx.post(f"{live}/commands/company.list", json={}, headers=hosted.bearer, timeout=5).status_code == 200
-        assert time.monotonic() - began < 2
+        # Starved read workers would leave this read waiting until the idle streams let go
+        # (15 s); it must be answered while every one of them is still open.
+        assert httpx.post(f"{live}/commands/company.list", json={}, headers=hosted.bearer, timeout=10).status_code == 200
+        assert not release.is_set() and all(thread.is_alive() for thread in threads)
     finally:
         release.set()
         for thread in threads:
@@ -1440,6 +1505,33 @@ def _page_url(cmd, company_id):
 
 
 
+#: Commands with a page of their own instead of a generated form: path, and the controls that
+#: carry the command's inputs (the restore page offers the saved backups as `backup`).
+DEDICATED_PAGES = {
+    "company backup": ("/company/backup", ()),
+    "company restore": ("/company/restore", ("backup", "organization", "name", "as_copy")),
+}
+
+
+def _generated_form(text):
+    """The generated command form on a page, or the whole page when it has none."""
+    marker = text.find("data-generated-form")
+    if marker < 0:
+        return text
+    start = text.rfind("<form", 0, marker)
+    return text[start:text.index("</form>", marker)]
+
+
+def _delete_urls(hosted, cmd):
+    """Confirmation pages for the real records of the Delete's own family."""
+    cid, noun = hosted.company_id, cmd.noun
+    for row in hosted.ok(noun.replace(" ", ".") + ".query", {}, company=cid)["items"]:
+        record = row.get("current", row)
+        identity = record.get("id") or record["deposit_id"]
+        yield (f"/c/{cid}/receive-payments?payment={identity}&mode=delete" if noun == "payment"
+               else f"/c/{cid}/{noun}/{identity}/delete")
+
+
 def _cursor_free_reports():
     """Reports whose filter form drops the cursor, taken from the page that drops it.
 
@@ -1483,7 +1575,48 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
         commercial_fields[noun] = {field["id"] for field in definitions}
     api = TestClient(hosted.handle.app)
     assert api.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    # A Delete answers only to its explicit family grant; give this person every one, as
+    # user setup would, so each record's confirmation page opens.
+    member = next(row for row in hosted.ok("membership.list", {"company": hosted.company_id})["items"]
+                  if row["scope_type"] == "company" and row["username"] == hosted.login)
+    hosted.ok("membership.grant", {"user": member["user_id"], "company": hosted.company_id, "role": member["role"],
+              "expected_version": member["version"],
+              "grants": sorted({c.capability for c in registry.routed_commands() if c.requires_explicit_grant})},
+              headers={"X-Bookflow-Reason": "Open every delete confirmation"})
+    from tests.mcp_coverage import delete_confirmation_row
     for cmd in registry.routed_commands():
+        if cmd.requires_explicit_grant:
+            # A Delete has no generic form at `self`: it is confirmed on its own record's page,
+            # which carries the record in the URL and its version, key and reason as controls.
+            # Some records of a family are owned elsewhere (a journal a check owns); the first
+            # record the page confirms is the witness.
+            tried = []
+            for url in _delete_urls(hosted, cmd):
+                page = api.get(url)
+                tried.append((url, page.status_code))
+                if page.status_code == 200:
+                    break
+            assert page.status_code == 200, (cmd.name, tried, page.text[:300])
+            if cmd.noun == "payment":
+                config = json.loads(re.search(r'id="payment-config">(.*?)</script>', page.text, re.S).group(1))
+                assert config["mode"] == "delete" and "delete" in config["allowed"], cmd.name
+            else:
+                for control in ("reason", "expected_version", "operation_key", "confirmed"):
+                    assert f'name="{control}"' in page.text, (cmd.name, control)
+            coverage.append(delete_confirmation_row(cmd, str(page.url), page.text))
+            continue
+        if cmd.name in DEDICATED_PAGES:
+            # Backing up and restoring have pages of their own (R133), whose controls are the
+            # command's inputs; no generated form stands in for them.
+            path, controls = DEDICATED_PAGES[cmd.name]
+            page = api.get(f"/c/{hosted.company_id}{path}")
+            assert page.status_code == 200, (cmd.name, page.text[:300])
+            assert f'action="/c/{hosted.company_id}{path}"' in page.text or 'method="post"' in page.text, cmd.name
+            for control in controls:
+                assert f'name="{control}"' in page.text, (cmd.name, control)
+            coverage.append(delete_confirmation_row(cmd, str(page.url), page.text,
+                                                    surface='dedicated_page', family='dedicated_page'))
+            continue
         url = _page_url(cmd, hosted.company_id)
         page = api.get(url)
         assert page.status_code == 200, (cmd.name, url, page.status_code, page.text[:300])
@@ -1533,9 +1666,12 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                     assert sorted(rendered_ids) == line_ids, (cmd.name, control)
                     assert len(rendered_ids) == len(set(rendered_ids)), (cmd.name, control)
         definition = registry.noun_meta(cmd.noun).get("definition")
+        # A report opens with its numbers, and their next-page form carries the filters as
+        # hidden fields; the controls counted are the generated form's own.
+        form_text = _generated_form(page.text)
         for leaf in F.leaves(cmd.input_model):
             for parent in leaf.get("object_controls", []):
-                assert page.text.count(f'name="clear:{parent}"') == 1, (cmd.name, parent)
+                assert form_text.count(f'name="clear:{parent}"') == 1, (cmd.name, parent)
             # Ask the workbench which shape this form takes rather than keeping a second
             # list of nouns here. The copy is what went stale: `bill post` renders `cf:`
             # controls correctly and was asserted against an `f:custom_fields` control it
@@ -1543,14 +1679,14 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
             if leaf["path"] == "custom_fields" and pages.runtime_custom_field_scope(
                 cmd.noun, cmd.verb, cmd, definition
             ):
-                assert 'name="f:custom_fields"' not in page.text, cmd.name
-                assert 'name="cf:' in page.text, cmd.name
+                assert 'name="f:custom_fields"' not in form_text, cmd.name
+                assert 'name="cf:' in form_text, cmd.name
             elif leaf["path"] == "custom_field_kinds" and pages.runtime_custom_field_scope(
                 cmd.noun, cmd.verb, cmd, definition
             ):
-                assert 'name="f:custom_field_kinds"' not in page.text, cmd.name
-                kinds = re.findall(r'name="cf-kind:([^"]+)"', page.text)
-                values = re.findall(r'name="cf:([^"]+)"', page.text)
+                assert 'name="f:custom_field_kinds"' not in form_text, cmd.name
+                kinds = re.findall(r'name="cf-kind:([^"]+)"', form_text)
+                values = re.findall(r'name="cf:([^"]+)"', form_text)
                 assert kinds and sorted(kinds) == sorted(values), cmd.name
                 assert len(kinds) == len(set(kinds)), cmd.name
                 if cmd.noun in commercial_fields:
@@ -1559,24 +1695,28 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
             elif leaf["path"] == "cursor" and cmd.name in _cursor_free_reports():
                 # Statement continuations belong to the result's Next form;
                 # rerunning the filter form must always start a fresh report.
-                assert 'name="f:cursor"' not in page.text, cmd.name
+                assert 'name="f:cursor"' not in form_text, cmd.name
             elif leaf["path"] in ("line_ids", "selections", "percent") and cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt"):
                 # These shared inputs use the source-aware controls checked above.
-                assert f'name="f:{leaf["path"]}"' not in page.text, cmd.name
-                assert f'name="collection:{leaf["path"]}"' not in page.text, cmd.name
+                assert f'name="f:{leaf["path"]}"' not in form_text, cmd.name
+                assert f'name="collection:{leaf["path"]}"' not in form_text, cmd.name
+            elif cmd.noun in ('reconcile', 'reconcile opening') and leaf['path'].endswith('.format'):
+                # A schema version is not a question: the reconciliation forms never ask a
+                # bookkeeper to choose the evidence format's version number.
+                assert f'name="f:{leaf["path"]}"' not in form_text, cmd.name
             elif cmd.name == 'invoice update' and leaf['path'] == 'settlement_versions':
                 # The mutually exclusive complete signed baseline is the GUI's
                 # chosen version representation, checked against a real source.
-                assert page.text.count('name="f:settlement_guard"') == 1
-                assert 'name="collection:settlement_versions"' not in page.text
-                assert page.text.count('value="review-settlement"') == 1
+                assert form_text.count('name="f:settlement_guard"') == 1
+                assert 'name="collection:settlement_versions"' not in form_text
+                assert form_text.count('value="review-settlement"') == 1
             elif leaf["kind"] == "collection":
-                assert page.text.count(
+                assert form_text.count(
                     f'name="collection:{leaf["path"]}"'
                 ) == 1, (cmd.name, leaf["path"])
-                assert f'name="f:{leaf["path"]}"' not in page.text, cmd.name
+                assert f'name="f:{leaf["path"]}"' not in form_text, cmd.name
             else:
-                assert page.text.count(f'name="f:{leaf["path"]}"') == 1, (
+                assert form_text.count(f'name="f:{leaf["path"]}"') == 1, (
                     cmd.name,
                     leaf["path"],
                 )

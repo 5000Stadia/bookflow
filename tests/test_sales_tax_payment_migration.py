@@ -20,7 +20,7 @@ from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
 from tests.test_bill_payment_migration import _rebuilt_since
 from tests.test_credit_memo_migration import _superseded_after
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import preserved, table
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0030_sales_tax_payments')
 PREVIOUS = 'co0029'
@@ -187,7 +187,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         # a rebuilt table that reordered or re-encoded a value fails here. This revision adds
         # no column to a rebuilt table, so nothing is allowed to differ at all.
         for name in names:
-            assert table(db.raw, name) == before[name], name
+            # Retention through the whole chain: read through the columns that existed then.
+            assert preserved(db.raw, name, before[name]) == before[name], name
         objects_after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())

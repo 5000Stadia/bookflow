@@ -12,7 +12,7 @@ from sqlalchemy.schema import CreateTable
 from sqlalchemy.dialects.sqlite import dialect
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head
+from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
 from tests import provenance
 
@@ -20,13 +20,31 @@ BASE='1e7ae551f29eb3e5ecbbecc5055db80c060452ce'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0021_deposit_operations')
 
 
-def test_operation_ddl_matches_fresh_migration(tmp_path):
+@pytest.fixture
+def at_co23(monkeypatch):
+    """The runner stopped at co0023, the successor that amends these tables: a claim about
+    this pair is made there, not at today's head, where later revisions own the text."""
+    monkeypatch.setitem(HEADS,'company','co0023')
+
+
+def test_operation_ddl_matches_fresh_migration(tmp_path,at_co23):
+    from tests.test_bill_payment_migration import _rebuilt_since
     successor=importlib.import_module('bookflow.storage.company_migrations.versions.0023_deposit_coordinate')
     expected=[]
     for statement in M.DDL:
         for old,new in successor.CHANGES.values():statement=statement.replace(old,new)
         expected.append(statement)
-    assert expected==[str(CreateTable(schema.metadata.tables[name]).compile(dialect=dialect())).strip() for name in M.NEW_TABLES]
+    # A table a revision after co0023 rewrote (co0054 admits `deposit delete`) is held to the
+    # text co0023 leaves behind; the others to today's metadata.
+    rewritten=_rebuilt_since('co0023')
+    with open_database(tmp_path/'own.db',writable=True,create=True) as db:
+        assert migrate_to_head(db,'company',None)==(None,'co0023')
+        stored={name:sql for name,sql in db.raw.execute("SELECT name,sql FROM sqlite_schema WHERE type='table'")}
+    def shape(name):
+        if name in rewritten:
+            return 'CREATE TABLE '+name+' ('+stored[name].split('(',1)[1]
+        return str(CreateTable(schema.metadata.tables[name]).compile(dialect=dialect())).strip()
+    assert expected==[shape(name) for name in M.NEW_TABLES]
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
         assert migrate_to_head(db,'company',None)==(None,'co0023')
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
@@ -34,7 +52,7 @@ def test_operation_ddl_matches_fresh_migration(tmp_path):
         assert migrate_to_head(db,'company',None)==('co0023','co0023')
 
 
-def test_co20_complete_raw_rows_and_local_ddl_preserved(tmp_path):
+def test_co20_complete_raw_rows_and_local_ddl_preserved(tmp_path,at_co23):
     source=tmp_path/'source';source.mkdir();root=tmp_path/'root'
     archive=subprocess.check_output(['git','archive',BASE,'src'],cwd=Path(__file__).parents[1])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')

@@ -283,6 +283,8 @@ def test_legacy_anomalies_read_noop_deny_replacement_explicit_repair_and_inverse
     root=tmp_path/'legacy';shutil.copytree(baseline,root)
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(root))
     client=bookflow.connect(data_root=str(root));case=cases[case_index]
+    # The pinned binary wrote an older hub; bring it forward as an operator does before use.
+    client.run('upgrade',{})
     noun=case['noun'];key=noun.replace('-','_');doc=case['doc']
     request={key:doc['id'],'expected_version':doc['version']}
     before=snapshot(client)

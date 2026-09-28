@@ -6,8 +6,10 @@ rest of the file is the preservation question -- a company database already at c
 rows, local tables, indexes, views and triggers that this migration has to rebuild
 ``transactions`` and ``document_lines`` underneath without touching.
 """
+import functools
 import importlib
 import sqlite3
+import tempfile
 from pathlib import Path
 
 from sqlalchemy.dialects.sqlite import dialect
@@ -45,6 +47,33 @@ def _revisions_after(revision, chain='company'):
             if entry.revision != revision]
 
 
+@functools.lru_cache(maxsize=None)
+def _rewritten_since(revision):
+    """Objects whose stored SQL a later migration changed, read off the chain itself.
+
+    A migration can rewrite an object without naming it in CHANGED/REPLACED/TRIGGERS: an
+    ``ALTER TABLE ... ADD COLUMN`` (co0039, co0048) or a rebuild declared under another name
+    (co0057's TABLE) appends to or replaces the stored CREATE text. Comparing a fresh file at
+    `revision` with a fresh file at the head finds every one of them without a list.
+    """
+    from alembic.script import ScriptDirectory
+
+    from bookflow.storage.migrate import _config
+    # The chain's own head, not HEADS: a test may pin HEADS to an older revision.
+    head, = ScriptDirectory.from_config(_config('company', None)).get_heads()
+    with tempfile.TemporaryDirectory() as folder:
+        stored = []
+        for target in (revision, head):
+            path = Path(folder) / (target + '.db')
+            _at(path, target)
+            with sqlite3.connect(path) as raw:
+                stored.append({name: sql for name, sql in raw.execute(
+                    "SELECT name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'")})
+            raw.close()
+    then, now = stored
+    return frozenset(name for name, sql in then.items() if now.get(name) != sql)
+
+
 def _rebuilt_since(revision):
     """Every table and trigger the migrations after `revision` rebuild or replace."""
     versions = Path(__file__).resolve().parents[1] / 'src/bookflow/storage/company_migrations/versions'
@@ -68,7 +97,7 @@ def _rebuilt_since(revision):
             # its GUARDS. A rewrite this cannot see reads as an object that vanished.
             names.update(getattr(module, 'TRIGGERS', ()))
         seen.update(guards)
-    return names
+    return names | _rewritten_since(revision)
 
 
 def _superseded_after(revision):

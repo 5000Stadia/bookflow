@@ -23,7 +23,8 @@ from bookflow.company import schema as c
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.test_bill_payment_migration import _revisions_after
+from tests.payment_raw_evidence import preserved, table
 from tests.test_bill_payment_migration import _rebuilt_since
 from tests.test_vendor_credit_migration import _at, _insert
 
@@ -64,7 +65,9 @@ def test_the_migration_sits_on_the_chain_and_is_its_end():
     """Derived, never a second copy of the number: the chain is the only authority."""
     assert M.revision in known_revisions('company')
     assert M.down_revision in known_revisions('company')
-    assert _chain_head() == M.revision == HEADS['company']
+    assert _chain_head() == HEADS['company']
+    # On the chain every company is built to, not necessarily its newest step.
+    assert M.revision in _revisions_after(M.down_revision)
     assert M.NEW_TABLES == () and M.DDL == () and M.OBJECTS == ()
 
 
@@ -220,7 +223,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PREVIOUS, HEADS['company'])
         for name in names:
-            assert table(db.raw, name) == before[name], name
+            # Retention through the whole chain: read through the columns that existed then.
+            assert preserved(db.raw, name, before[name]) == before[name], name
         after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())

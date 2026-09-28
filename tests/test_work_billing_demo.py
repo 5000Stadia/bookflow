@@ -52,7 +52,10 @@ def test_manifests_append_all_six_billing_commands_after_the_old_entries(resourc
 def test_billing_chain_lineage_corrections_and_replay(reference_client, company, prefix):
     client, _ = reference_client
     p = prefix + "-BILL-"
-    run = lambda name, **data: client.run(name, data, company=company, reason="Work billing demo test")  # noqa: E731
+    # A reason is part of a write; a read given one refuses it (E_USAGE), as an agent's would.
+    from bookflow.core import registry
+    run = lambda name, **data: client.run(name, data, company=company,  # noqa: E731
+                                          **({"reason": "Work billing demo test"} if registry.get(name).is_write else {}))
     customer = client.customer.show(customer="Billing Example Customer", company=company)
     assert customer["current_balance"]["minor_units"] == 0
     invoices = {r["number"]: r for r in run("invoice query", customer=customer["id"])["items"]}
@@ -175,17 +178,27 @@ def test_billing_chain_lineage_corrections_and_replay(reference_client, company,
     assert commercial["current_balance"]["minor_units"] == 12800
     assert {r["number"] for r in run("estimate query", customer=commercial["id"], active=None)["items"]} == {
         prefix + "-WORK-EST-1A", prefix + "-WORK-EST-1B", prefix + "-WORK-EST-2", prefix + "-WORK-EST-3"}
-    assert run("invoice query", customer=commercial["id"])["count"] == 2
+    assert len([r for r in run("invoice query", customer=commercial["id"])["items"]
+                if r["number"].startswith(prefix + "-SALE-")]) == 2
 
 
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_voided_billing_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit, equity = ((624895, 708234, 10, 151130, 651130) if prefix == "DEMO"
-                                                 else (7267800, 8048639, 36, 6457035, 7457035))
+    # What the whole demo company comes to lives in one place (tests/demo_oracle.DEMO_POSITION);
+    # the fixed reference year keeps its own figures.
+    from tests.demo_oracle import DEMO_POSITION
+    if prefix == "DEMO":
+        position = DEMO_POSITION
+        checking, trial, journals = (position["balances"]["Checking"], position["trial_balance"],
+                                     position["journal_entries"])
+        profit, equity = position["net_income"], position["total_equity"]
+        receivable, tax = position["balances"]["Accounts Receivable"], -position["balances"]["Sales Tax Payable"]
+    else:
+        checking, trial, journals, profit, equity, receivable, tax = 7267800, 8048639, 36, 6457035, 7457035, 13839, 1604
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13839
-    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1604
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == receivable
+    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == tax
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
     statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")

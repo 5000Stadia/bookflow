@@ -163,9 +163,18 @@ LEGACY_PROFILE = ('{"schema_version":1,"item":{"id":"item","label":"Service","ve
 
 
 def test_legacy_profile_exact_bytes_and_serialization_filters():
+    from bookflow.company.sales_facts import LATER_LINE_PROFILE_FIELDS
     profile = SalesLineProfile.model_validate_json(LEGACY_PROFILE)
-    assert profile.model_dump_json() == LEGACY_PROFILE
-    assert profile.model_dump() == json.loads(LEGACY_PROFILE)
+    # Fields added after these profiles were stored (cogs/asset accounts) read back as null,
+    # and absent and null are the same captured fact (sales_facts.LATER_LINE_PROFILE_FIELDS).
+    # Every legacy key keeps its exact value and order; the later ones are appended as null.
+    def legacy(values):
+        later = {key: values[key] for key in LATER_LINE_PROFILE_FIELDS if key in values}
+        assert set(later) == set(LATER_LINE_PROFILE_FIELDS) and set(later.values()) == {None}, later
+        return {key: value for key, value in values.items() if key not in LATER_LINE_PROFILE_FIELDS}
+    assert json.dumps(legacy(json.loads(profile.model_dump_json())), separators=(',', ':'),
+                      ensure_ascii=False) == LEGACY_PROFILE
+    assert legacy(profile.model_dump()) == json.loads(LEGACY_PROFILE)
     assert profile.model_dump(include={'item', 'pricing_basis'}) == {'item': profile.item.model_dump()}
     amount = SalesLineProfile.model_validate({**json.loads(LEGACY_PROFILE), 'schema_version': 2,
                                              'pricing_basis': 'amount', 'net_amount_minor_units': 1001})

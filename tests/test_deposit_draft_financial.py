@@ -270,7 +270,6 @@ def test_bulk_graph_exact_rows_and_adapter_match_ordinary_owners(client,cash,sal
 from tests.test_deposit_dependency_binding import bound_people
 
 
-@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 def test_permanent_draft_recovery_other_actor_and_revoked_principal(root,client,cash,run_private,bound_people,monkeypatch):
     from tests.test_deposit_dependency_binding import observe,_credential
     from tests.test_row7_credentials import writer
@@ -303,7 +302,8 @@ def test_permanent_draft_recovery_other_actor_and_revoked_principal(root,client,
             errors.append((error.value.code,error.value.details))
         assert errors[0]==errors[1]
         assert tuple(s.company.raw.iterdump())==before
-    observe(bound_people['bot'],monkeypatch,denied,bound_people['company'])
+    from tests.test_deposit_draft_authority import _denied_at_admission_or_read
+    _denied_at_admission_or_read(bound_people,monkeypatch,denied,d.id,cash['source'])
 
 
 def test_financial_captures_all_kinds_without_refresh_or_late_defaults(client,cash,run_private):

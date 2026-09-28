@@ -96,7 +96,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     assert 'revision_number=1' in b.evaluate('location.search')
     b.navigate(base + '/sales-receipt/' + receipt + '/history')
     b.wait_for('!!document.querySelector(".sales-document")')
-    snapshots_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "Read internal snapshots for sales revision 1").href')
+    snapshots_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "View sales revision 1").href')
     b.navigate(snapshots_link)
     b.wait_for('!!document.querySelector(".sales-document")')
     assert 'Original internal scope' in b.evaluate("""document.querySelector('[aria-label="Billed from work"]').textContent""")

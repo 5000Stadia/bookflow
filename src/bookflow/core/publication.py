@@ -72,7 +72,8 @@ class OSBinding:
         from bookflow.core.config import Config
         table = Config.load(host.data_root / 'config.toml').user_table(login)
         if not isinstance(table, dict) or not isinstance(table.get('user_id'), str):
-            raise BookflowError('E_UNAUTHENTICATED')
+            # The caller's own login: say what is missing, as the local host always has.
+            raise BookflowError('E_UNAUTHENTICATED', details={'reason': 'this login is not mapped to a Bookflow user'})
         session = host.reader_session(table['user_id'], login)
         try:
             return cls.from_session(session, principal)

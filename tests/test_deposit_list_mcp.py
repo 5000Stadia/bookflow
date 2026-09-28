@@ -45,7 +45,7 @@ def test_actual_mcp_query_next_page_and_show(hosted, live, tmp_path):
     measured = {}
     for _ in range(2):                       # the same read over HTTP, so the MCP figure has a scale
         started = perf_counter()
-        hosted.ok('deposit.query', dict(page=dict(limit=3)), company=company)
+        hosted.ok('deposit.query', dict(deposit_to=bank, page=dict(limit=3)), company=company)
         measured.setdefault('http_query_s', []).append(round(perf_counter() - started, 4))
 
     async def witness():
@@ -67,11 +67,12 @@ def test_actual_mcp_query_next_page_and_show(hosted, live, tmp_path):
                 # A small company-scoped read through the same session, so the deposit
                 # figures below separate transport cost from the deposit read itself.
                 _, measured['baseline_account_list_s'] = await run('account list', {})
-                first, measured['query_first_page_s'] = await run('deposit query', dict(page=dict(limit=3)))
+                # This test's own bank: the demo company banks deposits of its own.
+                first, measured['query_first_page_s'] = await run('deposit query', dict(deposit_to=bank, page=dict(limit=3)))
                 assert first['total_count'] == POPULATION and len(first['items']) == 3
                 paging = perf_counter()
                 second, measured['query_next_page_s'] = await run(
-                    'deposit query', dict(page=dict(limit=3, cursor=first['next_cursor'])))
+                    'deposit query', dict(deposit_to=bank, page=dict(limit=3, cursor=first['next_cursor'])))
                 assert len(second['items']) == 3
                 # The one assertion the measurement must not be allowed to obscure.
                 assert json.dumps([second['totals'], second['effective_bank_total'], second['total_count']],

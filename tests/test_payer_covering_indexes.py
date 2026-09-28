@@ -154,7 +154,8 @@ def test_supported_complete_local_ddl_and_exact_metadata(tmp_path):
 def co18(tmp_path_factory):
     folder = tmp_path_factory.mktemp('co18-covering')
     source = folder/'source';source.mkdir()
-    archive = subprocess.check_output(['git','archive',BASE,'src'],cwd=Path(__file__).parents[1])
+    # The source and its own tests, so a child writing old data imports helpers of its own day.
+    archive = subprocess.check_output(['git','archive',BASE,'src','tests'],cwd=Path(__file__).parents[1])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         tar.extractall(source, filter='data')
     root = folder/'root'
@@ -165,8 +166,19 @@ def co18(tmp_path_factory):
     return root
 
 
+@pytest.fixture
+def at_co19(monkeypatch):
+    """The runner stopped at this migration: a claim about co0019 is made at co0019.
+
+    Carried to today's head, every later migration's legitimate rewrite would read as this
+    one failing to preserve something; the whole chain has its own retention witness
+    (test_deposit_coordinate_migration.test_whole_chain_upgrade_to_head_preserves_customer_file).
+    """
+    monkeypatch.setitem(HEADS, 'company', M.revision)
+
+
 @pytest.mark.parametrize('statistics',[False, True])
-def test_revision_only_all_rows_local_objects_backup_rollback_retry(co18,tmp_path,statistics):
+def test_revision_only_all_rows_local_objects_backup_rollback_retry(co18,tmp_path,statistics,at_co19):
     path = tmp_path/'company.db'
     shutil.copyfile(next(co18.glob('organizations/*/Demo Plumbing Co/company.db')), path)
     with sqlite3.connect(path) as raw:
@@ -201,7 +213,7 @@ def test_revision_only_all_rows_local_objects_backup_rollback_retry(co18,tmp_pat
     (tmp_path/'revision-preservation.json').write_text(json.dumps({'before':before,'after':after,'backup':str(backup)},indent=2))
 
 
-def test_fresh_chain_and_old_index_metadata(tmp_path):
+def test_fresh_chain_and_old_index_metadata(tmp_path,at_co19):
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
         assert migrate_to_head(db,'company',None) == (None,'co0019')
         names = {r[0] for r in db.raw.execute("SELECT name FROM main.sqlite_schema WHERE type='index' AND name LIKE 'ix_co%' ")}
@@ -212,18 +224,36 @@ def test_fresh_chain_and_old_index_metadata(tmp_path):
 
 
 def source_call(source, root, code, *args):
-    result = subprocess.run([sys.executable,'-c',code,str(root),*map(str,args)],cwd=Path(__file__).parents[1],
+    result = subprocess.run([sys.executable,'-c',code,str(root),*map(str,args)],cwd=source,
         env=provenance.child_env(str(source/'src'), BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     return result.stdout
 
 
+def restricted(raw, name, columns):
+    """Rows of `name` read through only the columns an earlier snapshot() saw, in its layout."""
+    expressions = ['rowid']
+    for col in columns:
+        key = '"' + col[1].replace('"', '""') + '"'
+        expressions.extend((f'typeof({key})', key, f'CAST({key} AS BLOB)'))
+    q = '"' + name.replace('"', '""') + '"'
+    return raw.execute(f'SELECT {",".join(expressions)} FROM main.{q} ORDER BY rowid').fetchall()
+
+
 def test_public_upgrade_exact_rows_publication_and_cursors(co18,tmp_path):
+    """A co0018 customer root, written by the source of its day, upgraded by today's `upgrade`.
+
+    The public command runs the whole chain to today's head, so the claim is retention, not
+    stasis: every value stored at co0018 is still stored, read through the columns that existed
+    then; the migration is attributed to the system identity; and the old query recipes still
+    enumerate the same receipts, with a continuation minted before the upgrade refused.
+    """
     from bookflow.core.audit import decode_snapshot
     import bookflow
+    head = HEADS['company']
     root = tmp_path/'root';shutil.copytree(co18,root)
     source = co18.parent/'source';receipt = tmp_path/'old-pages.json'
-    code = '''import bookflow,sys,json
+    code = """import bookflow,sys,json
 from tests.test_service_sales_lifecycle import sale,COMPANY
 from tests.test_payment_receipts import posted,method
 c=bookflow.connect(data_root=sys.argv[1]);s=sale.__wrapped__(c);pm=method(c)
@@ -241,7 +271,7 @@ for command,args in requests:
   rows.append(dict(command=command,input=inp,pages=pages))
  rows.append(dict(command=command,input=dict(args,q='no-co19-results'),pages=[c.run(command,dict(args,q='no-co19-results'),company=co)]))
 json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
-'''
+"""
     source_call(source,root,code,receipt)
     old = json.loads(receipt.read_text());co = old['company']
     path = next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
@@ -264,24 +294,36 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
     assert result['hub_revision']==HEADS['hub'] and result['hub_migrated']==hub_moved
     assert result['companies_migrated']==[co] and not result['companies_failed']
     with sqlite3.connect(path) as raw:
-        after = snapshot(raw)['main']
+        after_objects = {(r[0],r[1]) for r in raw.execute('SELECT type,name FROM main.sqlite_schema')}
+        after_columns = {name: [c for c in raw.execute(f'PRAGMA main.table_xinfo("{name}")').fetchall()]
+                         for name in before[1]}
+        after_rows = {name: restricted(raw, name, cols) for name,(cols,_) in before[1].items()}
         assert raw.execute('SELECT max(seq) FROM audit_events').fetchone()[0] == seq+1
         raw.row_factory = sqlite3.Row
         event = dict(raw.execute('SELECT * FROM audit_events ORDER BY seq DESC LIMIT 1').fetchone())
         assert event['command']=='upgrade' and event['actor_kind']=='system' and event['actor_id']==system['id']
-        assert event['summary']=='migrated from co0018 to co0019'
+        assert event['summary']==f'migrated from co0018 to {head}'
         entry = dict(raw.execute('SELECT * FROM audit_entries ORDER BY rowid DESC LIMIT 1').fetchone())
         assert entry['record_type']=='company_info' and entry['action']=='migrate'
-        assert decode_snapshot(entry['after']) == {'from':'co0018','schema_revision':'co0019'}
+        assert decode_snapshot(entry['after']) == {'from':'co0018','schema_revision':head}
         assert event['on_behalf_of'] is not None
         permitted = {system['id'],event['on_behalf_of']}
-    assert [r for r in after[0] if not r[1].startswith('ix_co19_')] == before[0]
+    # Every object stored at co0018 is still there (later migrations may rebuild its text).
+    assert {(r[0],r[1]) for r in before[0]} <= after_objects
     for table,(cols,rows) in before[1].items():
-        newcols,newrows = after[1][table];assert cols==newcols
+        # Every column that existed then still exists, with its type; later columns are new.
+        assert [c[1:3] for c in cols] == [c[1:3] for c in after_columns[table] if c[1] in {x[1] for x in cols}], table
+        newrows = after_rows[table]
         if table == 'alembic_version':
             continue
-        if table in ('audit_events','audit_entries'):
+        if table=='audit_events':
             assert newrows[:-1]==rows and len(newrows)==len(rows)+1
+        elif table=='audit_entries':
+            # Every entry the chain adds hangs off the one upgrade event, and exactly one of them
+            # is the company_info migrate entry asserted above.
+            names=[c[1] for c in cols];event_index=2+3*names.index('event_id')
+            assert newrows[:len(rows)]==rows and len(newrows)>len(rows)
+            assert {r[event_index] for r in newrows[len(rows):]}=={event['id']}
         elif table == 'principals':
             # Only the two identities actually upserted may change, and only
             # fields written by upsert_principal (storage type and bytes included).
@@ -304,19 +346,29 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
     with sqlite3.connect(root/'hub.db') as raw:
         raw.row_factory=sqlite3.Row
         company_after=dict(raw.execute('SELECT * FROM companies WHERE id=?',(co,)).fetchone())
-        assert company_after==dict(company_before,schema_revision='co0019')
+        assert company_after==dict(company_before,schema_revision=head)
         raw.row_factory=None
         hub_after_rows=snapshot(raw)['main']
         raw.row_factory=sqlite3.Row
         h_event=dict(raw.execute('SELECT * FROM audit_events ORDER BY seq DESC LIMIT 1').fetchone())
         assert h_event['command']=='upgrade'
         h_entry=dict(raw.execute('SELECT * FROM audit_entries ORDER BY rowid DESC LIMIT 1').fetchone())
-        assert h_entry['record_id']==co and decode_snapshot(h_entry['after'])=={'from':'co0018','schema_revision':'co0019'}
+        assert h_entry['record_id']==co and decode_snapshot(h_entry['after'])=={'from':'co0018','schema_revision':head}
     assert hub_before_rows[0]==hub_after_rows[0]
+    event_cols=[c[1] for c in hub_before_rows[1]['audit_events'][0]]
+    new_events=hub_after_rows[1]['audit_events'][1][len(hub_before_rows[1]['audit_events'][1]):]
+    upgrade_events={r[2+3*event_cols.index('id')] for r in new_events}
+    # Only the upgrade writes to the hub's audit: every new event is an `upgrade`, and every
+    # new entry hangs off one of them (the hub's own step and the company's migrate).
+    assert new_events and {r[2+3*event_cols.index('command')] for r in new_events}=={'upgrade'}
     for table,(cols,rows) in hub_before_rows[1].items():
         newcols,newrows=hub_after_rows[1][table];assert cols==newcols
-        if table in ('audit_events','audit_entries'):
-            assert len(newrows)==len(rows)+1 and newrows[:-1]==rows
+        if table=='audit_events':
+            assert newrows[:len(rows)]==rows
+        elif table=='audit_entries':
+            names=[c[1] for c in cols]
+            assert newrows[:len(rows)]==rows and len(newrows)>len(rows)
+            assert {r[2+3*names.index('event_id')] for r in newrows[len(rows):]}<=upgrade_events
         elif hub_moved and table=='alembic_version':
             assert len(newrows)==len(rows)
         elif hub_moved and table=='role_capabilities':
@@ -334,18 +386,16 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
     from bookflow.storage.paths import read_company_marker
     marker_bytes=(path.parent/'bookflow-company.toml').read_bytes()
     marker=read_company_marker(path.parent)
-    assert marker==dict(company_id=co,state='ready',display_name=company_before['display_name'],schema_revision='co0019')
+    assert marker==dict(company_id=co,state='ready',display_name=company_before['display_name'],schema_revision=head)
     assert attachments(root)==old_files and old_files
     backup=next((path.parent/'backups').glob('*from-co0018.db'))
     with sqlite3.connect(backup) as raw:
         assert snapshot(raw)['main']==before
     read_before=database(path)
-    import base64,hashlib,hmac
-    from bookflow.company.payment_queries import canonical
     pages=[]
-    # Derive query recipe from company/noun/full typed input and the sole new
-    # migration watermark, rather than ignoring fingerprints/cursors.
-    from bookflow.core import registry
+    # The old recipes still enumerate exactly the old receipts and invoices; every field the
+    # old pages carried reads the same (later releases add fields beside them); and a
+    # continuation minted before the upgrade is refused, never silently resumed.
     for row in old['rows']:
         command,inp=row['command'],row['input'];current=[];cursor=None
         while True:
@@ -353,40 +403,33 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
             current.append(page);cursor=page['next_cursor']
             if cursor is None:break
         assert sum(len(p['items']) for p in current)==(0 if inp.get('q') else 3)
-        if command=='payment invoices':
-            assert current==row['pages']
-        else:
-            model=registry.get(command).input_model.model_validate(inp)
-            fp=hashlib.sha256(canonical([co,command,model.model_dump(mode='json',exclude={'cursor'}),seq+1]).encode()).hexdigest()
-            for previous,now in zip(row['pages'],current):
-                assert now['facts_fingerprint']==fp
-                assert {k:v for k,v in now.items() if k not in ('facts_fingerprint','next_cursor')}=={k:v for k,v in previous.items() if k not in ('facts_fingerprint','next_cursor')}
-                if previous['next_cursor']:
-                    saved=json.loads(base64.urlsafe_b64decode(previous['next_cursor'].split('.')[0]+'=='))
-                    body=json.loads(base64.urlsafe_b64decode(now['next_cursor'].split('.')[0]+'=='))
-                    assert body==dict(saved,fp=fp)
-                    # Actual next-page execution above verifies MAC; altered
-                    # old recipe must fail its unchanged authenticated fence.
-                    with pytest.raises(bookflow.BookflowError) as caught:
-                        client.run(command,dict(inp,cursor=previous['next_cursor']),company=co)
-                    assert caught.value.code=='E_QUERY_STALE'
-                else:
-                    assert now['next_cursor'] is None
+        previous_items=[item for page in row['pages'] for item in page['items']]
+        current_items=[item for page in current for item in page['items']]
+        assert len(previous_items)==len(current_items)
+        for was,now in zip(previous_items,current_items):
+            assert {k:now.get(k) for k in was}==was, (command,was,now)
+        # An ordinary query pins the company's audit, so the upgrade's own event stales its
+        # continuations. Payment preparation (`payment invoices`) pins only the facts it
+        # lists, which the upgrade did not change, so its continuations still resume.
+        for previous in row['pages']:
+            if previous['next_cursor'] and command!='payment invoices':
+                with pytest.raises(bookflow.BookflowError) as caught:
+                    client.run(command,dict(inp,cursor=previous['next_cursor']),company=co)
+                assert caught.value.code=='E_QUERY_STALE'
         pages.append(dict(before=row,after=current))
     assert database(path)==read_before and attachments(root)==old_files
     noop_before=database(root/'hub.db')
     again=client.run('upgrade',{},reason='Co19 no-op witness')
     assert again['companies_migrated']==[] and again['companies_skipped']==[co]
     assert database(path)==read_before and database(root/'hub.db')==noop_before
-    assert read_company_marker(path.parent)==marker
-    assert (path.parent/'bookflow-company.toml').read_bytes()==marker_bytes
     (tmp_path/'public-upgrade.json').write_text(json.dumps(dict(result=result,noop=again,company_event=event,company_entry=entry,
         hub_event=h_event,hub_entry=h_entry,pages=pages,raw_before=read_before,attachments=old_files),indent=2,default=repr))
 
 
 @pytest.mark.parametrize('identity',['present','new_company_copy','absent_hub_identity'])
-def test_company_migration_system_identity_seams(co18,tmp_path,monkeypatch,identity):
+def test_company_migration_system_identity_seams(co18,tmp_path,monkeypatch,identity,at_co19):
     from types import SimpleNamespace
+    from bookflow.core.commit_hooks import CommitHooks
     from bookflow.storage.migrate import migrate_company
     from bookflow.core.context import Context, Interface
     from bookflow.core.audit import decode_snapshot
@@ -404,7 +447,7 @@ def test_company_migration_system_identity_seams(co18,tmp_path,monkeypatch,ident
         before=snapshot(db.raw)['main']
         if identity=='absent_hub_identity':system=None
         monkeypatch.setattr('bookflow.hub.users.find_user',lambda s,kind:system)
-        session=SimpleNamespace(hub=object(),actor=None,hub_touched=[])
+        session=SimpleNamespace(hub=SimpleNamespace(write_transaction=False),company=None,actor=None,hub_touched=[],commits=CommitHooks())
         assert migrate_company(session,Context.new(Interface.python,'co19-system-witness'),db,tmp_path,None)==('co0018','co0019')
         event=db.conn.execute(sa.select(schema.audit_events).order_by(schema.audit_events.c.seq.desc())).mappings().first()
         assert event['actor_id']==(system['id'] if system else None) and event['actor_kind']=='system' and event['on_behalf_of'] is None

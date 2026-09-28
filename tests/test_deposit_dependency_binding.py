@@ -71,22 +71,45 @@ def _storage(root, company_path):
 
 @pytest.fixture
 def bound_people(root, client):
-    from tests.conftest import make_actor, as_user
-    from tests.test_row7_credentials import writer
-    from bookflow.hub import schema as h
-    from bookflow.core import clock
+    """Two equal human principals and an agent authorized to act for either, on the demo.
+
+    The agent is made the way an administrator makes one on an activated install -- the
+    public agent commands (conftest.make_agent) -- and its OS login is mapped so a session
+    can act as it. Nothing about its authority is written behind the commands' backs.
+    """
+    from tests.conftest import make_actor, as_user, make_agent
+    from bookflow.core.config import Config
     company = client.company.list()['items'][0]['company_id']
     first = make_actor(root, 'deposit-principal-one', company_role=(company, 'standard'))
     second = make_actor(root, 'deposit-principal-two', company_role=(company, 'standard'))
-    agent = make_actor(root, 'deposit-history-agent', kind='agent', owner_user_id=first, company_role=(company, 'standard'))
-    with writer(root) as db:
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=3, suspended_at=None, suspension_reason=None))
-        for principal in (first, second):
-            db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent, principal_user_id=principal,
-                assigned_by=first, assigned_at=clock.now_iso(), revoked_at=None))
+    agent = make_agent(lambda name, body: client.run(name, body), 'deposit-history-agent',
+                       principals=[first, second], company=company)
+    config = Config.load(root / 'config.toml')
+    config.set_user('deposit-history-agent', agent)
+    config.save()
     return dict(company=company, first=first, second=second, agent=agent,
         one=as_user(root, 'deposit-principal-one'), two=as_user(root, 'deposit-principal-two'),
-        bot=as_user(root, 'deposit-history-agent'))
+        bot=AgentSession(root, 'deposit-history-agent', principal=first),
+        bot_for=lambda principal: AgentSession(root, 'deposit-history-agent', principal=principal))
+
+
+class AgentSession:
+    """The agent's own session, acting for `principal`, as an activated install admits one.
+
+    An agent is admitted only on behalf of an eligible principal, and the policy checks the
+    agent and that principal together from the session. A request's session and its
+    credential are one binding in production, so a witness runs in a session for the same
+    principal as the credential it checks (`bot` acts for the first person).
+    """
+    def __init__(self, root, login, *, principal):
+        self.root, self.login, self.principal = root, login, principal
+
+    def run(self, name, raw, *, company=None):
+        from bookflow.core.context import Context, Interface
+        from bookflow.core.dispatch import run as dispatch_run
+        ctx = Context.new(Interface.python, 'bound agent witness', on_behalf_of=self.principal)
+        return dispatch_run(registry.get(name), raw, ctx, data_root=str(self.root), company_selector=company,
+                            company_source='option' if company else None, _login=self.login)
 
 
 def _credential(client, actor, principal):
@@ -96,7 +119,6 @@ def _credential(client, actor, principal):
                       actor_kind='agent', secret=issued['secret'])
 
 
-@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 @pytest.mark.parametrize('case', ['principal_switch', 'renewal', 'revoked', 'expired', 'epoch', 'principal_loss', 'missing_principal'])
 def test_actual_agent_credential_and_principal_matrix(root, client, sale, driver, monkeypatch, bound_people, case):
     from tests.test_row7_credentials import writer
@@ -144,7 +166,17 @@ def test_actual_agent_credential_and_principal_matrix(root, client, sale, driver
             rendered = str(caught.value.details)
             assert all(identifier not in rendered for identifier in (people['agent'], people['first'], people['second']))
             assert 'unknown_history' not in rendered
-    observe(people['bot'], monkeypatch, check, people['company'])
+    session = people['bot_for'](credential.on_behalf_of or people['first'])
+    if case == 'principal_loss':
+        # The person the agent acts for lost the company: the agent's session for them is
+        # refused at admission, before any history is read, naming no identity.
+        with pytest.raises(BookflowError) as caught:
+            observe(session, monkeypatch, check, people['company'])
+        assert caught.value.code == expected
+        rendered = str(caught.value.details)
+        assert all(identifier not in rendered for identifier in (people['agent'], people['first'], people['second']))
+    else:
+        observe(session, monkeypatch, check, people['company'])
     assert _storage(root, database_path(client)) == before
 
 
@@ -205,7 +237,19 @@ def test_os_remapping_invalidates_the_existing_execution_producer(root,client,sa
     assert _storage(root,database_path(client))==before
 
 
-@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
+def _as_admitted(writer_session, admitted):
+    """The agent's own admitted session, over the writer's open databases.
+
+    Every fact of the admission (actor, login, memberships and the binding an activated
+    install checks) is the agent's; only the database handles are the writer's.
+    """
+    import copy
+    s = copy.copy(admitted)
+    s.company, s.hub, s.dry_run = writer_session.company, writer_session.hub, False
+    s.company_info_row = writer_session.company_info_row
+    return s
+
+
 def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(root,client,sale,driver,monkeypatch,bound_people):
     from dataclasses import replace
     from bookflow.company import deposit_lifecycle as lifecycle, deposit_persistence as persistence
@@ -226,12 +270,15 @@ def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(roo
     wrong_context=Context.new(Interface.http,'wrong fixed principal',on_behalf_of=people['second'])
     with pytest.raises(BookflowError) as mismatch:
         with driver.session() as writer_session:
-            s=replace(writer_session,actor=admitted.actor,os_login=admitted.os_login,memberships=admitted.memberships)
+            s=_as_admitted(writer_session,admitted)
             persistence.execute(s,wrong_context,plan)
-    assert mismatch.value.code=='E_UNAUTHENTICATED'
+    # A context naming another principal than the bearer's is refused before any write: on a
+    # legacy root by the credential check, on an activated one by the binding admission.
+    assert mismatch.value.code in ('E_UNAUTHENTICATED','E_PERMISSION'), mismatch.value.to_dict()
+    assert people['first'] not in str(mismatch.value.details) and people['second'] not in str(mismatch.value.details)
     assert _storage(root,database_path(client))==before
     with driver.session() as writer_session:
-        s=replace(writer_session,actor=admitted.actor,os_login=admitted.os_login,memberships=admitted.memberships)
+        s=_as_admitted(writer_session,admitted)
         output=persistence.execute(s,ctx,plan)
         assert output.changed and output.effect.financial.bank_total==1000
         event=s.company.raw.execute('SELECT actor_id,actor_kind,on_behalf_of,interface FROM audit_events WHERE id=?',(output.effect.audit_event_id,)).fetchone()
@@ -243,7 +290,7 @@ def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(roo
     before=_storage(root,database_path(client))
     with pytest.raises(BookflowError) as error:
         with driver.session() as writer_session:
-            s=replace(writer_session,actor=admitted.actor,os_login=admitted.os_login,memberships=admitted.memberships)
+            s=_as_admitted(writer_session,admitted)
             persistence.execute(s,ctx,plan)
     assert error.value.code=='E_UNAUTHENTICATED'
     assert _storage(root,database_path(client))==before
@@ -251,7 +298,7 @@ def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(roo
     for path in ('prepare','execute'):
         with pytest.raises(BookflowError) as denied:
             with driver.session() as writer_session:
-                s=replace(writer_session,actor=admitted.actor,os_login=admitted.os_login,memberships=admitted.memberships)
+                s=_as_admitted(writer_session,admitted)
                 if path=='execute':persistence.execute(s,ctx,live_plan)
                 else:lifecycle.prepare(s,ctx,lifecycle.INPUTS['post'].model_validate_json(live_plan.input_json),'post',binding=credential)
         assert denied.value.code=='E_UNAUTHENTICATED'
