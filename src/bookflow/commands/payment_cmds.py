@@ -105,7 +105,7 @@ _PREPARATION_DESCRIPTIONS = {
     'invoices': 'Open (unpaid) invoices a customer can pay, with the amount due and current expected_version of each: mode "new_receipt" with customer and date. Each row also carries its early-payment `discount_date` and the `suggested_discount_minor_units` its terms offer for a receipt on that date (the terms percentage of the invoice total, tax included, less any discount already taken; zero after the discount date), which `payment receive` takes only when listed in its `discounts`. Page bounds never limit receipt intent.',
     'suggest': 'Choose which open invoices a payment pays. strategy "exact_then_oldest" takes an invoice matching the amount exactly, otherwise the oldest invoices first until the money runs out (give the total due to pay everything open). To apply the suggestion as it stands, give `payment receive` applications {"mode": "suggested", "strategy": ...} with the same customer, date and amount; to adjust it, pass each row to applications.items as invoice = invoice_id, expected_version, amount = {"minor_units": amount_minor_units, "currency": currency}.',
     'calculate': 'Calculate a payment amount from selected invoices, or split an entered amount across them, with the resolver the payment form uses; nothing is saved. Page bounds never limit receipt intent.',
-    'query': 'Page recorded customer payments with customer, method, status, date, number and available-credit filters.',
+    'query': 'Page recorded customer payments with customer, method, status, date, number, reference (the customer\'s check number) and available-credit filters. `q` searches the receipt number, memo, reference/check number and customer name.',
 }
 
 
