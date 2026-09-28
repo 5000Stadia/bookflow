@@ -218,6 +218,7 @@ class CompanyUpdateInput(BaseModel):
     automatically_apply_payments: bool = Field(None, strict=True, description="Suggest exact-match then oldest invoice allocations; omission preserves, null rejects")
     automatically_calculate_payments: bool = Field(None, strict=True, description="Calculate selected invoice amounts; omission preserves, null rejects")
     use_undeposited_funds_for_payments: bool = Field(None, strict=True, description="Default receipts to Undeposited Funds; omission preserves, null rejects")
+    negative_number_style: Literal["minus", "parentheses"] | None = Field(None, description="How reports, lists and forms show a negative amount: minus (-40.00) or parentheses ((40.00)). Display only; JSON, exports and inputs keep the minus sign.")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", mode="before")
     @classmethod
@@ -234,7 +235,7 @@ NOT_NULLABLE = {
     "use_account_numbers", "show_lowest_subaccount_only", "required_employee_profile_fields",
     "use_classes", "prompt_for_class", "enable_price_levels", "units_of_measure_mode",
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
-    "order_printable_checks", "attachment_max_bytes",
+    "order_printable_checks", "attachment_max_bytes", "negative_number_style",
 }
 
 

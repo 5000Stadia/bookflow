@@ -1000,6 +1000,7 @@ The same example as complete `bookflow_run` arguments:
 | `automatically_apply_payments` | `--automatically-apply-payments` | boolean | no | no | null | Suggest exact-match then oldest invoice allocations; omission preserves, null rejects |
 | `automatically_calculate_payments` | `--automatically-calculate-payments` | boolean | no | no | null | Calculate selected invoice amounts; omission preserves, null rejects |
 | `use_undeposited_funds_for_payments` | `--use-undeposited-funds-for-payments` | boolean | no | no | null | Default receipts to Undeposited Funds; omission preserves, null rejects |
+| `negative_number_style` | `--negative-number-style` | literal["minus", "parentheses"] \| null | no | yes | null | How reports, lists and forms show a negative amount: minus (-40.00) or parentheses ((40.00)). Display only; JSON, exports and inputs keep the minus sign. |
 
 ### Command and context options
 

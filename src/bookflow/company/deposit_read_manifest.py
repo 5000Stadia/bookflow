@@ -300,6 +300,7 @@ FIELDS = {
         'automatically_apply_payments': ('bool', False, False, 'dependency_field'),
         'automatically_calculate_payments': ('bool', False, False, 'dependency_field'),
         'use_undeposited_funds_for_payments': ('bool', False, False, 'dependency_field'),
+        'negative_number_style': ('str', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),

@@ -206,6 +206,7 @@ company_info = _table(
     _column("automatically_apply_payments", sa.Boolean, "Suggest exact-match then oldest invoice allocations for new cash.", nullable=False, server_default="0"),
     _column("automatically_calculate_payments", sa.Boolean, "Derive amounts for selected invoices while preserving explicitly entered cash.", nullable=False, server_default="0"),
     _column("use_undeposited_funds_for_payments", sa.Boolean, "Default new receipts to Undeposited Funds unless explicitly overridden.", nullable=False, server_default="1"),
+    _column("negative_number_style", sa.String(12), "How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign.", sa.CheckConstraint("negative_number_style IN ('minus','parentheses')", name="ck_company_negative_number_style"), nullable=False, server_default="minus"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 

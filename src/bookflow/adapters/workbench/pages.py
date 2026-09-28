@@ -659,6 +659,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         result = run_command(cmd, raw, ctx, cred, company, "option" if company else "none", dry_run)
         if name == "company show":
             request.state.workbench_company = result
+            # The company's own way of showing a negative amount, for every figure this
+            # request renders through the display filters.
+            Display.NEGATIVES.set((result.get("info") or {}).get("negative_number_style") or "minus")
         return result
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
