@@ -678,3 +678,5 @@ class PreviewOutput(Model):
     expected_facts_fingerprint: Fingerprint=FINGERPRINT_SAMPLE
     dependency_guard: str
     balanced: bool
+    # An opening draft is not finished by itself; this names the step that finishes it.
+    next_step: str|None=None

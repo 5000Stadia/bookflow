@@ -168,7 +168,7 @@ Example JSON output:
 
 ## `reconcile finish`
 
-Certify a reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified.
+Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -625,7 +625,7 @@ Example JSON output:
 
 ## `reconcile preview`
 
-Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires.
+Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement.
 
 | Contract | Value |
 |---|---|
@@ -706,6 +706,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expected_facts_fingerprint` | string | yes | no | — | — |
 | `dependency_guard` | string | yes | no | — | — |
 | `balanced` | boolean | yes | no | — | — |
+| `next_step` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -719,6 +720,7 @@ Example JSON output:
   "draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "expected_facts_fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
   "kind": "opening",
+  "next_step": null,
   "totals": {
     "beginning_balance": 1,
     "cleared_balance": 1,
