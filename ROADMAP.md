@@ -149,3 +149,4 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
 - [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
+- [ ] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
