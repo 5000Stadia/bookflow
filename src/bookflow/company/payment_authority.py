@@ -515,6 +515,15 @@ def authorize_publication_transactions(s, occurrences):
     from itertools import islice
     from bookflow.core.errors import BookflowError
     occurrences = iter(occurrences)
+    # One check reads one snapshot, so a requirement already met in it is met again: each
+    # distinct requirement is asked once, in the order its first occurrence needs it. A page
+    # naming hundreds of sales used to repeat the same few requirements hundreds of times on
+    # every frame it released.
+    met = set()
+    def require(capability, role):
+        if (capability, role) not in met:
+            require_resource(s, capability, role)
+            met.add((capability, role))
     while batch := list(islice(occurrences, _BATCH_SIZE)):
         facts = _publication_transaction_facts(s, list(dict.fromkeys(identifier for identifier, _ in batch)))
         for identifier, write in batch:
@@ -522,9 +531,9 @@ def authorize_publication_transactions(s, occurrences):
             if fact is None or fact['unresolved_target']:
                 raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
             role = 'standard' if write else 'member'
-            require_resource(s, 'ledger.post' if write else 'ledger.read', role)
+            require('ledger.post' if write else 'ledger.read', role)
             if fact['linked_work']:
-                require_resource(s, 'customer-work', role)
+                require('customer-work', role)
         del facts
 
 

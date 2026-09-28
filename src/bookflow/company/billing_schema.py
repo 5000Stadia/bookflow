@@ -95,4 +95,5 @@ def define_tables(metadata, column, table):
              work_billing_allocations.c.root_line_id)
     sa.Index('ix_work_billing_allocation_source', work_billing_allocations.c.source_document_id,
              work_billing_allocations.c.source_revision_id)
+    sa.Index('ix_work_billing_allocation_transaction', work_billing_allocations.c.transaction_id)
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}

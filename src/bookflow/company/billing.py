@@ -53,6 +53,16 @@ def source_selection(s, inp, kind):
 
 
 def posting_eligibility(s, source, selected):
+    """Current eligibility of these captured lines for posting, and what carries on as warnings.
+
+    ``source`` is the work revision; the selected lines are its saved lines, so the revision
+    and the line identities determine the answer within one reading."""
+    from bookflow.company.billing_allocations import within_reading
+    key = ('posting_eligibility', source['id'], tuple(row['id'] for row, _, _ in selected))
+    return list(within_reading(s, key, lambda: _posting_eligibility(s, source, selected)))
+
+
+def _posting_eligibility(s, source, selected):
     profile = work.facts(source).profile
     warnings = work._carry_warnings(s, source, [row for row, _, _ in selected])
     warnings = [w.replace('for non-posting work', 'as descriptive history') for w in warnings]
@@ -427,9 +437,11 @@ def persist(plan, ctx, s, *, command_name):
 
 
 def apply(plan, ctx, s):
-    fresh = prepare(s, ctx, plan.data['input'], plan.data['kind'], plan.data['destination'])
-    from bookflow.company.billing_validation import validate
-    validate(fresh, s, ctx)
+    from bookflow.company.billing_allocations import one_reading
+    # Fresh inside the write transaction; the reading scope ends before anything is written.
+    # prepare() ends by validating what it prepared, against these same reads.
+    with one_reading(s):
+        fresh = prepare(s, ctx, plan.data['input'], plan.data['kind'], plan.data['destination'])
     return persist(fresh, ctx, s, command_name=plan.data['kind'].replace('_', '-') + ' ' + plan.data['destination'].replace('_', '-'))
 
 
