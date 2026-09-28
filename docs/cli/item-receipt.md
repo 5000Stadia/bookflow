@@ -4,7 +4,7 @@
 
 ## `item-receipt history`
 
-Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
+Every revision of one item receipt, oldest first: name the receipt (ID or number) in `receipt`; find it first with `item-receipt query`.
 
 | Contract | Value |
 |---|---|
@@ -569,7 +569,7 @@ Example JSON output:
 
 ## `item-receipt query`
 
-Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
+Page item receipts with vendor, date, status and unbilled_only filters: received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
 
 | Contract | Value |
 |---|---|
@@ -809,7 +809,7 @@ Example JSON output:
 
 ## `item-receipt show`
 
-Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
+Show one item receipt (by ID or number in `receipt`, optionally an earlier revision_number): received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
 
 | Contract | Value |
 |---|---|

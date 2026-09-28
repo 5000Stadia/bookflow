@@ -280,3 +280,10 @@ def test_invoice_query_filters_by_what_is_still_owed(client):
         "operation_key": "r86-unsettle", "applications": [{"application_id": application["application_id"],
             "invoice_expected_version": current["version"]}]}, company=CO, reason="Wrong invoice")
     assert invoice["id"] in [row["id"] for row in statuses(settlement="unpaid")[1]]
+
+
+def test_item_receipt_reads_each_say_what_they_take():
+    from bookflow.adapters.mcp.catalog import list_commands
+    rows = {row["name"]: row["description"] for row in list_commands(prefix="item-receipt", limit=200)["commands"]}
+    assert len({rows["item-receipt show"], rows["item-receipt query"], rows["item-receipt history"]}) == 3
+    assert "`receipt`" in rows["item-receipt history"]
