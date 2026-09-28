@@ -321,6 +321,13 @@ class SalesQueryWithDeletedInput(SalesQueryInput):
     include_deleted: bool = Field(default=False, description="Include retained deleted sale facts")
 
 
+class InvoiceQueryInput(SalesQueryWithDeletedInput):
+    settlement: Literal["open", "unpaid", "partial", "paid"] | None = Field(default=None,
+        description="Filter posted invoices by what is still due, the same derivation as settlement_current: "
+                    "open is anything still owed (unpaid or partial), unpaid has nothing applied, partial has "
+                    "some applied and some due, paid has nothing due.")
+
+
 class InvoiceHistoryInput(SalesPageInput):
     include_deleted: bool = Field(default=False, description="Explicitly read retained deleted sale facts")
     invoice: Selector

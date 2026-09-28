@@ -32,6 +32,17 @@ def descriptor(cmd):
     }
 
 
+@lru_cache(maxsize=None)
+def _model_schema_text(model):
+    # A command's models are fixed for the life of the process, and their JSON schema is the
+    # expensive part of every help answer; each call still gets its own fresh copy.
+    return json.dumps(model.model_json_schema())
+
+
+def model_schema(model):
+    return json.loads(_model_schema_text(model))
+
+
 def _commands():
     registry.load_all()
     return registry.all_commands(include_standalone=True)
@@ -41,13 +52,14 @@ def command_help(name, view="usage"):
     _commands()
     cmd = registry.get(name)
     if cmd is None:
-        raise BookflowError("E_USAGE", details={"command": name})
+        raise registry.unknown_command(name)
     if view not in HELP_VIEWS:
         raise BookflowError("E_VALIDATION", details={"field": "view", "allowed": HELP_VIEWS})
-    from bookflow.documentation.generate import command_document, command_usage
+    from bookflow.documentation.examples import EXAMPLES
+    from bookflow.documentation.generate import command_document, command_usage, run_example
     from .envelopes import RunArguments
     row = descriptor(cmd)
-    context_fields = RunArguments.model_json_schema()["properties"]
+    context_fields = model_schema(RunArguments)["properties"]
     context_properties = {key: context_fields[key] if key in row["context"] else
                           {"const": False if key == "dry_run" else None,
                            "description": "Only this inactive value or omission applies to this command."}
@@ -56,14 +68,18 @@ def command_help(name, view="usage"):
         **row,
         "context_schema": {"type": "object", "description": "Schema fragment for top-level bookflow_run execution fields, not a nested context argument.", "additionalProperties": False,
             "properties": context_properties},
-        "context_usage": "Omit optional context or use null; dry_run omitted/false is inactive and null is invalid. Active context applies only where listed. Use a short audit reason naming the trigger (at most 140 characters), not a narrative. Agent writes require reason or an active directive. Company selection: explicit non-null company, then calling-machine environment, then calling-machine configuration; null behaves as omitted.",
+        "context_usage": "Omit optional context or use null; dry_run omitted/false is inactive and null is invalid. Active context applies only where listed. Use a short audit reason naming the trigger (at most 140 characters), not a narrative. Agent writes require reason or an active directive, and so do their dry_run previews: a preview runs the same checks as the save. Company selection: explicit non-null company, then calling-machine environment, then calling-machine configuration; null behaves as omitted.",
         "error_codes": sorted(set(cmd.error_codes) | set(INFRASTRUCTURE_CODES)),
         "bridge_version": BRIDGE_VERSION, "view": view, "available_views": list(HELP_VIEWS),
     }
     if view in {"usage", "input_schema", "full"}:
-        result["input_schema"] = cmd.input_model.model_json_schema()
+        # One worked example in every view that shows input, so a caller reading only the
+        # schema still sees a complete call it can copy and edit.
+        result["example"] = run_example(cmd)
+        result["cli_example"] = EXAMPLES[cmd.name].invocation
+        result["input_schema"] = model_schema(cmd.input_model)
     if view in {"output_schema", "full"}:
-        result["output_schema"] = cmd.output_model.model_json_schema()
+        result["output_schema"] = model_schema(cmd.output_model)
     if view in {"usage", "full"}:
         result["documentation"] = command_usage(cmd) if view == "usage" else command_document(cmd)
     return result
@@ -102,5 +118,10 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
     next_cursor = None
     if end < len(rows):
         next_cursor = base64.urlsafe_b64encode(json.dumps({"digest": digest, "prefix": prefix, "offset": end}).encode()).decode()
-    return {"commands": rows[offset:end], "next_cursor": next_cursor,
+    page = {"commands": rows[offset:end], "next_cursor": next_cursor,
             "registry_digest": digest, "bridge_version": BRIDGE_VERSION}
+    if prefix and not rows:
+        # A prefix that names nothing (a synonym, a plural, a typo) is answered with the
+        # nearest real command names rather than a bare empty page.
+        page["suggestions"] = registry.similar_commands(prefix)
+    return page

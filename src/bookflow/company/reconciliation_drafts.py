@@ -1,5 +1,6 @@
 """Immutable private draft/proposal preparation; never persists or posts."""
 import json
+from bookflow.core.errors import BookflowError
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company.reconciliation_storage_validation import Header, Evidence, Preferences
 from bookflow.company.reconciliation_preparation import (
@@ -15,6 +16,10 @@ def balance(s,value,field):
     """
     return m.statement_balance(value,s.referenced_rows['company_info'][0]['home_currency'],field)
 
+
+NO_OPENING=('this account has no reconciliation opening yet; start one with `reconcile opening start` '
+            '(opening date and balance from the last statement you trust), then `reconcile start` for the next statement; '
+            'to follow an opening draft that is not finished yet, pass its id as opening_draft_id')
 
 DEFAULT_PREFERENCES=Preferences(format=1,columns=['date','number','payee','amount','status'],sort='date',descending=False,hide_after_date=True,view='as_certified')
 
@@ -44,6 +49,11 @@ def start(s,inp, *, identity,revision_id,opening_draft=None):
     else:
         if inp.opening_id:
             require(state is not None and state['opening_id']==inp.opening_id,'E_RECONCILIATION_CHAIN_STALE')
+        elif not inp.opening_draft_id:
+            # Neither named: the statement follows the account's adopted opening, and an account
+            # that has none is told the first step rather than that an id is missing.
+            if state is None or state['opening_id'] is None:
+                raise BookflowError('E_VALIDATION',message=NO_OPENING,details={'fields':[{'field':'opening_id','problem':NO_OPENING}],'next_command':'reconcile opening start'})
         else:
             require(opening_draft is not None and opening_draft.id==inp.opening_draft_id and opening_draft.account_id==inp.account and opening_draft.kind=='opening' and opening_draft.state=='open','E_RECONCILIATION_DRAFT_STATE')
     header=Header(format=1,opening_date=cutoff if opening else None,statement_date=None if opening else cutoff,

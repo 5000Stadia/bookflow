@@ -131,7 +131,7 @@ def _transfer_section(cmd: Any) -> list[str]:
 
 def command_document(cmd: Any) -> str:
     """The same pure command reference used by generated files and discovery."""
-    return _command_page(cmd.noun, [cmd], constraint_cache={}).decode("utf-8")
+    return _command_page(cmd.noun, [cmd], constraint_cache=None).decode("utf-8")
 
 
 def _payment_usage(name: str) -> list[str]:
@@ -140,7 +140,7 @@ def _payment_usage(name: str) -> list[str]:
     if name in {"payment receive", "payment update"}:
         lines.extend(["", "reference is the customer's check/reference number (for example 1042); number is Bookflow's internal receipt number. deposit_to accepts a bank account or the system Undeposited Funds holding account. Recording a receipt into Undeposited Funds does not record a completed bank deposit."])
     if name == "payment receive":
-        lines.extend(["", "Parent/job example: receive 1000.00 from a parent customer, apply 100.00 to its HQ invoice, 600.00 to its Pine job invoice and 200.00 to its Oak job invoice. The remaining 100.00 is unapplied credit owned by the parent customer. Set customer to that parent and applications.mode to inline with each invoice, its current expected_version and amount in applications.items. Use payment invoices to discover compatible invoices and their current versions. Job invoice allocations remain owned by their respective jobs; parent credit is not silently moved to a job. Supply explicit applications when the directive specifies allocations; omitted applications can use the company's automatic-application policy."])
+        lines.extend(["", "Parent/job example: receive 1000.00 from a parent customer, apply 100.00 to its HQ invoice, 600.00 to its Pine job invoice and 200.00 to its Oak job invoice. The remaining 100.00 is unapplied credit owned by the parent customer. Set customer to that parent and applications.mode to inline with each invoice, its current expected_version and amount in applications.items. Use payment invoices to discover compatible invoices and their current versions. Job invoice allocations remain owned by their respective jobs; parent credit is not silently moved to a job. Supply explicit applications when the directive specifies allocations. To apply oldest invoice first, or to pay off everything open, call payment suggest with strategy exact_then_oldest and the received amount, then copy each returned row into applications.items as invoice = invoice_id, expected_version, amount = {\"minor_units\": amount_minor_units, \"currency\": currency}. With no applications the money stays as the customer's unapplied credit; the company's automatic-application preference only changes what payment suggest proposes with strategy company."])
     if name in {"payment receive", "payment apply", "payment unapply", "payment void", "payment update"}:
         lines.extend(["", "Preview/save: choose input.operation_key once for this business operation. Call with top-level dry_run=true. Copy the returned preview result's facts_fingerprint into input.expected_facts_fingerprint, then save with dry_run=false using the same operation_key, the same business inputs and the same reason/directive. The fingerprint is returned by Bookflow; do not calculate it. A stale preview requires a fresh preview and review of the changed facts before saving.",
             "After an uncertain transport result, recover the existing transport reference first. For an exact business retry, preserve the original operation_key, input and context; payment operation show retrieves the canonical saved request and historical effect. A new business operation needs a new operation_key. The permanent operation_key is distinct from the optional top-level idempotency_key and from the transport reference.",
@@ -155,6 +155,20 @@ def _purpose(cmd: Any) -> list[str]:
         *(["", "A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record."] if cmd.is_write else [])]
 
 
+def run_example(cmd: Any) -> dict[str, Any] | None:
+    """One complete, valid bookflow_run argument object for the command; None when it is local-only."""
+    if cmd.local_only or cmd.standalone:
+        return None
+    example: dict[str, Any] = {"command": cmd.name, "input": EXAMPLES[cmd.name].input}
+    if cmd.scope == "company":
+        example["company"] = "Company ID or name"
+    if cmd.is_write:
+        example.update(dry_run=True, reason="Preview the requested change")
+    if cmd.transfer:
+        example["transport"] = {"input_file" if cmd.transfer.direction == "input" else "output_file": "/permitted-directory/receipt.pdf"}
+    return example
+
+
 def command_usage(cmd: Any) -> str:
     """Concise registry reference, alongside the complete machine input schema.
 
@@ -165,14 +179,8 @@ def command_usage(cmd: Any) -> str:
              "Supply `input: {}` when the command has no business input fields.",
              "The input_schema describes only business fields inside input. context_schema describes execution fields placed at the top level beside command and input; it is not a nested context object.", "",
              "Existing CLI invocation example:", f"`{EXAMPLES[cmd.name].invocation}`"]
-    if not (cmd.local_only or cmd.standalone):
-        example = {"command": cmd.name, "input": EXAMPLES[cmd.name].input}
-        if cmd.scope == "company":
-            example["company"] = "Company ID or name"
-        if cmd.is_write:
-            example.update(dry_run=True, reason="Preview the requested change")
-        if cmd.transfer:
-            example["transport"] = {"input_file" if cmd.transfer.direction == "input" else "output_file": "/permitted-directory/receipt.pdf"}
+    example = run_example(cmd)
+    if example is not None:
         lines.extend(["", "Complete bookflow_run tool arguments (replace sample business values and company/file placeholders):",
                       "```json", json.dumps(example, ensure_ascii=True), "```",
                       "company, dry_run, reason, source_ref, directive, idempotency_key and transport are top-level execution fields, never fields inside input or a nested context object. Supply only the applicable fields described by this command's context_schema."])
@@ -193,7 +201,7 @@ def command_usage(cmd: Any) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _command_page(noun: str, commands: list[Any], *, constraint_cache: dict[int, str]) -> bytes:
+def _command_page(noun: str, commands: list[Any], *, constraint_cache: dict[int, str] | None) -> bytes:
     lines = [NOTICE.rstrip(), "", f"# `{noun}` commands", ""]
     for cmd in commands:
         capability = "none" if not getattr(cmd, "permissioned", True) else cmd.capability
@@ -217,6 +225,9 @@ def _command_page(noun: str, commands: list[Any], *, constraint_cache: dict[int,
             "",
             f"`{EXAMPLES[cmd.name].invocation}`",
             "",
+            *(["### MCP", "", "The same example as complete `bookflow_run` arguments:", "",
+               "```json", json.dumps(run_example(cmd), ensure_ascii=True), "```", ""]
+              if run_example(cmd) is not None else []),
             "### Input",
             "",
             "| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |",

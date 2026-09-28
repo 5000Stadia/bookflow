@@ -20,6 +20,14 @@ List hub audit events the acting user may see, newest first.
 
 `bookflow hub audit list --limit 5 --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "hub audit list", "input": {"limit": 5}}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -127,7 +135,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -151,6 +159,14 @@ Show one hub audit event with its entries and field diffs.
 ### CLI
 
 `bookflow hub audit show 01ARZ3NDEKTSV4RRFFQ69G5FAV --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "hub audit show", "input": {"event": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}}
+```
 
 ### Input
 
@@ -268,7 +284,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -292,6 +308,14 @@ Hub audit events newer than a cursor, oldest first; the event feed.
 ### CLI
 
 `bookflow hub audit tail --after 42 --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "hub audit tail", "input": {"after": 42}}
+```
 
 ### Input
 
@@ -408,7 +432,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

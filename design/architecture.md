@@ -4841,3 +4841,38 @@ facts, retaining ordered checks and family-specific proofs. This does not cache 
 allow across frames or turn multiple company databases into one atomic snapshot.
 Copied async contexts cannot borrow or close another thread's handles. Exceptions
 and outer scope exit close the owned hub snapshot.
+
+## Agent-facing help and refusals (R86)
+
+`core/input_errors.fields` is the only translator from an input model's validation failure to
+`details.fields`; `dispatch.validate_input` calls it for every surface. It walks each validator
+location through the model so a field path is the caller's own (union branch tags such as
+`function-after[...]` or a discriminator value never appear), collapses a value that failed every
+branch of a union into one "must be ..." shape (money reads as a decimal string like "22.80"),
+turns a missing or mis-patterned field into "required: <shape>" from the field's JSON schema, and
+gives an unknown key `accepted_fields` for the model it was sent to, plus a `hint` naming
+`<noun> query options` for a list query. `E_PERMISSION` messages come from
+`errors.permission_message(details)` at construction and never say more than the details;
+`errors.explain_permission` fills a refusal that names nothing with the command's published
+capability and role (`reason: record_rule`) at the two command boundaries, `dispatch.run` and
+the hosted executor, before any publication document is sealed. `E_REASON_REQUIRED` for an
+agent says previews need a reason too (blueprint 5.5 and 5.8). Help views that show input carry
+`example` (`generate.run_example`) and `cli_example`; generated pages print the same example
+under `### MCP`. `list_service.resolve_selector` names `<noun> list` on a miss. `reconcile start`
+with no opening named follows the account's adopted opening, and refuses with the
+`reconcile opening start` step when there is none.
+
+V1.5 widening of the same row: `invoice query` takes `settlement` (open, unpaid, partial, paid),
+filtered in SQL by `sales._settlement_condition` with the derivation `payment_queries` uses for
+`settlement_current` (posted gross less every apply without a reversing inverse). `register
+query` defaults an omitted period to the fiscal year (company `fiscal_year_start_month`) through
+today in the company zone, and binds the resolved period into its cursor; `direction: desc`
+reads the whole period oldest first (running balances are defined that way) and returns its
+reversed slice under a watermark-checked offset cursor. `reconcile opening start`/`start` accept
+an account name, resolved to the ID before the request is recorded. `registry.unknown_command`
+is the one refusal for an unknown command name on every surface, with `suggestions` from
+`registry.similar_commands` (everyday verbs such as list/search/create map onto query/post), and
+`bookflow_list_commands` adds `suggestions` when a prefix matches nothing. A statement charge
+totalling 0.00 is refused (its E_VALIDATION rule in tests/error_matrix.py); zero-value invoices
+and sales receipts remain valid. Help caches each model's JSON schema per process and field
+constraint text in a process-wide cache that retains the fields it keys.

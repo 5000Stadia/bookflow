@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow attachment add customer 01ARZ3NDEKTSV4RRFFQ69G5FAV receipt.pdf --company "Demo Plumbing Co" --caption "Service receipt" --reason "File service receipt" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "attachment add", "input": {"record_type": "customer", "record_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "original_filename": "receipt.pdf", "media_type": "application/pdf", "caption": "Service receipt"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change", "transport": {"input_file": "/permitted-directory/receipt.pdf"}}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -220,7 +228,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -246,6 +254,14 @@ Download verified attachment bytes with original metadata.
 ### CLI
 
 `bookflow attachment get 01ARZ3NDEKTSV4RRFFQ69G5FAV --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "attachment get", "input": {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name", "transport": {"output_file": "/permitted-directory/receipt.pdf"}}
+```
 
 ### Input
 
@@ -350,7 +366,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -378,6 +394,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow attachment link 01ARZ3NDEKTSV4RRFFQ69G5FAV customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --caption "Related receipt" --reason "Link receipt" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "attachment link", "input": {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "record_type": "customer", "record_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "caption": "Related receipt"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -562,7 +586,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -587,6 +611,14 @@ Page active file associations for a record, newest occurrence first.
 ### CLI
 
 `bookflow attachment list customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --limit 25 --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "attachment list", "input": {"record_type": "customer", "record_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -691,7 +723,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -718,6 +750,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow attachment unlink 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --company "Demo Plumbing Co" --reason "Remove association" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "attachment unlink", "input": {"link": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -897,7 +937,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

@@ -23,6 +23,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow deposit delete 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key deposit-delete-example --dependency-guard GUARD --reason "Banked into the wrong account" --company "Demo Plumbing Co" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit delete", "input": {"deposit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "deposit-delete-example"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -134,7 +142,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -162,6 +170,14 @@ Page what happened to one deposit in the order the audit recorded it: each revis
 ### CLI
 
 `bookflow deposit history 01ARZ3NDEKTSV4RRFFQ69G5FAV --page-limit 50 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit history", "input": {"deposit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "page": {"limit": 50}}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -257,7 +273,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -282,6 +298,14 @@ Page one deposit revision's composition: contributing receipts, additional cash 
 ### CLI
 
 `bookflow deposit items 01ARZ3NDEKTSV4RRFFQ69G5FAV --kind sources --revision-number 2 --page-limit 50 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit items", "input": {"deposit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "kind": "sources", "revision_number": 2, "page": {"limit": 50}}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -578,7 +602,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -605,6 +629,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow deposit post --operation-key example-deposit-1 --document-mode inline --document-deposit-to Checking --document-date 2026-06-03 --document-memo "Saturday receipts" --document-sources '[{"source_type":"payment","source":"01ARZ3NDEKTSV4RRFFQ69G5FB1","expected_version":1},{"source_type":"sales_receipt","source":"01ARZ3NDEKTSV4RRFFQ69G5FB2","expected_version":1}]' --company "Demo Plumbing Co" --reason "Bank Saturday receipts" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit post", "input": {"operation_key": "example-deposit-1", "document": {"mode": "inline", "deposit_to": "Checking", "date": "2026-06-03", "memo": "Saturday receipts", "sources": [{"source_type": "payment", "source": "01ARZ3NDEKTSV4RRFFQ69G5FB1", "expected_version": 1}, {"source_type": "sales_receipt", "source": "01ARZ3NDEKTSV4RRFFQ69G5FB2", "expected_version": 1}], "additional": []}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -877,7 +909,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -904,6 +936,14 @@ Find saved deposits by bank, current status, revision date, exact number or capt
 ### CLI
 
 `bookflow deposit query --date-from 2026-06-01 --date-to 2026-06-30 --sort date --direction desc --page-limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit query", "input": {"date_from": "2026-06-01", "date_to": "2026-06-30", "sort": "date", "direction": "desc", "page": {"limit": 25}}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1183,7 +1223,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1208,6 +1248,14 @@ Show one deposit: its selected revision header, exact totals and counts, current
 ### CLI
 
 `bookflow deposit show 01ARZ3NDEKTSV4RRFFQ69G5FAV --revision-number 2 --as-of 2026-06-30 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit show", "input": {"deposit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "revision_number": 2, "as_of": "2026-06-30"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1576,7 +1624,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1601,6 +1649,14 @@ List the customer payments and sales receipts sitting in Undeposited Funds that 
 ### CLI
 
 `bookflow deposit sources --date 2026-06-03 --limit 50 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit sources", "input": {"date": "2026-06-03", "limit": 50}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1707,7 +1763,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1734,6 +1790,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow deposit update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key example-deposit-2 --document-mode inline --document-deposit-to Checking --document-date 2026-06-03 --document-number 1 --document-memo "Saturday receipts" --document-custom-fields "{}" --document-expected-custom-field-kinds "{}" --document-sources '[{"source_type":"payment","source":"01ARZ3NDEKTSV4RRFFQ69G5FB1","expected_version":1}]' --document-additional "[]" --dependency-guard authenticated-guard-from-deposit-post-dry-run --company "Demo Plumbing Co" --reason "Remove a receipt banked in error" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit update", "input": {"deposit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "example-deposit-2", "dependency_guard": "authenticated-guard-from-deposit-post-dry-run", "document": {"mode": "inline", "deposit_to": "Checking", "date": "2026-06-03", "memo": "Saturday receipts", "sources": [{"source_type": "payment", "source": "01ARZ3NDEKTSV4RRFFQ69G5FB1", "expected_version": 1}], "additional": [], "number": "1", "cash_back": null, "custom_fields": {}, "expected_custom_field_kinds": {}}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -2008,7 +2072,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2037,6 +2101,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow deposit void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --operation-key example-deposit-3 --dependency-guard authenticated-guard-from-deposit-void-dry-run --company "Demo Plumbing Co" --reason "Deposit never reached the bank" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "deposit void", "input": {"deposit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "operation_key": "example-deposit-3", "dependency_guard": "authenticated-guard-from-deposit-void-dry-run"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -2286,7 +2358,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

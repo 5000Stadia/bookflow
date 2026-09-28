@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow payment selection clear 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --company 'Demo Plumbing Co' --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment selection clear", "input": {"selection": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -187,7 +195,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -217,6 +225,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment selection create --mode new_receipt --customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --date 2026-06-01 --amount 150.00 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment selection create", "input": {"mode": "new_receipt", "customer": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "date": "2026-06-01", "amount": "150.00"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -389,7 +405,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -417,6 +433,14 @@ Page the complete selected invoice manifest at a pinned draft revision.
 ### CLI
 
 `bookflow payment selection items 01ARZ3NDEKTSV4RRFFQ69G5FAV --revision 1 --limit 25 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment selection items", "input": {"selection": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "revision": 1, "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -497,7 +521,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -522,6 +546,14 @@ Page shared drafts by creation time and identity; protection covers their comple
 ### CLI
 
 `bookflow payment selection query --state open --limit 25 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment selection query", "input": {"state": "open", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -638,7 +670,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -663,6 +695,14 @@ Read a shared payment draft or an exact immutable revision with saved amount ori
 ### CLI
 
 `bookflow payment selection show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment selection show", "input": {"selection": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -808,7 +848,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -836,6 +876,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment selection update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --set-items '[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"50.00"}]' --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment selection update", "input": {"selection": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "set_items": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "50.00"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1011,7 +1059,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |

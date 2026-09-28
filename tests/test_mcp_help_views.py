@@ -15,7 +15,15 @@ from bookflow.documentation.generate import command_document
 @pytest.mark.timeout(180)
 def test_every_registry_command_has_complete_views_and_resolvable_schemas():
     registry.load_all()
+    # Metaschema checks dominate this test (measured ~155 s of ~280 s under load when every view of
+    # every command re-checked its schema); many commands share one model, so each distinct
+    # schema is checked once, and each command's expected schemas are generated once.
+    checked, schemas = set(), {}
     for cmd in registry.all_commands(include_standalone=True):
+        for model in (cmd.input_model, cmd.output_model):
+            if model not in schemas:
+                schemas[model] = model.model_json_schema()
+        expected = {'input_schema': schemas[cmd.input_model], 'output_schema': schemas[cmd.output_model]}
         for view in HELP_VIEWS:
             doc = command_help(cmd.name, view)
             assert doc['view'] == view and doc['available_views'] == HELP_VIEWS
@@ -29,7 +37,11 @@ def test_every_registry_command_has_complete_views_and_resolvable_schemas():
                 present = view == 'full' or view == key or (view == 'usage' and key == 'input_schema')
                 assert (key in doc) is present
                 if present:
-                    assert doc[key] == model.model_json_schema()
+                    assert doc[key] == expected[key]
+                    identity = json.dumps(doc[key], sort_keys=True)
+                    if identity in checked:
+                        continue
+                    checked.add(identity)
                     Draft202012Validator.check_schema(doc[key])
                     def references(value):
                         if isinstance(value, dict):

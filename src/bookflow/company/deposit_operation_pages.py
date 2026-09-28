@@ -117,7 +117,7 @@ def authorized_original(s,saved,binding,*,write=False):
         try:
             history._authorize_binding_graph(s,binding,tuple(sorted(set(ids))),write=write)
         except BookflowError as error:
-            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details=history._refusal(error)) from None
             raise
     admit((*targets,saved['transaction_id']))
     malformed=False

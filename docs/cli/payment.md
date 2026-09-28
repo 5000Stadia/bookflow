@@ -4,7 +4,7 @@
 
 ## `payment apply`
 
-Apply existing payment credit to its exact-party invoices without ledger posting.
+Apply existing payment credit to its exact-party invoices without ledger posting; `payment suggest` with mode "existing_credit" and strategy "exact_then_oldest" picks them oldest first.
 
 Preview/save: choose input.operation_key once for this business operation. Call with top-level dry_run=true. Copy the returned preview result's facts_fingerprint into input.expected_facts_fingerprint, then save with dry_run=false using the same operation_key, the same business inputs and the same reason/directive. The fingerprint is returned by Bookflow; do not calculate it. A stale preview requires a fresh preview and review of the changed facts before saving.
 After an uncertain transport result, recover the existing transport reference first. For an exact business retry, preserve the original operation_key, input and context; payment operation show retrieves the canonical saved request and historical effect. A new business operation needs a new operation_key. The permanent operation_key is distinct from the optional top-level idempotency_key and from the transport reference.
@@ -24,7 +24,15 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow payment apply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --date 2026-06-01 --operation-key example-apply-1 --applications '{"mode":"inline","items":[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"50.00"}]}' --company 'Demo Plumbing Co' --json`
+`bookflow payment apply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --date 2026-06-01 --operation-key example-apply-1 --applications-mode inline --applications-items '[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"50.00"}]' --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment apply", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "date": "2026-06-01", "operation_key": "example-apply-1", "applications": {"mode": "inline", "items": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "50.00"}]}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -383,7 +391,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -397,7 +405,7 @@ Example JSON output:
 
 ## `payment calculate`
 
-Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.
+Calculate a payment amount from selected invoices, or split an entered amount across them, with the resolver the payment form uses; nothing is saved. Page bounds never limit receipt intent.
 
 | Contract | Value |
 |---|---|
@@ -412,6 +420,14 @@ Read complete compatible payment candidates or calculate shared amount origins; 
 ### CLI
 
 `bookflow payment calculate --mode new_receipt --customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --date 2026-06-01 --amount 150.00 --amount-mode entered --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment calculate", "input": {"mode": "new_receipt", "customer": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "date": "2026-06-01", "amount": "150.00", "amount_mode": "entered"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -519,7 +535,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -548,6 +564,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment delete 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key payment-delete-example --reason "Remove duplicate receipt" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment delete", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "payment-delete-example"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -654,7 +678,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -682,6 +706,14 @@ Page receipt revisions and immutable settlement operation, application and alloc
 ### CLI
 
 `bookflow payment history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment history", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -853,7 +885,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -863,7 +895,7 @@ Example JSON output:
 
 ## `payment invoices`
 
-Find invoices this payer can pay. Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.
+Open (unpaid) invoices a customer can pay, with the amount due and current expected_version of each: mode "new_receipt" with customer and date. Page bounds never limit receipt intent.
 
 | Contract | Value |
 |---|---|
@@ -877,7 +909,15 @@ Find invoices this payer can pay. Read complete compatible payment candidates or
 
 ### CLI
 
-`bookflow payment invoices --mode new_receipt --customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --date 2026-06-01 --company 'Demo Plumbing Co' --json`
+`bookflow payment invoices --mode new_receipt --customer 'Riverside Apartments' --date 2026-06-01 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment invoices", "input": {"mode": "new_receipt", "customer": "Riverside Apartments", "date": "2026-06-01"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -994,7 +1034,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1005,7 +1045,7 @@ Example JSON output:
 
 ## `payment query`
 
-Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.
+Page recorded customer payments with customer, method, status, date, number and available-credit filters.
 
 | Contract | Value |
 |---|---|
@@ -1020,6 +1060,14 @@ Read complete compatible payment candidates or calculate shared amount origins; 
 ### CLI
 
 `bookflow payment query --payment-method Check --limit 25 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment query", "input": {"payment_method": "Check", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1121,7 +1169,7 @@ Example JSON output:
 | `E_PAYMENT_PROFILE_INVALID` | Stored payment profile is invalid. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1132,11 +1180,11 @@ Example JSON output:
 
 ## `payment receive`
 
-Record new cash and apply it across compatible customer/job invoices; retain unapplied owned credit with derived exact-party AR ownership and immutable invoice applications.
+Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), run `payment suggest` with strategy "exact_then_oldest" and pass its rows as applications.items; with no applications the money stays as the customer's unapplied credit. Retains unapplied owned credit with exact-party AR ownership and immutable invoice applications.
 
 reference is the customer's check/reference number (for example 1042); number is Bookflow's internal receipt number. deposit_to accepts a bank account or the system Undeposited Funds holding account. Recording a receipt into Undeposited Funds does not record a completed bank deposit.
 
-Parent/job example: receive 1000.00 from a parent customer, apply 100.00 to its HQ invoice, 600.00 to its Pine job invoice and 200.00 to its Oak job invoice. The remaining 100.00 is unapplied credit owned by the parent customer. Set customer to that parent and applications.mode to inline with each invoice, its current expected_version and amount in applications.items. Use payment invoices to discover compatible invoices and their current versions. Job invoice allocations remain owned by their respective jobs; parent credit is not silently moved to a job. Supply explicit applications when the directive specifies allocations; omitted applications can use the company's automatic-application policy.
+Parent/job example: receive 1000.00 from a parent customer, apply 100.00 to its HQ invoice, 600.00 to its Pine job invoice and 200.00 to its Oak job invoice. The remaining 100.00 is unapplied credit owned by the parent customer. Set customer to that parent and applications.mode to inline with each invoice, its current expected_version and amount in applications.items. Use payment invoices to discover compatible invoices and their current versions. Job invoice allocations remain owned by their respective jobs; parent credit is not silently moved to a job. Supply explicit applications when the directive specifies allocations. To apply oldest invoice first, or to pay off everything open, call payment suggest with strategy exact_then_oldest and the received amount, then copy each returned row into applications.items as invoice = invoice_id, expected_version, amount = {"minor_units": amount_minor_units, "currency": currency}. With no applications the money stays as the customer's unapplied credit; the company's automatic-application preference only changes what payment suggest proposes with strategy company.
 
 Preview/save: choose input.operation_key once for this business operation. Call with top-level dry_run=true. Copy the returned preview result's facts_fingerprint into input.expected_facts_fingerprint, then save with dry_run=false using the same operation_key, the same business inputs and the same reason/directive. The fingerprint is returned by Bookflow; do not calculate it. A stale preview requires a fresh preview and review of the changed facts before saving.
 After an uncertain transport result, recover the existing transport reference first. For an exact business retry, preserve the original operation_key, input and context; payment operation show retrieves the canonical saved request and historical effect. A new business operation needs a new operation_key. The permanent operation_key is distinct from the optional top-level idempotency_key and from the transport reference.
@@ -1156,7 +1204,15 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow payment receive --customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --date 2026-06-01 --amount 150.00 --payment-method Check --operation-key example-receipt-1 --company 'Demo Plumbing Co' --json`
+`bookflow payment receive --customer 'Riverside Apartments' --date 2026-06-01 --amount 150.00 --payment-method Check --reference 1042 --operation-key example-receipt-1 --applications-mode inline --applications-items '[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"150.00"}]' --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment receive", "input": {"customer": "Riverside Apartments", "date": "2026-06-01", "amount": "150.00", "payment_method": "Check", "reference": "1042", "operation_key": "example-receipt-1", "applications": {"mode": "inline", "items": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "150.00"}]}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1523,7 +1579,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -1552,6 +1608,14 @@ Page all current exact-party credit components or active applications, including
 ### CLI
 
 `bookflow payment settlement 01ARZ3NDEKTSV4RRFFQ69G5FAV --kind components --limit 25 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment settlement", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "kind": "components", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1739,7 +1803,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1764,6 +1828,14 @@ Show a receipt revision separately from current owned credit and application cap
 ### CLI
 
 `bookflow payment show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment show", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1994,7 +2066,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2004,7 +2076,7 @@ Example JSON output:
 
 ## `payment suggest`
 
-Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.
+Choose which open invoices a payment pays. strategy "exact_then_oldest" takes an invoice matching the amount exactly, otherwise the oldest invoices first until the money runs out (give the total due to pay everything open). Pass each row to `payment receive` applications.items as invoice = invoice_id, expected_version, amount = {"minor_units": amount_minor_units, "currency": currency}.
 
 | Contract | Value |
 |---|---|
@@ -2018,7 +2090,15 @@ Read complete compatible payment candidates or calculate shared amount origins; 
 
 ### CLI
 
-`bookflow payment suggest --mode new_receipt --customer 01ARZ3NDEKTSV4RRFFQ69G5FAV --date 2026-06-01 --amount 150.00 --strategy exact_then_oldest --company 'Demo Plumbing Co' --json`
+`bookflow payment suggest --mode new_receipt --customer 'Riverside Apartments' --date 2026-06-01 --amount 400.00 --strategy exact_then_oldest --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment suggest", "input": {"mode": "new_receipt", "customer": "Riverside Apartments", "date": "2026-06-01", "amount": "400.00", "strategy": "exact_then_oldest"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -2119,7 +2199,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2151,6 +2231,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment unapply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --operation-key example-unapply-1 --applications '[{"application_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","invoice_expected_version":2}]' --company 'Demo Plumbing Co' --json --reason 'Correct recorded remittance'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment unapply", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "operation_key": "example-unapply-1", "applications": [{"application_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "invoice_expected_version": 2}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -2504,7 +2592,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2540,6 +2628,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key example-correction-1 --memo 'Corrected remittance note' --company 'Demo Plumbing Co' --json --reason 'Correct recorded remittance'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment update", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "example-correction-1", "memo": "Corrected remittance note"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -2905,7 +3001,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2939,6 +3035,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 3 --operation-key example-void-1 --company 'Demo Plumbing Co' --json --reason 'Correct recorded remittance'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment void", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 3, "operation_key": "example-void-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -3292,7 +3396,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

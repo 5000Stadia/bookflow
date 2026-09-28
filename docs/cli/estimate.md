@@ -21,6 +21,14 @@ Show quoted, completed, billed and remaining work, exact partial quantities, ori
 
 `bookflow estimate billing 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --limit 50 --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate billing", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 50}, "company": "Company ID or name"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -326,7 +334,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -353,6 +361,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate copy 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --date 2026-09-02 --company "Demo Plumbing Co" --reason "Prepare another option" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate copy", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "date": "2026-09-02"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1057,7 +1073,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1087,6 +1103,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate create --date 2026-09-01 --title 'Clear the main drain' --customer 'Riverside Apartments' --scope 'Inspect and clear the main drain; test normal flow.' --lines '[{"item": "Mainline Clearing", "quantity": "1", "unit_price": "125.00"}]' --company "Demo Plumbing Co" --reason "Prepare customer work" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate create", "input": {"date": "2026-09-01", "title": "Clear the main drain", "customer": "Riverside Apartments", "scope": "Inspect and clear the main drain; test normal flow.", "lines": [{"item": "Mainline Clearing", "quantity": "1", "unit_price": "125.00"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1839,7 +1863,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1867,6 +1891,14 @@ Page immutable work revisions in revision order, including decision evidence, li
 ### CLI
 
 `bookflow estimate history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate history", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -2041,7 +2073,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2069,6 +2101,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate invoice 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --conversion-key "bill-work-2026-09" --date 2026-09-04 --percent 25 --company "Demo Plumbing Co" --reason "Invoice one quarter of agreed scope" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate invoice", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "conversion_key": "bill-work-2026-09", "date": "2026-09-04", "percent": "25"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -3208,7 +3248,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -3236,6 +3276,14 @@ Find work by customer, number, title, date, status, availability and net amount,
 ### CLI
 
 `bookflow estimate query --customer "Riverside Apartments" --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate query", "input": {"customer": "Riverside Apartments", "date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -3354,7 +3402,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -3382,6 +3430,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate sales-receipt 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --conversion-key "paid-work-2026-09" --date 2026-09-04 --deposit-to Checking --payment-method Cash --amount-received "10.81" --company "Demo Plumbing Co" --reason "Record paid work" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate sales-receipt", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "conversion_key": "paid-work-2026-09", "date": "2026-09-04", "deposit_to": "Checking", "payment_method": "Cash", "amount_received": "10.81"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -4522,7 +4578,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -4550,6 +4606,14 @@ Show current or historical work facts, exact quoted totals, costs, completed qua
 ### CLI
 
 `bookflow estimate show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate show", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -5216,7 +5280,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -5243,6 +5307,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate update 01ARZ3NDEKTSV4RRFFQ69G5FAV --memo "Site visit arranged" --expected-version 1 --company "Demo Plumbing Co" --reason "Record work note" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate update", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "memo": "Site visit arranged", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -6002,7 +6074,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -6032,6 +6104,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --company "Demo Plumbing Co" --reason "Customer changed their mind" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate void", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -6729,7 +6809,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -6759,6 +6839,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow estimate work-order 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --conversion-key "drain-dispatch-2026-09" --date 2026-09-03 --company "Demo Plumbing Co" --reason "Make a work order from the accepted estimate" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "estimate work-order", "input": {"estimate": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "conversion_key": "drain-dispatch-2026-09", "date": "2026-09-03"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -7464,7 +7552,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

@@ -4,7 +4,7 @@
 
 ## `sales-tax liability`
 
-What each sales tax agency is owed as of a date, from the tax the books recorded. Each row is one agency with the tax charged on posted sales, the tax taken back by credit memos, what has been remitted, and the balance still owed; an effect on the sales tax payable account that names no agency -- a journal entry posted straight at it -- is its own row rather than dropped, so the total is that account's balance on the balance sheet for the same date. Accrual only: the liability is recorded when the invoice is, which is the only basis on which this product records tax at all, and a company set to the payment-receipt basis is refused rather than answered. Totals cover every agency and rows are paged.
+How much sales tax is owed, by agency, as of a date (as_of), from the tax the books recorded. Each row is one agency with the tax charged on posted sales, the tax taken back by credit memos, what has been remitted, and the balance still owed; an effect on the sales tax payable account that names no agency -- a journal entry posted straight at it -- is its own row rather than dropped, so the total is that account's balance on the balance sheet for the same date. Accrual only: the liability is recorded when the invoice is, which is the only basis on which this product records tax at all, and a company set to the payment-receipt basis is refused rather than answered. Totals cover every agency and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -19,6 +19,14 @@ What each sales tax agency is owed as of a date, from the tax the books recorded
 ### CLI
 
 `bookflow sales-tax liability --as-of 2026-03-31 --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "sales-tax liability", "input": {"as_of": "2026-03-31", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -188,7 +196,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -217,6 +225,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow sales-tax pay --agency "State Board of Equalization" --date 2026-04-20 --through-date 2026-03-31 --funding-account "Checking" --method "Check" --check-number 1052 --memo "Q1 sales tax" --company "Demo Plumbing Co" --reason "Remit the first-quarter sales tax" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "sales-tax pay", "input": {"agency": "State Board of Equalization", "date": "2026-04-20", "through_date": "2026-03-31", "funding_account": "Checking", "method": "Check", "check_number": "1052", "memo": "Q1 sales tax"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -569,7 +585,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

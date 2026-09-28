@@ -18,7 +18,15 @@ Read prospective receipt/application effect pages by pure recomputation of exact
 
 ### CLI
 
-`bookflow payment preview items --request '{"command":"payment receive","input":{"customer":"01ARZ3NDEKTSV4RRFFQ69G5FAV","date":"2026-06-01","amount":"150.00","payment_method":"Check","operation_key":"example-receipt-1"}}' --facts-fingerprint aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --kind source_components --company 'Demo Plumbing Co' --json`
+`bookflow payment preview items --request '{"command":"payment receive","input":{"customer":"Riverside Apartments","date":"2026-06-01","amount":"150.00","payment_method":"Check","reference":"1042","operation_key":"example-receipt-1","applications":{"mode":"inline","items":[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"150.00"}]}}}' --facts-fingerprint aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --kind source_components --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment preview items", "input": {"request": {"command": "payment receive", "input": {"customer": "Riverside Apartments", "date": "2026-06-01", "amount": "150.00", "payment_method": "Check", "reference": "1042", "operation_key": "example-receipt-1", "applications": {"mode": "inline", "items": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "150.00"}]}}}, "facts_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "source_components"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -236,7 +244,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

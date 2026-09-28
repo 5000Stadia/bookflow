@@ -80,7 +80,7 @@ def recover(s,ctx,inp,verb,binding,*,posting=True):
         try:
             history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=posting)
         except BookflowError as error:
-            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details=history._refusal(error)) from None
             raise
     return operations.recover(s,ctx,inp,verb,binding=binding,posting=posting)
 

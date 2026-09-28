@@ -30,7 +30,11 @@ def _read(verb, model, output):
     def planner(inp, ctx, s):
         return Plan(receiving.page(s, inp, ctx) if verb == 'query' else getattr(receiving, verb)(s, inp))
     return command('item-receipt ' + verb, scope='company',
-        description='Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
+        description={
+            'show': 'Show one item receipt (by ID or number in `receipt`, optionally an earlier revision_number): received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
+            'query': 'Page item receipts with vendor, date, status and unbilled_only filters: received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
+            'history': 'Every revision of one item receipt, oldest first: name the receipt (ID or number) in `receipt`; find it first with `item-receipt query`.',
+        }[verb],
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
         positional=[] if verb == 'query' else ['receipt'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])(planner)
 

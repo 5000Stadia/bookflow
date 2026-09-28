@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from bookflow.core.config import Config, os_login
 from bookflow.core.context import CONTEXT_FIELD_NAMES, ActorKind, Context
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, explain_permission
 from bookflow.core.fs import check_local
 from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
@@ -29,12 +29,24 @@ from bookflow.storage.migrate import HEADS, backup, classify, current_revision_o
 from bookflow.storage.paths import name_key, resolve_data_root
 
 
-def _validation_error(e: ValidationError) -> BookflowError:
-    fields = [{"field": ".".join(str(p) for p in err["loc"]) or "input", "problem": err["msg"]} for err in e.errors()]
-    return BookflowError("E_VALIDATION", details={"fields": fields})
+def _validation_error(e: ValidationError, cmd: Command | None = None) -> BookflowError:
+    """Field problems a caller can act on: its own field path, the accepted shape, the valid names."""
+    from bookflow.core import input_errors
+    fields = input_errors.fields(e, cmd.input_model if cmd is not None else None)
+    details: dict[str, Any] = {"fields": fields}
+    if cmd is not None and any("accepted_fields" in field for field in fields):
+        from bookflow.core import registry
+        options = cmd.name + " options"
+        if cmd.name.endswith(" query") and registry.get(options) is not None:
+            details["hint"] = f"`{options}` lists the filters, sorts and columns this query accepts."
+    return BookflowError("E_VALIDATION", details=details)
 
 
 CONTEXT_LIMITS = {"reason": 140, "source_ref": 512, "idempotency_key": 128}
+
+AGENT_REASON_MESSAGE = ("Writes by an agent need a reason or an active directive, dry-run previews included: "
+                        "a short phrase naming what triggered this, such as \"Record check #1042 from Riverside\" "
+                        "(top-level reason on MCP, --reason on the CLI, the X-Bookflow-Reason header on HTTP).")
 
 
 def validate_context(ctx: Context) -> None:
@@ -80,7 +92,7 @@ def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
     try:
         return cmd.input_model.model_validate(raw)
     except ValidationError as e:
-        raise _validation_error(e)
+        raise _validation_error(e, cmd)
 
 
 @performance.measured("command.resolve")
@@ -415,6 +427,16 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
         _login: str | None = None, input_stream=None, output_stream=None) -> dict[str, Any]:
     """Execute a command from a fresh process: data root, hand-off to a live host, lock, hub, actor, migration, execute."""
+    try:
+        return _run_explained(cmd, raw_input, ctx, data_root=data_root, company_selector=company_selector,
+                              company_source=company_source, dry_run=dry_run, _login=_login,
+                              input_stream=input_stream, output_stream=output_stream)
+    except BookflowError as e:
+        raise explain_permission(e, cmd)
+
+
+def _run_explained(cmd, raw_input, ctx, *, data_root, company_selector, company_source, dry_run, _login,
+                   input_stream, output_stream):
     if performance.enabled():
         performance.protect_selection(data_root)
     if cmd.transfer is not None:
@@ -540,7 +562,10 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
         ctx = ctx.model_copy(update={"directive_id": drow["id"]})
         s.directive_code = drow["code"]
     if cmd.is_write and s.actor.kind in ("agent", "system") and not ctx.reason and not ctx.directive_id:
-        raise BookflowError("E_REASON_REQUIRED")
+        # Blueprint 5.8 requires it of every agent write and 5.5 makes a dry run the same
+        # validation as the save, so a preview needs it too and says so.
+        raise BookflowError("E_REASON_REQUIRED", message=AGENT_REASON_MESSAGE,
+                            details={"required": ["reason", "directive"], "applies_to_dry_run": True})
     if ctx.idempotency_key and not cmd.accepts_idempotency_key:
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
     return ctx

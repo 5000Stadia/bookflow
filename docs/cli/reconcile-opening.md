@@ -4,7 +4,7 @@
 
 ## `reconcile opening start`
 
-Open a draft that adopts a bank or credit card account, classifying everything dated on or before the opening date as covered by the entered balance or still outstanding.
+First step for an account never reconciled in Bookflow: open a draft that adopts a bank or credit card account at an opening date and balance from the last statement you trust, classifying everything dated on or before that date as covered by the entered balance or still outstanding. Tick with `reconcile mark`, certify with `reconcile finish`, then reconcile each later statement with `reconcile start`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -20,14 +20,22 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow reconcile opening start --account 01ARZ3NDEKTSV4RRFFQ69G5FAV --opening-date 2026-01-31 --entered-balance 1250.00 --evidence '{"format":1,"statement_reference":"Jan 2026 checking statement","entered_text":null}' --operation-key example-opening-1 --company 'Demo Plumbing Co' --reason 'Adopt the checking account opening balance' --json`
+`bookflow reconcile opening start --account Checking --opening-date 2026-01-31 --entered-balance 1250.00 --evidence '{"format":1,"statement_reference":"Jan 2026 checking statement","entered_text":null}' --operation-key example-opening-1 --company 'Demo Plumbing Co' --reason 'Adopt the checking account opening balance' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile opening start", "input": {"account": "Checking", "opening_date": "2026-01-31", "entered_balance": "1250.00", "evidence": {"format": 1, "statement_reference": "Jan 2026 checking statement", "entered_text": null}, "operation_key": "example-opening-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
-| `account` | `--account` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
 | `opening_date` | `--opening-date` | string | yes | no | — | — |
 | `entered_balance` | `--entered-balance` | string \| object | yes | no | — | A statement balance, as money: "290.00", or "-15.00" when the account is overdrawn. |
 | `evidence.format` | `--evidence-format` | literal[1] | no | no | 1 | — |
@@ -187,7 +195,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
