@@ -183,20 +183,61 @@ def _sales_columns(revision: Mapping[str, Any]) -> tuple[Column, ...]:
     return tuple(columns)
 
 
+def _shown(line: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The amount a line shows: a subtotal's sum, a discount's negative, or the line's own amount."""
+    return line.get("amount") or line["net"]
+
+
+def _adjustment_rate(adjustment: Mapping[str, Any], shown: Mapping[str, Any]) -> str:
+    from bookflow.core.exact import format_percentage_millionths
+    if adjustment["kind"] == "subtotal":
+        return ""
+    if adjustment.get("percent_millionths") is not None:
+        return format_percentage_millionths(adjustment["percent_millionths"]) + "%"
+    return shown["amount"].lstrip("-")
+
+
+def _money_sum(values, currency: str) -> str:
+    from bookflow.core.money import Money
+    return Money(sum(value["minor_units"] for value in values), currency).to_dict()["amount"]
+
+
 def _sales_rows(revision: Mapping[str, Any], columns) -> tuple[tuple[str, ...], ...]:
+    """One row per line; a group whose members do not print is one row at the group's total."""
     taxed = any(column.label == "Tax" for column in columns)
     rows = []
-    for line in revision["lines"]:
+    lines = list(revision["lines"])
+    index = 0
+    while index < len(lines):
+        line = lines[index]
         snapshot = line["item_snapshot"]
-        rate = (line["unit_price"]["amount"] if line.get("unit_price")
-                else "Quoted" if line.get("pricing_basis") == "allocated" else "")
-        unit = _label(snapshot.get("unit"))
-        quantity = str(line["quantity"]) + (f" {unit}" if unit else "")
+        group = snapshot.get("group")
+        if group and not group.get("print_members"):
+            members = [line]
+            while (index + len(members) < len(lines)
+                   and (lines[index + len(members)]["item_snapshot"].get("group") or {}).get("item") == group["item"]):
+                members.append(lines[index + len(members)])
+            row = [_label(group["item"]) or "", group.get("description") or "", "", ""]
+            if taxed:
+                row.append(_money_sum((member["tax"] for member in members), revision["currency"]))
+            row.append(_money_sum((_shown(member) for member in members), revision["currency"]))
+            rows.append(tuple(row))
+            index += len(members)
+            continue
+        adjustment = snapshot.get("adjustment")
+        if adjustment:
+            rate, quantity = _adjustment_rate(adjustment, _shown(line)), ""
+        else:
+            rate = (line["unit_price"]["amount"] if line.get("unit_price")
+                    else "Quoted" if line.get("pricing_basis") == "allocated" else "")
+            unit = _label(snapshot.get("unit"))
+            quantity = str(line["quantity"]) + (f" {unit}" if unit else "")
         row = [_label(snapshot["item"]) or "", line.get("description") or "", quantity, rate]
         if taxed:
             row.append(line["tax"]["amount"])
-        row.append(line["net"]["amount"])
+        row.append(_shown(line)["amount"])
         rows.append(tuple(row))
+        index += 1
     return tuple(rows)
 
 
@@ -268,17 +309,12 @@ def _estimate(read: Read, company_id: str, document_id: str) -> PrintedDocument:
     if taxed:
         columns.append(Column("Tax", 0.9, align="right"))
     columns.append(Column("Amount", 1.1, align="right"))
-    rows = []
-    for line in revision["lines"]:
-        line_facts = line["facts"]
-        unit = _label(line_facts["profile"].get("unit"))
-        row = [_label(line_facts["profile"]["item"]) or "", line_facts.get("description") or "",
-               str(line["quantity"]) + (f" {unit}" if unit else ""),
-               line["unit_price"]["amount"] if line.get("unit_price") else ""]
-        if taxed:
-            row.append(line["tax"]["amount"])
-        row.append(line["net"]["amount"])
-        rows.append(tuple(row))
+    # A quoted line is read through the same row rule as a sold one: its captured profile is
+    # the item snapshot, and its description lives in its facts.
+    quoted = dict(currency=revision["currency"], lines=[
+        dict(line, item_snapshot=line["facts"]["profile"], description=line["facts"].get("description"))
+        for line in revision["lines"]])
+    rows = list(_sales_rows(quoted, columns))
     facts = [("Date", revision["date"]), ("Status", str(revision["status"]).replace("_", " ")),
              ("Expires on", facts_block.get("expires_on")),
              ("Terms", _label(profile.get("terms"))),

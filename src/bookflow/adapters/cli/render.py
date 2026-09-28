@@ -45,16 +45,18 @@ def _cell(v: Any) -> str:
     return str(v)
 
 
-def render_table(items: list[dict[str, Any]], columns: list[str] | None = None) -> str:
+def render_table(items: list[dict[str, Any]], columns: list[str] | None = None, *, exact: bool = False) -> str:
+    """A plain-text table. ``exact`` prints exactly ``columns``, in that order: a chosen set."""
     if not items:
         return "(none)"
     cols = list(columns) if columns is not None else [k for k in items[0] if not isinstance(items[0][k], (dict, list))]
-    for item in items:
-        for key, value in item.items():
-            if key not in cols and _money(value) is not None:
-                cols.append(key)
+    if not exact:
+        for item in items:
+            for key, value in item.items():
+                if key not in cols and _money(value) is not None:
+                    cols.append(key)
     money_cols = [c for c in cols if any(_money(i.get(c)) is not None for i in items)]
-    if money_cols:
+    if money_cols and not exact:
         labels = [c for c in cols if c in {"display_name", "full_name", "name", "number", "code"}]
         cols = labels + money_cols + [c for c in cols if c not in labels and c not in money_cols]
     widths = {c: max(len(c), *(len(_cell(i.get(c))) for i in items)) for c in cols}
@@ -87,13 +89,13 @@ PREFERRED = ["id", "seq", "display_name", "organization_name", "legal_name", "ho
 HIDDEN = COMMON | {"path", "schema_revision", "entries", "session_id", "request_id", "client_version", "client_host", "client_name", "actor_id", "actor_kind", "on_behalf_of", "directive_id", "source_ref", "registered_by_name", "is_demo", "entry_count"}
 
 
-def render_output(out: dict[str, Any], as_json: bool) -> str:
+def render_output(out: dict[str, Any], as_json: bool, *, columns: list[str] | None = None) -> str:
+    """JSON is the whole payload; text is a table of ``columns`` (a chosen set) or of every column."""
     if as_json:
         return json.dumps(out, default=str)
     if "items" in out and isinstance(out["items"], list):
         items = out["items"]
-        cols = list_columns(items)
-        text = render_table(items, cols)
+        text = render_table(items, columns, exact=True) if columns is not None else render_table(items, list_columns(items))
         extra = {k: v for k, v in out.items() if k != "items"}
         return text + "\n" + " ".join(f"{k}={_cell(v)}" for k, v in extra.items())
     return render_fields(out)

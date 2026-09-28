@@ -1,20 +1,32 @@
+{% import 'list_card.html' as list_card %}<link rel="stylesheet" href="{{ static_urls['browsing.css'] }}">
 <section id="payables-report" aria-label="Payables report">
+{% set home = math_company_currency | default('') %}
+{# On a phone a wide table becomes cards (browsing.css): the vendor and its figure on one line,
+   the rest on a muted line. The desktop table is unchanged; its whole-report totals wrap. #}
 {% if verb == 'ap-aging' %}
-<div class="table-wrap"><table id="payables-totals"><caption class="report-sr-only">Whole-report totals — all pages</caption><thead><tr>{% for key in payables.columns %}<th scope="col" class="num">{{ payables.headings[key] }}</th>{% endfor %}<th scope="col" class="num">Total</th></tr></thead><tbody>
-<tr>{% for key in payables.columns %}<td class="num" data-total="{{ key }}">{{ payables.totals[key]|amount }}</td>{% endfor %}<td class="num" data-total="total">{{ payables.totals.total|amount }}</td></tr>
+<div class="table-wrap"><table id="payables-totals" class="report-totals"><caption class="report-sr-only">Whole-report totals — all pages</caption><thead><tr>{% for key in payables.columns %}<th scope="col" class="num">{{ payables.headings[key] }}</th>{% endfor %}<th scope="col" class="num">Total</th></tr></thead><tbody>
+<tr>{% for key in payables.columns %}<td class="num" data-total="{{ key }}" data-label="{{ payables.headings[key] }}">{{ payables.totals[key]|amount }}</td>{% endfor %}<td class="num" data-total="total" data-label="Total">{{ payables.totals.total|amount }}</td></tr>
 </tbody></table></div>
 {% if payables.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ payables.count }} vendors on this page; more on the next page.</p>{% endif %}
-<div class="table-wrap"><table id="payables-aging"><thead><tr><th scope="col">Vendor</th>{% for key in payables.columns %}<th scope="col" class="num">{{ payables.headings[key] }}</th>{% endfor %}<th scope="col" class="num">Total</th></tr></thead><tbody>
+<div class="table-wrap list-desktop"><table id="payables-aging"><thead><tr><th scope="col">Vendor</th>{% for key in payables.columns %}<th scope="col" class="num">{{ payables.headings[key] }}</th>{% endfor %}<th scope="col" class="num">Total</th></tr></thead><tbody>
 {% for row in payables.rows %}<tr><th scope="row">{% if row.detail_url %}<a href="{{ row.detail_url }}">{{ row.display_vendor_label }}</a>{% else %}{{ row.display_vendor_label }}{% endif %}{% if row.active is not none and not row.active %} (inactive){% endif %}</th>{% for key in payables.columns %}<td class="num">{{ row[key]|amount }}</td>{% endfor %}<td class="num">{{ row.total|amount }}</td></tr>{% else %}<tr><td colspan="7">No vendor is owed anything on this date.</td></tr>{% endfor %}
 </tbody></table></div>
+<ul class="list-cards" aria-label="Vendors">
+{% for row in payables.rows %}{% set parts = ['Inactive'] if row.active is not none and not row.active else [] %}{% for key in payables.columns if row[key].minor_units %}{% set _ = parts.append(payables.headings[key] ~ ' ' ~ row[key]|money(home=home)) %}{% endfor %}
+{{ list_card.card(row.detail_url, row.display_vendor_label, row.total|money(home=home), parts, data={'vendor': row.vendor_id or ''}) }}{% else %}<li class="list-card list-card-empty">No vendor is owed anything on this date.</li>{% endfor %}
+</ul>
 {% else %}
-<div class="table-wrap"><table id="payables-totals"><caption class="report-sr-only">Whole-report totals — all pages</caption><thead><tr><th scope="col" class="num">Amount</th><th scope="col" class="num">Applied</th><th scope="col" class="num">Open balance</th></tr></thead><tbody>
-<tr>{% for key in ('amount', 'applied', 'balance') %}<td class="num" data-total="{{ key }}">{{ payables.totals[key]|amount }}</td>{% endfor %}</tr>
+<div class="table-wrap"><table id="payables-totals" class="report-totals"><caption class="report-sr-only">Whole-report totals — all pages</caption><thead><tr><th scope="col" class="num">Amount</th><th scope="col" class="num">Applied</th><th scope="col" class="num">Open balance</th></tr></thead><tbody>
+<tr>{% for key in ('amount', 'applied', 'balance') %}<td class="num" data-total="{{ key }}" data-label="{{ payables.headings[key] }}">{{ payables.totals[key]|amount }}</td>{% endfor %}</tr>
 </tbody></table></div>
 {% if payables.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ payables.count }} bills on this page; more on the next page.</p>{% endif %}
-<div class="table-wrap"><table id="payables-unpaid"><thead><tr><th scope="col">Due</th><th scope="col" class="num">Days past due</th><th scope="col">Column</th><th scope="col">Bill</th><th scope="col">Vendor</th><th scope="col">Bill date</th><th scope="col">Reference</th><th scope="col" class="num">Amount</th><th scope="col" class="num">Applied</th><th scope="col" class="num">Open balance</th></tr></thead><tbody>
+<div class="table-wrap list-desktop"><table id="payables-unpaid"><thead><tr><th scope="col">Due</th><th scope="col" class="num">Days past due</th><th scope="col">Column</th><th scope="col">Bill</th><th scope="col">Vendor</th><th scope="col">Bill date</th><th scope="col">Reference</th><th scope="col" class="num">Amount</th><th scope="col" class="num">Applied</th><th scope="col" class="num">Open balance</th></tr></thead><tbody>
 {% for row in payables.rows %}<tr><td>{{ row.due_date|day(report_view.today_date if report_view else none) }}</td><td class="num">{{ row.days_past_due }}</td><td>{{ payables.headings[row.aging_bucket] }}</td><td><a href="{{ row.detail_url }}">{{ row.number }}</a></td><td>{{ row.display_vendor_label }}</td><td>{{ row.date|day(report_view.today_date if report_view else none) }}</td><td>{{ row.supplier_reference or '' }}</td><td class="num">{{ row.amount|amount }}</td><td class="num">{{ row.applied|amount }}</td><td class="num">{{ row.balance|amount }}</td></tr>{% else %}<tr><td colspan="10">No bill is open on this date.</td></tr>{% endfor %}
 </tbody></table></div>
+<ul class="list-cards" aria-label="Unpaid bills">
+{% for row in payables.rows %}
+{{ list_card.card(row.detail_url, row.display_vendor_label, row.balance|money(home=home), ['Bill ' ~ row.number, 'Ref. ' ~ row.supplier_reference if row.supplier_reference else '', 'Due ' ~ row.due_date|day(report_view.today_date if report_view else none), (row.days_past_due ~ ' days past due') if row.days_past_due > 0 else '', 'Applied ' ~ row.applied|money(home=home) if row.applied.minor_units else '']) }}{% else %}<li class="list-card list-card-empty">No bill is open on this date.</li>{% endfor %}
+</ul>
 {% endif %}
 {% if payables.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="payables-next-page">{% for name, value in payables.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
 {% set about %}

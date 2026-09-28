@@ -443,6 +443,14 @@ class _StorageImage:
     ddl: tuple
     columns: dict
     tables: dict
+    # (rowid, token cell before the write) when the authority_generation triggers must
+    # have redrawn the token: its new value is random, so it is checked, not predicted.
+    redrawn: tuple | None = field(default=None, compare=False)
+
+
+# The permission input tables whose every row write the hub0014 triggers count.
+_GENERATION_TABLES = frozenset(('users', 'organizations', 'companies', 'memberships', 'agent_principals',
+                                'agent_authority', 'role_capabilities', 'permission_state'))
 
 
 def _observe(tx):
@@ -487,6 +495,17 @@ def _expected_storage(tx,before,prepared):
     if prepared.audit is not None:
         insert('audit_events',asdict(prepared.audit.event))
         for entry in prepared.audit.entries:insert('audit_entries',asdict(entry))
+    # Each mutation writes exactly one row (_write_mutation requires it), so the triggers
+    # advance the generation once per mutation of a permission input table.
+    counted=sum(1 for mutation in prepared.mutations if mutation.table in _GENERATION_TABLES)
+    if counted and 'authority_generation' in image.tables:
+        rows=tx.raw.execute('SELECT rowid,id,generation,token FROM main.authority_generation').fetchall()
+        if len(rows)!=1 or type(rows[0][2]) is not int:fail('unsupported_schema','authority_generation')
+        rowid,ident,generation,token=rows[0]
+        if image.tables['authority_generation'].get(rowid)!=(_cell(ident),_cell(generation),_cell(token)):
+            fail('conflict','authority_generation')
+        image.tables['authority_generation'][rowid]=(_cell(ident),_cell(generation+counted),_cell(token))
+        image.redrawn=(rowid,_cell(token))
     return image
 
 
@@ -511,7 +530,13 @@ def _verify_final(tx,prepared,expected_storage):
     except s.SnapshotError as exc:_translate_snapshot(exc)
     if observed!=prepared.final.root or aa.read_tokens(tx)!=prepared.final_tokens or audit_owner.read_users(tx)!=prepared.final_users or audit_owner.read_state(tx)!=prepared.final_state:
         fail('conflict','final_state')
-    if _observe(tx)!=expected_storage:fail('conflict','allowed_write_set')
+    final=_observe(tx)
+    if expected_storage.redrawn is not None:
+        rowid,before=expected_storage.redrawn
+        row=final.tables.get('authority_generation',{}).get(rowid)
+        if row is None or len(row)!=3 or row[2]==before:fail('conflict','allowed_write_set')
+        final.tables['authority_generation'][rowid]=(*row[:2],before)
+    if final!=expected_storage:fail('conflict','allowed_write_set')
 
 
 def preview_edit(tx: Database, *, binding: TrustedBinding, intent: Edit,

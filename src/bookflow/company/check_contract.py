@@ -33,4 +33,6 @@ _COMMON = (
 FORM_DEFINITIONS = {
     'check': MoneyOutFormDefinition(_COMMON),
     'card-charge': MoneyOutFormDefinition(_COMMON),
+    # A card credit has no items grid.
+    'card-credit': MoneyOutFormDefinition(tuple(ref for ref in _COMMON if not ref.field.startswith('items.'))),
 }

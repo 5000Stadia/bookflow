@@ -2304,3 +2304,78 @@ command = "bill pay"
 capture = "contractor_card_payment"
 reason = "Pay the materials bill on the company card"
 input = { number = "DEMO-1099-PAY-2", date = "2026-12-09", bills = [{ bill = "${contractor_materials_bill.id}" }], funding_account = "${register_card.id}", method = "Visa", memo = "Liner resin on the card" }
+
+# Early-payment discounts. A customer on "2% 10 Net 30" pays a 500.00 invoice inside the discount
+# window and takes the 10.00 the terms offer; the company pays a supplier's 300.00 bill on the
+# same terms in time and takes 6.00. Neither discount is taken until it is named, and the
+# "Discounts Given" and "Discounts Taken" accounts are created the first time each is used.
+[[commands]]
+command = "term show"
+capture = "two_ten_net_30"
+input = { term = "2% 10 Net 30" }
+
+[[commands]]
+command = "customer create"
+capture = "discount_customer"
+reason = "Add a customer on early-payment terms"
+input = { name = "Lakeside Dental", terms_id = "${two_ten_net_30.id}", sales_tax_code_id = "${sale_exempt.id}" }
+
+[[commands]]
+command = "invoice post"
+capture = "discount_invoice"
+reason = "Invoice the dental office on 2% 10 Net 30"
+input = { customer = "${discount_customer.id}", date = "2026-12-03", number = "DEMO-DISC-INV-1", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${service_item.id}", quantity = "1", net_amount = "500.00" }] }
+
+[[commands]]
+command = "payment receive"
+capture = "discount_receipt"
+reason = "The customer paid within ten days and took the 2% discount"
+input = { customer = "${discount_customer.id}", date = "2026-12-10", amount = "490.00", number = "DEMO-DISC-PAY-1", payment_method = "${check_method.id}", deposit_to = "${pay_bank.id}", operation_key = "DEMO-DISC-PAY-1-receive", applications = { mode = "inline", items = [{ invoice = "${discount_invoice.id}", expected_version = 1, amount = "490.00" }] }, discounts = [{ invoice = "${discount_invoice.id}", amount = "10.00" }] }
+
+[[commands]]
+command = "vendor create"
+capture = "discount_vendor"
+reason = "Add a supplier offering early-payment terms"
+input = { name = "Lakeview Pipe Supply", terms_id = "${two_ten_net_30.id}" }
+
+[[commands]]
+command = "bill post"
+capture = "discount_bill"
+reason = "Enter the supplier's bill on 2% 10 Net 30"
+input = { vendor = "${discount_vendor.id}", number = "DEMO-DISC-BILL-1", date = "2026-12-03", supplier_reference = "LPS-1203", memo = "Fittings, early-pay terms", expenses = [{ account = "${expense_account.id}", amount = "300.00", memo = "Fittings" }] }
+
+[[commands]]
+command = "bill pay"
+capture = "discount_bill_payment"
+reason = "Pay within ten days and take the 2% discount"
+input = { number = "DEMO-DISC-BPAY-1", date = "2026-12-11", bills = [{ bill = "${discount_bill.id}", amount = "294.00", discount = "6.00" }], funding_account = "${pay_bank.id}", method = "check", memo = "Paid in time for the discount" }
+# Recorded time on the Riverside Building A job: an afternoon's billable drain clearing waiting to
+# be invoiced (it shows in the unbilled costs report), and a warranty callback that is the job's
+# cost and never a charge.
+[[commands]]
+command = "time-activity create"
+capture = "demo_time_billable"
+reason = "Casey's timesheet for the stack clearing"
+input = { employee = "${employee.id}", customer = "${job_inherit.id}", date = "2026-12-10", duration = "2.5", item = "${service_item.id}", note = "Cleared the main stack and camera-checked the run", number = "DEMO-TIME-1" }
+
+[[commands]]
+command = "time-activity create"
+capture = "demo_time_warranty"
+reason = "Casey's timesheet for the warranty callback"
+input = { employee = "${employee.id}", customer = "${job_inherit.id}", date = "2026-12-11", duration = "0.75", item = "${service_item.id}", note = "Warranty callback: reseated a slipped coupling", billable = false, number = "DEMO-TIME-2" }
+
+# R147: one invoice that uses the line kinds a sales form carries besides sold items. Two
+# services and a part, a subtotal of them, the loyalty discount taking 5% off that subtotal
+# (shared over the three lines by their amounts, taxable, so tax is charged on what is left),
+# then the drain bundle, which expands into its member line when it is entered.
+[[commands]]
+command = "customer create"
+capture = "line_kinds_customer"
+reason = "A customer for the subtotal, discount and group example"
+input = { name = "Line Kinds Example Customer" }
+
+[[commands]]
+command = "invoice post"
+capture = "line_kinds_invoice"
+reason = "Keep an active example of a subtotal, a percentage discount and a group item on one sale"
+input = { date = "2026-12-10", number = "DEMO-LINE-KINDS", customer = "${line_kinds_customer.id}", lines = [{ item = "${service_item.id}", quantity = "2" }, { item = "${noninventory_item.id}", quantity = "4" }, { item = "${subtotal_item.id}" }, { item = "${discount_item.id}" }, { item = "${group_item.id}" }] }

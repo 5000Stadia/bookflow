@@ -131,8 +131,14 @@ ITEM_LINE_TABLES = tuple(sorted(
     if list(table.primary_key.columns.keys()) == ["document_line_id"]
     and {"item_id", "base_quantity_microunits", "net_minor_units"} <= set(table.c.keys())))
 
+# A discount or subtotal line is on the grid without being sold. A discount's share of a sold
+# line's amount rides that line's own income posting (its source names the discount line), so
+# it is income of the sold line's item; only the discount's own posting is the discount item's.
+# Neither counts any quantity.
+_ADJUSTS = "CASE WHEN json_extract(item_snapshot,'$.item_type') IN ('discount','subtotal') THEN 1 ELSE 0 END"
 _ITEM_LINES = "\n UNION ALL ".join(
-    f"SELECT document_line_id, item_id, base_quantity_microunits FROM {name}"
+    f"SELECT document_line_id, item_id, base_quantity_microunits, "
+    f"{_ADJUSTS if 'item_snapshot' in c.metadata.tables[name].c else '0'} AS adjusts FROM {name}"
     for name in ITEM_LINE_TABLES)
 
 # The sales representative is captured in the revision's own profile snapshot, which is
@@ -388,13 +394,20 @@ _BY_CUSTOMER = _INCOME + """, keyed AS (
 
 _ITEM_ATTRIBUTION = _INCOME_BY_PARTY + f""", item_lines AS (
  {_ITEM_LINES}
+), sold AS (
+ SELECT s.posting_line_id, min(p.item_id) AS item_id
+ FROM income_lines e JOIN posting_line_sources s ON s.posting_line_id=e.line_id
+ JOIN item_lines p ON p.document_line_id=s.document_line_id
+ WHERE p.adjusts=0 GROUP BY s.posting_line_id
 ), attributed AS (
- SELECT e.line_id, p.item_id, e.direction*s.amount_minor_units AS amount,
-        CASE WHEN p.base_quantity_microunits IS NULL THEN NULL
+ SELECT e.line_id, CASE WHEN p.adjusts=1 AND o.item_id IS NOT NULL THEN o.item_id ELSE p.item_id END AS item_id,
+        e.direction*s.amount_minor_units AS amount,
+        CASE WHEN p.adjusts=1 THEN 0 WHEN p.base_quantity_microunits IS NULL THEN NULL
              ELSE e.direction*p.base_quantity_microunits END AS quantity
  FROM income_lines e
  JOIN posting_line_sources s ON s.posting_line_id=e.line_id
  JOIN item_lines p ON p.document_line_id=s.document_line_id
+ LEFT JOIN sold o ON o.posting_line_id=e.line_id
 ), unattributed AS (
  SELECT e.line_id, e.amount FROM income_lines e
  WHERE NOT EXISTS (

@@ -20,6 +20,8 @@ from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from bookflow.adapters.workbench import forms as F
+from bookflow.adapters.workbench import activity as Activity
+from bookflow.adapters.workbench import admin as Admin
 from bookflow.adapters.workbench import command_result as CommandResult
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
@@ -67,9 +69,12 @@ env.filters["segment"] = Routing.segment
 env.globals["noun_base"] = Routing.base
 env.globals["ui_heading"] = Naming.heading
 env.globals["ui_words"] = Naming.words
+env.globals["ui_list_heading"] = Naming.list_heading
 env.filters["when"] = Naming.when
 # Money and dates as a person reads them; display only, never input or export.
 env.filters.update(Display.FILTERS)
+# What an audit event did and who did it, in plain words; the stored summary is unchanged.
+env.filters.update(Activity.FILTERS)
 # Whether a noun's show command is about one record or about the whole thing, so the
 # navigation grid sends each to the page that can actually open. Registered after the
 # function it calls; see `_record_selector`.
@@ -533,7 +538,7 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     if company_id and cmd.name == "rate set" and output.get("id"):
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update", "check post",
-                                   "card-charge post", "transfer post") and output.get("id"):
+                                   "card-charge post", "card-credit post", "transfer post") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
     if company_id and cmd.name in ('reconcile opening start', 'reconcile start', 'reconcile mark') \
             and output.get('draft'):
@@ -656,9 +661,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         result = run_command(cmd, raw, ctx, cred, company, "option" if company else "none", dry_run)
         if name == "company show":
             request.state.workbench_company = result
+            # The company's own way of showing a negative amount, for every figure this
+            # request renders through the display filters.
+            Display.NEGATIVES.set((result.get("info") or {}).get("negative_number_style") or "minus")
         return result
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
+
+    def result_names(request: Request, company_id: str | None, company_view: dict[str, Any] | None):
+        """Name the records a read result points at, through each record's own `show`."""
+        if not company_id:
+            return None
+
+        def resolve(target: str, identifier: str) -> str | None:
+            try:
+                row = run(request, f"{target} show", {_noun_meta(target)["identifier"]: identifier}, company_id)
+            except BookflowError:
+                return None  # not found, or not the reader's to see: the id stays as it is
+            return _reference_label(target, row, company_view or {}) if isinstance(row, dict) else None
+        return resolve
 
     def annotations(company_id, noun, record_id, shown, role_view, cred):
         """Project target metadata and existing UI authority; commands own all data access."""
@@ -697,6 +718,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # `apply` as a command name on a credit memo and answer `unknown command credit-memo apply`.
     Credits.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                   role_allows=_role_allows)
+    # Mounted ahead of the generic `<noun>/<verb>` routes: `company restore` is a hub command
+    # reached from the company's own menu, and its upload is not a generic form.
+    from bookflow.adapters.workbench import backups as Backups
+    Backups.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -917,7 +942,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             heading=lambda noun, verb: Naming.heading(noun, verb, _noun_meta(noun)),
             plural=lambda noun: Naming.list_heading(noun, _noun_meta(noun)),
             selector=_record_selector)
+        hub_admin = credential(request).hub_admin
+        index += Admin.finder_entries(lambda cmd: _role_allows(cmd, {}, hub_admin=hub_admin))
         return JSONResponse({"items": index}, headers={"Cache-Control": "no-store"})
+
+    @app.get("/c/{company_id}/_activity")
+    @permission_read_package(host)
+    def company_activity(company_id: str, request: Request):
+        """A record's activity for its page: the `activity` command's own result, each item
+        also carrying what happened and who did it in the audit trail's plain words."""
+        raw = {key: request.query_params[key] for key in ("record_type", "record_id", "cursor", "since", "until")
+               if request.query_params.get(key)}
+        try:
+            if request.query_params.get("limit"):
+                raw["limit"] = F.query_value(registry.get("activity").input_model, "limit", request.query_params["limit"])
+            result = run(request, "activity", raw, company_id)
+        except BookflowError as e:
+            return JSONResponse(e.to_dict(), status_code=STATUS.get(e.code, 400))
+        items = [dict(item, sentence=Activity.sentence(item), who=Activity.attribution(item)) for item in result.get("items", [])]
+        return JSONResponse({**result, "items": items}, headers={"Cache-Control": "no-store"})
 
     @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
     @permission_read_package(host)
@@ -1209,7 +1252,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, err)
         include = request.query_params.get("include_inactive") == "1"
         raw: dict[str, Any] = {}
-        if company_id and "limit" in cmd.input_model.model_fields:
+        if (company_id or noun in Admin.COLUMNS) and "limit" in cmd.input_model.model_fields:
             try:
                 limit = int(request.query_params.get("limit", "50"))
             except ValueError:
@@ -1245,9 +1288,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         items = out.get("items", [])
         if noun in Credits.COLUMNS:
             items = Credits.list_rows(noun, items)
+        if noun == 'time-activity':
+            items = Work.time_rows(items)
+        admin_list = company_id is None and noun in Admin.COLUMNS
+        if admin_list:
+            # People, access and credentials by name and date, not by id and timestamp.
+            items = Admin.list_rows(noun, items, Admin.names(lambda name, raw: run(request, name, raw, None)))
         definition = meta.get("definition")
-        columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
-                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
+        columns = (list(Admin.COLUMNS[noun]) if admin_list else
+                   list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
+                   list(Work.TIME_COLUMNS) if noun == 'time-activity' else
+                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge", "card-credit") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
                    ["number", "date", "customer_name", "total", "open_balance", "status"] if noun == 'invoice' else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun == 'sales-receipt' else
@@ -1376,7 +1427,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           and command_noun.replace("-", "_") not in c.input_model.model_fields)]
         if company_id and not company_view.get('info', {}).get('estimates_enabled', True):
             verbs = [cmd for cmd in verbs if cmd.name not in ('estimate copy', 'proposal estimate')]
-        if command_noun == "customer":
+        if command_noun in ("customer", "agent"):
             verbs = [
                 command
                 for command in verbs
@@ -1387,6 +1438,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     or (command.verb == "deactivate" and not out.get("active"))
                 )
             ]
+        if command_noun == "agent" and not out.get("active"):
+            # A deactivated agent can only be brought back; everything else would refuse.
+            verbs = [command for command in verbs if command.verb == "activate"]
         audit_undo = None
         if company_id is not None and command_noun == "audit":
             if out.get("undo_of_event_id"):
@@ -1563,6 +1617,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       purchase_noun=purchase_noun, purchase_history=purchase_history, purchase_history_paging=purchase_history_paging,
                       credit=Credits.detail_context(command_noun, out, company_id) if command_noun in Credits.NOUNS else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
+                      agent=Admin.agent_view(out, Admin.names(lambda name, raw: run(request, name, raw, None)))
+                            if company_id is None and command_noun == "agent" else None,
                       annotations=annotation_context,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
                                and _may_publish_presence(role_view, hub_admin=cred.hub_admin),
@@ -1959,6 +2015,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for leaf in described:
                 if leaf['path'] in labels:
                     leaf['label'] = labels[leaf['path']]
+        if noun == 'time-activity' and cmd.is_write:
+            labels = {'employee': 'Employee', 'duration': 'Hours', 'item': 'Service item', 'note': 'What was done',
+                      'rate': 'Rate per hour', 'class_id': 'Class', 'number': 'Number (automatic when blank)'}
+            for leaf in described:
+                if leaf['path'] in labels:
+                    leaf['label'] = labels[leaf['path']]
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if noun == 'sales-receipt' and verb == 'update':
@@ -2071,6 +2133,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     "link_version_field": link_version_field,
                     "include_fields": include_fields,
                 }
+        # A new sale whose tax field is left empty takes the customer's or the company's sales
+        # tax item (R79). Say which before it is saved: what the last preview applied, else the
+        # company default read from its record.
+        tax_leaf = next((leaf for leaf in described if leaf.get("path") == "sales_tax_item"
+                         and leaf.get("reference") and not leaf["reference"].get("current")), None)
+        if tax_leaf is not None and verb in ("post", "create") and company_id is not None:
+            profile = (result.get("revision") or {}).get("profile") if isinstance(result, dict) else None
+            applied = profile.get("sales_tax_item") if isinstance(profile, dict) else None
+            if isinstance(applied, dict) and applied.get("label"):
+                tax_leaf["reference"]["default_label"] = f"Left empty, this sale uses {applied['label']}."
+            elif default_tax := ((authorized_company or {}).get("info") or {}).get("default_sales_tax_item_id"):
+                try:
+                    row = run(request, "item show", {"item": default_tax}, company_id)
+                except BookflowError as err:
+                    if err.code not in ("E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE"):
+                        return page_error(request, err)
+                else:
+                    tax_leaf["reference"]["default_label"] = (
+                        f"Left empty, this sale uses the company default, "
+                        f"{_reference_label('item', row, authorized_company or {})}, "
+                        "unless the customer has its own.")
         runtime_fields = []
         reference_values: dict[str, dict[str, Any]] = {}
         reference_cache: dict[tuple[str, str], dict[str, Any]] = {}
@@ -2156,7 +2239,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         ):
             return_context = {"token": return_token, "target": return_target}
         panel_return = _agent_panel_return(cmd.name, attempted.get("_back") or request.query_params.get("back"))
+        if company_id is None:
+            try:
+                described = Admin.decorate_form(noun, verb, described, record_id, lambda name, raw: run(request, name, raw, None))
+            except BookflowError as err:
+                return page_error(request, err)
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      crumb=meta.get("plural_label") or (Naming.list_heading(noun, meta) if company_id is None and noun in Admin.COLUMNS else None),
+                      plain_errors=company_id is None and noun in Admin.COLUMNS, field_labels=Admin.FIELD_LABELS,
                       panel_return=panel_return,
                       heading=Naming.heading(noun, verb, meta), receipt_choices=receipt_choices, order_choices=order_choices, receipt_source_labels=receipt_source_labels, receipt_date=receipt_date,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
@@ -2174,7 +2264,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       work_history=result if noun in Work.DOCUMENTS and verb == "history" else None,
                       work_results=result if noun in Work.DOCUMENTS and verb == "query" else None,
                       command_result=CommandResult.view(company_id, noun, verb, result,
-                          home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'))
+                          home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'),
+                          resolve=result_names(request, company_id, authorized_company))
                           if not cmd.is_write and not preview and noun != 'report' and not billing else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),

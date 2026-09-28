@@ -6,6 +6,7 @@ exports, printing data or any interface other than the rendered page.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -13,6 +14,10 @@ from jinja2 import pass_context
 
 # The home-currency symbols a bookkeeper expects to see. A currency not listed keeps its code.
 SYMBOLS = {"USD": "$", "CAD": "$", "AUD": "$", "NZD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+# How the company shows a negative amount: "minus" (-$40.00) or "parentheses" ($40.00). Set
+# for the request from the company's `negative_number_style` when its company page loads; a
+# page with no company keeps the minus sign.
+NEGATIVES: ContextVar[str] = ContextVar("bookflow_negative_number_style", default="minus")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
@@ -44,8 +49,18 @@ def _grouped(amount: str) -> str | None:
     return sign, ",".join(groups) + (dot + frac if dot else "")
 
 
-def amount(value: Any) -> str:
-    """A figure for a column whose header already names the currency: "1,855.95", "-40.00"."""
+def _signed(sign: str, body: str, negatives: str | None) -> str:
+    """A negative body with the company's sign: "-$40.00" or "($40.00)"."""
+    if not sign:
+        return body
+    return f"({body})" if (negatives or NEGATIVES.get()) == "parentheses" else sign + body
+
+
+def amount(value: Any, negatives: str | None = None) -> str:
+    """A figure for a column whose header already names the currency: "1,855.95", "-40.00".
+
+    A negative figure reads "(40.00)" instead when the company shows negatives in parentheses.
+    """
     text, _ = _split(value)
     if text is None or text == "":
         return ""
@@ -53,15 +68,18 @@ def amount(value: Any) -> str:
     if grouped is None:
         return text
     sign, digits = grouped
-    return sign + digits
+    return _signed(sign, digits, negatives)
 
 
-def money(value: Any, currency: str | None = None, home: str | None = None) -> str:
+def money(value: Any, currency: str | None = None, home: str | None = None,
+          negatives: str | None = None) -> str:
     """An amount a person reads: "$1,855.95", "-$40.00", "¥12,000 JPY" when foreign.
 
     `currency` names the currency when `value` is a bare amount. `home` is the company's home
     currency; an amount in any other currency also shows its code so two currencies never read
-    alike. Text that is not a plain decimal is returned unchanged.
+    alike. A negative amount reads "($40.00)" when the company shows negatives in parentheses
+    (`negatives`, else the request's company setting). Text that is not a plain decimal is
+    returned unchanged.
     """
     text, code = _split(value)
     code = code or currency
@@ -73,11 +91,11 @@ def money(value: Any, currency: str | None = None, home: str | None = None) -> s
     sign, digits = grouped
     symbol = SYMBOLS.get(code or "")
     if symbol is None:
-        return f"{sign}{digits} {code}" if code else sign + digits
-    shown = f"{sign}{symbol}{digits}"
+        return _signed(sign, f"{digits} {code}" if code else digits, negatives)
+    shown = f"{symbol}{digits}"
     if home and code != home:
         shown += f" {code}"
-    return shown
+    return _signed(sign, shown, negatives)
 
 
 def _as_date(value: Any) -> date | None:

@@ -337,12 +337,14 @@ def test_recorded_time_pages_by_status_oldest_first(client, worker, sale):
     write(client, 'time-activity void', reason='Logged against the wrong job',
           time_activity=second['id'], expected_version=1)
 
-    live = read(client, 'time-activity query', status='recorded')
+    # The demo records time of its own; this customer's is what the test wrote.
+    live = read(client, 'time-activity query', status='recorded', customer=sale['customer'])
     assert [row['id'] for row in live['items']] == [first['id']]
+    assert live['items'][0]['time']['duration'] == '1' and live['items'][0]['time']['billable'] is True
     # Withdrawn time is inactive, and the page lists what is live unless asked otherwise --
     # the same default `estimate query` has, so one habit covers both.
-    assert read(client, 'time-activity query', status='voided')['items'] == []
-    withdrawn = read(client, 'time-activity query', status='voided', active=False)
+    assert read(client, 'time-activity query', status='voided', customer=sale['customer'])['items'] == []
+    withdrawn = read(client, 'time-activity query', status='voided', active=False, customer=sale['customer'])
     assert [row['id'] for row in withdrawn['items']] == [second['id']]
     # A state belonging to another kind is refused rather than quietly matching nothing.
     with pytest.raises(BookflowError) as refused:

@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 TRANSACTIONS = {
     **{name: 'date' for name in (
         'invoice post', 'sales-receipt post', 'bill post', 'check post',
-        'card-charge post', 'transfer post', 'journal post', 'register post',
+        'card-charge post', 'card-credit post', 'transfer post', 'journal post', 'register post',
         'credit-memo post', 'customer-refund post', 'vendor-credit post',
         'item-receipt post', 'purchase-order post', 'inventory adjust',
         'statement-charge post', 'sales-tax pay', 'batch-invoice post',

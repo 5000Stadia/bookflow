@@ -71,10 +71,13 @@ execute, release and inspect always require current authority. A lost, expired o
 evicted submitted receipt is unknown, never proof of rollback. After a submitted
 run/execute read timeout, the launcher polls the same reference for up to 30 seconds,
 with 100 ms exponential backoff capped at 1 second, including requests and receipt
-retrieval within that deadline. A completed state with an available receipt permits
+retrieval within that deadline. Each status that reports the operation still active
+(preparing, ready, receiving, queued, started or delivering) renews the 30 seconds from
+that report, up to BOOKFLOW_MCP_JSON_SECONDS (default 300) in all, so a long command
+such as demo reset or a large restore is waited for. A completed state with an available receipt permits
 retrieving the original verified result under current authority. Temporary
 E_DB_BUSY filesystem_change or publication_pending responses while checking
-status or retrieving the receipt retry within that same deadline; other failures and original business
+status or retrieving the receipt retry, and renew the deadline the same way; other failures and original business
 rejections do not receive that retry. Status alone is
 not command success. Failed recovery returns unknown outcome with the reference
 and guidance to use action=status; do not resubmit the business command. Caller

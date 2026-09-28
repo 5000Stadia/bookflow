@@ -97,6 +97,11 @@ RESOURCE_PAIRS = {
     'billing_queries.sale_source_links': {('customer-work', 'member')},
     'billing_queries.sale_source_output': {('customer-work', 'member')},
     'deposit_resolution.resolve': {('ledger.post', 'standard')},
+    'audit_visibility.admitted': {(name, 'member') for name in (
+        'account', 'attachment', 'class', 'company', 'custom-field', 'customer', 'customer-message',
+        'customer-type', 'customer-work', 'directive', 'employee', 'item', 'item-category', 'job-type',
+        'ledger.read', 'note', 'other-name', 'payment-method', 'price-level', 'sales-rep',
+        'sales-tax-code', 'ship-method', 'term', 'unit-of-measure', 'vendor', 'vendor-type')},
     'payment_authority.authorize': {('customer-work', 'member'), ('customer-work', 'standard'), ('ledger.post', 'standard'), ('ledger.read', 'member')},
     'payment_authority.authorize_event': {('customer-work', 'member'), ('ledger.read', 'member')},
     'payment_authority.authorize_events': {('customer-work', 'member'), ('ledger.read', 'member')},

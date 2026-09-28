@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from bookflow.company.journal_models import _Date
 from bookflow.company.sales_calculations import adjusted_price, base_quantity, extension, tax
@@ -99,6 +99,18 @@ class WorkLineFacts(StrictModel):
     profile: SalesLineProfile
     estimated_cost_origin: Origin
     taxes: list[WorkTaxComponent] = Field(default_factory=list, max_length=200)
+    # What discounts below this line took out of its net, and the amount its taxes apply to
+    # when a non-taxable discount left that above the net. Absent on every other line.
+    discount_minor_units: MinorUnits | None = None
+    taxable_minor_units: MinorUnits | None = None
+
+    @model_serializer(mode='wrap')
+    def legacy_line_facts(self, handler):
+        values = handler(self)
+        for key in ('discount_minor_units', 'taxable_minor_units'):
+            if getattr(self, key) is None:
+                values.pop(key, None)
+        return values
 
     @model_validator(mode='after')
     def consistency(self):
@@ -116,7 +128,7 @@ class WorkLineFacts(StrictModel):
         if self.pricing_basis == 'amount':
             if self.unit_price_minor_units is not None:
                 raise ValueError('amount pricing has no unit price')
-        elif self.unit_price_minor_units is None or self.net_minor_units != extension(self.quantity_microunits, self.unit_price_minor_units):
+        elif self.unit_price_minor_units is None or self.net_minor_units != extension(self.quantity_microunits, self.unit_price_minor_units) - (self.discount_minor_units or 0):
             raise ValueError('net disagrees with quantity and unit price')
         if self.pricing_basis == 'markup':
             if self.markup_percent_millionths is None or self.estimated_unit_cost_minor_units is None:
@@ -128,7 +140,8 @@ class WorkLineFacts(StrictModel):
         cost = self.estimated_unit_cost_minor_units
         if self.estimated_cost_minor_units != (extension(self.quantity_microunits, cost) if cost is not None else None):
             raise ValueError('estimated cost disagrees with quantity and unit cost')
-        if any(component.taxable_minor_units != self.net_minor_units for component in self.taxes):
+        base = self.net_minor_units if self.taxable_minor_units is None else self.taxable_minor_units
+        if any(component.taxable_minor_units != base for component in self.taxes):
             raise ValueError('taxable amount disagrees with authoritative net')
         if self.tax_minor_units != sum(component.tax_minor_units for component in self.taxes):
             raise ValueError('tax disagrees with captured components')

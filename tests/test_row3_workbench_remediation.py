@@ -365,5 +365,6 @@ def test_browser_journey_conflict_presence_directive_and_audit(hosted, root):
 
     audit_page = owner.get(f"/c/{cid}/audit")
     assert audit_page.status_code == 200
-    assert "company update" in audit_page.text and "directive add" in audit_page.text
-    assert "http" in audit_page.text
+    # Each event reads as what was done, with its command kept on the link for reference.
+    assert "Updated company info" in audit_page.text and 'title="company update"' in audit_page.text
+    assert 'title="directive add"' in audit_page.text and ">HTTP<" in audit_page.text

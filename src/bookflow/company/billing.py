@@ -73,7 +73,8 @@ def posting_eligibility(s, source, selected):
         item = defaults._row(s.company, 'item', lf.item_id)
         if item['type'] != lf.profile.item_type or not item['sales_enabled']:
             raise _invalid('item', 'current selling-item type differs from the quoted type')
-        if item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None:
+        if (item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None
+                and lf.profile.adjustment is None):
             raise _invalid('item', 'percentage charges cannot replace captured fixed-charge work')
         defaults._account(s.company, lf.profile.income_account.id, 'income_account', {'income', 'other_income'})
         if item['income_account_id'] != lf.profile.income_account.id:
@@ -122,9 +123,16 @@ def financial_profile(s, inp, document_type, source):
 
 def resolved_line(lf, proof=None):
     facts = lf.profile.model_dump()
+    # A quoted line a discount reduced is billed at its amount before the discount, which the
+    # billed discount line then takes back out; allocated billing bills its net and the
+    # billed discount's share of it is added back to show and post its amount.
+    amount = lf.net_minor_units + (getattr(lf, 'discount_minor_units', None) or 0)
     facts.update(schema_version=2 if lf.pricing_basis == 'amount' else 1,
         pricing_basis='amount' if lf.pricing_basis == 'amount' else 'unit',
-        net_amount_minor_units=lf.net_minor_units if lf.pricing_basis == 'amount' else None)
+        net_amount_minor_units=amount if lf.pricing_basis == 'amount' else None)
+    if facts.get('adjustment') is not None and facts['adjustment']['kind'] == 'charge':
+        # A charge's amount was decided on the quote; the sale bills it, never reworks it.
+        facts['adjustment'] = dict(facts['adjustment'], applies_to='billed')
     if lf.pricing_basis == 'amount':
         facts['price_rule'] = None
         facts['price_basis_minor_units'] = None
@@ -140,6 +148,8 @@ def resolved_line(lf, proof=None):
         'unit_id', 'unit_factor_nanounits', 'base_quantity_microunits', *sales.MONEY_COLUMNS)} | dict(
         line_id=None, profile=profile, taxes=[dict(rule=t.rule, taxable_minor_units=t.taxable_minor_units,
             tax_minor_units=t.tax_minor_units) for t in lf.taxes])
+    if proof is None:
+        resolved['net_minor_units'] = amount
     if proof is not None:
         from bookflow.company import billing_math as math
         net = proof.net()
@@ -152,12 +162,76 @@ def resolved_line(lf, proof=None):
     return resolved
 
 
+def billed_lines(s, rev, selected, profile):
+    """The sale a selection bills, in quote order, and what each line was billed from.
+
+    Selected lines are billed as they always were. A quoted subtotal comes along when any
+    line in its span is billed; a quoted discount comes along when any line it reduced is,
+    carrying for each such line its quoted share of the part billed (all of it for a whole
+    line, the same exact endpoint portion as the line's own net for a partial one). Nothing is
+    worked out again from percentages: the quote decided it. Returns ``(lines, sources)``
+    where a source is the selected line, or ``None`` for a line that came along.
+    """
+    from bookflow.company import sales_adjustments, billing_math as math
+    from bookflow.company.sales_facts import AdjustmentTarget, SalesLineProfile as Profile
+    quoted = work.saved_lines(s, rev)
+    chosen = {item.line['id']: item for item in selected}
+    facts = [work.line_facts(line) for line in quoted]
+    kinds = [sales_adjustments.kind(f.profile) for f in facts]
+    lines, sources, placed = [], [], {}
+    exempt = profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
+    start = 0
+    for index, (line, lf, role) in enumerate(zip(quoted, facts, kinds)):
+        if role == 'subtotal':
+            span = range(start, index)
+            start = index + 1
+            if not any(quoted[j]['id'] in chosen for j in span):
+                continue
+            entry = resolved_line(lf)
+        elif role == 'discount':
+            targets = []
+            for target in lf.profile.adjustment.targets:
+                item = chosen.get(quoted[target.position - 1]['id'])
+                if item is None:
+                    continue
+                source = item.facts
+                d = math.denominator(source.quantity_microunits, source.net_minor_units)
+                spans = item.spans or ((0, d),)
+                share = sum(math.portion(target.amount_minor_units, a, b, d) for a, b in spans)
+                cut = (None if target.taxable_minor_units is None else
+                       sum(math.portion(target.taxable_minor_units, a, b, d) for a, b in spans))
+                targets.append((placed[target.position - 1], share, cut))
+            targets = [row for row in targets if row[1] or row[2]]
+            if not targets:
+                continue
+            adjustment = lf.profile.adjustment.model_copy(deep=True)
+            adjustment.applies_to = 'billed'
+            adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=share, taxable_minor_units=cut)
+                                  for position, share, cut in targets]
+            adjustment.amount_minor_units = -sum(share for _, share, _ in targets)
+            entry = resolved_line(lf)
+            entry['profile'] = Profile.model_validate(dict(entry['profile'].model_dump(), adjustment=adjustment.model_dump()))
+        elif line['id'] in chosen:
+            item = chosen[line['id']]
+            entry = resolved_line(item.facts, item.proof) if item.proof else resolved_line(item.facts)
+        else:
+            continue
+        entry['adjustment_taxable'] = bool(profile.preferences.sales_tax_enabled and lf.profile.tax_code is not None
+                                           and lf.profile.tax_code.taxable and not exempt)
+        placed[index] = len(lines) + 1
+        lines.append(entry)
+        sources.append(chosen.get(line['id']))
+    from bookflow.company import tax_policy
+    sales_adjustments.apply(lines, tax_policy.effective(profile))
+    return lines, sources
+
+
 def resolve_commercial(s, inp, document_type, *, document_id, kind):
     header, rev, selected = source_selection(s, inp, kind)
     warnings = posting_eligibility(s, rev, selected)
     profile, extra = financial_profile(s, inp, document_type, rev)
     warnings += extra
-    lines = [resolved_line(item.facts, item.proof) if item.proof else resolved_line(item.facts) for item in selected]
+    lines, sources = billed_lines(s, rev, selected, profile)
     planned, extra = work._custom_plan(s, inp, document_type, document_id, carry=rev)
     warnings += extra
     number, sequence = effects.allocate(s, document_type, inp.number, document_id)
@@ -196,7 +270,7 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     return dict(profile=profile, date=inp.date, number=number, sequence=sequence, memo=inp.memo,
         issuer=issuer, lines=lines, custom_plan=planned, warnings=warnings, semantic=semantic,
         fingerprint=fingerprint, subtotal=subtotal, tax=tax, total=total, currency=rev['currency'],
-        tax_attribution=attribution, tax_keys=tax_keys)
+        tax_attribution=attribution, tax_keys=tax_keys, billed_sources=sources)
 
 
 def replay_plan(s, ctx, inp, kind, destination):
@@ -249,7 +323,8 @@ def prepare(s, ctx, inp, kind, destination):
     allocations = []
     profiles = {row['document_line_id']: row for row in data['pending']['sales_line_profiles']}
     from bookflow.company.billing_allocations import stored_proof
-    for envelope, item in zip(data['pending']['document_lines'], selected):
+    billed = [envelope for envelope, source in zip(data['pending']['document_lines'], data['billed_sources']) if source]
+    for envelope, item in zip(billed, selected, strict=True):
         line, root, lf = item
         projected = profiles[envelope['id']]
         snapshot = dict(line=lf.model_dump(mode='json'), document=work.facts(source_rev).model_dump(mode='json'),

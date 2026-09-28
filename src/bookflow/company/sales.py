@@ -14,6 +14,7 @@ from bookflow.company import tax_attribution as tax_facts
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
+from bookflow.company.sales_facts import DISCOUNT_ACCOUNT_TYPES
 from bookflow.company.sales_outputs import (
     SalesOutput, SalesSummaryOutput, SalesRevisionOutput, SalesRevisionSummaryOutput,
     SalesWriteOutput, SalesPageOutput, SalesHistoryOutput,
@@ -85,6 +86,36 @@ def saved_lines(s, revision):
     query = sa.select(lines, *(col for col in profiles.c if col.name not in lines.c)).join(
         profiles, profiles.c.document_line_id == lines.c.id).where(lines.c.revision_id == revision['id']).order_by(lines.c.position)
     return [dict(row) for row in s.company.conn.execute(query).mappings()]
+
+
+def shown_amount(line, currency, restored=0):
+    """``line_kind`` and ``amount`` for a line that is not a plain item line, else nothing.
+
+    ``restored`` is what billed discounts took from a line billed by allocation, which has no
+    pricing of its own to show its amount before them.
+    """
+    from bookflow.company import sales_adjustments
+    facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+    role = sales_adjustments.kind(facts)
+    if role in ('subtotal', 'discount'):
+        shown = facts.adjustment.amount_minor_units
+    else:
+        shown = (line['net_minor_units'] + restored if facts.pricing_basis == 'allocated'
+                 else sales_adjustments.own_amount(line, facts))
+        if role == 'item' and shown == line['net_minor_units']:
+            return {}
+    return dict(line_kind=role, amount=Money(shown, currency).to_dict())
+
+
+def _restored(lines):
+    """Billed discount shares per position, for allocated lines' shown amounts."""
+    result = {}
+    for line in lines:
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        if facts.adjustment is not None and facts.adjustment.kind == 'discount':
+            for target in facts.adjustment.targets:
+                result[target.position] = result.get(target.position, 0) + target.amount_minor_units
+    return result
 
 
 def component_attribution(sources, *, document_line_id, item_snapshot, tax, control_account_id,
@@ -172,6 +203,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         tax_mapping = effects.rows(s, c.sales_tax_attribution_lines, c.sales_tax_attribution_lines.c.revision_id == revision['id'])
     tax_ordinals = {r['document_line_id']: r['tax_ordinal'] for r in tax_mapping}
     rendered = []
+    restored = _restored(lines)
     for line in lines:
         taxes = []
         for component in sorted((row for row in components if row['document_line_id'] == line['id']),
@@ -181,6 +213,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
         from bookflow.company.billing_allocations import quantity_output
         rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
+            **shown_amount(line, currency, restored.get(line['position'], 0)),
             unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
@@ -463,17 +496,24 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     prior = {line['line_id']: line for line in old_lines}
     entered = inp.lines if inp.lines is not None else [SalesLineInput(item=line['item_id'], line_id=line['line_id']) for line in old_lines]
     seen, lines = set(), []
-    for line in entered:
+    for line, group in expand_groups(s, entered):
         key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
         if key is not None and (key not in prior or key in seen):
             raise _invalid('line_id', 'use a unique current line identity from this sale; retired identities cannot return')
         if key:
             seen.add(key)
         resolved, line_warnings = sales_defaults.resolve_line(s, line, profile, previous=prior.get(key),
-            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True)
+            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True, line_kinds=True)
+        if group is not None:
+            resolved['profile'].group = group
         resolved['line_id'] = key
         lines.append(resolved)
         warnings.extend(line_warnings)
+    if len(lines) > 200:
+        raise _invalid('lines', 'a sale holds at most 200 lines once its groups are expanded')
+    from bookflow.company import sales_adjustments, tax_policy
+    remap_billed(old_lines, lines)
+    sales_adjustments.apply(lines, tax_policy.effective(profile))
     tax_ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line['line_id'] for line in lines])
     attribution = tax_facts.calculate(lines, profile, info['home_currency'], tax_ordinals)
     tax_facts.apply(lines, attribution, tax_ordinals)
@@ -521,10 +561,80 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         subtotal=subtotal, tax=tax, total=total, currency=info['home_currency'], tax_attribution=attribution, tax_keys=tax_keys)
 
 
+def remap_billed(old_lines, lines):
+    """Point a retained billed discount's shares at where their lines now sit.
+
+    A discount billed from quoted work names each line it took a share from by position. A
+    correction can move, add or remove lines; the shares follow the stable line identities,
+    and a share on a removed line goes with it.
+    """
+    from bookflow.company.sales_facts import AdjustmentTarget
+    before = {line['position']: line['line_id'] for line in old_lines}
+    now = {line['line_id']: position for position, line in enumerate(lines, 1) if line['line_id']}
+    for line in lines:
+        adjustment = line['profile'].adjustment
+        if line['line_id'] is None or adjustment is None or adjustment.applies_to != 'billed' or adjustment.kind != 'discount':
+            continue
+        moved = [(now[before[target.position]], target.amount_minor_units, target.taxable_minor_units)
+                 for target in adjustment.targets if before.get(target.position) in now]
+        adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=units, taxable_minor_units=cut)
+                              for position, units, cut in sorted(moved)]
+
+
+def expand_groups(s, entered):
+    """Each entered line, with a new group line replaced by its members.
+
+    A group is a way of entering several items at once: its active members, in order, each at
+    the member quantity times the group line's quantity. What comes out is ordinary lines,
+    each recording the group it came from so the document can show and print the group.
+    Returns ``(line_input, LineGroup | None)`` pairs.
+    """
+    from bookflow.company import sales_defaults
+    from bookflow.company.sales_facts import LineGroup
+    from bookflow.core.exact import format_quantity_micro_units, parse_quantity_micro_units
+    result = []
+    for index, line in enumerate(entered):
+        if line.line_id is not None:
+            result.append((line, None))
+            continue
+        item = sales_defaults._row(s.company, 'item', line.item)
+        if item['type'] != 'group':
+            result.append((line, None))
+            continue
+        extra = sorted(line.model_fields_set - {'item', 'quantity'}) + (['use_defaults'] if line.use_defaults else [])
+        if extra:
+            raise _invalid(f'lines.{index}.{extra[0]}', 'a group line takes an item and a quantity; '
+                           'change its members once they are on the sale')
+        if not item['sales_enabled']:
+            raise _invalid(f'lines.{index}.item', 'item is not enabled for sales')
+        members = s.company.conn.execute(sa.select(c.item_members).where(
+            c.item_members.c.owner_item_id == item['id'], c.item_members.c.active.is_(True)).order_by(
+            c.item_members.c.position, c.item_members.c.id)).mappings().all()
+        if not members:
+            raise _invalid(f'lines.{index}.item', 'this group has no active members to add')
+        times = parse_quantity_micro_units(line.quantity)
+        group = LineGroup(item=sales_defaults._ref(item), description=item['description'],
+                          print_members=bool(item['print_members']))
+        for member in members:
+            quantity, rest = divmod(member['quantity_microunits'] * times, 1_000_000)
+            name = sales_defaults._row(s.company, 'item', member['component_item_id'], active=False)['full_name']
+            if not member['quantity_microunits']:
+                raise _invalid(f'lines.{index}.item', f'group member {name} has no quantity; add {name} as its own line')
+            if rest or quantity > 9_223_372_036_854_775_807:
+                raise _invalid(f'lines.{index}.quantity', f'the group quantity gives {name} a quantity finer than '
+                               'six decimal places; add it as its own line')
+            values = dict(item=member['component_item_id'], quantity=format_quantity_micro_units(quantity))
+            if member['unit_id'] is not None:
+                values['unit'] = member['unit_id']
+            result.append((SalesLineInput(**values), group))
+    return result
+
+
 def _posting_accounts_active(s, resolved):
     ids = {resolved['profile'].control_account.id}
     for line in resolved['lines']:
-        ids.add(line['profile'].income_account.id)
+        if _line_account(line['profile']) is not None:
+            ids.add(_line_account(line['profile']).id)
         ids.update(tax['rule'].liability_account.id for tax in line['taxes'])
     accounts = effects.rows(s, c.accounts, c.accounts.c.id.in_(ids))
     if {account['id'] for account in accounts} != ids:
@@ -550,11 +660,21 @@ def _posting_accounts_active(s, resolved):
         if current[control.id]['type'] == 'other_current_asset':
             eligible(control.id, {'other_current_asset'}, 'deposit_to', 'Select bank or system Undeposited Funds before posting this correction.', role='undeposited_funds')
     for line in resolved['lines']:
-        eligible(line['profile'].income_account.id, {'income', 'other_income'}, 'lines',
-                 "Explicitly refresh the affected item's defaults or select an eligible item before posting this correction.")
+        account = _line_account(line['profile'])
+        if account is not None:
+            eligible(account.id, {'income', 'other_income'} if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES), 'lines',
+                     "Explicitly refresh the affected item's defaults or select an eligible item before posting this correction.")
         for tax in line['taxes']:
             eligible(tax['rule'].liability_account.id, {'other_current_liability'}, 'sales_tax_item',
                      'Explicitly refresh or select eligible tax defaults before posting this correction.', role='sales_tax_payable')
+
+
+def _line_account(facts):
+    """The account a line posts its own amount to: income for a sold line, the discount account
+    for a discount, none for a subtotal."""
+    if facts.income_account is not None:
+        return facts.income_account
+    return facts.adjustment.account if facts.adjustment is not None else None
 
 
 def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False, provenance=None):
@@ -704,8 +824,10 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         changed_fields=changed_fields)
     plan = Plan(output, dict(input=inp, operation=operation, document_type=document_type, changed=True, header=header,
         before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan, billing_source=billing_source,
-        stock=stock,
-        semantic=resolved['semantic'] if resolved else None))
+        stock=stock, semantic=resolved['semantic'] if resolved else None,
+        # Only a sale billed from quoted work says which of its lines were billed; the deposit
+        # coordinator reads every other sale plan against a closed set of keys.
+        **({'billed_sources': resolved['billed_sources']} if resolved and 'billed_sources' in resolved else {})))
     from bookflow.company.billing_edits import carry_allocations
     carry_allocations(plan, s)
     if 'billing_allocations' in plan.data and operation != 'void':
@@ -739,6 +861,35 @@ def _stock_entries(pending):
     return entries
 
 
+def discount_shares(pending):
+    """Each sold line's discount shares, as ``{document_line_id: [(discount_line_id, amount)]}``."""
+    envelopes = sorted(pending['document_lines'], key=lambda row: row['position'])
+    by_position = {row['position']: row['id'] for row in envelopes}
+    profiles = {row['document_line_id']: row for row in pending['sales_line_profiles']}
+    result = {}
+    for envelope in envelopes:
+        facts = SalesLineProfile.model_validate_json(profiles[envelope['id']]['item_snapshot'])
+        if facts.adjustment is None or facts.adjustment.kind != 'discount':
+            continue
+        for target in facts.adjustment.targets:
+            result.setdefault(by_position[target.position], []).append((envelope['id'], target.amount_minor_units))
+    return result
+
+
+def income_sources(envelope_id, net, shares):
+    """``(tax_component_id, amount, document_line_id)`` sources of a sold line's income leg.
+
+    The line's own net, then each discount share attributed to the discount line that took it,
+    so the net component keeps exactly one recognition source of its own amount. A line a
+    discount took entirely has no net component to settle, and its income is its own.
+    """
+    taken = shares.get(envelope_id, [])
+    if not net:
+        whole = sum(units for _, units in taken)
+        return [(None, whole, envelope_id)] if whole else []
+    return [(None, net, envelope_id)] + [(None, units, owner) for owner, units in taken]
+
+
 def _business_postings(header, revision, batch, resolved, pending, created, costs=None):
     """Every leg this sale posts, and the inventory-asset leg each stock line's cost left by.
 
@@ -765,19 +916,30 @@ def _business_postings(header, revision, batch, resolved, pending, created, cost
             debit_minor_units=amount if debit else 0, credit_minor_units=0 if debit else amount,
             reversed_line_id=None, **dict.fromkeys(journals.FACTS))
         pending['posting_lines'].append(value)
-        for component_id, units in allocations:
+        for allocation in allocations:
+            component_id, units = allocation[:2]
+            owner = allocation[2] if len(allocation) > 2 else envelope['id']
             if units:
                 pending['posting_line_sources'].append(dict(**created(), transaction_id=header['id'], posting_line_id=value['id'],
-                    revision_id=revision['id'], document_line_id=envelope['id'], tax_component_id=component_id,
+                    revision_id=revision['id'], document_line_id=owner, tax_component_id=component_id,
                     amount_minor_units=units, currency=revision['currency'], reversed_source_id=None))
         return value
+    shares = discount_shares(pending)
     for envelope in pending['document_lines']:
         line = profiles[envelope['id']]
         facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        if facts.adjustment is not None and facts.adjustment.kind in ('subtotal', 'discount'):
+            # A subtotal posts nothing. A discount debits its own account with every share it
+            # took; the lines it took them from credit income at their full amount.
+            if facts.adjustment.kind == 'discount':
+                taken = -facts.adjustment.amount_minor_units
+                leg(envelope, facts.adjustment.account, taken, True, [(None, taken)])
+            continue
         taxes = [component for component in pending['sales_tax_components'] if component['document_line_id'] == envelope['id']]
         amounts = [(None, line['net_minor_units'])] + [(component['id'], component['tax_minor_units']) for component in taxes]
         leg(envelope, profile.control_account, line['gross_minor_units'], True, amounts)
-        leg(envelope, facts.income_account, line['net_minor_units'], False, [(None, line['net_minor_units'])])
+        leg(envelope, facts.income_account, line['net_minor_units'] + sum(units for _, units in shares.get(envelope['id'], [])),
+            False, income_sources(envelope['id'], line['net_minor_units'], shares))
         for component in taxes:
             captured = SalesTaxComponent.model_validate_json(component['component_snapshot'])
             leg(envelope, captured.liability_account, component['tax_minor_units'], False, [(component['id'], component['tax_minor_units'])])

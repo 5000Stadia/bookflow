@@ -78,6 +78,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.currency` | string | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].amount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].effective_date` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount` | object \| null | no | yes | null | Present in PaymentApplicationOutput. |
+| `items[].discount.amount` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount.currency` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount` | object \| null | no | yes | null | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount.amount` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount.currency` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount_date` | string \| null | no | yes | null | Present in PaymentApplicationOutput. |
 | `items[].reverses_allocation_id` | string \| null | no | yes | null | Present in PaymentAllocationOutput. |
 | `items[].allocation_id` | string \| null | no | yes | — | Present in PaymentAllocationOutput. |
 | `items[].target_ordinal` | integer | no | no | — | Present in PaymentAllocationOutput. |
@@ -123,6 +132,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `items[].invoice` | string | no | no | — | Present in InvoiceAmount. |
 | `items[].expected_version` | integer | no | no | — | Present in InvoiceAmount. |
 | `total_count` | integer | yes | no | — | — |
@@ -260,6 +270,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -323,8 +338,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -396,6 +412,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.effect.applications[].amount.currency` | string | yes | no | — | — |
 | `original.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
 | `original.effect.applications[].effective_date` | string | yes | no | — | — |
+| `original.effect.applications[].discount` | object \| null | no | yes | null | — |
+| `original.effect.applications[].discount.amount` | string | yes | no | — | — |
+| `original.effect.applications[].discount.currency` | string | yes | no | — | — |
+| `original.effect.applications[].discount.minor_units` | integer | yes | no | — | — |
+| `original.effect.applications[].suggested_discount` | object \| null | no | yes | null | — |
+| `original.effect.applications[].suggested_discount.amount` | string | yes | no | — | — |
+| `original.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
+| `original.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
+| `original.effect.applications[].discount_date` | string \| null | no | yes | null | — |
 | `original.effect.allocations` | array[object] | yes | no | — | — |
 | `original.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `original.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -453,6 +478,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.current.components[].applied_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
 | `original.current.components[].available_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
 | `original.current.component_count` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.discount_minor_units` | integer | no | no | 0 | Present in PaymentWriteOutput. |
 | `original.effect_counts` | object | yes | no | — | — |
 | `original.effect_counts.source_components` | integer | yes | no | — | — |
 | `original.effect_counts.applications` | integer | yes | no | — | — |
@@ -475,6 +501,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `original.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `original.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `original.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -538,8 +569,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. Present in InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `original.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -551,6 +583,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `original.prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `original.prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `original.summary` | object \| null | no | yes | null | Present in PaymentWriteOutput. |
+| `original.summary.text` | string | no | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. Present in PaymentWriteOutput. |
+| `original.summary.documents` | array[object] | no | no | — | The documents this write settled, at most 50. Present in PaymentWriteOutput. |
+| `original.summary.documents[].document_id` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].document_type` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].number` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied` | object | no | no | — | Money from this payment applied to the document. Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due` | object | no | no | — | What the document still owes after this payment. Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].paid_in_full` | boolean | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.document_count` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.paid_in_full_count` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.still_due` | object | no | no | — | Total still owed on the documents this write settled. Present in PaymentWriteOutput. |
+| `original.summary.still_due.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.still_due.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.still_due.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. Present in PaymentWriteOutput. |
+| `original.summary.credit.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.credit.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.credit.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. Present in PaymentWriteOutput. |
+| `original.summary.discount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.discount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.discount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
 | `original.effect.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
@@ -567,6 +632,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
 | `original.effect.payment_changes` | array[object] | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.payment_changes[].payment_id` | string \| null | no | yes | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.payment_changes[].version` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
@@ -588,6 +654,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.effect.payment_changes[].components[].applied_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.payment_changes[].components[].available_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.payment_changes[].component_count` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].discount_minor_units` | integer | no | no | 0 | Present in InvoiceCorrectionOutput. |
 | `original.current.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceCorrectionOutput. |
 | `original.current.gross_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
@@ -626,6 +693,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `current.components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `current.component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
 | `current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. Present in InvoiceSettlementOutput. |
 | `current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
@@ -734,6 +802,8 @@ Example JSON output:
       "customer": "value",
       "date": "2026-01-01",
       "deposit_to": null,
+      "discount_account": null,
+      "discounts": [],
       "expected_custom_field_kinds": {},
       "expected_facts_fingerprint": null,
       "memo": null,

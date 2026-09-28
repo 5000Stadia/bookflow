@@ -484,6 +484,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Bill", "bill post", "/bill/post"),
             _new("Check", "check post", "/check/post"),
             _new("Credit card charge", "card-charge post", "/card-charge/post"),
+            _new("Credit card credit", "card-credit post", "/card-credit/post"),
             _new("Purchase order", "purchase-order post", "/purchase-order/post"),
             _new("Item receipt", "item-receipt post", "/item-receipt/post"),
             _new("Vendor credit", "vendor-credit post", "/vendor-credit/post"),
@@ -494,6 +495,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Bill payments", "bill payment query", "/bill-payment"),
             _list("Checks", "check query", "/check"),
             _list("Credit card charges", "card-charge query", "/card-charge"),
+            _list("Credit card credits", "card-credit query", "/card-credit"),
             _list("Purchase orders", "purchase-order query", "/purchase-order"),
             _list("Item receipts", "item-receipt query", "/item-receipt"),
             _list("Vendor credits", "vendor-credit query", "/vendor-credit"),
@@ -546,6 +548,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Deposit", "deposit post", "/deposit/post"),
             _new("Transfer", "transfer post", "/transfer/post"),
             _new("Credit card charge", "card-charge post", "/card-charge/post"),
+            _new("Credit card credit", "card-credit post", "/card-credit/post"),
             _new("Journal entry", "journal post", "/journal/post"),
         ),
         lists=(
@@ -553,6 +556,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Checks", "check query", "/check"),
             _list("Transfers", "transfer query", "/transfer"),
             _list("Credit card charges", "card-charge query", "/card-charge"),
+            _list("Credit card credits", "card-credit query", "/card-credit"),
             _list("Exchange rates", "rate query", "/rate"),
         ),
         tasks=(
@@ -605,6 +609,8 @@ SECTIONS: tuple[Section, ...] = (
             Action("Audit trail", READ, ("audit list",), "/audit"),
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             Action("Rename the company", WRITE, ("company rename",), "/company/rename"),
+            Action("Back up the company", WRITE, ("company backup",), "/company/backup"),
+            Action("Restore a backup", WRITE, ("company restore",), "/company/restore"),
             Action("Settings and lists", READ, (), "/_group/settings"),
         ),
     ),
@@ -882,16 +888,23 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         attention["overdue_more"] = bool(overdue.get("next_cursor"))
         attention["overdue_href"] = figures[-1]["href"]
 
+    # What the company owes is Accounts Payable: the A/P aging total, which is the balance
+    # sheet's Accounts Payable and the vendor balance summary's total for the same day. It
+    # counts items received but not yet billed and unapplied vendor credits, which a list of
+    # unpaid bills does not.
+    payable = ask("report ap-aging", {"as_of": today, "limit": 1})
+    if payable is not None:
+        figures.append(dict(key="payable", label="You owe", value=payable["totals"]["total"],
+                            note="Accounts payable", href=report("ap-aging", as_of=today)))
+
     # Unpaid bills come oldest due date first, so the first rows are the overdue and the soonest
     # due; one row past what is shown says whether there are more due within the week.
     bills = ask("report unpaid-bills", {"as_of": today, "limit": ATTENTION_ROWS + 1})
     if bills is not None:
-        figures.append(dict(key="payable", label="You owe", value=bills["totals"]["balance"],
-                            note="Unpaid bills", href=report("unpaid-bills", as_of=today)))
         soon = [dict(row, href=f"{base}/bill/{row['transaction_id']}") for row in bills["rows"] if row["due_date"] <= week]
         attention["bills"] = soon[:ATTENTION_ROWS]
         attention["bills_more"] = len(soon) > ATTENTION_ROWS
-        attention["bills_href"] = figures[-1]["href"]
+        attention["bills_href"] = report("unpaid-bills", as_of=today)
 
     month = ask("report profit-and-loss", {"date_from": month_start, "date_to": today, "limit": 1})
     if month is not None:

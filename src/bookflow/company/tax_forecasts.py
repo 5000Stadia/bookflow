@@ -41,10 +41,18 @@ def remaining(s,source,revision,*,pending=()):
         length,net,count=query.free_amounts(s,root,facts,mode,pending_by_root.get(root))
         values[row['line_id']]=dict(length=length,net=net if facts.billable else 0,tax=0,count=count)
         free_facts.append((row['line_id'],length,net,count,facts.billable))
-        if not facts.billable or length==0:continue
+        from bookflow.company.billing_selection import derived
+        if not facts.billable or length==0 or derived(facts):continue
         selected.append((row,root,facts))
         ordinal=len(inputs)+1;ordinals[row['line_id']]=ordinal;span_count+=count
-        inputs.append(dict(net_minor_units=net,taxes=[dict(rule=t.rule) for t in facts.taxes]))
+        base=net
+        if getattr(facts,'taxable_minor_units',None) is not None:
+            # A discount left tax owed on other than the net: the same share of that base.
+            from bookflow.company import billing_math as math,billing_allocations as alloc
+            d=math.denominator(facts.quantity_microunits,facts.net_minor_units)
+            base=sum(math.portion(facts.taxable_minor_units,a,b,d)
+                     for a,b in alloc.free_spans(s,root,facts,policy=mode))
+        inputs.append(dict(net_minor_units=net,taxable_minor_units=base,taxes=[dict(rule=t.rule) for t in facts.taxes]))
         if count>200:reasons.append(ForecastReason(code='line_span_limit',line_id=row['line_id'],recovery='Bill this root’s exact recommended net amount, then inspect the remaining work again.'))
     if span_count>2000:reasons.append(ForecastReason(code='conversion_span_limit',recovery='Select fewer complete source lines; each bounded installment rounds its own tax.'))
     if sum(value['net'] for value in values.values())<=0:reasons.append(ForecastReason(code='no_charge',recovery='No positive charge remains; physical completion is tracked separately.'))

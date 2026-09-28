@@ -41,15 +41,17 @@ def _overpaid(books):
     return sale, payment
 
 
-def _row(b, payment_id):
-    """The payment list row for one receipt, found by the link the page put in it.
+def _row(b, payment_id, width):
+    """The payment list entry for one receipt a person sees at this width -- the ledger row on a
+    wide screen, the card on a phone -- found by the link the page put in it.
 
     By id rather than by number: the number is the page's own to render, and a test that
     already knew it could not catch the page rendering somebody else's row.
     """
     link = json.dumps('a[href*="payment=' + payment_id + '"]')
-    return (f'''[...document.querySelectorAll(".payment-invoices tbody tr")].find(
-        tr => tr.querySelector({link}))''')
+    entries = '.list-cards .list-card' if width == 390 else '#payment-list tbody tr'
+    return (f'''[...document.querySelectorAll("{entries}")].find(
+        entry => entry.querySelector({link}))''')
 
 
 def _cell(b, row, label):
@@ -69,11 +71,15 @@ def test_the_payment_list_offers_the_overpayment_back_and_the_refund_takes_it(
 
     # The list says what is standing, and the row carries the way to send it back.
     b.navigate(f'{base}/payment')
-    b.wait_for('!!document.querySelector(".payment-invoices tbody tr")')
-    row = _row(b, payment['id'])
+    b.wait_for('!!document.querySelector("#payment-list tbody tr")')
+    row = _row(b, payment['id'], width)
     assert b.evaluate(f'!!{row}'), 'the receipt is not on the payment list'
-    number = _cell(b, row, 'Payment')
-    assert _cell(b, row, 'Unapplied credit') == OVERAGE, _cell(b, row, 'Unapplied credit')
+    if width == 390:
+        number = b.evaluate(f'{row}.querySelector(".list-card-link").textContent.trim()')
+        assert f'${OVERAGE} unapplied' in b.evaluate(f'{row}.innerText')
+    else:
+        number = _cell(b, row, 'Payment')
+        assert _cell(b, row, 'Unapplied credit') == OVERAGE, _cell(b, row, 'Unapplied credit')
     assert b.evaluate(f'!!{row}.querySelector("[data-refund-overpayment]")'), \
         'the overpaid row offers no way to send the money back'
     _contained(b, width)
@@ -109,9 +115,12 @@ def test_the_payment_list_offers_the_overpayment_back_and_the_refund_takes_it(
 
     # And the payment list no longer offers money that has been sent back.
     b.navigate(f'{base}/payment')
-    b.wait_for('!!document.querySelector(".payment-invoices tbody tr")')
-    row = _row(b, payment['id'])
+    b.wait_for('!!document.querySelector("#payment-list tbody tr")')
+    row = _row(b, payment['id'], width)
     assert b.evaluate(f'!{row}.querySelector("[data-refund-overpayment]")'), \
         'a refunded overpayment is still being offered'
-    assert _cell(b, row, 'Unapplied credit') == '0.00', _cell(b, row, 'Unapplied credit')
+    if width == 390:
+        assert 'unapplied' not in b.evaluate(f'{row}.innerText')
+    else:
+        assert _cell(b, row, 'Unapplied credit') == '0.00', _cell(b, row, 'Unapplied credit')
     _contained(b, width)

@@ -187,12 +187,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -211,7 +211,7 @@ Example JSON output:
   "affected_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "changed": false,
@@ -549,12 +549,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -570,7 +570,7 @@ Example JSON output:
   "address": null,
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "company_name": null,
@@ -854,12 +854,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -878,7 +878,7 @@ Example JSON output:
   "affected_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "changed": false,
@@ -1017,6 +1017,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--columns LIST` | Columns the table prints, comma-separated, or `all` for every column; default `name,phone,open_balance`. --json always returns every field. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1155,12 +1156,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].last_purchase_cost.amount` | string | yes | no | — | — |
 | `items[].last_purchase_cost.currency` | string | yes | no | — | — |
 | `items[].last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `items[].balances_available` | boolean | no | no | false | — |
-| `items[].current_balance` | object | yes | no | — | — |
+| `items[].balances_available` | boolean | no | no | true | — |
+| `items[].current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `items[].current_balance.amount` | string | yes | no | — | — |
 | `items[].current_balance.currency` | string | yes | no | — | — |
 | `items[].current_balance.minor_units` | integer | yes | no | — | — |
-| `items[].open_balance` | object | yes | no | — | — |
+| `items[].open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `items[].open_balance.amount` | string | yes | no | — | — |
 | `items[].open_balance.currency` | string | yes | no | — | — |
 | `items[].open_balance.minor_units` | integer | yes | no | — | — |
@@ -1303,7 +1304,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].company_name` | string \| null | no | yes | — | Present in VendorSummary. |
 | `items[].primary_contact` | string \| null | no | yes | — | Present in VendorSummary. |
 | `items[].phone` | string \| null | no | yes | — | Present in VendorSummary. |
-| `items[].open_balance` | object | no | no | — | Present in VendorSummary. |
+| `items[].open_balance` | object | no | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. Present in VendorSummary. |
 | `items[].open_balance.amount` | string | no | no | — | Present in VendorSummary. |
 | `items[].open_balance.currency` | string | no | no | — | Present in VendorSummary. |
 | `items[].open_balance.minor_units` | integer | no | no | — | Present in VendorSummary. |
@@ -1525,12 +1526,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -1544,7 +1545,7 @@ Example JSON output:
   "address": null,
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "company_name": null,
@@ -1875,12 +1876,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -1900,7 +1901,7 @@ Example JSON output:
   "affected_descendant_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "changed_fields": [],

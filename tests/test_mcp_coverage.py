@@ -29,7 +29,10 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 491
+    # 491 -> 492 on main before batch A (not measured here); +6 the card-credit verbs (R135).
+    # +2 company backup and company restore (R133).
+    # +4 agent/user deactivate and activate (R89); +1 report export (R145).
+    assert len(rows) == 505
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -107,11 +110,6 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
     #
-    # 2797 -> 2801 since df02af0, measured per command on both trees:
-    #    +1  invoice query gained the `settlement` filter.
-    #    +2  register query gained `direction` (a choice of two).
-    #    +1  report reconciliation-discrepancy is new (R146).
-    #
     # 2694 -> 2766 since 82e3a13, and every one of the 72 is accounted for by a command that
     # landed. Re-measure it the same way when it moves again -- per-command node counts on both
     # trees, differenced -- because a census bumped without that arithmetic hides new shape.
@@ -129,7 +127,17 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # bill post/update, +4 from membership grant/revoke, +2 from customer-refund show's
     # revision_number and company attach's administrator.
     # +1: customer-refund history adds its refund selector; limit/cursor are paging controls.
-    assert sum(len(group["paths"]) for group in mapped)==2801
+    #
+    # 2797 -> 2858 at the batch A merge: main already measured 2817 (+20, not re-measured
+    # per command here), and batch A adds +41: card-credit post 11, update 15, query 8, and
+    # one each for show, history and void (+37, R135); invoice, sales-receipt, credit-memo and
+    # statement-charge post each gain the null branch of an optional `date` (+4, R95).
+    # 2858 -> 2860: company restore's optional organization and name each add their null branch (R133).
+    # 2860 -> 2864, measured per command on the merged tree: agent deactivate/activate and user
+    # deactivate/activate add one node each (+4, R89); report export adds none (R145).
+    # 2864 -> 2876: R147 (sales line kinds) adds 12 input variants to the sales and quote posts.
+    # 2876 -> 2878: user list and membership list gain optional paging (the cursor null branch each, R88).
+    assert sum(len(group["paths"]) for group in mapped)==2878
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

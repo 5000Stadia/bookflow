@@ -91,6 +91,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_INCOMPLETE_COMPANY": "The folder holds an unfinished company creation.",
     "E_ALREADY_ATTACHED": "That company id is already registered.",
     "E_ATTACH_INVALID": "The folder is not a valid company folder.",
+    "E_BACKUP_INVALID": "The file is not an intact Bookflow company backup.",
     "E_DEMO_RESET_INCOMPLETE": "The old demo could not be moved to trash; its folders remain unregistered.",
     "E_DEPOSIT_SOURCE_INVALID": "The captured receipt cash provenance is unsupported or inconsistent.",
     "E_DEPOSIT_SOURCE_INELIGIBLE": "The receipt is not eligible undeposited home-currency cash.",
@@ -218,3 +219,18 @@ def explain_permission(error: BookflowError, command: Any) -> BookflowError:
     error.message = permission_message(error.details)
     error.args = (f"{error.code}: {error.message}",)
     return error
+
+
+REASON_LIMIT = 140
+
+
+def require_reason(reason: str | None) -> None:
+    """A write that needs a reason: missing is E_REASON_REQUIRED, over-long a plain field error."""
+    if not reason or not reason.strip():
+        raise BookflowError("E_REASON_REQUIRED")
+    if len(reason) > REASON_LIMIT:
+        raise BookflowError(
+            "E_VALIDATION",
+            message=f"The reason is {len(reason)} characters; a reason may be at most {REASON_LIMIT}. "
+                    "Shorten it to a short phrase naming what triggered the write.",
+            details={"fields": [{"field": "reason", "problem": f"must be at most {REASON_LIMIT} characters"}]})

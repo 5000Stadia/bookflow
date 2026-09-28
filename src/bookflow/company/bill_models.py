@@ -363,7 +363,7 @@ class BillObligationComponentOutput(CreatedOutput):
 class BillSettlementSourceOutput(_Input):
     """How much of what settled this bill came from one kind of money."""
 
-    source_type: Literal['bill_payment', 'vendor_credit']
+    source_type: Literal['bill_payment', 'vendor_credit', 'early_discount']
     applied: MoneyOutput
     applied_minor_units: int
 
@@ -465,6 +465,12 @@ class BillSummaryOutput(CommonOut):
     settlement_current: BillSettlementOutput
     # The purchase order this bill was entered from; null when it was entered outright.
     purchase_order_id: str | None = None
+    # Early-payment terms: the last day the discount can be earned, and what the terms still
+    # offer if the bill is paid by then (the percentage of the total less any discount already
+    # taken, at most what is open). ``bill pay`` takes it only when a row names it.
+    discount_date: str | None = None
+    early_discount_minor_units: int = 0
+    early_discount: MoneyOutput | None = None
 
 
 class BillOutput(BillSummaryOutput):

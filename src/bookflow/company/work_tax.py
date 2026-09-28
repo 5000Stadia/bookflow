@@ -34,6 +34,11 @@ def economics(value):
     return result
 
 
+def _base(line):
+    """The amount a quoted line's taxes apply to: its net unless a non-taxable discount left more."""
+    return line.net_minor_units if line.taxable_minor_units is None else line.taxable_minor_units
+
+
 def prepare(s,document_id,value):
     """Mutate only the prospective value. Ordinal planning never writes."""
     f=read_facts(value['facts']);profile=f.profile
@@ -43,7 +48,7 @@ def prepare(s,document_id,value):
     profile=read_facts(value['facts']).profile
     lines=[read_line(entry['facts']) for entry in value['lines']]
     ordinals,keys=tax.prospective(s.company,document_id,[entry['line_id'] for entry in value['lines']],work=True)
-    inputs=[dict(net_minor_units=line.net_minor_units,taxes=[dict(rule=t.rule,taxable_minor_units=t.taxable_minor_units,tax_minor_units=t.tax_minor_units) for t in line.taxes]) for line in lines]
+    inputs=[dict(net_minor_units=line.net_minor_units,taxable_minor_units=_base(line),taxes=[dict(rule=t.rule,taxable_minor_units=t.taxable_minor_units,tax_minor_units=t.tax_minor_units) for t in line.taxes]) for line in lines]
     attributed=tax.calculate(inputs,profile,s.company_info_row['home_currency'],ordinals)
     tax.apply(inputs,attributed,ordinals)
     for entry,line,derived in zip(value['lines'],lines,inputs):
@@ -79,14 +84,22 @@ def validate(s,rev,lines,pending,require):
     require(len(mapping)==len(lines) and {(r['work_line_id'],r['line_id'],r['tax_ordinal']) for r in mapping}=={(row['id'],row['line_id'],ordinal) for row,ordinal in zip(lines,ordinals)},'wrong work tax line ownership')
     require(all(row['document_id']==rev['document_id'] for row in mapping),'work tax owner differs')
     inputs=[]
+    from bookflow.company import sales_adjustments
+    captured=[read_line(row['facts_snapshot']) for row in lines]
+    taxable_flags=[bool(profile.preferences.sales_tax_enabled and f.profile.tax_code is not None and f.profile.tax_code.taxable
+                        and not (profile.customer_tax_code is not None and not profile.customer_tax_code.taxable)) for f in captured]
+    bases=sales_adjustments.check([f.profile for f in captured],[f.net_minor_units+(f.discount_minor_units or 0) for f in captured],
+                                  [f.net_minor_units for f in captured],taxable_flags,require)
+    for f,base,flag in zip(captured,bases,taxable_flags):
+        require(sales_adjustments.kind(f.profile) in ('subtotal','discount') or not flag or base==_base(f),'quoted taxable base differs from discount shares')
     for row in lines:
         facts=read_line(row['facts_snapshot'])
         require(facts.schema_version==2 or tax_policy.effective(profile)==tax_policy.LEGACY,'combined work policy requires version2 line facts')
         taxable=profile.preferences.sales_tax_enabled and facts.profile.tax_code is not None and facts.profile.tax_code.taxable
         exempt=profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
-        rules=profile.tax_rules if taxable and not exempt else []
+        rules=profile.tax_rules if taxable and not exempt and sales_adjustments.kind(facts.profile) in ('item','charge') else []
         require(rules is not None,'missing work tax rules')
-        inputs.append(dict(net_minor_units=facts.net_minor_units,taxes=[dict(rule=rule) for rule in rules]))
+        inputs.append(dict(net_minor_units=facts.net_minor_units,taxable_minor_units=_base(facts),taxes=[dict(rule=rule) for rule in rules]))
     expected=tax.calculate(inputs,profile,rev['currency'],ordinals)
     snapshots=[row for row in pending['work_tax_attributions'] if row['revision_id']==rev['id']]
     require(len(snapshots)==1 and snapshots[0]['document_id']==rev['document_id'],'wrong work tax snapshot owner')

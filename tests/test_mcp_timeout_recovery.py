@@ -40,6 +40,7 @@ def short_recovery(monkeypatch):
     monkeypatch.setattr(client_module, 'RECOVERY_SECONDS', 0.15)
     monkeypatch.setattr(client_module, 'RECOVERY_INITIAL_DELAY', 0.01)
     monkeypatch.setattr(client_module, 'RECOVERY_MAX_DELAY', 0.04)
+    monkeypatch.setattr(client_module, 'RECOVERY_PROGRESS_SECONDS', 0.3)
 
 
 @pytest.mark.parametrize('mode', ['running', 'status_stalls', 'receipt_stalls', 'receipt_timeouts',
@@ -94,6 +95,36 @@ def test_unknown_is_bounded_and_never_resubmits(short_recovery, mode, caplog):
     assert len(calls) <= 12  # backoff, including repeated receipt timeouts
     assert 'private-secret' not in caplog.text
     assert all(record.exc_info is None for record in caplog.records)
+
+
+@pytest.mark.parametrize('report', ['started', 'filesystem_change'])
+def test_a_long_command_the_host_reports_as_running_is_waited_for(short_recovery, report):
+    """R74: silence ends recovery after RECOVERY_SECONDS; reported progress renews it."""
+    calls = []
+    async def receive(request):
+        action = request.url.path.rsplit('/', 1)[-1]
+        calls.append(action)
+        if len(calls) == 1:
+            raise httpx2.ReadTimeout('lost reply')
+        if action == 'status':
+            if time.monotonic() - started[0] < 0.22:  # well past RECOVERY_SECONDS, inside the progress bound
+                if report == 'filesystem_change':
+                    return control({'code': 'E_DB_BUSY', 'message': 'busy',
+                                    'details': {'operation': 'filesystem_change'}}, 409)
+                return control(state('started', False))
+            return control(state())
+        return completion({'value': 'original output'})
+    started = [0.0]
+    async def witness():
+        with closing(Directories([])) as dirs:
+            async with httpx2.AsyncClient(base_url='http://fixture', transport=httpx2.MockTransport(receive)) as http:
+                started[0] = time.monotonic()
+                result, is_error, meta = await Client(http, dirs, dirs).run(RecoveryArguments(operation_ref=REF, action='execute'))
+                assert time.monotonic() - started[0] >= 0.2
+                assert not is_error and result == {'value': 'original output'}
+                assert meta['response_kind'] == 'verified_command_completion'
+    anyio.run(witness)
+    assert calls[0] == 'execute' and calls[-2:] == ['status', 'execute'] and calls.count('execute') == 2
 
 
 @pytest.mark.parametrize('error', [False, True])

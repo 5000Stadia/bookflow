@@ -284,7 +284,7 @@ class StandardProfileManifest(_ProfileInput):
         all_seed_keys: set[str] = set()
         expected_counts = {
             "term": 6,
-            "payment-method": 11,
+            "payment-method": 12,
             "sales-tax-code": 2,
             "ship-method": 5,
             "customer-message": 3,

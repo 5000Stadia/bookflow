@@ -10,6 +10,7 @@ from bookflow.commands.common import CommonOut
 from bookflow.company.sales_facts import Reference, Account
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.payment_models import PreviewRequest
+from bookflow.company.payment_summaries import PaymentSummary
 from bookflow.company.payment_deletion_models import PaymentDeletionInfo
 from bookflow.company.payment_models import InvoiceAmount
 
@@ -142,6 +143,10 @@ class PaymentCurrentOutput(StrictModel):
     currency: str
     components: list[PaymentComponentOutput]
     component_count: int
+    # Early-payment discounts this receipt took. They settle invoices beside the cash, so the
+    # components' capacity is the cash plus these; ``received`` stays the cash alone. Omitted
+    # when none, so a receipt without discounts reads exactly as it always has.
+    discount_minor_units: int = Field(default=0, exclude_if=lambda v: not v)
 
 
 class PaymentRevisionOutput(StrictModel):
@@ -178,6 +183,11 @@ class PaymentApplicationOutput(StrictModel):
     party_id: str
     amount: JournalMoneyOutput
     effective_date: str
+    # The part of ``amount`` that is an early-payment discount rather than cash, what the terms
+    # suggested for the receipt date, and the discount date it was measured against.
+    discount: JournalMoneyOutput | None = Field(default=None, exclude_if=lambda v: v is None)
+    suggested_discount: JournalMoneyOutput | None = Field(default=None, exclude_if=lambda v: v is None)
+    discount_date: str | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PaymentAllocationOutput(StrictModel):
@@ -272,6 +282,10 @@ class PaymentWriteOutput(WriteOutput):
     current: PaymentCurrentOutput
     effect_counts: PaymentEffectCounts
     prospective_pages: list[ProspectivePageOutput] = Field(default_factory=list)
+    # The short account beside the detail: documents paid, what each still owes, the payer's
+    # credit and any discount (receive and apply). Absent on the other verbs and on results
+    # recorded before it existed.
+    summary: PaymentSummary | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PaymentEffectItemsOutput(StrictModel):
@@ -312,6 +326,8 @@ class ApplicationRecordOutput(StrictModel):
     created_by: str
     created_via: str
     audit_event_id: str
+    # The part of ``amount_minor_units`` that was an early-payment discount; zero when none.
+    discount_minor_units: int = 0
 
 
 class InvoiceSettlementReadOutput(InvoiceSettlementOutput):
@@ -481,6 +497,8 @@ class PaymentCandidateOutput(StrictModel):
     applied_minor_units: int
     due_minor_units: int
     available_source_minor_units: int | None
+    discount_date: str | None = Field(default=None, description='Last day the terms offer an early-payment discount; null when they offer none.')
+    suggested_discount_minor_units: int = Field(default=0, description='Discount the terms suggest for a receipt on the context date: the terms percentage of the total less any discount already taken, at most what is due; zero after the discount date. Taken only when listed in `payment receive` discounts.')
 
 
 class PaymentCandidatesOutput(StrictModel):

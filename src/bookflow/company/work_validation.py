@@ -95,7 +95,7 @@ def _validate(plan, s, ctx):
             if lf.pricing_basis == 'amount':
                 require(lf.unit_price_minor_units is None and lf.markup_percent_millionths is None, 'amount mode has a competing rate')
             else:
-                require(lf.unit_price_minor_units is not None and lf.net_minor_units == calc.extension(lf.quantity_microunits, lf.unit_price_minor_units), 'wrong rate extension')
+                require(lf.unit_price_minor_units is not None and lf.net_minor_units == calc.extension(lf.quantity_microunits, lf.unit_price_minor_units) - (lf.discount_minor_units or 0), 'wrong rate extension')
                 if lf.pricing_basis == 'markup':
                     require(lf.estimated_unit_cost_minor_units is not None and lf.markup_percent_millionths is not None, 'markup has no basis')
                     require(lf.unit_price_minor_units == calc.adjusted_price(lf.estimated_unit_cost_minor_units, lf.markup_percent_millionths), 'wrong cost markup')
@@ -105,11 +105,12 @@ def _validate(plan, s, ctx):
             require(lf.estimated_cost_minor_units == expected_cost, 'wrong estimated cost extension')
             taxable = f.profile.preferences.sales_tax_enabled and bool(lf.profile.tax_code and lf.profile.tax_code.taxable)
             exempt = f.profile.customer_tax_code is not None and not f.profile.customer_tax_code.taxable
-            rules = f.profile.tax_rules if taxable and not exempt else []
+            from bookflow.company.sales_adjustments import kind as line_kind
+            rules = f.profile.tax_rules if taxable and not exempt and line_kind(lf.profile) in ('item', 'charge') else []
             require(rules is not None and len(rules) == len(lf.taxes), 'incomplete quoted tax rules')
             for component, rule in zip(lf.taxes, rules):
                 require(component.rule == rule, 'tax rule differs from captured header')
-                require(component.taxable_minor_units == lf.net_minor_units and component.tax_minor_units == expected_cells[line['id'],rule.id], 'incorrect quoted tax')
+                require(component.taxable_minor_units == work_tax._base(lf) and component.tax_minor_units == expected_cells[line['id'],rule.id], 'incorrect quoted tax')
             require(lf.tax_minor_units == calc.total(component.tax_minor_units for component in lf.taxes), 'wrong line tax total')
             require(lf.gross_minor_units == calc.total((lf.net_minor_units, lf.tax_minor_units)), 'wrong line gross')
             identity = indexed['work_line_identities'].get(line['line_id'])

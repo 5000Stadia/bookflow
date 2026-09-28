@@ -48,3 +48,18 @@ def test_ago_reads_recent_instants_relative_to_now():
     assert D.ago("2026-09-27T11:59:30Z", now) == "just now"
     assert D.ago("2026-09-27T11:48:00+00:00", now) == "12 min ago"
     assert D.ago("2026-09-20T11:48:00+00:00", now) == "Sep 20, 2026"
+
+
+def test_negatives_read_in_parentheses_when_the_company_says_so():
+    """R82: the company's negative-number style; minus stays the default."""
+    assert D.money("-40.00", "USD", negatives="parentheses") == "($40.00)"
+    assert D.money({"amount": "-12000", "currency": "JPY"}, home="USD", negatives="parentheses") == "(¥12,000 JPY)"
+    assert D.money("-5.125", "BHD", negatives="parentheses") == "(5.125 BHD)"
+    assert D.amount("-1234.50", negatives="parentheses") == "(1,234.50)"
+    assert D.money("40.00", "USD", negatives="parentheses") == "$40.00"
+    token = D.NEGATIVES.set("parentheses")
+    try:
+        assert D.money("-40.00", "USD") == "($40.00)" and D.amount("-40.00") == "(40.00)"
+    finally:
+        D.NEGATIVES.reset(token)
+    assert D.money("-40.00", "USD") == "-$40.00" and D.amount("-40.00") == "-40.00"

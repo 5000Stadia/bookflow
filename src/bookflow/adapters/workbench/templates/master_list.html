@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from 'browse_value.html' import value, plain with context %}
+{% extends 'base.html' %}{% from 'browse_value.html' import value, plain with context %}{% import 'list_card.html' as list_card %}
 {% block title %}{{ meta.plural_label }}{% endblock %}
 {% block body %}
 <link rel="stylesheet" href="{{ static_urls['browsing.css'] }}"><script src="{{ static_urls['browsing.js'] }}" defer></script>
@@ -48,11 +48,8 @@
    as secondary (plus any column a person added) on a muted line, empty fields left out. #}
 {% set column_labels = {} %}{% for column in result.columns %}{% set _ = column_labels.update({column.key: column.label}) %}{% endfor %}
 <ul class="list-cards" aria-label="{{ meta.plural_label }}">
-{% for row in result['items'] %}<li class="list-card{% if not row.active %} is-inactive{% endif %}" data-record-id="{{ row.id }}">
-<div class="list-card-main"><a class="list-card-link" href="/c/{{ company_id }}/{{ noun|segment }}/{{ row.id }}">{{ row.label }}</a>{% if layout.amount and row['values'][layout.amount] is mapping %}<span class="list-card-amount">{{ row['values'][layout.amount] | money(home=home) }}</span>{% endif %}</div>
-{% set parts = ['Inactive'] if not row.active else [] %}{% for key in layout.secondary if key != 'active' %}{% set cell = row['values'].get(key) %}{% set text = (ui_words(cell) if key in layout.words and cell is string else plain(cell, key, column_labels[key], 'date' if key in layout.dates else '', layout.prefix.get(key, ''), home)) | trim %}{% if text %}{% set _ = parts.append(text) %}{% endif %}{% endfor %}
-{% if parts %}<p class="list-card-sub">{{ parts | join(' · ') }}</p>{% endif %}
-</li>{% endfor %}
+{% for row in result['items'] %}{% set parts = ['Inactive'] if not row.active else [] %}{% for key in layout.secondary if key != 'active' %}{% set cell = row['values'].get(key) %}{% set text = (ui_words(cell) if key in layout.words and cell is string else plain(cell, key, column_labels[key], 'date' if key in layout.dates else '', layout.prefix.get(key, ''), home)) | trim %}{% if text %}{% set _ = parts.append(text) %}{% endif %}{% endfor %}
+{{ list_card.card('/c/' ~ company_id ~ '/' ~ (noun|segment) ~ '/' ~ row.id, row.label, row['values'][layout.amount] | money(home=home) if layout.amount and row['values'][layout.amount] is mapping else '', parts, cls='' if row.active else 'is-inactive', data={'record-id': row.id}) }}{% endfor %}
 </ul>
 {% if not result['items'] %}<p>No matching records. Clear a filter or include inactive records.</p>{% endif %}
 {% if next_url %}<nav class="pagination" aria-label="Results pages"><a href="{{ next_url }}" rel="next">Next page →</a></nav>{% endif %}

@@ -118,9 +118,11 @@ account query
 account show
 account update
 activity
+agent activate
 agent assign
 agent authorize
 agent create
+agent deactivate
 agent list
 agent show
 agent unassign
@@ -151,6 +153,12 @@ card-charge query
 card-charge show
 card-charge update
 card-charge void
+card-credit history
+card-credit post
+card-credit query
+card-credit show
+card-credit update
+card-credit void
 chart apply
 chart list
 chart show
@@ -168,11 +176,13 @@ class query
 class show
 class update
 company attach
+company backup
 company compact
 company detach
 company list
 company new
 company rename
+company restore
 company show
 company update
 company use
@@ -392,6 +402,7 @@ report customer-balance-detail
 report customer-balance-summary
 report deposit-detail
 report expenses-by-vendor
+report export
 report general-ledger
 report income-tax-summary
 report inventory-valuation
@@ -479,7 +490,9 @@ unit-of-measure query
 unit-of-measure show
 unit-of-measure update
 upgrade
+user activate
 user add
+user deactivate
 user list
 user set-password
 vendor activate
@@ -565,6 +578,8 @@ def execution_map():
     from tests.test_mcp_registry_identity import COMMANDS as IDENTITY_COMMANDS
     from tests.test_mcp_registry_agent import COMMANDS as AGENT_COMMANDS
     from tests.test_money_out_documents import COMMANDS as MONEY_OUT_COMMANDS
+    from tests.test_card_credit_surfaces import COMMANDS as CARD_CREDIT_COMMANDS
+    from tests.test_company_backup import COMMANDS as BACKUP_COMMANDS
     from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
     from tests.test_bill_payment import COMMANDS as BILL_PAYMENT_COMMANDS
     from tests.test_credit_memo import COMMANDS as CREDIT_MEMO_COMMANDS
@@ -593,6 +608,7 @@ def execution_map():
     from tests.test_credit_memo_deletion_transports import COMMANDS as CREDIT_DELETE_COMMANDS
     from tests.test_deposit_deletion_transports import COMMANDS as DEPOSIT_DELETE_COMMANDS
     from tests.test_journal_deletion_transports import COMMANDS as JOURNAL_DELETE_COMMANDS
+    from tests.test_report_export_surfaces import COMMANDS as REPORT_EXPORT_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -610,6 +626,8 @@ def execution_map():
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_mcp_registry_agent.py::test_agent_administration_full_documents_on_four_actual_surfaces' if cmd.name in AGENT_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
+                   'tests/test_card_credit_surfaces.py::test_the_same_card_credit_through_python_cli_http_and_mcp' if cmd.name in CARD_CREDIT_COMMANDS else
+                   'tests/test_company_backup.py::test_the_same_backup_and_restore_through_python_cli_http_and_mcp' if cmd.name in BACKUP_COMMANDS else
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else
                    'tests/test_vendor_credit.py::test_the_same_vendor_credit_through_python_cli_http_and_mcp' if cmd.name in VENDOR_CREDIT_COMMANDS else
@@ -650,6 +668,7 @@ def execution_map():
                    'tests/test_credit_memo_deletion_transports.py::test_credit_memo_deletion_crosses_all_four_actual_transports' if cmd.name in CREDIT_DELETE_COMMANDS else
                    'tests/test_deposit_deletion_transports.py::test_deposit_deletion_crosses_all_four_actual_transports' if cmd.name in DEPOSIT_DELETE_COMMANDS else
                    'tests/test_journal_deletion_transports.py::test_journal_deletion_crosses_all_four_actual_transports' if cmd.name in JOURNAL_DELETE_COMMANDS else
+                   'tests/test_report_export_surfaces.py::test_report_csv_is_the_same_file_on_every_surface' if cmd.name in REPORT_EXPORT_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

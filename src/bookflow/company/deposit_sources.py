@@ -117,7 +117,16 @@ def _partition(g, *, cash_account, home_currency):
         presence = [SemanticKey(kind='payment', identity=k) for k in keys]
         physical = {r['id']: r for r in current('payment_components')}
         require(len(physical) == len(current('payment_components')))
-        require(sum(r['amount_minor_units'] for r in physical.values()) == rev['total_minor_units'])
+        # A component carries its cash and any early-payment discount the receipt took; the
+        # discount is the component's attribution on a debit leg that is not the cash leg, so
+        # what the component put in the bank is its capacity less that.
+        discount_legs = {r['id'] for r in legs if r['debit_minor_units'] > 0 and r['id'] not in cash_legs}
+        discounted = {}
+        for r in g['posting_line_sources']:
+            if r['posting_line_id'] in discount_legs:
+                discounted[r.get('payment_component_id')] = discounted.get(r.get('payment_component_id'), 0) + r['amount_minor_units']
+        require(set(discounted) <= set(physical))
+        require(sum(r['amount_minor_units'] for r in physical.values()) == rev['total_minor_units'] + sum(discounted.values()))
     else:
         lines = {r['document_line_id']: r for r in current('sales_line_profiles')}
         require(set(lines) == set(envelopes))
@@ -137,7 +146,7 @@ def _partition(g, *, cash_account, home_currency):
         if payment:
             require(src.get('tax_component_id') is None and src.get('payment_component_id') in physical)
             component = physical[src['payment_component_id']]
-            require(component['document_line_id'] == envelope['id'] and component['component_key_id'] in keys and component['amount_minor_units'] == src['amount_minor_units'] and component['currency'] == home_currency)
+            require(component['document_line_id'] == envelope['id'] and component['component_key_id'] in keys and component['amount_minor_units'] == src['amount_minor_units'] + discounted.get(component['id'], 0) and component['currency'] == home_currency)
             key = keys[component['component_key_id']]
             require(key['line_id'] == envelope['line_id'] and key['currency'] == home_currency)
             require(dims.party_kind == 'customer' and dims.party_id == profile.payer.id and dims.class_id is None)

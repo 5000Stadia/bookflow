@@ -48,6 +48,74 @@ def validate_sale_allocations(plan, s):
             and row['created_at'] == data['header']['updated_at'], 'allocation provenance')
 
 
+def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, currency):
+    """Rebuild, from the quote alone, every line the sale carries along and each taxable base.
+
+    In quote order: a billed line where its allocation is; a subtotal wherever a line of its
+    span is billed; a discount wherever a line it reduced is billed, with that line's quoted
+    share of the part billed. Returns each billed line's taxable base.
+    """
+    from bookflow.company.sales_adjustments import kind
+    chosen = {line['id']: (line, lf) for line, _, lf in selected}
+    posted = [SalesLineProfile.model_validate_json(profiles[envelope['id']]['item_snapshot']) for envelope in envelopes]
+    facts = [work.line_facts(line) for line in source_lines]
+    expected, placed, shares, start = [], {}, {}, 0
+    for index, (line, lf) in enumerate(zip(source_lines, facts)):
+        role = kind(lf.profile)
+        if role == 'subtotal':
+            span, start = range(start, index), index + 1
+            if any(source_lines[j]['id'] in chosen for j in span):
+                placed[index] = len(expected) + 1
+                expected.append(('subtotal', lf, None))
+        elif role == 'discount':
+            targets = []
+            for target in lf.profile.adjustment.targets:
+                source = source_lines[target.position - 1]
+                if source['id'] not in chosen:
+                    continue
+                targets.append((target.position - 1, target.amount_minor_units, target.taxable_minor_units))
+            if targets:
+                placed[index] = len(expected) + 1
+                expected.append(('discount', lf, targets))
+        elif line['id'] in chosen:
+            placed[index] = len(expected) + 1
+            expected.append(('billed', lf, line))
+    require(len(expected) == len(envelopes), 'carried subtotal or discount lines differ from the quote')
+    for (role, lf, extra), envelope, facts_posted in zip(expected, envelopes, posted):
+        require((envelope['id'] in allocated_ids) == (role == 'billed') and facts_posted.item.id == lf.profile.item.id,
+                'carried line order or kind differs from the quote')
+        if role == 'discount':
+            adjustment = facts_posted.adjustment
+            require(adjustment is not None and adjustment.applies_to == 'billed' and adjustment.account == lf.profile.adjustment.account
+                    and (adjustment.percent_millionths, adjustment.fixed_minor_units) == (lf.profile.adjustment.percent_millionths, lf.profile.adjustment.fixed_minor_units),
+                    'carried discount differs from the quote')
+            wanted = []
+            for position, quoted_share, quoted_cut in extra:
+                billed_line = source_lines[position]
+                billed_envelope = envelopes[placed[position] - 1]
+                tf = facts[position]
+                d = math.denominator(tf.quantity_microunits, tf.net_minor_units)
+                row = profiles[billed_envelope['id']]
+                proof = SalesLineProfile.model_validate_json(row['item_snapshot']).allocation_proof
+                spans = proof.intervals() if proof else ((0, d),)
+                part = lambda whole: sum(round(Fraction(whole * b, d)) - round(Fraction(whole * a, d)) for a, b in spans)
+                share = part(quoted_share)
+                cut = None if quoted_cut is None else part(quoted_cut)
+                wanted.append((placed[position], share, cut))
+                shares.setdefault(billed_envelope['id'], []).append((share, share if cut is None else cut, facts_posted))
+            require([(t.position, t.amount_minor_units, t.taxable_minor_units) for t in adjustment.targets] ==
+                    [row for row in wanted if row[1] or row[2]], 'carried discount shares differ from the quote')
+    bases = {}
+    for envelope in envelopes:
+        if envelope['id'] not in allocated_ids:
+            continue
+        row = profiles[envelope['id']]
+        cut = sum(reduction for _, reduction, discount in shares.get(envelope['id'], ())
+                  if discount.tax_code is not None and discount.tax_code.taxable)
+        bases[envelope['id']] = row['net_minor_units'] + sum(share for share, _, _ in shares.get(envelope['id'], ())) - cut
+    return bases
+
+
 def validate(plan, s, ctx):
     try:
         return _validate(plan, s, ctx)
@@ -121,8 +189,11 @@ def _validate(plan, s, ctx):
     require(wh['active'] == (not closes) and newrev['active'] == wh['active'], 'required automatic closure differs')
     require(plan.preview.source_effect == billing.source_effect(source, rev, newrev, source['version'])
         and plan.preview.source_current == billing.source_current(wh), 'source effect/current projection differs')
-    require(len(allocs) == len(selected) == len(envelopes), 'missing selected allocation')
     profiles = {row['document_line_id']: row for row in data['pending']['sales_line_profiles']}
+    allocated_ids = {row['document_line_id'] for row in allocs}
+    billed_envelopes = [envelope for envelope in envelopes if envelope['id'] in allocated_ids]
+    require(len(allocs) == len(selected) == len(billed_envelopes), 'missing selected allocation')
+    bases = _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, rev['currency'])
     captured_header = work.facts(rev)
     posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
     for field in type(captured_header.profile).model_fields:
@@ -138,7 +209,7 @@ def _validate(plan, s, ctx):
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')
     exact_cells=tax_attribution.validate_sales(s,header,created,posted_header,data['pending'],require)
     roots = set()
-    for actual, envelope, (line, root, lf) in zip(allocs, envelopes, selected):
+    for actual, envelope, (line, root, lf) in zip(allocs, billed_envelopes, selected):
         require(root not in roots, 'duplicate root in conversion')
         roots.add(root)
         d = math.denominator(lf.quantity_microunits,lf.net_minor_units)
@@ -168,7 +239,9 @@ def _validate(plan, s, ctx):
                 and projected['gross_minor_units'] == net+tax, 'allocated financial amounts differ')
         require(envelope['description'] == lf.description, 'source description')
         posted_line = SalesLineProfile.model_validate_json(projected['item_snapshot'])
-        changed_representation = {'schema_version', 'pricing_basis', 'net_amount_minor_units', 'allocation_proof', 'origins'}
+        changed_representation = {'schema_version', 'pricing_basis', 'net_amount_minor_units', 'allocation_proof', 'origins', 'adjustment'}
+        require(posted_line.adjustment == (None if lf.profile.adjustment is None else
+                lf.profile.adjustment.model_copy(update=dict(applies_to='billed'))), 'billed charge differs from the quote')
         if lf.pricing_basis == 'amount':
             changed_representation |= {'price_rule', 'price_basis_minor_units'}
         for field in type(lf.profile).model_fields:
@@ -188,5 +261,5 @@ def _validate(plan, s, ctx):
                 and captured_tax['tax_item'] == rule.model_dump(mode='json', include={'id', 'label', 'version'})
                 and captured_tax['agency'] == rule.agency.model_dump(mode='json')
                 and captured_tax['liability_account'] == rule.liability_account.model_dump(mode='json')
-                and posted_tax['taxable_minor_units'] == net
+                and posted_tax['taxable_minor_units'] == bases[envelope['id']]
                 and posted_tax['tax_minor_units'] == exact_cells[envelope['id'],rule.id], 'captured tax classification differs')

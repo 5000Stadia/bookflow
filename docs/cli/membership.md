@@ -280,7 +280,9 @@ The same example as complete `bookflow_run` arguments:
 | `user` | `--user` | string \| null | no | yes | null | Only this person's access; username or id |
 | `company` | `--company` | string \| null | no | yes | null | Only access reaching this company; name or id |
 | `organization` | `--organization` | string \| null | no | yes | null | Only access reaching this organization; name or id |
-| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked |
+| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked, and the access of deactivated accounts |
+| `limit` | `--limit` | integer | no | no | 50 | Most memberships on one page; minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | next_cursor from the previous page; omit for the first page |
 
 ### Command and context options
 
@@ -306,6 +308,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `has_more` | boolean | yes | no | — | More rows follow this page |
+| `next_cursor` | string \| null | yes | yes | — | Pass as cursor for the next page; null on the last page |
 | `items` | array[object] | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].grants` | array[string] | no | no | [] | — |
@@ -322,6 +326,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].organization_id` | string | yes | no | — | — |
 | `items[].role` | literal["readonly", "standard", "admin", "owner"] | yes | no | — | Role at that scope: readonly reads, standard does the bookkeeping, admin also manages members, owner is the final say |
 | `items[].active` | boolean | yes | no | — | Whether this access is in force; false once it has been revoked |
+| `items[].account_active` | boolean | no | no | true | Whether the person's account is active; false once it has been deactivated |
 | `items[].granted_at` | string \| null | yes | yes | — | — |
 | `items[].granted_by_name` | string \| null | yes | yes | — | — |
 | `items[].revoked_at` | string \| null | yes | yes | — | — |
@@ -332,7 +337,9 @@ Example JSON output:
 ```json
 {
   "count": 0,
-  "items": []
+  "has_more": false,
+  "items": [],
+  "next_cursor": null
 }
 ```
 

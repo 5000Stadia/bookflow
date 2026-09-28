@@ -765,6 +765,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--columns LIST` | Columns the table prints, comma-separated, or `all` for every column; default `name,phone,email`. --json always returns every field. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 

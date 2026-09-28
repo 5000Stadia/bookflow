@@ -37,6 +37,7 @@ def _minor(money):
 # Every other customer's invoices are paid, credited or voided to nothing.
 CUSTOMER_BALANCES = [
     ("Commercial Example Customer", 12800),
+    ("Line Kinds Example Customer", 47782),
     ("Payment Example Customer:Job A", 2000),
     ("Payment Example Customer:Job B", -1000),
     ("Tax Rounding Example Customer", 33),
@@ -46,6 +47,8 @@ CUSTOMER_DETAIL = [
     # customer, kind, number, amount, running balance
     ("Commercial Example Customer", "activity", "DEMO-SALE-INV-ACTIVE", 12800, 12800),
     ("Commercial Example Customer", "total", None, 12800, 12800),
+    ("Line Kinds Example Customer", "activity", "DEMO-LINE-KINDS", 47782, 47782),
+    ("Line Kinds Example Customer", "total", None, 47782, 47782),
     ("Payment Example Customer:Job A", "activity", "DEMO-PAY-INV-A", 10000, 10000),
     ("Payment Example Customer:Job A", "activity", "DEMO-PAY-P1", -8000, 2000),
     ("Payment Example Customer:Job A", "total", None, 2000, 2000),
@@ -70,16 +73,25 @@ CUSTOMER_DETAIL = [
 #                    receipt price correction (journal 7) 2026-12-05  +4.00
 #                    item receipt (journal 8) 2026-12-11, 3 kits
 #                      at 8.00 plus 12.00 shipping                    +36.00
-#                    DEMO-KIT-BILL and bill 1 bill received goods: they
-#                    move the receipts' payable onto themselves and
-#                    change nothing the vendor is owed.               =  78.10
+#                    DEMO-KIT-BILL 2026-12-06 bills 4 of journal 6's kits
+#                      (40.00) and journal 7's correction (4.00): that
+#                      payable moves off the receipt onto the bill     -40.00 -4.00 +44.00
+#                    bill 1 2026-12-12 bills 2 of journal 8's kits with
+#                      8.00 of its shipping                           -24.00 +24.00
+#                    Moving a payable onto the bill that took it over changes
+#                    nothing the vendor is owed.                        =  78.10
 VENDOR_DETAIL = [
     ("activity", "DEMO-BUY-BILL-1", 30080, 30080),
     ("activity", "DEMO-BUY-PAY-1", -30080, 0),
     ("activity", "DEMO-BUY-CREDIT-1", -2190, -2190),
     ("activity", "6", 6000, 3810),
     ("activity", "7", 400, 4210),
+    ("activity", "6", -4000, 210),
+    ("activity", "DEMO-KIT-BILL", 4400, 4610),
+    ("activity", "7", -400, 4210),
     ("activity", "8", 3600, 7810),
+    ("activity", "8", -2400, 5410),
+    ("activity", "1", 2400, 7810),
     ("total", None, 7810, 7810),
 ]
 
@@ -99,7 +111,7 @@ def test_customer_balance_detail_lists_every_effect_with_a_running_balance(clien
     shown = [(row["display_customer_label"], row["kind"], row["number"], _minor(row["amount"]),
               _minor(row["balance"])) for row in result["rows"]]
     assert shown == CUSTOMER_DETAIL
-    assert _minor(result["totals"]["balance"]) == 13839
+    assert _minor(result["totals"]["balance"]) == DEMO_POSITION["balances"]["Accounts Receivable"]
     # One customer, named: its own rows and nothing else.
     one = _run(client, "report customer-balance-detail",
                {"as_of": DEMO_AS_OF, "customer": "Payment Example Customer:Job B"})
@@ -365,8 +377,8 @@ def test_1099_summary_opens_on_the_last_calendar_year():
 # Each page opens already run on the filters its link carries, shows the report's own
 # headline figure, and offers the whole report as print and CSV.
 PAGES = {
-    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "138.39"),
-    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "138.39"),
+    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "616.21"),
+    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "616.21"),
     "vendor-balance-summary": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "vendor-balance-detail": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "open-purchase-orders": ({"f:date_to": DEMO_AS_OF}, "56.00"),
