@@ -403,6 +403,7 @@ report profit-and-loss-by-class
 report profit-and-loss-by-job
 report purchases-by-item
 report purchases-by-vendor
+report reconciliation-discrepancy
 report sales-by-customer
 report sales-by-item
 report sales-by-rep
