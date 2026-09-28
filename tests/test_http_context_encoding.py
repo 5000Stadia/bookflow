@@ -42,3 +42,19 @@ def test_encoded_context_and_ordinary_percent_header_remain_distinct(hosted, cli
 def test_context_is_decoded_once_and_plus_is_literal():
     assert decode_context_headers(Headers({'X-Bookflow-Context-Encoding':'percent-utf8',
         'X-Bookflow-Reason':'%2520+text'}))['reason'] == '%20+text'
+
+
+def test_an_unknown_bookflow_header_on_a_write_is_refused_not_ignored(hosted):
+    """V1.5 retest R70: a caller sent X-Bookflow-Dry-Run expecting a preview, and the write posted."""
+    write=('register.post', {'account':'Checking','category':'Professional Fees',
+        'date':'2026-01-01','direction':'decrease','amount':'1.00'})
+    before=hosted.ok('journal.query',company=hosted.company_id)['count']
+    response=hosted.call(*write, company=hosted.company_id, headers={'X-Bookflow-Dry-Run':'true'})
+    assert response.status_code == 422 and response.json()['code'] == 'E_VALIDATION'
+    assert 'dry_run=true' in response.json()['message']
+    assert response.json()['details']['fields'][0]['field'].lower() == 'x-bookflow-dry-run'
+    assert hosted.ok('journal.query',company=hosted.company_id)['count'] == before
+    # Reads are not guarded, and the known headers still pass on a write.
+    hosted.ok('journal.query',None,company=hosted.company_id,headers={'X-Bookflow-Dry-Run':'true'})
+    hosted.ok(*write, company=hosted.company_id, headers={'X-Bookflow-Reason':'Known header'})
+    assert hosted.ok('journal.query',company=hosted.company_id)['count'] == before + 1

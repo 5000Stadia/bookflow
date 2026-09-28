@@ -33,6 +33,24 @@ STATUS = {"E_UNAUTHENTICATED": 401, "E_LOGIN_FAILED": 401, "E_PERMISSION": 403, 
           "E_VALIDATION": 422, "E_VALUE_RANGE": 422, "E_LIST_FILTER": 422, "E_INTERNAL": 500, "E_PAYMENT_PROFILE_INVALID": 500}
 CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Directive", "source_ref": "X-Bookflow-Source-Ref",
                    "idempotency_key": "Idempotency-Key", "client_name": "X-Bookflow-Client-Name", "client_version": "X-Bookflow-Client-Version"}
+# Every X-Bookflow-* header a command request may carry. A write naming any other one is refused
+# rather than run as if the header were not there: a caller who sends X-Bookflow-Dry-Run expects
+# nothing to be written, and ignoring it would post for real.
+REQUEST_HEADERS = frozenset(h.lower() for h in (*CONTEXT_HEADERS.values(), "X-Bookflow-Context-Encoding",
+                            "X-Bookflow-Company", "X-Bookflow-Workbench", "X-Bookflow-Client-Host",
+                            "X-Bookflow-Session-Id", "X-Bookflow-Input"))
+
+
+def refuse_unknown_headers(headers) -> None:
+    unknown = sorted(name for name in headers.keys()
+                     if name.lower().startswith("x-bookflow-") and name.lower() not in REQUEST_HEADERS)
+    if unknown:
+        raise BookflowError("E_VALIDATION", message="Bookflow does not know this header, so the write was not run. "
+                            "For a preview that writes nothing, add ?dry_run=true to the URL.",
+                            details={"fields": [{"field": name, "problem": "is not a Bookflow request header"}
+                                                for name in unknown]})
+
+
 COOKIE = "bookflow_session"
 WORKBENCH_HEADER = "x-bookflow-workbench"
 
@@ -257,6 +275,8 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         # caller cannot use error differences to probe the command surface.
         cred = credential(request)
         cmd = lookup(route)
+        if cmd.is_write:
+            refuse_unknown_headers(request.headers)
         selector, source = selector_of(request, company_id)
         dry = request.query_params.get("dry_run") in ("1", "true")
         return run_command(cmd, raw, make_context(request, cred), cred, selector, source, dry)
