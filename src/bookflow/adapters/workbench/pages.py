@@ -515,6 +515,16 @@ def _source_watermark(request: Request, attempted: dict[str, str] | None = None)
     return stated
 
 
+def _agent_panel_return(cmd_name: str, value: str | None) -> str | None:
+    """The company Users & permissions page an `agent create` form was opened from, if it was."""
+    if cmd_name != "agent create" or not value:
+        return None
+    parts = value.split("/")
+    ok = len(parts) == 4 and parts[0] == "" and parts[1] == "c" and parts[3] == "users" \
+        and parts[2] != "" and all(ch.isalnum() or ch in "-_" for ch in parts[2])
+    return value if ok else None
+
+
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
                     output: dict[str, Any]) -> str:
     route_noun = Routing.segment(noun)
@@ -2140,7 +2150,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             and 16 <= len(return_token) <= 200
         ):
             return_context = {"token": return_token, "target": return_target}
+        panel_return = _agent_panel_return(cmd.name, attempted.get("_back") or request.query_params.get("back"))
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      panel_return=panel_return,
                       heading=Naming.heading(noun, verb, meta), receipt_choices=receipt_choices, order_choices=order_choices, receipt_source_labels=receipt_source_labels, receipt_date=receipt_date,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
                       captured_custom_fields=(shown or {}).get("revision", {}).get("custom_fields", []),
@@ -2451,6 +2463,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 headers={"Cache-Control": "no-store"},
             )
         target = _success_target(cmd, company_id, noun, record_id, out)
+        panel_return = _agent_panel_return(cmd.name, form.get("_back"))
+        if panel_return and isinstance(out.get("agent"), dict):
+            # Opened from a company's Agents panel: go back there with the new agent loaded,
+            # because granting it that company is the next step.
+            target = panel_return + "?" + urlencode({"user": out["agent"]["username"]})
         if (form.get("action") == "submit-new" and company_id
                 and Document.is_document(noun, verb) and verb in ("post", "create")):
             target = f"{Routing.base(company_id, noun)}/{verb}"

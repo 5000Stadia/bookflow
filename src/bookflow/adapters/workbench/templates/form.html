@@ -242,6 +242,7 @@
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 {% if return_context %}<input type="hidden" name="_return_token" value="{{ return_context.token }}"><input type="hidden" name="_return_target" value="{{ return_context.target }}">{% endif %}
+{% if panel_return %}<input type="hidden" name="_back" value="{{ panel_return }}">{% endif %}
 {% if document %}{% include "sales_document_form.html" %}{% elif form_groups %}
 {% set groups = form_groups %}
 {% if noun == 'company' %}
