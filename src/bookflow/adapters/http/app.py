@@ -222,7 +222,12 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     @app.exception_handler(Exception)
     async def _handle_any(request: Request, exc: Exception):
         rid = new_id()
-        log.exception("internal failure %s", rid)
+        if isinstance(exc, ConnectionAbortedError):
+            # The response's connection ended or its admission was cancelled mid-send; the
+            # transport layer decides what that means. It is not an internal failure.
+            log.info("response abandoned %s: %s", rid, exc)
+        else:
+            log.exception("internal failure %s", rid)
         return error_response(BookflowError("E_INTERNAL", message="Internal failure; see the host log.", details={"request_id": rid}))
 
     def selector_of(request: Request, company_id: str | None) -> tuple[str | None, str]:

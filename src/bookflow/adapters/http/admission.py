@@ -49,9 +49,18 @@ class AdmissionProtocol(H11Protocol):
                 await send(message)
             try:
                 await app(scope, receive, bound_send)
-            except AdmissionCancelled:
+            except ConnectionAbortedError:
+                # AdmissionCancelled is one. A peer that already hung up (curl -I, a client that
+                # had the whole content-length-0 redirect from its headers) leaves nothing to
+                # deliver: end the cycle quietly. Any other cancellation, such as a revoked
+                # stream on a live connection, stays a raised abort.
+                raw = self.transport.raw
+                gone = self.cycle.disconnected or raw._closing or raw._conn_lost
                 self.cycle.release_state.aborted = True
                 self.transport.abort()
+                if gone:
+                    self.cycle.disconnected = True
+                    return
                 raise
         self.app = bound_app
 
@@ -219,8 +228,12 @@ class ReleaseAttempt:
                         raise ConnectionAbortedError('response disconnected or host stopping')
                     frame = self.gate.admit(self.generation, 'http wire', self.response)
                     self.gate.transport_write(frame, transport.raw, chunk)
-                    transport.raw._loop._add_writer(transport.raw._sock_fd, transport.raw._write_ready)
-                    transport.raw._maybe_pause_protocol()
+                    if chunk:
+                        # Arm the writer only for bytes actually buffered: asyncio's writer
+                        # asserts a nonempty buffer, so an empty terminal frame arming it
+                        # after the buffer drained raised in the loop callback.
+                        transport.raw._loop._add_writer(transport.raw._sock_fd, transport.raw._write_ready)
+                        transport.raw._maybe_pause_protocol()
                     self.gate.finish(frame)
                     break
                 except AdmissionCancelled:
