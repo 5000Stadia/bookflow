@@ -1,6 +1,7 @@
 """Snapshot and commit boundaries exercised through real storage and HTTP paths."""
 
 from concurrent.futures import ThreadPoolExecutor
+import json
 import shutil
 import sqlite3
 import subprocess
@@ -344,17 +345,40 @@ def test_stream_uses_bounded_reauthorized_snapshot_batches(hosted, live, monkeyp
     monkeypatch.setattr(host, "reader_session", record_reader)
     monkeypatch.setattr(host, "reader_done", finished)
     monkeypatch.setattr(tail, "plan", record_plan)
-    seen = _collect(live, f"/companies/{cid}/events?after={start}&command=company%20update",
-                    {"Authorization": f"Bearer {token['secret']}"},
-                    101 if revoke_between_batches else 250, timeout=15)
+    path = f"/companies/{cid}/events?after={start}&command=company%20update"
+    headers = {"Authorization": f"Bearer {token['secret']}"}
+    if revoke_between_batches:
+        # The revoked-stream contract (R29): the stream closes with no further data. A check
+        # that fails after bytes were sent cannot answer with a document, so it aborts the
+        # connection; either ending is a close.
+        import httpx
+        seen, kind = [], None
+        try:
+            with httpx.stream("GET", live + path, headers=headers, timeout=15) as response:
+                assert response.status_code == 200
+                for line in response.iter_lines():
+                    if line.startswith("event: "):
+                        kind = line[7:]
+                    elif line.startswith("data: "):
+                        seen.append((kind, json.loads(line[6:])))
+                        if len(seen) > 100:
+                            break
+        except httpx.RemoteProtocolError:
+            pass
+    else:
+        seen = _collect(live, path, headers, 250, timeout=15)
     # Each batch plans in a reader session of its own. The same reader also opens the
     # publication checks that release each frame, which plan nothing.
     assert plans and all(any(candidate is session for session in sessions) for candidate in plans)
     assert all(sum(candidate is session for candidate in plans) <= 1 for session in sessions)
     assert all(session.hub.conn.closed for session in sessions)
     if revoke_between_batches:
+        # One batch was planned before the revocation and none after; nothing past that one
+        # batch of 100 was delivered, and anything else released could only be the refusal.
         assert len(plans) == 1
-        assert seen[-1][0] == "error" and seen[-1][1]["code"] == "E_UNAUTHENTICATED"
+        data = [event for kind, event in seen if kind == "audit"]
+        assert len(data) <= 100, len(data)
+        assert all(kind == "error" and event["code"] == "E_UNAUTHENTICATED" for kind, event in seen if kind != "audit"), seen
     else:
         assert len(plans) >= 3
         assert all(kind == "audit" for kind, _ in seen)

@@ -123,7 +123,11 @@ def test_company_setup_grants_and_displays_payment_deletion(books, office):
     assert page.status_code == 200, page.text
     assert 'name="payment_delete"' in page.text
     assert 'Grant customer payment deletion' in page.text
-    assert f'{PAYMENT_DELETE}: Denied' in page.text
+    # The effective list speaks in words since R88: "<what it allows>: no" / ": yes".
+    from html import escape
+    from bookflow.adapters.workbench.admin import capability_words
+    words = escape(capability_words(PAYMENT_DELETE))
+    assert f'{words}: no' in page.text
 
     saved = office.installer.post(f'/c/{company}/users', data=dict(user=clerk['user_id'], role='standard',
         expected_version='1', other_grants='[]', other_denies='[]', payment_delete='on', allow_read='on',
@@ -134,7 +138,7 @@ def test_company_setup_grants_and_displays_payment_deletion(books, office):
     assert PAYMENT_DELETE in granted['grants'] and 'ledger.post' in granted['denies']
 
     shown = office.installer.get(f'/c/{company}/users?user={clerk["user_id"]}')
-    assert f'{PAYMENT_DELETE}: Allowed' in shown.text
+    assert f'{words}: yes' in shown.text
     # Every family that has retained-deletion storage is grantable here, and no other.
     assert [field for field in FIELDS if f'name="{field}"' in shown.text] == list(FIELDS)
     assert shown.text.count('_delete"') == len(FIELDS)
