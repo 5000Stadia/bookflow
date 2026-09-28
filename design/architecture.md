@@ -4861,3 +4861,18 @@ agent says previews need a reason too (blueprint 5.5 and 5.8). Help views that s
 under `### MCP`. `list_service.resolve_selector` names `<noun> list` on a miss. `reconcile start`
 with no opening named follows the account's adopted opening, and refuses with the
 `reconcile opening start` step when there is none.
+
+V1.5 widening of the same row: `invoice query` takes `settlement` (open, unpaid, partial, paid),
+filtered in SQL by `sales._settlement_condition` with the derivation `payment_queries` uses for
+`settlement_current` (posted gross less every apply without a reversing inverse). `register
+query` defaults an omitted period to the fiscal year (company `fiscal_year_start_month`) through
+today in the company zone, and binds the resolved period into its cursor; `direction: desc`
+reads the whole period oldest first (running balances are defined that way) and returns its
+reversed slice under a watermark-checked offset cursor. `reconcile opening start`/`start` accept
+an account name, resolved to the ID before the request is recorded. `registry.unknown_command`
+is the one refusal for an unknown command name on every surface, with `suggestions` from
+`registry.similar_commands` (everyday verbs such as list/search/create map onto query/post), and
+`bookflow_list_commands` adds `suggestions` when a prefix matches nothing. A statement charge
+totalling 0.00 is refused (its E_VALIDATION rule in tests/error_matrix.py); zero-value invoices
+and sales receipts remain valid. Help caches each model's JSON schema per process and field
+constraint text in a process-wide cache that retains the fields it keys.

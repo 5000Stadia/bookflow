@@ -32,6 +32,17 @@ def descriptor(cmd):
     }
 
 
+@lru_cache(maxsize=None)
+def _model_schema_text(model):
+    # A command's models are fixed for the life of the process, and their JSON schema is the
+    # expensive part of every help answer; each call still gets its own fresh copy.
+    return json.dumps(model.model_json_schema())
+
+
+def model_schema(model):
+    return json.loads(_model_schema_text(model))
+
+
 def _commands():
     registry.load_all()
     return registry.all_commands(include_standalone=True)
@@ -48,7 +59,7 @@ def command_help(name, view="usage"):
     from bookflow.documentation.generate import command_document, command_usage, run_example
     from .envelopes import RunArguments
     row = descriptor(cmd)
-    context_fields = RunArguments.model_json_schema()["properties"]
+    context_fields = model_schema(RunArguments)["properties"]
     context_properties = {key: context_fields[key] if key in row["context"] else
                           {"const": False if key == "dry_run" else None,
                            "description": "Only this inactive value or omission applies to this command."}
@@ -66,9 +77,9 @@ def command_help(name, view="usage"):
         # schema still sees a complete call it can copy and edit.
         result["example"] = run_example(cmd)
         result["cli_example"] = EXAMPLES[cmd.name].invocation
-        result["input_schema"] = cmd.input_model.model_json_schema()
+        result["input_schema"] = model_schema(cmd.input_model)
     if view in {"output_schema", "full"}:
-        result["output_schema"] = cmd.output_model.model_json_schema()
+        result["output_schema"] = model_schema(cmd.output_model)
     if view in {"usage", "full"}:
         result["documentation"] = command_usage(cmd) if view == "usage" else command_document(cmd)
     return result

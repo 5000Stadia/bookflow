@@ -131,7 +131,7 @@ def _transfer_section(cmd: Any) -> list[str]:
 
 def command_document(cmd: Any) -> str:
     """The same pure command reference used by generated files and discovery."""
-    return _command_page(cmd.noun, [cmd], constraint_cache={}).decode("utf-8")
+    return _command_page(cmd.noun, [cmd], constraint_cache=None).decode("utf-8")
 
 
 def _payment_usage(name: str) -> list[str]:
@@ -201,7 +201,7 @@ def command_usage(cmd: Any) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _command_page(noun: str, commands: list[Any], *, constraint_cache: dict[int, str]) -> bytes:
+def _command_page(noun: str, commands: list[Any], *, constraint_cache: dict[int, str] | None) -> bytes:
     lines = [NOTICE.rstrip(), "", f"# `{noun}` commands", ""]
     for cmd in commands:
         capability = "none" if not getattr(cmd, "permissioned", True) else cmd.capability
