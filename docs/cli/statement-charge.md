@@ -22,11 +22,19 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow statement-charge post --customer "Hayes, Marcus" --date 2026-04-18 --item "Consultation" --quantity 0.25 --rate 240.00 --description "Call about the lease renewal" --company "Demo Plumbing Co" --reason "Charge the client for the call" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "statement-charge post", "input": {"customer": "Hayes, Marcus", "date": "2026-04-18", "item": "Consultation", "quantity": "0.25", "rate": "240.00", "description": "Call about the lease renewal"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `date` | `--date` | string \| null | no | yes | null | Accounting date. Omitted, it is today in the company's timezone. |
 | `customer` | `--customer` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `item` | `--item` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `quantity` | `--quantity` | string | no | no | "1" | — |
@@ -439,6 +447,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -487,8 +500,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -559,6 +572,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -657,6 +696,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].amount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].effective_date` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].suggested_discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -708,6 +756,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `settlement.effect.document_changes[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `settlement.effect.payment_changes` | array[object] | yes | no | — | — |
 | `settlement.effect.payment_changes[].payment_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.payment_changes[].version` | integer | yes | no | — | — |
@@ -729,6 +778,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].components[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].components[].available_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
+| `settlement.effect.payment_changes[].discount_minor_units` | integer | no | no | 0 | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
 | `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
@@ -774,6 +824,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -837,8 +892,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -1159,7 +1215,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1185,6 +1241,14 @@ Page statement charges in accounting-date and stable-id order, oldest first or n
 ### CLI
 
 `bookflow statement-charge query --customer "Hayes, Marcus" --date-from 2026-04-01 --status posted --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "statement-charge query", "input": {"customer": "Hayes, Marcus", "date_from": "2026-04-01", "status": "posted", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1334,7 +1398,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1359,6 +1423,14 @@ Show a statement charge: its current or a selected immutable revision, the captu
 ### CLI
 
 `bookflow statement-charge show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "statement-charge show", "input": {"statement_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1748,6 +1820,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -1796,8 +1873,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -1868,6 +1945,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2071,7 +2174,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2098,6 +2201,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow statement-charge void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --company "Demo Plumbing Co" --reason "Charged to the wrong client" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "statement-charge void", "input": {"statement_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -2499,6 +2610,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -2547,8 +2663,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -2619,6 +2735,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2717,6 +2859,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].amount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].effective_date` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].suggested_discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -2768,6 +2919,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `settlement.effect.document_changes[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `settlement.effect.payment_changes` | array[object] | yes | no | — | — |
 | `settlement.effect.payment_changes[].payment_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.payment_changes[].version` | integer | yes | no | — | — |
@@ -2789,6 +2941,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].components[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].components[].available_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
+| `settlement.effect.payment_changes[].discount_minor_units` | integer | no | no | 0 | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
 | `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
@@ -2834,6 +2987,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -2897,8 +3055,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -3216,7 +3375,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

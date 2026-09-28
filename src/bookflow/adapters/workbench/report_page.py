@@ -43,6 +43,17 @@ HEADLINES = {
     "general-ledger": (None, "Ledger entries"),
     "transaction-detail": (None, "Transactions by account"),
     "missing-checks": (None, "Check numbers"),
+    "customer-balance-summary": ("balance", "Total balance"),
+    "customer-balance-detail": ("balance", "Total balance"),
+    "vendor-balance-summary": ("balance", "Total balance"),
+    "vendor-balance-detail": ("balance", "Total balance"),
+    "open-purchase-orders": ("open_balance", "Open balance"),
+    "purchases-by-vendor": ("amount", "Total purchases"),
+    "purchases-by-item": ("amount", "Total purchases"),
+    "deposit-detail": ("deposited", "Total deposited"),
+    "transaction-list-by-date": (None, "Transactions by date"),
+    "vendor-1099-summary": ("reportable", "Reportable payments"),
+    "reconciliation-discrepancy": (None, "Reconciliations and what changed in them"),
 }
 # Inputs the summary line already names, or that only steer paging.
 SUMMARISED = {"date_from", "date_to", "as_of", "basis", "limit", "cursor"}

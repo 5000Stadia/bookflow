@@ -3,7 +3,7 @@
 import logging
 from bookflow.core.context_options import normalize_options
 from bookflow.core.dispatch import _close, execute, guard
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, explain_permission
 from bookflow.core.publication import PublicationPermit
 
 
@@ -171,6 +171,9 @@ def _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_
                 finally:
                     host.reader_done()
     except BookflowError as exc:
+        # A refusal that names nothing gets its command's published requirement before it is
+        # sealed into the rejected document below.
+        explain_permission(exc, cmd)
         if permit is not None:
             from bookflow.adapters.http.publication import protect
             rejected = PublishedDocument(exc.to_dict(), permit, host, cred)

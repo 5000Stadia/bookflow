@@ -1,4 +1,6 @@
+{% import 'list_card.html' as list_card %}<link rel="stylesheet" href="{{ static_urls['browsing.css'] }}">
 <section id="summary-report" aria-label="Period summary report">
+{% set home = math_company_currency | default('') %}
 {% if summaries.filter_summary %}<p id="summary-filter" class="warn">{{ summaries.filter_summary }}</p>
 <div class="table-wrap"><table id="summary-scope"><caption class="report-sr-only">What the filter left out</caption><thead><tr>
 <th scope="col" class="num">Whole period</th><th scope="col" class="num">Not on this report</th></tr></thead><tbody>
@@ -12,7 +14,7 @@
 <td class="num" data-total="{{ summaries.shape.amount }}">{{ summaries.total_amount|amount }}</td></tr>
 </tbody></table></div>
 {% if summaries.next_cursor %}<p class="muted statement-note" id="summary-page-count">{{ summaries.count }} {{ summaries.shape.rows }} on this page; more on the next page.</p>{% endif %}
-<div class="table-wrap"><table id="summary-rows"><thead><tr>
+<div class="table-wrap list-desktop"><table id="summary-rows"><thead><tr>
 <th scope="col">{{ summaries.shape.row }}</th>
 {% if summaries.verb == 'sales-by-customer' %}<th scope="col">Parent</th>{% endif %}
 {% if summaries.verb == 'sales-by-item' %}<th scope="col" class="num">Quantity</th>{% endif %}
@@ -30,6 +32,17 @@
 <td class="num" data-percent>{{ row.display_percent or '' }}</td></tr>
 {% else %}<tr><td colspan="5">Nothing was posted to these accounts between {{ summaries.date_from|longday }} and {{ summaries.date_to|longday }}.</td></tr>{% endfor %}
 </tbody></table></div>
+{# On a phone each row is a card (browsing.css): its name and figure on one line, the rest muted. #}
+<ul class="list-cards" aria-label="{{ summaries.shape.rows | capitalize }}">
+{% for row in summaries.rows %}
+{{ list_card.card(row.detail_url, row.display_label, row.display_amount|money(summaries.metadata.currency, home=home), [
+   'Inactive' if row.active is defined and row.active is not none and not row.active else '',
+   row.parent_label if summaries.verb == 'sales-by-customer' else '',
+   ('Quantity ' ~ row.quantity ~ ('' if row.quantity_complete else ' (partial)')) if summaries.verb == 'sales-by-item' else '',
+   row.current_sales_rep_initials if summaries.verb == 'sales-by-rep' else '',
+   ('Average ' ~ row.average_price|money(summaries.metadata.currency, home=home)) if summaries.verb == 'sales-by-item' and row.average_price else '',
+   (row.display_percent ~ ' of total') if row.display_percent else ''], data={'row': row[summaries.shape.id] or ''}) }}{% else %}<li class="list-card list-card-empty">Nothing was posted to these accounts between {{ summaries.date_from|longday }} and {{ summaries.date_to|longday }}.</li>{% endfor %}
+</ul>
 {% if summaries.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="summary-next-page">{% for name, value in summaries.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
 {% set about %}
 <p>{{ company_label }} · {{ summaries.metadata.basis|capitalize }} basis · {{ summaries.metadata.currency }} · {{ summaries.date_from|longday }} to {{ summaries.date_to|longday }}.</p>

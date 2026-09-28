@@ -18,6 +18,12 @@ MATRIX = {
     "company attach": {"E_NOT_IN_ORGANIZATION_DIR": "path outside organizations", "E_INCOMPLETE_COMPANY": "marker state creating", "E_ALREADY_ATTACHED": "id registered",
                        "E_NAME_TAKEN": "name in use", "E_ATTACH_INVALID": "marker or database missing or mismatched, wide mode", "E_SCHEMA_UNKNOWN": "unknown revision", "E_PERMISSION": "non hub admin"},
     "company detach": {"E_COMPANY_NOT_FOUND": "absent company", "E_PERMISSION": "non hub admin"},
+    "company backup": {"E_IO": "backups folder unwritable or disk full", "E_BACKUP_INVALID": "the written archive fails its read-back check",
+                       "E_PERMISSION": "standard member or readonly", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
+    "company restore": {"E_BACKUP_INVALID": "missing file, not a zip, bad manifest, member hash or size mismatch, damaged database", "E_SCHEMA_UNKNOWN": "backup from a newer Bookflow",
+                        "E_ALREADY_ATTACHED": "backed-up company registered here without --as-copy", "E_NAME_TAKEN": "name in use in the organization",
+                        "E_ORGANIZATION_REQUIRED": "several visible organizations", "E_ORGANIZATION_NOT_FOUND": "absent organization", "E_VALIDATION": "relative path or slash in name",
+                        "E_MIGRATION_FAILED": "older backup whose migration fails", "E_IO": "organization folder unwritable", "E_PERMISSION": "non hub admin"},
     "company show": {"E_COMPANY_NOT_FOUND": "absent, invisible, or unselected company", "E_COMPANY_MISSING": "folder or database absent", "E_SCHEMA_BEHIND": "behind head on read", "E_IO": "corrupt database"},
     "company rename": {"E_NAME_TAKEN": "existing name", "E_RENAME_INCOMPLETE": "move failed", "E_COMPANY_MISSING": "folder absent", "E_PERMISSION": "readonly or standard member", "E_IO": "corrupt database", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
     "demo reset": {"E_DEMO_RESET_INCOMPLETE": "trash move failed", "E_NAME_TAKEN": "non-demo organization holds the seed name", "E_PERMISSION": "non hub admin"},
@@ -88,6 +94,18 @@ MATRIX = {
     "agent authorize": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
                         "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "no --confirm-permitted-use, no principals, or a required --acknowledge-fresh-context missing",
                         "E_VERSION_CONFLICT": "stale --expected-version", "E_AGENT_PRINCIPAL_MISMATCH": "the assigned principals do not hold identical permissions"},
+    "agent deactivate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                         "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "malformed input", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "agent activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                       "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "malformed input", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user deactivate": {"E_PERMISSION": "not a human hub administrator, a never-activated installation, or the last active installation administrator",
+                        "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent deactivate), or yourself",
+                        "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                      "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent activate)",
+                      "E_VERSION_CONFLICT": "stale --expected-version"},
+    "report export": {"E_VALIDATION": "not an exportable report, or the report's own filters are invalid (named filters.<field>)",
+                      "E_QUERY_STALE": "the books changed on every attempt to read the report through"},
     "token revoke": {"E_TOKEN_NOT_FOUND": "unknown token id", "E_PERMISSION": "another user's token, as a non-admin"},
 }
 
@@ -237,7 +255,7 @@ MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('
 # The money-out documents are the register split under their own names, so they raise the
 # ledger's own codes; only the unbalanced one reads differently, because what it names is the
 # difference between the expense lines and the figure on the face of the document.
-for _noun in ('check', 'card-charge'):
+for _noun in ('check', 'card-charge', 'card-credit'):
     MATRIX[_noun + ' post'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
         'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER',
         'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_IDEMPOTENCY_MISMATCH',
@@ -275,7 +293,8 @@ MATRIX['check post']['E_DUPLICATE_NUMBER'] = (
     'the typed check number is already on another cheque drawn on the same bank account, '
     'including a voided one; 1001 and 01001 are one number')
 
-for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
+for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('card-credit', 'card-credit'),
+                     ('transfer', 'transfer')):
     MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
     MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
         'expected_version is stale: the document changed since it was read')
@@ -402,6 +421,49 @@ MATRIX['report open-invoices'] = {
     'E_VALUE_RANGE': 'public invoice amount or open-invoice total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
 }
+MATRIX['report customer-balance-summary'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public customer balance or report total exceeds signed 64-bit range',
+}
+MATRIX['report customer-balance-detail'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between detail pages',
+    'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+}
+MATRIX['report vendor-balance-summary'] = {
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public vendor balance or report total exceeds signed 64-bit range',
+}
+MATRIX['report vendor-balance-detail'] = {
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between detail pages',
+    'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
+MATRIX['report open-purchase-orders'] = {
+    'E_QUERY_STALE': 'an order, a receipt against one or vendor display facts changed between pages',
+    'E_VALUE_RANGE': 'public order amount or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
+MATRIX['report purchases-by-vendor'] = {
+    'E_QUERY_STALE': 'posting, stock movement or vendor display facts changed between pages',
+    'E_VALUE_RANGE': 'public purchase amount or report total exceeds signed 64-bit range',
+}
+MATRIX['report purchases-by-item'] = {
+    'E_QUERY_STALE': 'posting, stock movement or item display facts changed between pages',
+    'E_VALUE_RANGE': 'public purchase amount, average cost or report total exceeds signed 64-bit range',
+}
+MATRIX['report deposit-detail'] = {
+    'E_QUERY_STALE': 'a deposit, its sources or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public deposit amount or report total exceeds signed 64-bit range',
+}
+MATRIX['report transaction-list-by-date'] = {
+    'E_QUERY_STALE': 'a posting or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public transaction amount exceeds signed 64-bit range',
+}
+MATRIX['report vendor-1099-summary'] = {
+    'E_QUERY_STALE': 'a posting or vendor facts changed between pages',
+    'E_VALUE_RANGE': 'public payment total exceeds signed 64-bit range',
+}
 MATRIX['report ap-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',
@@ -422,6 +484,12 @@ MATRIX['report missing-checks'] = {
     'E_RECORD_NOT_FOUND': 'account filter does not resolve',
     'E_VALIDATION': 'account filter names an account that is not a bank account',
 }
+MATRIX['report reconciliation-discrepancy'] = {
+    'E_QUERY_STALE': 'company audit changed between discrepancy pages',
+    'E_VALUE_RANGE': 'a reconciled or current balance exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'account does not resolve',
+    'E_VALIDATION': 'account names an account that is neither a bank nor a credit card account',
+}
 MATRIX['report inventory-valuation'] = {
     'E_QUERY_STALE': 'a movement, posting or item display fact changed between valuation pages',
     'E_VALUE_RANGE': 'an item asset value or the valuation total exceeds signed 64-bit range',
@@ -433,7 +501,7 @@ MATRIX['report stock-status'] = {
 MATRIX['inventory adjust'] = {
     'E_RECORD_NOT_FOUND': 'unknown item, adjustment account or class',
     'E_INACTIVE_REFERENCE': 'inactive item, account or class',
-    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, negative stock on an affected date, stock left worth nothing, or a movement worth nothing at the current average',
+    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, stock left worth nothing, or a movement worth nothing at the current average',
     'E_VALUE_RANGE': 'quantity or value outside signed 64-bit storage',
     'E_AMOUNT_PRECISION': 'value_change with more decimal places than the currency allows',
     'E_UNBALANCED_ENTRY': 'the generated posting does not balance',
@@ -446,7 +514,7 @@ MATRIX['inventory adjust'] = {
 MATRIX['inventory void'] = {
     'E_RECORD_NOT_FOUND': 'no inventory adjustment with that id or number',
     'E_VERSION_CONFLICT': 'stale expected_version',
-    'E_VALIDATION': 'the reversal would take the item below zero on an affected date',
+    'E_VALIDATION': 'the reversal would leave value with no quantity behind it',
     'E_VALUE_RANGE': 'a reversed or corrected value outside signed 64-bit storage',
     'E_REASON_REQUIRED': 'void without a reason',
     'E_PERIOD_CLOSED': 'the adjustment date or any correction date falls in a closed period',
@@ -684,7 +752,7 @@ MATRIX['payment unapply'].update({
 MATRIX['payment void'].update({
     'E_HAS_APPLICATIONS': 'the receipt still carries active applications; unapply them before voiding',
     'E_HAS_REFUND': 'a live refund paid this receipt\'s overpayment back; void the refund before voiding the receipt',
-    'E_REASON_REQUIRED': 'the void has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the void has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
     'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
     'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
@@ -714,7 +782,7 @@ MATRIX['payment delete'] = {
 MATRIX['payment update'].update({
     'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',
-    'E_REASON_REQUIRED': 'the correction has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the correction has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on a related invoice named by invoice_versions',
     'E_PREVIEW_STALE': 'the supplied settlement_guard no longer matches, or invoice_versions omits a related invoice; a fresh guard is returned',
     'E_DUPLICATE_NUMBER': 'the corrected receipt number belongs to another payment',

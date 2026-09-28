@@ -152,7 +152,10 @@ def translate(s, register, summary, header, expected):
     if header:
         journals.version_meta(s, header, expected)
     party = journals.active(parties.resolve_party(s.company, register.payee.name_type.replace('_', '-'), register.payee.name_id), register.payee.name_type) if register.payee else None
-    captured = dict(account_id=selected['id'], currency=summary.currency, side='credit',
+    # The funding account's own side: a credit where money leaves (a check, a card charge), a
+    # debit where it comes back to the card (a card credit).
+    side = registers._side(accounts.NORMAL_BALANCE[selected['type']], register.direction)
+    captured = dict(account_id=selected['id'], currency=summary.currency, side=side,
         amount_minor_units=summary.amount.minor_units,
         account_snapshot=json.dumps({k: selected.get(k) for k in ('id','name','full_name','number','type')} | {'normal_balance': accounts.NORMAL_BALANCE[selected['type']]}, sort_keys=True),
         name_type=register.payee.name_type if register.payee else None, name_id=party['id'] if party else None,
@@ -168,7 +171,7 @@ def translate(s, register, summary, header, expected):
     positive = [a for a in register.allocations if (a.amount.minor_units if not isinstance(a.amount, str) else money(a.amount, summary.currency).minor_units)]
     lines = []
     if summary.amount.minor_units:
-        main = registers._line(selected['id'], 'credit', register.amount, register.payee, register.memo, None, captured['line_id'])
+        main = registers._line(selected['id'], side, register.amount, register.payee, register.memo, None, captured['line_id'])
         offsets, total = registers._offsets(register.model_copy(update={'allocations': positive}), s, selected, summary.currency, owner='inventory')
         if total != summary.amount.minor_units:
             raise journals.invalid('amount', 'item and expense amounts must match')

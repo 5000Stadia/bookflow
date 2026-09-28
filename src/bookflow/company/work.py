@@ -17,7 +17,7 @@ from bookflow.company.work_tax_facts import read_facts, read_line
 from bookflow.company import work_models
 from bookflow.company.work_models import WorkLineInput
 from bookflow.company.work_outputs import (
-    WorkOutput, WorkWriteOutput, WorkSummaryOutput, WorkRevisionOutput,
+    WorkOutput, WorkWriteOutput, WorkSummaryOutput, TimeSummaryOutput, WorkRevisionOutput,
     WorkRevisionSummary, WorkLineOutput, WorkLinkOutput, WorkPageOutput, WorkHistoryOutput,
 )
 from bookflow.company.sales_models import _invalid, money
@@ -95,12 +95,28 @@ def _amounts(rev):
             (('net', 'net_minor_units'), ('tax', 'tax_minor_units'), ('total', 'gross_minor_units'))}
 
 
-def summary(header, rev):
+def summary(header, rev, s=None, pending=None):
+    """A document's list row; a time entry's also says who worked how long as what (needs `s`)."""
     f = facts(rev)
     return WorkSummaryOutput(**header, **{k: rev[k] for k in ('date', 'title', 'customer_id',
         'currency', 'net_minor_units', 'tax_minor_units', 'gross_minor_units')},
         customer_name=f.profile.customer.label, **_amounts(rev),
-        expired=bool(f.expires_on and f.expires_on < clock.now().date().isoformat()))
+        expired=bool(f.expires_on and f.expires_on < clock.now().date().isoformat()),
+        time=_time_summary(s, f, rev, pending) if s is not None and header.get('kind') == 'time_activity' else None)
+
+
+def _time_summary(s, f, rev, pending=None):
+    from bookflow.core.exact import format_quantity_micro_units
+    supplied = (pending or {}).get('work_lines')
+    lines = saved_lines(s, rev) if supplied is None else [row for row in supplied if row['revision_id'] == rev['id']]
+    if len(lines) != 1:
+        return None
+    line = line_facts(lines[0])
+    employee = f.assignees[0] if f.assignees else None
+    return TimeSummaryOutput(employee_id=employee.id if employee else None,
+        employee_name=employee.label if employee else None,
+        duration=format_quantity_micro_units(line.quantity_microunits), item_id=line.item_id,
+        item_name=line.profile.item.label, billable=line.billable, note=line.description)
 
 
 def revision_output(s, rev, pending=None, *, summary_only=False):
@@ -146,7 +162,8 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
             completed_quantity=format_quantity_micro_units(f.completed_quantity_microunits),
             unit_price=amount(f.unit_price_minor_units), net=amount(f.net_minor_units),
             tax=amount(f.tax_minor_units), total=amount(f.gross_minor_units),
-            estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units)))
+            estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units),
+            **_shown(f, currency)))
         if f.estimated_cost_minor_units is None:
             complete = False
         else:
@@ -190,7 +207,7 @@ def links(s, document_id, pending=None, headers=None, *, cursor=None, ctx=None):
 
 def output(s, header, rev, pending=None, headers=None, *, cursor=None, ctx=None):
     linked, more, following, watermark = links(s, header['id'], pending, headers, cursor=cursor, ctx=ctx)
-    return WorkOutput(**summary(header, rev).model_dump(), revision=revision_output(s, rev, pending),
+    return WorkOutput(**summary(header, rev, s, pending).model_dump(), revision=revision_output(s, rev, pending),
                       links=linked, links_has_more=more, next_links_cursor=following, links_audit_watermark=watermark)
 
 
@@ -250,7 +267,7 @@ def page(s, ctx, inp, kind, *, history=False):
     if history:
         return WorkHistoryOutput(**{key: h[key] for key in ('id', 'version', 'number', 'current_revision_id', 'status')},
             items=[revision_output(s, row, summary_only=True) for row in found], **shared)
-    return WorkPageOutput(items=[summary(h, revision(s, h)) for h in found], **shared)
+    return WorkPageOutput(items=[summary(h, revision(s, h), s) for h in found], **shared)
 
 
 def _semantic(rev, lines):
@@ -490,7 +507,11 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
     if len(entered) > 200 or (kind == 'estimate' and not entered):
         raise _invalid('lines', 'estimates need 1–200 lines; proposals/work orders allow 0–200')
     seen, out, warnings = set(), [], []
-    for line in entered:
+    from bookflow.company.sales import expand_groups
+    resolved_lines = []
+    for line, group in expand_groups(s, entered):
+        if group is not None:
+            line = WorkLineInput(**line.model_dump(exclude_unset=True))
         key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
         if key is not None:
             if key not in prior or key in seen:
@@ -499,14 +520,59 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
         resolved, line_warnings = work_defaults.resolve_line(s, line, profile,
             previous=line_facts(prior[key]) if key else None, previous_header=old_profile,
             refresh=inp.refresh_defaults, kind=kind, document_tax=True)
+        if group is not None:
+            resolved.profile.group = group
+        resolved_lines.append((key, resolved))
+        warnings.extend(line_warnings)
+    if len(resolved_lines) > 200:
+        raise _invalid('lines', 'a quote holds at most 200 lines once its groups are expanded')
+    apply_adjustments(profile, [resolved for _, resolved in resolved_lines])
+    for key, resolved in resolved_lines:
         payload=resolved.model_dump(mode='json')
+        base = payload.get('taxable_minor_units', payload['net_minor_units'])
         if key and line_facts(prior[key]).schema_version==1 and profile.sales_tax_calculation=='line_component_half_even':
             payload['schema_version']=1
-            for component in payload['taxes']:component['tax_minor_units']=calc.tax(payload['net_minor_units'],component['rule']['rate_percent_millionths'])
+            for component in payload['taxes']:component['tax_minor_units']=calc.tax(base,component['rule']['rate_percent_millionths'])
             payload['tax_minor_units']=sum(t['tax_minor_units'] for t in payload['taxes']);payload['gross_minor_units']=payload['net_minor_units']+payload['tax_minor_units']
         out.append({'line_id': key, 'facts': payload})
-        warnings.extend(line_warnings)
     return out, warnings
+
+
+def _shown(f, currency):
+    """``line_kind`` and ``amount`` for a quoted line that is not a plain item line."""
+    from bookflow.company import sales_adjustments
+    role = sales_adjustments.kind(f.profile)
+    if role in ('subtotal', 'discount'):
+        return dict(line_kind=role, amount=Money(f.profile.adjustment.amount_minor_units, currency).to_dict())
+    if role == 'item' and not f.discount_minor_units:
+        return {}
+    return dict(line_kind=role, amount=Money(f.net_minor_units + (f.discount_minor_units or 0), currency).to_dict())
+
+
+def _line_taxable(profile, facts):
+    exempt = profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
+    return bool(profile.preferences.sales_tax_enabled and facts.profile.tax_code is not None
+                and facts.profile.tax_code.taxable and not exempt)
+
+
+def apply_adjustments(profile, lines):
+    """Work out subtotal, discount and percentage-charge lines over a quote's resolved lines."""
+    from bookflow.company import sales_adjustments, tax_policy
+    if not any(line.profile.adjustment is not None for line in lines):
+        return
+    views = [dict(profile=line.profile, net_minor_units=line.net_minor_units,
+                  taxes=[dict(taxable_minor_units=cell.taxable_minor_units) for cell in line.taxes],
+                  adjustment_taxable=_line_taxable(profile, line)) for line in lines]
+    sales_adjustments.apply(views, tax_policy.effective(profile))
+    for line, view in zip(lines, views, strict=True):
+        line.net_minor_units = view['net_minor_units']
+        if sales_adjustments.kind(line.profile) in ('item', 'charge'):
+            line.discount_minor_units = (view['amount_minor_units'] - view['net_minor_units']) or None
+            base = view['taxable_minor_units']
+            line.taxable_minor_units = base if line.taxes and base != line.net_minor_units else None
+            for cell in line.taxes:
+                cell.taxable_minor_units = base
+        line.gross_minor_units = line.net_minor_units + line.tax_minor_units
 
 
 def _custom_plan(s, inp, kind, document_id, old_rev=None, *, carry=None):
@@ -562,7 +628,9 @@ def _carry_warnings(s, source, lines):
         references[(c.items.name, lf.item_id)] = c.items
         if lf.unit_id:
             references[(c.unit_conversions.name, lf.unit_id)] = c.unit_conversions
-        references[(c.accounts.name, lf.profile.income_account.id)] = c.accounts
+        account = lf.profile.income_account or (lf.profile.adjustment.account if lf.profile.adjustment else None)
+        if account is not None:
+            references[(c.accounts.name, account.id)] = c.accounts
         for field in ('class_id', 'tax_code', 'price_rule'):
             captured = getattr(lf.profile, field)
             if captured:

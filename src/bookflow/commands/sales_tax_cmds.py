@@ -21,7 +21,7 @@ from bookflow.company.sales_tax_reports import (
 )
 
 _LIABILITY = (
-    'What each sales tax agency is owed as of a date, from the tax the books recorded. Each'
+    'How much sales tax is owed, by agency, as of a date (as_of), from the tax the books recorded. Each'
     ' row is one agency with the tax charged on posted sales, the tax taken back by credit'
     ' memos, what has been remitted, and the balance still owed; an effect on the sales tax'
     ' payable account that names no agency -- a journal entry posted straight at it -- is its'

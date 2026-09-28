@@ -5,7 +5,7 @@ from bookflow.company.sales_models import (
     InvoicePostInput, InvoiceUpdateInput, InvoiceVoidInput, InvoiceShowInput,
     InvoiceHistoryInput, SalesReceiptPostInput, SalesReceiptUpdateInput,
     SalesReceiptVoidInput, SalesReceiptShowInput, SalesReceiptHistoryInput,
-    SalesQueryWithDeletedInput as SalesQueryInput,
+    SalesQueryWithDeletedInput as SalesQueryInput, InvoiceQueryInput,
 )
 from bookflow.company.sales_outputs import (
     SalesOutput, SalesWriteOutput, SalesPageOutput, SalesHistoryOutput,
@@ -30,7 +30,7 @@ def _write(document_type, verb, model):
             'post': 'Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice.',
             'update': 'Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification.',
             'void': 'Void a sale with a required context reason and an exact reversal at its current accounting date.',
-        }[verb] + (' sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys.' if verb != 'void' else '') + (' A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.'
+        }[verb] + (' A stocked line that takes its item below zero on its date is saved, and warnings says so: the units below zero are costed provisionally at the average cost, else the purchase cost on the item record, else zero, and the receipt that later brings the item back up posts a true-up to cost of goods sold dated at that receipt and linked to this sale.' if verb != 'void' else '') + (' sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys.' if verb != 'void' else '') + (' A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.'
                    if document_type == 'sales_receipt' and verb == 'update' else ''),
         input_model=model, output_model=SalesWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
@@ -67,7 +67,8 @@ def _read(document_type, verb, model, output_model):
             'show': 'Show a sale and its current or selected immutable revision, captured commercial and custom facts, ordered lines, tax components and separate posting batch totals.',
             'query': 'Page sales in accounting-date and stable-id order, oldest first or newest first, with exact customer, date, status and number filters; restart on company audit changes.',
             'history': 'Page immutable sale revisions in revision-number order with current header/version and correction and void batches; restart on company audit changes.',
-        }[verb],
+        }[verb] + (' For open/unpaid invoices set settlement to "open" (or unpaid, partial, paid); each row carries settlement_current with the amount due. status is only posted or voided.'
+                   if (document_type, verb) == ('invoice', 'query') else ''),
         input_model=model, output_model=output_model,
         required_role='member', capability='ledger.read',
         positional=[] if verb == 'query' else [document_type],
@@ -84,7 +85,7 @@ invoice_post = _write('invoice', 'post', InvoicePostInput)
 invoice_update = _write('invoice', 'update', InvoiceUpdateInput)
 invoice_void = _write('invoice', 'void', InvoiceVoidInput)
 invoice_show = _read('invoice', 'show', InvoiceShowInput, SalesOutput)
-invoice_query = _read('invoice', 'query', SalesQueryInput, SalesPageOutput)
+invoice_query = _read('invoice', 'query', InvoiceQueryInput, SalesPageOutput)
 invoice_history = _read('invoice', 'history', InvoiceHistoryInput, SalesHistoryOutput)
 
 sales_receipt_post = _write('sales_receipt', 'post', SalesReceiptPostInput)

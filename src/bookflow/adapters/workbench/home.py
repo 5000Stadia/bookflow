@@ -319,7 +319,10 @@ PANELS: tuple[Panel, ...] = (
                         "open invoices, A/P aging, unpaid bills, trial balance, profit and "
                         "loss, balance sheet, statement of cash flows, income tax summary, "
                         "general ledger, transaction detail by account, missing checks, "
-                        "inventory valuation and stock status.",
+                        "reconciliation discrepancies, "
+                        "inventory valuation and stock status, customer and vendor "
+                        "balances, open purchase orders, purchases by vendor and item, "
+                        "deposit detail, the transaction list by date and the 1099 summary.",
                 action=Action(
                     "Choose a report to run",
                     READ,
@@ -327,11 +330,17 @@ PANELS: tuple[Panel, ...] = (
                      "report expenses-by-vendor",
                      "report statement", "report ar-aging", "report open-invoices",
                      "report ap-aging", "report unpaid-bills",
+                     "report customer-balance-summary", "report customer-balance-detail",
+                     "report vendor-balance-summary", "report vendor-balance-detail",
+                     "report open-purchase-orders", "report purchases-by-vendor",
+                     "report purchases-by-item",
+                     "report deposit-detail", "report transaction-list-by-date",
+                     "report vendor-1099-summary",
                      "report inventory-valuation", "report stock-status",
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
                      "report general-ledger", "report transaction-detail",
-                     "report missing-checks"),
+                     "report missing-checks", "report reconciliation-discrepancy"),
                     "/_group/reports",
                 ),
             ),
@@ -465,6 +474,8 @@ SECTIONS: tuple[Section, ...] = (
             _report("Customer statement", "statement"),
             _report("A/R aging summary", "ar-aging"),
             _report("Open invoices", "open-invoices"),
+            _report("Customer balance summary", "customer-balance-summary"),
+            _report("Customer balance detail", "customer-balance-detail"),
         ),
     ),
     Section(
@@ -473,6 +484,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Bill", "bill post", "/bill/post"),
             _new("Check", "check post", "/check/post"),
             _new("Credit card charge", "card-charge post", "/card-charge/post"),
+            _new("Credit card credit", "card-credit post", "/card-credit/post"),
             _new("Purchase order", "purchase-order post", "/purchase-order/post"),
             _new("Item receipt", "item-receipt post", "/item-receipt/post"),
             _new("Vendor credit", "vendor-credit post", "/vendor-credit/post"),
@@ -483,6 +495,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Bill payments", "bill payment query", "/bill-payment"),
             _list("Checks", "check query", "/check"),
             _list("Credit card charges", "card-charge query", "/card-charge"),
+            _list("Credit card credits", "card-credit query", "/card-credit"),
             _list("Purchase orders", "purchase-order query", "/purchase-order"),
             _list("Item receipts", "item-receipt query", "/item-receipt"),
             _list("Vendor credits", "vendor-credit query", "/vendor-credit"),
@@ -495,6 +508,12 @@ SECTIONS: tuple[Section, ...] = (
             _report("A/P aging summary", "ap-aging"),
             _report("Unpaid bills", "unpaid-bills"),
             _report("Expenses by vendor", "expenses-by-vendor"),
+            _report("Vendor balance summary", "vendor-balance-summary"),
+            _report("Vendor balance detail", "vendor-balance-detail"),
+            _report("Open purchase orders", "open-purchase-orders"),
+            _report("Purchases by vendor summary", "purchases-by-vendor"),
+            _report("Purchases by item summary", "purchases-by-item"),
+            _report("1099 summary", "vendor-1099-summary"),
         ),
     ),
     Section(
@@ -529,6 +548,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Deposit", "deposit post", "/deposit/post"),
             _new("Transfer", "transfer post", "/transfer/post"),
             _new("Credit card charge", "card-charge post", "/card-charge/post"),
+            _new("Credit card credit", "card-credit post", "/card-credit/post"),
             _new("Journal entry", "journal post", "/journal/post"),
         ),
         lists=(
@@ -536,6 +556,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Checks", "check query", "/check"),
             _list("Transfers", "transfer query", "/transfer"),
             _list("Credit card charges", "card-charge query", "/card-charge"),
+            _list("Credit card credits", "card-credit query", "/card-credit"),
             _list("Exchange rates", "rate query", "/rate"),
         ),
         tasks=(
@@ -547,6 +568,8 @@ SECTIONS: tuple[Section, ...] = (
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
             _report("Missing checks", "missing-checks"),
+            _report("Reconciliation discrepancy", "reconciliation-discrepancy"),
+            _report("Deposit detail", "deposit-detail"),
         ),
     ),
     Section(
@@ -566,6 +589,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             _report("Trial balance", "trial-balance"),
             _report("General ledger", "general-ledger"),
+            _report("Transaction list by date", "transaction-list-by-date"),
             _report("Profit and loss", "profit-and-loss"),
             _report("Balance sheet", "balance-sheet"),
         ),
@@ -585,6 +609,8 @@ SECTIONS: tuple[Section, ...] = (
             Action("Audit trail", READ, ("audit list",), "/audit"),
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             Action("Rename the company", WRITE, ("company rename",), "/company/rename"),
+            Action("Back up the company", WRITE, ("company backup",), "/company/backup"),
+            Action("Restore a backup", WRITE, ("company restore",), "/company/restore"),
             Action("Settings and lists", READ, (), "/_group/settings"),
         ),
     ),
@@ -862,16 +888,23 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         attention["overdue_more"] = bool(overdue.get("next_cursor"))
         attention["overdue_href"] = figures[-1]["href"]
 
+    # What the company owes is Accounts Payable: the A/P aging total, which is the balance
+    # sheet's Accounts Payable and the vendor balance summary's total for the same day. It
+    # counts items received but not yet billed and unapplied vendor credits, which a list of
+    # unpaid bills does not.
+    payable = ask("report ap-aging", {"as_of": today, "limit": 1})
+    if payable is not None:
+        figures.append(dict(key="payable", label="You owe", value=payable["totals"]["total"],
+                            note="Accounts payable", href=report("ap-aging", as_of=today)))
+
     # Unpaid bills come oldest due date first, so the first rows are the overdue and the soonest
     # due; one row past what is shown says whether there are more due within the week.
     bills = ask("report unpaid-bills", {"as_of": today, "limit": ATTENTION_ROWS + 1})
     if bills is not None:
-        figures.append(dict(key="payable", label="You owe", value=bills["totals"]["balance"],
-                            note="Unpaid bills", href=report("unpaid-bills", as_of=today)))
         soon = [dict(row, href=f"{base}/bill/{row['transaction_id']}") for row in bills["rows"] if row["due_date"] <= week]
         attention["bills"] = soon[:ATTENTION_ROWS]
         attention["bills_more"] = len(soon) > ATTENTION_ROWS
-        attention["bills_href"] = figures[-1]["href"]
+        attention["bills_href"] = report("unpaid-bills", as_of=today)
 
     month = ask("report profit-and-loss", {"date_from": month_start, "date_to": today, "limit": 1})
     if month is not None:

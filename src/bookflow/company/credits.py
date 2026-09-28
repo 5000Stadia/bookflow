@@ -130,6 +130,9 @@ def _source_line(s, invoice_selector, line_selector, profile):
             'record_type': 'sales_line_profile', 'selector': line_selector,
             'next': 'Read the invoice with `invoice show` and use a current line_id from it.'})
     line = dict(lines[0])
+    if json.loads(line['item_snapshot'])['item_type'] in ('discount', 'subtotal'):
+        raise _invalid('source_line', 'a discount or subtotal line is not returned; return the lines it '
+                                      'applies to, whose nets already carry the discount')
     if line['base_quantity_microunits'] is None or line['base_quantity_microunits'] <= 0:
         raise _invalid('source_line', 'this invoice line carries no quantity to return against')
     taxes = effects.rows(s, c.sales_tax_components,
@@ -182,6 +185,8 @@ def _returned(s, entered, source, pending):
     captured = facts.model_dump()
     captured.update(schema_version=2, pricing_basis='amount', net_amount_minor_units=money['net_minor_units'])
     captured.pop('allocation_proof', None)
+    # A returned percentage charge is the amount returned, not a percentage of anything here.
+    captured.pop('adjustment', None)
     facts = SalesLineProfile.model_validate(captured)
     return dict(item_id=line['item_id'], quantity_microunits=wanted, unit_id=line['unit_id'],
                 unit_factor_nanounits=factor, base_quantity_microunits=base_wanted,
@@ -382,15 +387,19 @@ def commercial(s, inp, *, document_id, pending, previous=None):
             supplied.setdefault('item', entered.item)
             if not line_id or 'quantity' in entered.model_fields_set:
                 supplied.setdefault('quantity', entered.quantity)
-            resolved, line_warnings = sales_defaults.resolve_line(
-                s, SalesLineInput(**supplied), profile, defer_tax=True,
-                previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults)
-            resolved['line_id'] = line_id
-            resolved['source'] = None
-            resolved['intervals'] = ()
-            resolved['claim_rows'] = []
-            lines.append(resolved)
-            warnings.extend(line_warnings)
+            from bookflow.company.sales import expand_groups
+            for sales_input, group in expand_groups(s, [SalesLineInput(**supplied)]):
+                resolved, line_warnings = sales_defaults.resolve_line(
+                    s, sales_input, profile, defer_tax=True, line_kinds=True,
+                    previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults)
+                if group is not None:
+                    resolved['profile'].group = group
+                resolved['line_id'] = line_id
+                resolved['source'] = None
+                resolved['intervals'] = ()
+                resolved['claim_rows'] = []
+                lines.append(resolved)
+                warnings.extend(line_warnings)
     attribution = None
     ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line.get('line_id') for line in lines])
     if retained:
@@ -398,6 +407,12 @@ def commercial(s, inp, *, document_id, pending, previous=None):
         captured = profile_row(s, old_revision)['tax_attribution_snapshot']
         attribution = TaxAttribution.model_validate_json(captured) if captured else None
     elif origin == 'standalone':
+        # The invoice's own rules, read backwards: a subtotal shows, a charge adds, and a discount
+        # takes its shares out of the lines it applies to and is credited back to its account.
+        if len(lines) > 200:
+            raise _invalid('lines', 'a credit holds at most 200 lines once its groups are expanded')
+        from bookflow.company import sales_adjustments, tax_policy
+        sales_adjustments.apply(lines, tax_policy.effective(profile))
         attribution = tax_facts.calculate(lines, profile, info['home_currency'], ordinals)
         tax_facts.apply(lines, attribution, ordinals)
     else:
@@ -449,8 +464,10 @@ def _line_semantic(line):
 def _posting_accounts_active(s, resolved):
     from bookflow.company import inventory
     ids = {resolved['profile'].control_account.id}
+    from bookflow.company.sales import _line_account
     for line in resolved['lines']:
-        ids.add(line['profile'].income_account.id)
+        if _line_account(line['profile']) is not None:
+            ids.add(_line_account(line['profile']).id)
         ids.update(_liability(cell).id for cell in line['taxes'])
         # A returned stock line posts to two more captured accounts, so they are held to the
         # same bar as the income account: still there, and still active.
@@ -472,9 +489,12 @@ def _posting_accounts_active(s, resolved):
 
     eligible(resolved['profile'].control_account.id, {'accounts_receivable'}, 'ar_account',
              'Select an eligible Accounts Receivable account before posting this credit.')
+    from bookflow.company.sales_facts import DISCOUNT_ACCOUNT_TYPES
     for line in resolved['lines']:
-        eligible(line['profile'].income_account.id, {'income', 'other_income'}, 'lines',
-                 "Select an item whose income account is still an income account.")
+        account = _line_account(line['profile'])
+        if account is not None:
+            eligible(account.id, {'income', 'other_income'} if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES),
+                     'lines', "Select an item whose income account is still an income account.")
         for cell in line['taxes']:
             eligible(_liability(cell).id, {'other_current_liability'}, 'sales_tax_item',
                      'Select eligible tax defaults before posting this credit.', role='sales_tax_payable')
@@ -655,12 +675,30 @@ def _business_postings(header, revision, batch, resolved, pending, created, audi
         pending['posting_line_sources'].append(source)
         return source
 
+    by_position = {position: line['envelope'] for position, line in enumerate(resolved['lines'], 1)}
+    shares = {}
+    for line in resolved['lines']:
+        adjustment = line['profile'].adjustment
+        if adjustment is not None and adjustment.kind == 'discount':
+            for target in adjustment.targets:
+                shares.setdefault(by_position[target.position]['id'], []).append((line['envelope'], target.amount_minor_units))
     for line in resolved['lines']:
         envelope, facts = line['envelope'], line['profile']
         net_source = None
-        if line['net_minor_units']:
-            posting = leg(facts.income_account, line['net_minor_units'], True, envelope, envelope['description'])
-            net_source = attribute(posting, envelope, line['net_minor_units'])
+        adjustment = facts.adjustment
+        if adjustment is not None and adjustment.kind == 'discount':
+            # The discount given back: a credit to its account for every share it took.
+            if adjustment.amount_minor_units:
+                attribute(leg(adjustment.account, -adjustment.amount_minor_units, False, envelope,
+                              envelope['description']), envelope, -adjustment.amount_minor_units)
+        taken = shares.get(envelope['id'], [])
+        if line['net_minor_units'] or taken:
+            posting = leg(facts.income_account, line['net_minor_units'] + sum(units for _, units in taken),
+                          True, envelope, envelope['description'])
+            if line['net_minor_units']:
+                net_source = attribute(posting, envelope, line['net_minor_units'])
+            for owner, units in taken:
+                attribute(posting, owner, units)
         pending['credit_line_profiles'].append(dict(
             document_line_id=envelope['id'], transaction_id=header['id'], revision_id=revision['id'],
             **audited, item_id=line['item_id'], quantity_microunits=line['quantity_microunits'],
@@ -924,6 +962,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                               c.credit_source_claims.c.kind == 'claim', order=c.credit_source_claims.c.id)
     profiles = {row['document_line_id']: row for row in details}
     lines = []
+    from bookflow.company.sales import shown_amount
     for envelope in envelopes:
         detail = profiles[envelope['id']]
         cells = [CreditTaxComponentOutput(
@@ -952,7 +991,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
             tax=Money(detail['tax_minor_units'], currency).to_dict(),
             gross=Money(detail['gross_minor_units'], currency).to_dict(),
             item_snapshot=_decoded(detail['item_snapshot']),
-            tax_components=cells, claims=owned))
+            tax_components=cells, claims=owned, **shown_amount(detail, currency)))
     snapshot = json.loads(revision['custom_fields_snapshot'])
     return CreditRevisionOutput(**values, profile=json.loads(profile['profile_snapshot']), lines=lines,
                                 issuer_snapshot=json.loads(revision['issuer_snapshot']),

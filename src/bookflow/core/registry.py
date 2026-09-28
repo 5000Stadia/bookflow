@@ -236,6 +236,52 @@ def get(name: str) -> Command | None:
     return cmd
 
 
+def similar_commands(name: object, limit: int = 3) -> list[str]:
+    """Registered command names closest to a wrong one: same-noun names first, then close spellings."""
+    import difflib
+    load_all()
+    if not isinstance(name, str) or not name.strip():
+        return []
+    wanted = " ".join(name.replace(".", " ").replace("_", "-").lower().split())
+    names = sorted(REGISTRY)
+    out: list[str] = []
+    words = wanted.split(" ")
+    # Everyday verbs map onto the registry's conventional ones (blueprint 5.1), and a noun
+    # written with spaces ("sales tax") is the hyphenated noun.
+    synonyms = {"list": "query", "search": "query", "find": "query", "get": "show", "view": "show",
+                "read": "show", "create": "post", "add": "create", "new": "create", "record": "post",
+                "enter": "post", "begin": "start", "delete": "void", "edit": "update", "pay": "pay"}
+    guesses = [wanted]
+    for split in range(1, len(words)):
+        noun, verb = "-".join(words[:split]), " ".join(words[split:])
+        guesses += [noun + " " + verb, noun + " " + synonyms.get(verb, verb)]
+    guesses.append("-".join(words))
+    for guess in guesses:
+        for candidate in [guess] + [n for n in names if n.startswith(guess + " ")]:
+            if candidate in REGISTRY and candidate not in out and candidate != wanted:
+                out.append(candidate)
+    for candidate in difflib.get_close_matches(wanted, names, n=limit, cutoff=0.6):
+        if candidate not in out:
+            out.append(candidate)
+    for candidate in names:
+        if len(out) >= limit:
+            break
+        parts = candidate.split(" ")
+        if candidate not in out and (parts[0] == words[0] or (len(words) > 1 and parts[-1] == words[-1] and
+                                                               difflib.SequenceMatcher(None, parts[0], words[0]).ratio() > 0.6)):
+            out.append(candidate)
+    return out[:limit]
+
+
+def unknown_command(name: object):
+    """The one refusal for a command name the registry does not have, naming the closest real ones."""
+    from bookflow.core.errors import BookflowError
+    suggestions = similar_commands(name)
+    hint = (" Did you mean " + ", ".join(f"`{s}`" for s in suggestions) + "?") if suggestions else ""
+    return BookflowError("E_USAGE", message=f"unknown command {name!r}.{hint} `bookflow_list_commands` (or `bookflow --help`) lists every command.",
+                         details={"command": name if isinstance(name, str) else None, "suggestions": suggestions})
+
+
 def all_commands(*, include_standalone: bool = False) -> list[Command]:
     """Registered database commands, plus rootless local tooling when explicitly requested.
 
@@ -249,7 +295,7 @@ def all_commands(*, include_standalone: bool = False) -> list[Command]:
 # with the command count; tests/test_registry.py asserts this index matches what the modules register.
 NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.permission_cmds": ["permission", "membership"],
-    "bookflow.commands.agent_cmds": ["agent"],
+    "bookflow.commands.agent_cmds": ["agent", "user"],
     "bookflow.commands.hub_cmds": ["init", "upgrade", "organization", "company", "demo"],
     "bookflow.commands.company_cmds": ["company", "directive", "presence"],
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
@@ -268,7 +314,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.time_cmds": ["time-activity"],
     "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity"],
     "bookflow.commands.register_cmds": ["register"],
-    "bookflow.commands.check_cmds": ["check", "card-charge"],
+    "bookflow.commands.check_cmds": ["check", "card-charge", "card-credit"],
     "bookflow.commands.credit_memo_cmds": ["credit-memo"],
     "bookflow.commands.credit_settlement_cmds": ["customer-credit"],
     "bookflow.commands.refund_cmds": ["customer-refund"],
@@ -282,10 +328,12 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.sales_tax_cmds": ["sales-tax", "sales-tax payment"],
     "bookflow.commands.report_cmds": ["report"],
+    "bookflow.commands.report_export_cmds": ["report"],
     "bookflow.commands.inventory_cmds": ["inventory"],
     "bookflow.commands.rate_cmds": ["rate"],
     "bookflow.commands.activity_cmds": ["activity"],
     "bookflow.commands.compact_cmds": ["company"],
+    "bookflow.commands.backup_cmds": ["company"],
     "bookflow.commands.host_cmds": ["serve", "user", "membership", "token"],
     "bookflow.commands.docs_cmds": ["docs"],
     "bookflow.commands.mcp_cmds": ["mcp"],
@@ -314,6 +362,7 @@ MODULE_VERBS: dict[str, frozenset[str]] = {
     "bookflow.commands.query_cmds": frozenset({"query"}),
     "bookflow.commands.billing_cmds": frozenset({"invoice", "sales-receipt", "billing"}),
     "bookflow.commands.compact_cmds": frozenset({"compact"}),
+    "bookflow.commands.backup_cmds": frozenset({"backup", "restore"}),
 }
 
 _loaded: set[str] = set()

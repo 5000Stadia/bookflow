@@ -34,10 +34,11 @@ from bookflow.core.ids import is_ulid
 # The noun a person types, and the kind stored against the transaction it posts. The stored
 # spellings are exactly ``money_out_schema.KINDS``, which is what the table's own CHECK
 # constraint allows; ``tests/test_money_out_lifecycle.py`` holds the two together.
-KIND = {'check': 'check', 'card-charge': 'card_charge', 'transfer': 'transfer'}
+KIND = {'check': 'check', 'card-charge': 'card_charge', 'card-credit': 'card_credit', 'transfer': 'transfer'}
 
 # What each document is called in a sentence a person reads.
-LABEL = {'check': 'check', 'card-charge': 'credit card charge', 'transfer': 'transfer'}
+LABEL = {'check': 'check', 'card-charge': 'credit card charge', 'card-credit': 'credit card credit',
+         'transfer': 'transfer'}
 
 # ``KIND`` read the other way, so the two spellings of one document stay one fact.
 NOUN = {kind: noun for noun, kind in KIND.items()}
@@ -52,11 +53,11 @@ KIND_LABEL = {kind: LABEL[noun] for noun, kind in KIND.items()}
 OWNER = 'money_out'
 
 # The command that owns cancelling each document. A check and a card charge have a Delete of
-# their own; a transfer has no deletion family -- it is absent from ``core.deletion_families``
+# their own; a card credit is cancelled by its void; a transfer has no deletion family -- it is absent from ``core.deletion_families``
 # -- so what genuinely owns cancelling one is ``transfer void``, which reverses it exactly at
 # its own date and leaves its history readable.
 CANCELLING_COMMAND = {'check': 'check delete', 'card_charge': 'card-charge delete',
-                      'transfer': 'transfer void'}
+                      'card_credit': 'card-credit void', 'transfer': 'transfer void'}
 
 
 def _documents(*columns, kind=None):

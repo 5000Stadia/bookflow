@@ -7,6 +7,7 @@ import anyio
 import pytest
 
 from tests import provenance
+from tests.demo_oracle import DEMO_AS_OF
 from tests.mcp_matrix_support import Matrix, normalize
 from tests.test_mcp_registry_rollout import state as _state
 
@@ -24,11 +25,9 @@ def state(root):
 COMMANDS = frozenset({'demo reset','upgrade'})
 
 
-# `demo reset` on an activated root seeds through the policy_v1 permission check on every
-# seeded command and currently outlasts the MCP client's 30 s read + 30 s recovery budget under
-# load (measured 2026-09-27: about 3x the legacy seed time). Until that cost is addressed its
-# four-surface parity is witnessed on a legacy root; `upgrade` runs on the new-install mode.
-@pytest.mark.parametrize('command', [pytest.param('demo reset', marks=pytest.mark.legacy_permissions), 'upgrade'])
+# Both run on the new-install (activated) mode. `demo reset` there once outlasted the MCP
+# client's recovery budget; R74 made permission reads cheap and recovery progress-aware.
+@pytest.mark.parametrize('command', ['demo reset', 'upgrade'])
 @pytest.mark.timeout(provenance.MATRIX_SECONDS)
 def test_owned_demo_replacement_and_current_schema_upgrade(root, tmp_path, command):
     ids = set()
@@ -45,6 +44,9 @@ def test_owned_demo_replacement_and_current_schema_upgrade(root, tmp_path, comma
                     assert path.is_dir() and list(path.rglob('company.db'))
                 row['trashed_path'] = '<owned demo trash path>'
         return normalize(documents,here,ids)
+    # The in-process surface resets as of the seed's written day (tests/conftest.py) and a child
+    # surface as of its own today; naming the day makes all four reset the same demo.
+    data = {'as_of': DEMO_AS_OF} if command == 'demo reset' else {}
     async def witness():
         matrix = Matrix()
         try:
@@ -52,9 +54,9 @@ def test_owned_demo_replacement_and_current_schema_upgrade(root, tmp_path, comma
             for surface in matrix.documents:
                 here = matrix.roots[surface]
                 before = state(here)
-                preview = await matrix.call(surface,command,{},dry_run=True)
+                preview = await matrix.call(surface,command,data,dry_run=True)
                 assert preview['dry_run'] and state(here) == before
-                result = await matrix.call(surface,command,{})
+                result = await matrix.call(surface,command,data)
                 if command == 'upgrade':
                     assert not result['hub_migrated'] and not result['companies_migrated']
                     assert result['companies_skipped'] == [matrix.company]

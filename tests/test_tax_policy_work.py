@@ -190,7 +190,7 @@ def test_malformed_work_effect_version_is_controlled_and_atomic(client,tax_sale,
 def test_forecast_preserves_captured_knowledge_when_current_tax_is_ineligible(client,tax_sale):
     source=accepted(client,tax_sale,**request(tax_sale))
     before=run(client,'estimate','billing',estimate=source['id'])
-    run(client,'company','update',sales_tax_enabled=False)
+    run(client,'company','update',sales_tax_enabled=False,default_sales_tax_item_id=None)
     after=run(client,'estimate','billing',estimate=source['id'])
     assert not after['can_bill_together']
     assert after['forecast_tax_attribution']==before['forecast_tax_attribution']

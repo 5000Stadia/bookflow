@@ -139,6 +139,7 @@ def test_standard_manifest_has_the_exact_versioned_seed_key_inventory():
             "payment.mastercard",
             "payment.american-express",
             "payment.discover",
+            "payment.credit-card",
             "payment.debit-card",
             "payment.gift-card",
             "payment.electronic-check",
@@ -348,7 +349,7 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
     first = apply_standard_profile(company_db, actor_id=ACTOR_ID, via="python")
     assert first.inserted_by_list == {
         "term": 6,
-        "payment-method": 11,
+        "payment-method": 12,
         "sales-tax-code": 2,
         "ship-method": 5,
         "customer-message": 3,
@@ -375,7 +376,7 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
     }
     assert second.preserved_by_list == {
         "term": 6,
-        "payment-method": 10,
+        "payment-method": 11,
         "sales-tax-code": 2,
         "ship-method": 5,
         "customer-message": 3,
@@ -387,13 +388,13 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
     assert edited["active"] is False
     assert company_db.conn.execute(
         sa.select(sa.func.count()).select_from(c.payment_methods)
-    ).scalar_one() == 11
+    ).scalar_one() == 12
 
     third = apply_standard_profile(company_db, actor_id=ACTOR_ID, via="python")
     assert set(third.inserted_by_list.values()) == {0}
     assert third.preserved_by_list == {
         "term": 6,
-        "payment-method": 11,
+        "payment-method": 12,
         "sales-tax-code": 2,
         "ship-method": 5,
         "customer-message": 3,
@@ -408,7 +409,7 @@ def test_manifest_dry_run_writes_nothing(company_db):
         dry_run=True,
     )
     assert result.dry_run is True
-    assert sum(result.inserted_by_list.values()) == 27
+    assert sum(result.inserted_by_list.values()) == 28
     assert company_db.conn.execute(sa.select(sa.func.count()).select_from(c.terms)).scalar_one() == 0
 
 

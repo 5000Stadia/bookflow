@@ -146,7 +146,9 @@ def mount_transport(app, host, authenticate, make_context, response):
         args = validate("bookflow_run", {**arguments, "input": {}})
         cmd = registry.get(args.command)
         if cmd is None:
-            raise BookflowError("E_USAGE", details={"reason": "unknown_command"})
+            error = registry.unknown_command(args.command)
+            error.details["reason"] = "unknown_command"
+            raise error
         selection = envelope["company_selection"]
         ctx = command_context(request, credential, args, selection, make_context)
         try:

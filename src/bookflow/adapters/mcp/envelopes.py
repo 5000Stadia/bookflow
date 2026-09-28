@@ -55,7 +55,7 @@ class RunArguments(Envelope):
     command: str = Field(min_length=1)
     input: dict[str, Any] | None = None
     company: str | None = None
-    reason: str | None = Field(None, max_length=CONTEXT_LIMITS["reason"], description="Short audit reason for a write; omit on reads. An agent write needs reason or directive.")
+    reason: str | None = Field(None, max_length=CONTEXT_LIMITS["reason"], description="Short audit reason for a write; omit on reads. An agent write needs reason or directive, dry_run previews included.")
     source_ref: str | None = Field(None, max_length=CONTEXT_LIMITS["source_ref"])
     directive: str | None = None
     idempotency_key: str | None = Field(None, max_length=CONTEXT_LIMITS["idempotency_key"])

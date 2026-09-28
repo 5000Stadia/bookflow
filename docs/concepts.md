@@ -42,6 +42,10 @@ Durable write commands accept dry-run execution. A dry run performs selection, a
 
 Only commands whose reference says they accept an idempotency key may use one. For 30 days, repeating the same key as the same actor with the same command, validated input, and company returns the stored result with `idempotent_replay: true`. Reusing the key for different work returns `E_IDEMPOTENCY_MISMATCH`.
 
+## Correcting a reconciled transaction
+
+Correcting or voiding a transaction after a finished bank or credit card reconciliation cleared it is allowed, as in the anchor. When the change moves what that reconciliation counted -- the amount, the account, a date past the statement date, or a void -- the dry run and the saved result each carry a line in `warnings` naming the account and the statement date and saying by how much the reconciliation no longer ties: its cleared balance now against the statement's ending balance. A change that moves nothing reconciled (a memo, a payee, a number, a date still within the statement) says nothing. A transaction ticked on an unfinished reconciliation is not reconciled yet and follows the draft's own rules. `report reconciliation-discrepancy` shows every finished reconciliation of an account with its statement ending balance, its cleared balance now and the difference, and under each the reconciled transactions changed since, at what they were reconciled and what they count for now. Deleting a reconciled transaction, and correcting a reconciled customer refund, are still refused with `E_RECONCILIATION_DEPENDENCY`.
+
 ## Bounded list queries
 
 Use each primary company list noun's `query` command for interactive browsing. It returns typed summary rows by default; `projection=reference` returns only stable id, version, readable label and active state for selection controls. `limit` is an integer from 1 to 200, default 50. Search, filters and sorting apply before pagination. `show` returns the complete record, and legacy `list` remains complete enumeration with full records rather than a bounded page.

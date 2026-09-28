@@ -48,6 +48,14 @@ def dated_consumptions(s, *, keys, as_of=None):
     return [row for row in rows if row['kind'] == 'consume' and row['id'] not in released]
 
 
+def with_discounts(s, rows):
+    """Each settlement edge with the part of it that was an early-payment discount."""
+    originals = {row['reverses_application_id'] or row['id'] for row in rows}
+    found = {row['application_id']: row['amount_minor_units'] for row in effects.rows(
+        s, c.payment_discounts, c.payment_discounts.c.application_id.in_(sorted(originals)))} if originals else {}
+    return [dict(row, discount_minor_units=found.get(row['reverses_application_id'] or row['id'], 0)) for row in rows]
+
+
 def invoice(s, inp):
     facts = query.invoice_facts(s, inp.invoice)
     current = query.invoice_current(s, inp.invoice)
@@ -76,6 +84,7 @@ def invoice(s, inp):
         c.applications.c.paid_transaction_id == facts['header']['id']).distinct()).scalars().all()
     authorize(s, [facts['header']['id'], *all_payments])
     apps.sort(key=lambda row: (row['effective_date'], row['id']))
+    apps = with_discounts(s, apps)
     allocations = effects.rows(s, c.application_allocations, c.application_allocations.c.target_transaction_id == facts['header']['id'],
         *([c.application_allocations.c.effective_date <= inp.as_of] if inp.as_of else []))
     totals = {kind: sum(row['amount_minor_units'] * (1 if row['kind'] == 'allocation' else -1) for row in allocations if row['logical_kind'] == kind)
@@ -102,14 +111,19 @@ def payment(s, inp):
         .group_by(component.c.component_key_id))
     capacities.update(dict(rows.all()))
     apps = dated_applications(s, payment=facts['header']['id'], as_of=inp.as_of)
+    discounts = payments.discount_rows(s, facts['header']['id'])
     applied = {key: 0 for key in capacities}
     app_outputs = []
     for app in apps:
         invoice_facts = query.invoice_facts(s, app['paid_transaction_id'])
         applied[app['source_component_key_id']] += app['amount_minor_units']
+        taken = discounts.get(app['id'])
         app_outputs.append(dict(application_id=app['id'], invoice_id=app['paid_transaction_id'], invoice_version=invoice_facts['header']['version'],
             source_component_key_id=app['source_component_key_id'], party_id=facts['keys'][app['source_component_key_id']]['party_id'],
-            amount=Money(app['amount_minor_units'], app['currency']).to_dict(), effective_date=app['effective_date']))
+            amount=Money(app['amount_minor_units'], app['currency']).to_dict(), effective_date=app['effective_date'],
+            **(dict(discount=Money(taken['amount_minor_units'], app['currency']).to_dict(),
+                    suggested_discount=Money(taken['suggested_minor_units'], app['currency']).to_dict(),
+                    discount_date=taken['discount_date']) if taken else {})))
     # Cash sent back to the customer is spent as surely as cash applied to an invoice, so the
     # settlement projection subtracts it from the same capacity -- otherwise this report would
     # go on calling a refunded overpayment unapplied while the receipt itself says nothing is.
@@ -144,7 +158,7 @@ def application_show(s, inp):
     original_id = row['reverses_application_id'] or row['id']
     inverses = effects.rows(s, c.applications, c.applications.c.reverses_application_id == original_id)
     allocations = live_allocations(s, original_id)
-    return dict(record=row, original_application_id=original_id, active=not inverses,
+    return dict(record=with_discounts(s, [row])[0], original_application_id=original_id, active=not inverses,
         reverse_application_id=inverses[0]['id'] if inverses else None,
         current_payment=payments.current_output(s, row['paying_transaction_id']),
         current_invoice=query.invoice_current(s, row['paid_transaction_id']),

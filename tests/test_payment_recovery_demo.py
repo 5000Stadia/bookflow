@@ -9,6 +9,7 @@ import tomllib
 import pytest
 import bookflow
 from bookflow.commands import hub_cmds
+from tests.demo_oracle import as_edited_by_r83
 from bookflow.demo.recovery import resolve_intent
 from tests.test_customer_payment_demo import snapshot
 from tests.payment_raw_evidence import table as raw_table,attachments
@@ -19,7 +20,7 @@ EXPECTED=json.loads((RESOURCE/'recovery-expected.json').read_text())
 
 @pytest.mark.parametrize('filename',['seed.toml','reference.toml'])
 def test_preserves_the_entire_combined_seed_prefix(filename):
-    old=subprocess.check_output(['git','show',BASE+':src/bookflow/demo/'+filename])
+    old=as_edited_by_r83(subprocess.check_output(['git','show',BASE+':src/bookflow/demo/'+filename]),filename)
     current=(RESOURCE/filename).read_bytes()
     assert current.startswith(old)
     before=tomllib.loads(old.decode())['commands'];after=tomllib.loads(current.decode())['commands']

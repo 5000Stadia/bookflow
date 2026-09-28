@@ -41,8 +41,11 @@ currently records `interface=http`, `client_name=bookflow-workbench`.
 prefix and follow next_cursor. `bookflow_help` defaults to concise usage with the
 complete input schema, context and errors. Select `view=input_schema`,
 `view=output_schema` or `view=full` for the other complete views. No schema or full
-help is truncated. A command without business fields still needs `input: {}`.
-Reason is a short trigger, at most 140 characters. Reads accept inactive null
+help is truncated. Every view that shows input also carries `example`, one complete
+`bookflow_run` argument object to copy and edit, and `cli_example`. A command without
+business fields still needs `input: {}`.
+Reason is a short trigger, at most 140 characters; an agent write needs one (or an
+active directive) even for a `dry_run` preview. Reads accept inactive null
 optional context and false dry_run; active unsupported context is an error.
 Preview does not save proposed IDs or posted status. Posting an invoice saves it
 to the books and does not send it to the customer.
@@ -68,10 +71,13 @@ execute, release and inspect always require current authority. A lost, expired o
 evicted submitted receipt is unknown, never proof of rollback. After a submitted
 run/execute read timeout, the launcher polls the same reference for up to 30 seconds,
 with 100 ms exponential backoff capped at 1 second, including requests and receipt
-retrieval within that deadline. A completed state with an available receipt permits
+retrieval within that deadline. Each status that reports the operation still active
+(preparing, ready, receiving, queued, started or delivering) renews the 30 seconds from
+that report, up to BOOKFLOW_MCP_JSON_SECONDS (default 300) in all, so a long command
+such as demo reset or a large restore is waited for. A completed state with an available receipt permits
 retrieving the original verified result under current authority. Temporary
 E_DB_BUSY filesystem_change, publication_pending or authority_change responses while checking
-status or retrieving the receipt retry within that same deadline; other failures and original business
+status or retrieving the receipt retry, and renew the deadline the same way; other failures and original business
 rejections do not receive that retry. Status alone is
 not command success. Failed recovery returns unknown outcome with the reference
 and guidance to use action=status; do not resubmit the business command. Caller

@@ -27,7 +27,7 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_MIGRATION_FAILED": "A schema migration failed; the database was backed up first and is unchanged.",
     "E_IO": "A filesystem operation failed.",
     "E_PARTIAL_WRITE": "The authoritative write committed, but a secondary update remains incomplete.",
-    "E_REASON_REQUIRED": "Writes by an agent need --reason or --directive.",
+    "E_REASON_REQUIRED": "This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP).",
     "E_FEATURE_DISABLED": "This feature is not enabled for the company.",
     "E_UNAUTHENTICATED": "No valid credential: log in, or send a bearer token.",
     "E_INTERNAL": "Internal failure.",
@@ -91,6 +91,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_INCOMPLETE_COMPANY": "The folder holds an unfinished company creation.",
     "E_ALREADY_ATTACHED": "That company id is already registered.",
     "E_ATTACH_INVALID": "The folder is not a valid company folder.",
+    "E_BACKUP_INVALID": "The file is not an intact Bookflow company backup.",
     "E_DEMO_RESET_INCOMPLETE": "The old demo could not be moved to trash; its folders remain unregistered.",
     "E_DEPOSIT_SOURCE_INVALID": "The captured receipt cash provenance is unsupported or inconsistent.",
     "E_DEPOSIT_SOURCE_INELIGIBLE": "The receipt is not eligible undeposited home-currency cash.",
@@ -147,8 +148,8 @@ class BookflowError(Exception):
         if code not in ALL_CODES:
             raise ValueError(f"unknown error code {code!r}")
         self.code = code
-        self.message = message or ALL_CODES[code]
         self.details: dict[str, Any] = details or {}
+        self.message = message or (permission_message(self.details) if code == "E_PERMISSION" else ALL_CODES[code])
         super().__init__(f"{self.code}: {self.message}")
 
     @property
@@ -157,3 +158,73 @@ class BookflowError(Exception):
 
     def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": self.details}
+
+
+# A permission refusal says why in one plain line, from what its details already name: the
+# capability and role threshold, or a named rule. It never says more than the details do, so a
+# refusal that was deliberately scrubbed of a hidden record stays scrubbed.
+_ROLE_WORDS = {"hub_admin": "an installation administrator", "human": "a person, not an agent",
+               "self": "the user themself"}
+_PERMISSION_REASONS = {
+    "capability_not_activated": "This needs a capability that is granted explicitly, and this installation's "
+                                "permission catalog is not activated yet; an administrator runs `permission activate`.",
+    "command_unavailable": "This command is not available under this installation's current permission catalog.",
+    "not_administrator": "Only an administrator of this organization or company may do this.",
+    "unresolved_payment_evidence": "A payment, invoice or credit this touches is outside what your access in this "
+                                   "company covers.",
+}
+
+
+def permission_message(details: dict[str, Any]) -> str:
+    """One plain line for an E_PERMISSION refusal, built only from its own details."""
+    default = INFRASTRUCTURE_CODES["E_PERMISSION"]
+    if not isinstance(details, dict) or details.get("stage"):
+        return default
+    reason = details.get("reason")
+    capability, required, role = details.get("capability"), details.get("required_role"), details.get("role")
+    if reason == "record_rule":
+        command = details.get("command")
+        need = f" It needs {capability} at role {required} or above" if capability and required else ""
+        return (f"`{command}` was refused by a rule on a record or account it reads or changes.{need}; "
+                "if your role meets that, ask an administrator to check your access with `membership effective`."
+                if need else f"`{command}` was refused by a rule on a record or account it reads or changes.")
+    if reason in _PERMISSION_REASONS:
+        return _PERMISSION_REASONS[reason]
+    if required in _ROLE_WORDS:
+        return f"Only {_ROLE_WORDS[required]} may do this" + (f" ({capability})." if capability else ".")
+    if required and capability:
+        yours = f"; your role here is {role}" if role else ""
+        return f"This needs {capability} at role {required} or above{yours}."
+    return default
+
+
+def explain_permission(error: BookflowError, command: Any) -> BookflowError:
+    """At a command's boundary, a refusal that names nothing gets the command's own requirement.
+
+    Only what the registry already publishes for the command is added (its capability and
+    required role, the same facts its documentation lists), never anything about the record
+    that refused, which an inner authority may have scrubbed on purpose.
+    """
+    if error.code != "E_PERMISSION" or error.details or command is None:
+        return error
+    error.details.update(reason="record_rule", command=command.name,
+                         capability=getattr(command, "capability", None),
+                         required_role=getattr(command, "required_role", None))
+    error.message = permission_message(error.details)
+    error.args = (f"{error.code}: {error.message}",)
+    return error
+
+
+REASON_LIMIT = 140
+
+
+def require_reason(reason: str | None) -> None:
+    """A write that needs a reason: missing is E_REASON_REQUIRED, over-long a plain field error."""
+    if not reason or not reason.strip():
+        raise BookflowError("E_REASON_REQUIRED")
+    if len(reason) > REASON_LIMIT:
+        raise BookflowError(
+            "E_VALIDATION",
+            message=f"The reason is {len(reason)} characters; a reason may be at most {REASON_LIMIT}. "
+                    "Shorten it to a short phrase naming what triggered the write.",
+            details={"fields": [{"field": "reason", "problem": f"must be at most {REASON_LIMIT} characters"}]})

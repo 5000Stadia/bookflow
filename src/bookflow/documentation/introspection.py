@@ -120,12 +120,31 @@ def _constraints(field: Any) -> str:
     return "; ".join(parts)
 
 
+class _FieldConstraints(dict):
+    """Constraint text per field, keyed by the field's identity.
+
+    Each entry keeps its field alive, so an id can never be reused by another object while the
+    cache holds it -- which is what makes one process-wide cache safe. A field's constraints
+    are a pure function of its annotation and metadata, so every render reads the same text.
+    """
+
+    def remember(self, field, text):
+        dict.__setitem__(self, id(field), (field, text))
+
+    def text(self, field):
+        return dict.__getitem__(self, id(field))[1]
+
+
+_PROCESS_CONSTRAINTS = _FieldConstraints()
+
+
 def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: str = "",
                  _constraint_cache: dict[int, str] | None = None) -> list[FieldDoc]:
-    # A traversal can visit the same captured profile through many union branches.
-    # Reuse schemas within this traversal or render, never across separate renders.
+    # A traversal can visit the same captured profile through many union branches, and help
+    # renders the same models on every call; the process-wide cache retains each field it
+    # keys, so identities stay unique. A caller-owned cache keeps its own lifetime.
     return _model_fields(model, leaves_only=leaves_only, prefix=prefix,
-                         constraints={} if _constraint_cache is None else _constraint_cache)
+                         constraints=_PROCESS_CONSTRAINTS if _constraint_cache is None else _constraint_cache)
 
 
 def _model_fields(model, *, leaves_only, prefix, constraints):
@@ -152,8 +171,14 @@ def _model_fields(model, *, leaves_only, prefix, constraints):
         origin = get_origin(_optional(field.annotation)[0])
         child_prefix = path + ("[]." if origin in (list, tuple, set) else ".")
         extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
-        if id(field) not in constraints:
-            constraints[id(field)] = _constraints(field)
+        if isinstance(constraints, _FieldConstraints):
+            if id(field) not in constraints:
+                constraints.remember(field, _constraints(field))
+            constraint_text = constraints.text(field)
+        else:
+            if id(field) not in constraints:
+                constraints[id(field)] = _constraints(field)
+            constraint_text = constraints[id(field)]
         doc = FieldDoc(
             path=path,
             type=type_name(field.annotation),
@@ -161,7 +186,7 @@ def _model_fields(model, *, leaves_only, prefix, constraints):
             nullable=_optional(field.annotation)[1],
             default=_default(field),
             description=(field.description or "").strip(),
-            constraints=constraints[id(field)],
+            constraints=constraint_text,
             secret=bool(extra.get("secret")),
             leaf=nested is None and not variants,
         )

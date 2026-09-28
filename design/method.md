@@ -169,8 +169,8 @@ already adopted whatever was there:
 
 - **Display name** — their words as they said them. It titles the README and the design documents.
 - **Slug** — lowercase letters, digits and single hyphens, derived from the display name and shown
-  to them to correct. It is the directory name, and on the crewed route it is also the AgentPost
-  project namespace in `PROJECT.SEAT`, which takes no dots, spaces or capitals.
+  to them to correct. It is the directory name, and the project's name on the colony board, which takes no dots,
+  spaces or capitals.
 - **Target** — `<absolute parent>/<slug>`, resolved and printed in full before you run anything.
 - **Branch** — ask, and use `main` if they have no preference, so no seat later has to discover
   which name this git installation happened to choose. The repository is created on it; where the
@@ -577,41 +577,28 @@ git -C /abs/path/<project> worktree add /abs/path/<project>-review --detach
 You and the Builder do share the repository root. Stage by explicit path — never `git add -A` — or
 one of you will commit the other's half-finished work.
 
-**Mailboxes.** The seats talk over AgentPost. If an AgentPost skill is installed, follow it over
-anything here; it owns the current command surface. Otherwise, `agentpost --help`.
+**The channel.** In this project the seats are not separate mailboxes. The Navigator launches the
+Builder and the Reviewer as subagents in its own session, each with its own worktree and a brief
+that names its row, and talks to each through that session: a message to a running seat, and its
+report when it finishes. Everything that leaves the project goes through the colony: `colony send`
+and `colony reply` for other projects on the board, and notes, gates and pins for the human.
+AgentPost is retired; do not start anything on it.
 
-If AgentPost is not installed, do not invent a channel and do not quietly run this as the solo
-route: crew was chosen because the work has seams, and dropping the seats drops the seams, not just
-the mailboxes. Tell the human the channel is missing, say what installing it would take, and let
-them choose between installing it and giving up the seams.
+**A seat that goes quiet is the Navigator's to notice.** A subagent that has stopped without
+reporting, or a worktree with work but no commits, is followed up the same turn: resume the seat
+from its own transcript rather than starting fresh, so its partial work is kept.
 
-**Standing the seats up is the AgentPost skill's job — follow it rather than a transcript of it.**
-Register three profiles (you, the Builder, the Reviewer), connect your own mailbox first — the
-first mailbox bound at a root becomes that root's default sender, and you share the root with the
-Builder — then launch each seat detached in its own root under its own identity, on the runtime you
-are running unless the human names another. Whatever does the launching, the parts that matter are
-the working directory, the identity, and that the session survives you.
-
-**A fresh directory can sit silently at a trust prompt, and a waiting seat looks exactly like a
-working seat.** Grant the runtime's trust in the same act as the launch; if a seat never speaks,
-attach to its terminal and look — it is usually sitting on that prompt with nothing on the channel.
-
-**The brief each seat is launched with** names its own mailbox, yours, and its counterpart; points
-it at `design/method.md`, whose header names the sections its seat reads; says its identity is
-already set by the launcher — register nothing, join nothing; and has it prove the channel before
-touching work: a round trip, its message answered by your reply arriving as a live wake. QUEUED is
-not live, and no seat is ready until its round trip lands — until then it is set up but unproven,
-in those words. The Builder's brief ends with the spec row to take; the Reviewer's ends with
-waiting for the Builder's first handoff. A seat that reports blocked gets its instance ended and
-relaunched; twice for the same seat means the launch form is wrong — fix the form, not the seat.
+**The brief each seat is launched with** points it at `design/method.md`, whose header names the
+sections its seat reads, gives it its worktree and branch, the rules it works under (never
+`git stash`, never push or merge, commit only after its own targeted tests pass), and ends with the
+spec row to take or, for the Reviewer, the exact commit to review.
 
 ### On the channel
 
-`agentpost message <address> '...'` to send, `agentpost question` when you need an answer,
-`agentpost list <seat>` and `agentpost read <seat> <id>` to see, `agentpost next <seat>
---message-id <id>` to claim one before working it, `agentpost reply` to answer. A seat that has
-sent its message stops; the next letter wakes it. Mail lives outside the repository, so anything
-decided on the channel is written into the design documents before the exchange scrolls away.
+Messages to a running seat go through the session that launched it; a seat that has reported
+stops until the next message resumes it. Other projects are reached with `colony send NAME --ask`
+and answered with `colony reply ID`. Messages live outside the repository, so anything decided on
+the channel is written into the design documents before the exchange scrolls away.
 
 **Dead air at the seams is the Navigator's to own.** A crew stalls between seats, not inside
 them — a wedged prompt, an unread letter, a seat that is running but not producing — and a

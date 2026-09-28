@@ -159,3 +159,31 @@ eligible binding set retains the earlier no-suspension rule. P/Q removal, equal
 replacement P→R, and simultaneous P removal/permission loss must all produce
 agent-wide suspension/epoch/all-token effects before any publication; restore
 requires explicit reauthorization and the existing fresh-context acknowledgment.
+
+
+## Observation reuse across transactions
+
+A complete observation of the hub's permission facts is a function of the rows of
+users, organizations, companies, memberships, agent_principals, agent_authority,
+role_capabilities and permission_state, the hub schema, and the build's catalog code.
+hub0014 adds `authority_generation` and an AFTER INSERT, UPDATE and DELETE trigger on
+each of those eight tables; each trigger advances `generation` and redraws `token` (16
+random bytes) in the writing transaction, whatever connection, process or code path
+wrote the row.
+
+A company requirement (`permission_runtime.require_company`) and a bound reader's
+observation reuse an earlier observation only when one SELECT, made on the caller's own
+open transaction, returns the same token, generation, schema version and alembic head
+the earlier observation was built under, for the same hub path and the same loaded
+catalog, visibility and loader code. Otherwise they read the complete facts afresh, and
+they store the result only when the token was unchanged across that read and all 24
+triggers are present with their expected text. No decision, credential, token expiry,
+binding or publication check is reused; each still runs on the current transaction.
+Administration keeps `observe_current` and its independent final-state reads.
+
+Consequences: a grant, revocation, role or capability change, agent assignment,
+suspension or authorization, user deactivation or catalog activation is visible to the
+next transaction that begins after it commits; a transaction that began earlier sees
+the facts of its own snapshot, as a complete read would; an own uncommitted write is
+seen at once and a rollback to a savepoint returns to the earlier token and its facts;
+a hub without the table or with any trigger missing never reuses.

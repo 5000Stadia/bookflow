@@ -21,6 +21,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
+from bookflow.company.payment_summaries import PaymentSummary
 from bookflow.commands.common import CommonOut
 from bookflow.company.bill_payment_facts import BillPaymentProfile
 from bookflow.company.journal_models import MoneyInput, _Date, _Input, _Number, _Selector, _Version
@@ -40,10 +41,23 @@ class BillSelectionInput(_Input):
     person selecting a row on a Pay Bills screen means. Supplying less is a partial payment and
     leaves the remainder open; supplying more than is open is refused rather than turned into
     a credit, because a vendor credit is a document this command does not write.
+
+    ``discount`` is an early-payment discount taken on this bill, on top of ``amount``: the bill
+    is settled by the money paid plus the discount, and the discount is credited to the discount
+    account. It is never taken unless named -- ``bill query`` and a dry run show what the bill's
+    terms suggest -- and with a discount and no ``amount`` the money paid is what is open less
+    the discount. A bill may take its discount with no money at all -- ``"amount": "0.00"`` --
+    as long as the payment pays its vendor some money on another bill. Only ``bill pay`` takes a
+    discount.
     """
 
     bill: _Selector
     amount: str | MoneyInput | None = None
+    discount: str | MoneyInput | None = Field(default=None, description=(
+        'Early-payment discount taken on this bill in addition to amount; the bill is settled by '
+        'amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is '
+        '{"bill": "4410", "amount": "980.00", "discount": "20.00"}. A discount alone is '
+        '{"bill": "4411", "amount": "0.00", "discount": "6.00"} beside money paid on another bill.'))
     expected_version: _Version | None = None
 
 
@@ -60,6 +74,9 @@ class BillPayInput(_Input):
     memo: Text | None = None
     number: _Number | None = None
     class_id: _Selector | None = None
+    discount_account: _Selector | None = Field(default=None, description=(
+        'Account credited for any discount taken; defaults to the company vendor discount account, '
+        'else "Discounts Taken", which is created as an income account if the chart lacks it.'))
 
     @model_validator(mode='after')
     def one_row_per_bill(self) -> Self:
@@ -163,10 +180,17 @@ class BillApplicationOutput(CreatedOutput):
     reverses_application_id: str | None
     audit_event_id: str
     active: bool
+    # The part of ``amount`` that was an early-payment discount rather than money; zero when none.
+    discount_minor_units: int = 0
+    discount: MoneyOutput | None = None
 
 
 class BillPaymentSettlementOutput(_Input):
-    """Where this payment's money currently stands."""
+    """Where this payment's money currently stands.
+
+    ``amount`` is everything the payment can settle: the money paid plus any early-payment
+    discount it took, which ``discount`` names separately.
+    """
 
     payment_id: str
     source_key_id: str
@@ -180,6 +204,8 @@ class BillPaymentSettlementOutput(_Input):
     unapplied: MoneyOutput
     currency: str
     status: Literal['voided', 'applied', 'partial', 'unapplied']
+    discount_minor_units: int = 0
+    discount: MoneyOutput | None = None
 
 
 class BillPaymentLineOutput(CreatedOutput):
@@ -207,6 +233,12 @@ class BillPaymentLineOutput(CreatedOutput):
     class_id: str | None
     class_name: str | None
     description: str | None
+    # ``amount`` settles the bill; of it, this much was an early-payment discount, not money.
+    discount_minor_units: int = 0
+    discount: MoneyOutput | None = None
+    suggested_discount_minor_units: int = 0
+    discount_date: str | None = None
+    discount_account_id: str | None = None
 
 
 class BillPaymentRevisionSummaryOutput(CreatedOutput):
@@ -306,6 +338,10 @@ class BillPayOutput(WriteOutput):
     paid: MoneyOutput
     currency: str
     bill_count: int
+    discount_minor_units: int = 0
+    # Which bills this paid, what each still owes and any discount taken, in one paragraph.
+    summary: PaymentSummary | None = Field(default=None, exclude_if=lambda v: v is None)
+    discount: MoneyOutput | None = None
 
 
 class BillPaymentPageOutput(_Input):

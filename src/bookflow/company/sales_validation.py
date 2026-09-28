@@ -101,7 +101,10 @@ def _stock(s, data, indexed, require):
     for item_id in {row['item_id'] for row in movements}:
         stored = inventory.movements(s, item_id=item_id)
         state = replay(stored + [row for row in movements if row['item_id'] == item_id])
-        require(not any(correction.target_movement['id'] in own for correction in state.corrections),
+        # A true-up is owed at a later receipt's date, not at the sale's, and the change writes
+        # it as its own correction; only the sale's own-date cost must already agree.
+        require(not any(correction.target_movement['id'] in own and correction.filled_by is None
+                        for correction in state.corrections),
                 'a stock issue is posted at a cost the weighted average does not agree with')
 
 
@@ -246,6 +249,12 @@ def _validate(plan, s, ctx):
     require(all(component['document_line_id'] in indexed['document_lines'] for component in components), 'unowned tax component')
     line_profiles = indexed['sales_line_profiles']
     expected_cells = tax_facts.validate_sales(s, header, revision, profile, pending, require)
+    from bookflow.company import sales_adjustments
+    ordered = sorted(envelopes, key=lambda line: line['position'])
+    _, own_amounts, bases = sales_adjustments.captured(profile, [line_profiles[e['id']] for e in ordered], require)
+    own_amounts = {e['id']: value for e, value in zip(ordered, own_amounts)}
+    bases = {e['id']: value for e, value in zip(ordered, bases)}
+    shares = sales.discount_shares(pending)
     expected_legs = []
     semantic_lines = []
     new_ids = set(indexed['document_line_identities'])
@@ -263,7 +272,11 @@ def _validate(plan, s, ctx):
                 and envelope['name_id'] == profile.customer.id and envelope['party_name'] == profile.customer.label, 'line party/currency')
         require(envelope['class_id'] == (facts.class_id.id if facts.class_id else None)
                 and envelope['class_name'] == (facts.class_id.label if facts.class_id else None), 'line class facts')
-        require(line['item_id'] == facts.item.id and facts.income_account.type in ('income', 'other_income'), 'item/account facts')
+        role = sales_adjustments.kind(facts)
+        require(line['item_id'] == facts.item.id and (
+            facts.income_account.type in ('income', 'other_income') if role in ('item', 'charge') else
+            facts.adjustment.account.type in sales.DISCOUNT_ACCOUNT_TYPES if role == 'discount' else
+            facts.income_account is None), 'item/account facts')
         for name in ('quantity_microunits', 'base_quantity_microunits', 'unit_factor_nanounits'):
             if line[name] is not None or facts.pricing_basis != 'allocated' or name == 'unit_factor_nanounits':
                 amount(line[name], positive=True)
@@ -282,14 +295,17 @@ def _validate(plan, s, ctx):
                 'ordinary sale cannot create an allocation proof')
             numeric_projection(s,line,facts.allocation_proof)
         elif facts.pricing_basis == 'amount':
-            require(line['unit_price_minor_units'] is None and line['net_minor_units'] == facts.net_amount_minor_units, 'amount extension')
+            require(line['unit_price_minor_units'] is None and line['net_minor_units'] == facts.net_amount_minor_units
+                    - sum(units for _, units in shares.get(envelope['id'], [])), 'amount extension')
         else:
-            require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units']), 'line extension')
+            require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units'])
+                    - sum(units for _, units in shares.get(envelope['id'], [])), 'line extension')
+            require(role in ('item', 'charge') or line['unit_price_minor_units'] == 0, 'priced subtotal or discount')
         own_taxes = sorted((comp for comp in components if comp['document_line_id'] == envelope['id']),
             key=lambda comp: json.loads(comp['component_snapshot'])['position'])
         taxable = profile.preferences.sales_tax_enabled and bool(facts.tax_code and facts.tax_code.taxable)
         exempt = profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
-        rules = profile.tax_rules if taxable and not exempt else []
+        rules = profile.tax_rules if taxable and not exempt and role in ('item', 'charge') else []
         require(rules is not None and len(own_taxes) == len(rules), 'tax-rule coverage')
         for position, (component, rule) in enumerate(zip(own_taxes, rules), 1):
             captured = SalesTaxComponent.model_validate_json(component['component_snapshot'])
@@ -298,7 +314,7 @@ def _validate(plan, s, ctx):
             require(component['tax_item_id'] == rule.id and component['agency_id'] == rule.agency.id
                     and component['liability_account_id'] == rule.liability_account.id
                     and component['rate_percent_millionths'] == rule.rate_percent_millionths, 'component references/rate')
-            require(component['taxable_minor_units'] == line['net_minor_units']
+            require(component['taxable_minor_units'] == bases[envelope['id']]
                     and component['tax_minor_units'] == (expected_cells[envelope['id'], rule.id] if expected_cells is not None else calc.tax(line['net_minor_units'], rule.rate_percent_millionths)), 'tax arithmetic')
         require(line['tax_minor_units'] == calc.total(comp['tax_minor_units'] for comp in own_taxes)
                 and line['gross_minor_units'] == calc.total((line['net_minor_units'], line['tax_minor_units'])), 'gross arithmetic')
@@ -308,8 +324,14 @@ def _validate(plan, s, ctx):
             if debit or credit:
                 expected_legs.append((account.id, debit, credit, envelope['class_id'], envelope['class_name'], envelope['description'],
                     sales.json_text(account.model_dump()), tuple(sorted(allocation, key=str))))
+        if role == 'discount':
+            taken = -facts.adjustment.amount_minor_units
+            expect(facts.adjustment.account, taken, 0, [(envelope['id'], None, taken)])
         expect(profile.control_account, line['gross_minor_units'], 0, attribution)
-        expect(facts.income_account, 0, line['net_minor_units'], [(envelope['id'], None, line['net_minor_units'])])
+        if role in ('item', 'charge'):
+            expect(facts.income_account, 0, own_amounts[envelope['id']],
+                   [(owner, component, units) for component, units, owner in
+                    sales.income_sources(envelope['id'], line['net_minor_units'], shares)])
         for component in own_taxes:
             captured = SalesTaxComponent.model_validate_json(component['component_snapshot'])
             expect(captured.liability_account, 0, component['tax_minor_units'], [(envelope['id'], component['id'], component['tax_minor_units'])])

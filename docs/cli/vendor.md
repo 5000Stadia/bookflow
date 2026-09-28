@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow vendor activate 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --company "Demo Plumbing Co" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor activate", "input": {"vendor": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -179,12 +187,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -203,7 +211,7 @@ Example JSON output:
   "affected_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "changed": false,
@@ -291,7 +299,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -319,6 +327,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow vendor create --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor create", "input": {"name": "Example vendor", "company_name": "Example Vendor LLC"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -533,12 +549,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -554,7 +570,7 @@ Example JSON output:
   "address": null,
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "company_name": null,
@@ -644,7 +660,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -672,6 +688,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow vendor deactivate 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor deactivate", "input": {"vendor": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -830,12 +854,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -854,7 +878,7 @@ Example JSON output:
   "affected_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "changed": false,
@@ -941,7 +965,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_IN_USE` | The record is still used by active records. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -970,6 +994,14 @@ List vendors.
 
 `bookflow vendor list --company "Demo Plumbing Co" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor list", "input": {}, "company": "Company ID or name"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -985,6 +1017,7 @@ List vendors.
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--columns LIST` | Columns the table prints, comma-separated, or `all` for every column; default `name,phone,open_balance`. --json always returns every field. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1123,12 +1156,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].last_purchase_cost.amount` | string | yes | no | — | — |
 | `items[].last_purchase_cost.currency` | string | yes | no | — | — |
 | `items[].last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `items[].balances_available` | boolean | no | no | false | — |
-| `items[].current_balance` | object | yes | no | — | — |
+| `items[].balances_available` | boolean | no | no | true | — |
+| `items[].current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `items[].current_balance.amount` | string | yes | no | — | — |
 | `items[].current_balance.currency` | string | yes | no | — | — |
 | `items[].current_balance.minor_units` | integer | yes | no | — | — |
-| `items[].open_balance` | object | yes | no | — | — |
+| `items[].open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `items[].open_balance.amount` | string | yes | no | — | — |
 | `items[].open_balance.currency` | string | yes | no | — | — |
 | `items[].open_balance.minor_units` | integer | yes | no | — | — |
@@ -1164,7 +1197,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -1173,7 +1206,7 @@ Example JSON output:
 
 ## `vendor query`
 
-Query a bounded page of vendors.
+Query a bounded page of vendors; `query` searches by name (for example "query": "Riverside"), and `vendor query options` lists the filters, sorts and columns.
 
 | Contract | Value |
 |---|---|
@@ -1188,6 +1221,14 @@ Query a bounded page of vendors.
 ### CLI
 
 `bookflow vendor query --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor query", "input": {"limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1263,7 +1304,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].company_name` | string \| null | no | yes | — | Present in VendorSummary. |
 | `items[].primary_contact` | string \| null | no | yes | — | Present in VendorSummary. |
 | `items[].phone` | string \| null | no | yes | — | Present in VendorSummary. |
-| `items[].open_balance` | object | no | no | — | Present in VendorSummary. |
+| `items[].open_balance` | object | no | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. Present in VendorSummary. |
 | `items[].open_balance.amount` | string | no | no | — | Present in VendorSummary. |
 | `items[].open_balance.currency` | string | no | no | — | Present in VendorSummary. |
 | `items[].open_balance.minor_units` | integer | no | no | — | Present in VendorSummary. |
@@ -1304,7 +1345,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -1328,6 +1369,14 @@ Show one vendor.
 ### CLI
 
 `bookflow vendor show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor show", "input": {"vendor": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1477,12 +1526,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -1496,7 +1545,7 @@ Example JSON output:
   "address": null,
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "company_name": null,
@@ -1577,7 +1626,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1604,6 +1653,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow vendor update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor update", "input": {"vendor": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1819,12 +1876,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `last_purchase_cost.amount` | string | yes | no | — | — |
 | `last_purchase_cost.currency` | string | yes | no | — | — |
 | `last_purchase_cost.minor_units` | integer | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | What the company owes this vendor: net Accounts Payable ledger balance, including credits. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
@@ -1844,7 +1901,7 @@ Example JSON output:
   "affected_descendant_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_rate_level_id": null,
   "cc_email": null,
   "changed_fields": [],
@@ -1936,7 +1993,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

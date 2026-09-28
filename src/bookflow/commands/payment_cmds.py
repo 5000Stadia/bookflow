@@ -28,8 +28,8 @@ def _financial(verb, model):
         return plan
     cmd = command('payment ' + verb, scope='company',
         description={
-            'receive': 'Record new cash and apply it across compatible customer/job invoices; retain unapplied owned credit with derived exact-party AR ownership and immutable invoice applications.',
-            'apply': 'Apply existing payment credit to its exact-party invoices without ledger posting.',
+            'receive': 'Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), run `payment suggest` with strategy "exact_then_oldest" and pass its rows as applications.items; with no applications the money stays as the customer\'s unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else "Discounts Given", created as an income account when missing) and credited to Accounts Receivable. `payment invoices` shows each invoice\'s discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice leaves the discount with the payment as the customer\'s credit; voiding the payment reverses it. Retains unapplied owned credit with exact-party AR ownership and immutable invoice applications.',
+            'apply': 'Apply existing payment credit to its exact-party invoices without ledger posting; `payment suggest` with mode "existing_credit" and strategy "exact_then_oldest" picks them oldest first.',
             'unapply': 'Reverse selected active applications and their current allocations at original dates; retain owned credit without ledger posting.',
             'void': 'Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.',
             'update': 'Correct receipt content with immutable replacement postings, fixed job ownership and complete source allocation restatement.',
@@ -101,10 +101,17 @@ from bookflow.company.payment_models import PaymentInvoicesInput, PaymentSuggest
 from bookflow.company.payment_outputs import PaymentCandidatesOutput, PaymentCalculationOutput, PaymentPageOutput
 
 
+_PREPARATION_DESCRIPTIONS = {
+    'invoices': 'Open (unpaid) invoices a customer can pay, with the amount due and current expected_version of each: mode "new_receipt" with customer and date. Each row also carries its early-payment `discount_date` and the `suggested_discount_minor_units` its terms offer for a receipt on that date (the terms percentage of the invoice total, tax included, less any discount already taken; zero after the discount date), which `payment receive` takes only when listed in its `discounts`. Page bounds never limit receipt intent.',
+    'suggest': 'Choose which open invoices a payment pays. strategy "exact_then_oldest" takes an invoice matching the amount exactly, otherwise the oldest invoices first until the money runs out (give the total due to pay everything open). Pass each row to `payment receive` applications.items as invoice = invoice_id, expected_version, amount = {"minor_units": amount_minor_units, "currency": currency}.',
+    'calculate': 'Calculate a payment amount from selected invoices, or split an entered amount across them, with the resolver the payment form uses; nothing is saved. Page bounds never limit receipt intent.',
+    'query': 'Page recorded customer payments with customer, method, status, date, number and available-credit filters.',
+}
+
+
 def _preparation(verb, model, output, planner):
     @command('payment ' + verb, scope='company',
-        description=('Find invoices this payer can pay. ' if verb == 'invoices' else '') +
-            'Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.',
+        description=_PREPARATION_DESCRIPTIONS[verb],
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_QUERY_STALE', 'E_APPLICATION_INCOMPATIBLE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION']
             # These three take mode and payment straight from the caller, so an

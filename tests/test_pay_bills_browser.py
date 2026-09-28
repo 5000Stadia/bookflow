@@ -294,14 +294,15 @@ def test_a_saved_payment_is_found_in_the_list_and_read_back_with_the_bills_it_se
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill-payment')
     b.wait_for('!!document.querySelector("table td")')
     assert b.evaluate('document.querySelector("h1").textContent').strip() == 'Bill payments'
+    # A ledger: the figure headings name the one currency, so each figure reads bare.
     heads = b.evaluate('[...document.querySelectorAll("table th")].map(e => e.textContent.trim())')
-    assert heads == ['Date', 'Payment', 'Vendor', 'Method', 'Check no.', 'Amount', 'Applied',
-                     'Unapplied', 'Status'], heads
+    assert heads == ['Date', 'Payment', 'Vendor', 'Method', 'Check no.', 'Amount (USD)', 'Applied (USD)',
+                     'Unapplied (USD)', 'Status'], heads
     row = b.evaluate(f'''[...document.querySelectorAll("table tbody tr")]
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(cells => cells[1] === {json.dumps(payment["number"])})''')
     assert row == [day('2026-06-30'), payment['number'], 'Reading supply', 'Check', '5150',
-                   '$50.00', '$50.00', '$0.00', 'posted · applied'], row
+                   '50.00', '50.00', '0.00', 'Posted · Applied'], row
 
     # The payment number is the way in, the way a bill number is.
     b.evaluate(f'''document.querySelector('a[href$="/bill-payment/{payment["id"]}"]').click()''')
@@ -414,6 +415,7 @@ def test_the_pay_bills_window_has_nothing_to_scroll_sideways_at_phone_width(regi
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill-payment')
     b.wait_for('!!document.querySelector("table td")')
     _contained(b, 390)
-    assert b.evaluate('''[...document.querySelectorAll(".pay-bills-open td")]
-        .every(e => e.scrollWidth <= e.clientWidth + 1
-                    && e.getBoundingClientRect().right <= innerWidth + 1)''')
+    # On a phone the list is one card per payment, each inside the screen, with its figure.
+    assert b.evaluate('''(() => {const cards = [...document.querySelectorAll(".list-card")];
+        return cards.length > 0 && cards.every(card => card.getBoundingClientRect().right <= innerWidth + 1
+                    && card.querySelector(".list-card-amount").textContent.trim().startsWith("$"));})()''')

@@ -91,7 +91,9 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     net = None
     if mode == 'amount':
         net = (money(inp.net_amount, currency, 'net_amount').minor_units
-               if 'net_amount' in inp.model_fields_set else previous.net_minor_units)
+               if 'net_amount' in inp.model_fields_set
+               # The saved net is after any discount; the amount entered is before it.
+               else previous.net_minor_units + (previous.discount_minor_units or 0))
     payload = inp.model_dump(exclude_unset=True, include=set(SalesLineInput.model_fields))
     payload['use_defaults'] = [field for field in inp.use_defaults if field != 'estimated_unit_cost']
     if mode == 'catalog' and previous and previous.pricing_basis != 'catalog' and 'unit_price' not in payload['use_defaults']:
@@ -105,16 +107,26 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     resolved, shared_warnings = sales_defaults.resolve_line(
         s, sales_input, header, previous=saved, previous_header=previous_header, refresh=refresh,
         nonposting=True, price_override=override, net_override=net, defer_tax=document_tax,
+        line_kinds=True,
     )
+    resolved.pop('adjustment_taxable', None)
     warnings.extend(shared_warnings)
     profile = resolved['profile']
-    if override is None:
+    if profile.adjustment is not None:
+        # A subtotal, discount or percentage charge is worked out over the whole quote; it is
+        # never marked up or costed, and a charge is quoted as the amount it comes to.
+        if mode in ('markup', 'manual') or (mode == 'amount' and profile.adjustment.kind != 'charge'
+                                               and 'net_amount' not in inp.model_fields_set):
+            raise _invalid('unit_price', 'a subtotal, discount or percentage charge line is not priced by rate or markup')
+        mode = 'amount' if profile.adjustment.kind == 'charge' else 'catalog'
+        markup = None
+    if override is None or override.origin is None:
         cost, origin = _cost(s, inp, profile, resolved['unit_factor_nanounits'], currency, previous, refresh, warnings)
     else:
         cost, origin = override.cost, override.origin
     for field in ('markup_percent', 'net_amount'):
         profile.origins.pop(field, None)
-    if mode in ('markup', 'amount'):
+    if mode in ('markup', 'amount') and profile.adjustment is None:
         profile.origins['markup_percent' if mode == 'markup' else 'net_amount'] = Origin(kind='explicit')
     if previous and previous.item_id != profile.item.id and mode == 'manual' and 'unit_price' not in inp.model_fields_set:
         warnings.append('unit_price: explicit price retained per selected unit')

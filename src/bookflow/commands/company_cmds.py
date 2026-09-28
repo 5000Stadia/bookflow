@@ -218,6 +218,9 @@ class CompanyUpdateInput(BaseModel):
     automatically_apply_payments: bool = Field(None, strict=True, description="Suggest exact-match then oldest invoice allocations; omission preserves, null rejects")
     automatically_calculate_payments: bool = Field(None, strict=True, description="Calculate selected invoice amounts; omission preserves, null rejects")
     use_undeposited_funds_for_payments: bool = Field(None, strict=True, description="Default receipts to Undeposited Funds; omission preserves, null rejects")
+    customer_discount_account_id: str | None = Field(None, description="Account debited for early-payment discounts given on receipts; null means Discounts Given, created when first needed")
+    vendor_discount_account_id: str | None = Field(None, description="Account credited for early-payment discounts taken on bill payments; null means Discounts Taken, created when first needed")
+    negative_number_style: Literal["minus", "parentheses"] | None = Field(None, description="How reports, lists and forms show a negative amount: minus (-40.00) or parentheses ((40.00)). Display only; JSON, exports and inputs keep the minus sign.")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", mode="before")
     @classmethod
@@ -234,7 +237,7 @@ NOT_NULLABLE = {
     "use_account_numbers", "show_lowest_subaccount_only", "required_employee_profile_fields",
     "use_classes", "prompt_for_class", "enable_price_levels", "units_of_measure_mode",
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
-    "order_printable_checks", "attachment_max_bytes",
+    "order_printable_checks", "attachment_max_bytes", "negative_number_style",
 }
 
 
@@ -284,6 +287,11 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "prompt_for_class", "problem": "requires use_classes"}]})
     if not new["sales_tax_enabled"] and new.get("default_sales_tax_item_id") is not None:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "sales_tax_enabled", "problem": "clear default_sales_tax_item_id before disabling sales tax"}]})
+
+    for field in ("customer_discount_account_id", "vendor_discount_account_id"):
+        if field in changed and new.get(field) is not None:
+            from bookflow.company.early_discounts import validate_preference
+            new[field] = validate_preference(s.company, field, new[field])
 
     for field, table in (("default_sales_tax_item_id", cschema.items), ("default_ship_method_id", cschema.ship_methods)):
         if field not in changed or new.get(field) is None:

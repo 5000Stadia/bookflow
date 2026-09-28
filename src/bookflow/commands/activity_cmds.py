@@ -155,6 +155,10 @@ def plan_activity(inp: ActivityInput, ctx: Context, s) -> Plan:
     from bookflow.core.dispatch import parse_when
     from bookflow.core.errors import BookflowError
 
+    from bookflow.company import audit_visibility as visibility
+    held = visibility.admitted(s)
+    # A record type the reader may not read is refused before the record is looked up.
+    visibility.require_record_type(s, inp.record_type, held)
     key = records.resolve(s, inp.record_type, inp.record_id)
     zone = s.actor.timezone or s.company_tz
     since = parse_when(inp.since, zone) if inp.since is not None else None
@@ -166,7 +170,9 @@ def plan_activity(inp: ActivityInput, ctx: Context, s) -> Plan:
         record_id=key, since=since, until=until, kinds=sorted(set(inp.kinds)) if inp.kinds is not None else ["attachment", "audit", "note"], limit=inp.limit))
     previous = _decode(inp.cursor, scope) if inp.cursor is not None else None
     events, entries = c.audit_events, c.audit_entries
-    newest = s.company.conn.execute(sa.select(sa.func.max(events.c.seq))).scalar() or 0
+    shown = visibility.visible_events(events.c.id, held)
+    newest = sa.select(sa.func.max(events.c.seq))
+    newest = s.company.conn.execute(newest if shown is None else newest.where(shown)).scalar() or 0
     high_water = previous.high_water if previous else newest
     if high_water > newest:
         raise _invalid_cursor()
@@ -176,6 +182,8 @@ def plan_activity(inp: ActivityInput, ctx: Context, s) -> Plan:
         events.c.summary, events.c.actor_id, events.c.on_behalf_of, events.c.interface).select_from(
             entries.join(events, entries.c.event_id == events.c.id)).where(
                 entries.c.id.in_(_candidates(inp, key)), events.c.seq <= high_water)
+    if shown is not None:
+        q = q.where(shown)
     if since is not None:
         q = q.where(events.c.at >= since)
     from bookflow.company.payment_authority import denied_events

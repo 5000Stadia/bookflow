@@ -29,13 +29,16 @@ def test_loaded_user_permissions_do_not_follow_an_editable_target(register_brows
     b.wait_for('!!document.querySelector("form[aria-label=\\"Company user permissions\\"]")')
     print('Users initial page seconds',width,time.monotonic()-start)
     edit='document.querySelector("form[aria-label=\\"Company user permissions\\"]")'
-    assert b.evaluate(edit+'.elements.user.readOnly')
+    # The loaded person is fixed in the editor: not a field anyone can type another name into.
+    assert b.evaluate(edit+'.elements.user.type')=='hidden'
+    assert 'Alpha' in b.evaluate(edit+'.textContent') or 'alpha' in b.evaluate(edit+'.textContent')
     assert b.evaluate(edit+'.elements.expected_version.value')=='2'
     assert json.loads(b.evaluate(edit+'.elements.other_grants.value'))==['ledger.read']
     # Explicit Load navigates; equal versions cannot carry Alpha's hidden grants into Beta.
-    b.evaluate('document.querySelector("form[aria-label=\\"Load company user\\"]").elements.user.value='+json.dumps(z['user_id']))
+    # People are chosen from a list of names, not typed.
+    b.evaluate('document.querySelector("form[aria-label=\\"Load company user\\"]").elements.user.value="beta"')
     b.evaluate('document.querySelector("form[aria-label=\\"Load company user\\"]").requestSubmit()')
-    b.wait_for(edit+'.elements.user.value=='+json.dumps(z['user_id']))
+    b.wait_for(edit+'.elements.user.value=="beta"')
     assert b.evaluate(edit+'.elements.expected_version.value')=='2'
     assert json.loads(b.evaluate(edit+'.elements.other_grants.value'))==['customer-work']
     b.evaluate(edit+'.elements.check_delete.click()')

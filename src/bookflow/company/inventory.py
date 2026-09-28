@@ -29,21 +29,19 @@ offset account and class -- read off the movement, never resolved again.
 
 Everything is decided before anything is built, so a refusal leaves nothing behind:
 
-- **Negative stock.** The replay walks every chronological prefix, so a backdated issue or a
-  void that would take an earlier prefix below zero is refused by date, not just the state
-  as it stands today.
 - **A closed period.** Every date this change would write to -- the document's own and every
   correction's -- is checked against the closing date first, and the whole change is refused
   naming the period. Deltas are never moved to today.
 - **A worthless movement.** Every movement must carry a real value, because every movement is
   one side of a real posting and Bookflow posts no zero-amount entries.
 
-## Parity limit, recorded deliberately
+## Stock taken below zero
 
-The anchor product permits stock to go negative and warns. Bookflow refuses, because a
-warning-only mode needs a provisional-cost rule and a later settlement pass, and an undefined
-or silently-zero cost is not a finished implementation. This is the first increment; that
-mode can be added on purpose later.
+As in the anchor product, an adjustment may take stock below zero, and the result says so in
+``warnings``. The units below zero are costed provisionally by ``inventory_costing.replay``
+(the average, else the purchase cost captured on the issue, else zero) and a later quantity
+increase trues each such issue up with a correction dated at that increase. An issue that
+would be worth nothing at all is still refused, because Bookflow posts no zero-amount entry.
 """
 
 from __future__ import annotations
@@ -54,7 +52,7 @@ import sqlalchemy as sa
 
 from bookflow.company import accounts, items as item_service, journals, list_service, schema as c
 from bookflow.company.document_effects import allocate
-from bookflow.company.inventory_costing import StockRefusal, replay
+from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_models import (
     InventoryAdjustmentSummary, InventoryCorrectionOutput, InventoryOutput, InventoryWriteOutput,
 )
@@ -98,6 +96,26 @@ def movements(s, *, item_id=None, transaction_id=None, as_of=None):
     if as_of is not None:
         query = query.where(t.c.effective_date <= as_of)
     return [dict(row) for row in s.company.conn.execute(query).mappings()]
+
+
+def fallback_cost(s, item_id, currency):
+    """The item's purchase cost per base unit, captured on an issue as its provisional fallback.
+
+    ``None`` when the item records no purchase cost -- a stocked item must record one, so in
+    practice that is a cost of zero -- or one in another currency: a stock value is always home
+    currency and Bookflow never converts one implicitly.
+    """
+    row = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency)
+                                 .where(c.items.c.id == item_id)).first()
+    if row is None or row.cost_minor_units is None or row.cost_currency != currency \
+            or int(row.cost_minor_units) <= 0:
+        return None
+    return int(row.cost_minor_units)
+
+
+def item_name(s, item_id):
+    return s.company.conn.execute(sa.select(c.items.c.full_name).where(
+        c.items.c.id == item_id)).scalar_one_or_none() or item_id
 
 
 def resolve(s, selector):
@@ -157,6 +175,19 @@ class _Change:
     movement_kind: str = 'reversal'
     asset_account_id: str = ''
     offset_account_id: str = ''
+    warnings: list = field(default_factory=list)
+
+
+def _warnings(item, history, state, own):
+    """One line per issue this change leaves below zero: its own, or one it newly leaves short."""
+    if not state.shortfalls:
+        return []
+    try:
+        before = {shortfall.movement['id'] for shortfall in replay(history).shortfalls}
+    except StockRefusal:
+        before = set()
+    return [shortfall_warning(item['full_name'], shortfall) for shortfall in state.shortfalls
+            if shortfall.movement['id'] in own or shortfall.movement['id'] not in before]
 
 
 def _home(s):
@@ -239,8 +270,7 @@ def refuse_stock(refusal, item, *, quantity_field='quantity_change', value_field
     when = details.get('effective_date', 'an affected date')
     if refusal.reason == 'negative_stock':
         return BookflowError('E_VALIDATION', message=(
-            f'This change would take "{item["full_name"]}" below zero on {when}: {problem}. '
-            'Bookflow refuses negative stock; receive the quantity first, or take out less.'),
+            f'This change cannot stand for "{item["full_name"]}" on {when}: {problem}.'),
             details={'fields': [{'field': quantity_field, 'problem': problem}], **details})
     return BookflowError('E_VALIDATION', message=(
         f'This change cannot stand for "{item["full_name"]}" on {when}: {problem}.'),
@@ -267,7 +297,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
                     value_minor_units=stated if stated is not None else -1,
                     effective_date=inp.date, sequence=sequence,
                     corrects_movement_id=None, reverses_movement_id=None,
-                    returns_movement_id=None)
+                    returns_movement_id=None, filled_by_movement_id=None,
+                    fallback_unit_cost_minor_units=(fallback_cost(s, item['id'], currency)
+                                                    if kind == 'issue' else None))
     if kind == 'issue':
         # What it is worth is the average's answer, not the caller's, so the value is read off
         # a first replay and written back before the corrections are worked out.
@@ -279,13 +311,17 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         raise invalid('quantity_change' if kind == 'issue' else 'value_change',
                       'this adjustment is worth nothing at the current average cost, and '
                       'Bookflow posts no zero-amount entry')
-    try:
-        state = replay(history + [proposed])
-    except StockRefusal as refusal:
-        raise refuse_stock(refusal, item) from None
     values = dict(proposed, item_id=item['id'], currency=currency,
                   asset_account_id=asset['id'], offset_account_id=offset['id'],
                   class_id=klass['id'] if klass else None)
+    # Replayed with every dimension it will be written with: an issue taken below zero ahead of
+    # a receipt already on file owes itself a true-up at that receipt, and the true-up reads
+    # its accounts and class off the movement it corrects.
+    try:
+        state = replay(history + [values])
+    except StockRefusal as refusal:
+        raise refuse_stock(refusal, item) from None
+    warnings = _warnings(item, history, state, {identity})
     description = inp.memo or f'Inventory adjustment for {item["full_name"]}'
     journal = JournalPostInput(
         date=inp.date, memo=inp.memo, custom_fields=inp.custom_fields,
@@ -295,7 +331,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         **({'number': inp.number} if inp.number is not None else {}))
     document = _Document(journal, 'post', 'adjustment', [_Movement(values, 1)])
     return _Change([document], item, state, currency, quantity, values['value_minor_units'],
-                   kind, asset['id'], offset['id'])
+                   kind, asset['id'], offset['id'], warnings)
 
 
 def _void_change(s, inp, currency, sequence):
@@ -321,34 +357,45 @@ def _void_change(s, inp, currency, sequence):
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
             corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
+            filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
             revision_id=revision['id'], document_line_id=row['document_line_id']),
             line_index=0, reverses_line_id=row['posting_line_id']))
         sequence += 1
+    history = movements(s, item_id=item['id'])
     try:
-        state = replay(movements(s, item_id=item['id']) + [m.values for m in reversals])
+        state = replay(history + [m.values for m in reversals])
     except StockRefusal as refusal:
         raise refuse_stock(refusal, item) from None
     journal = JournalVoidInput(journal=header['id'], expected_version=inp.expected_version)
     first = reversals[0].values
     change = _Change([_Document(journal, 'void', 'adjustment', reversals)], item, state, currency,
                      first['quantity_microunits'], first['value_minor_units'], 'reversal',
-                     first['asset_account_id'], first['offset_account_id'])
+                     first['asset_account_id'], first['offset_account_id'],
+                     _warnings(item, history, state, set()))
     change.documents[0].journal_date = revision['date']
     return change
 
 
 def _correction_documents(s, change, sequence):
-    """One dated document per affected date, one line pair per corrected movement."""
-    by_date: dict[str, list] = {}
+    """One dated document per affected date, one line pair per corrected movement.
+
+    A true-up -- the settlement of a provisional cost, dated at the receipt that settled it --
+    goes in a document of its own for that date, so every correction's memo says what it is.
+    """
+    by_date: dict[tuple, list] = {}
     for correction in change.state.corrections:
-        by_date.setdefault(correction.effective_date, []).append(correction)
-    for date in sorted(by_date):
+        by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+                           []).append(correction)
+    for date, true_up in sorted(by_date):
         lines, pending = [], []
-        for correction in by_date[date]:
+        for correction in by_date[(date, true_up)]:
             target = correction.target_movement
             lines.extend(pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, change.currency, target['class_id'],
+                f'Provisional cost true-up for movement {target["id"]} dated '
+                f'{target["effective_date"]}, filled by receipt movement {correction.filled_by["id"]}'
+                if true_up else
                 f'Weighted-average cost correction for movement {target["id"]} '
                 f'dated {target["effective_date"]}'))
             pending.append(_Movement(dict(
@@ -358,11 +405,14 @@ def _correction_documents(s, change, sequence):
                 asset_account_id=target['asset_account_id'],
                 offset_account_id=target['offset_account_id'], class_id=target['class_id'],
                 corrects_movement_id=target['id'], reverses_movement_id=None,
-                returns_movement_id=None),
+                returns_movement_id=None,
+                filled_by_movement_id=correction.filled_by['id'] if true_up else None,
+                fallback_unit_cost_minor_units=None),
                 line_index=len(pending) * 2 + 1))
             sequence += 1
+        memo = ('Provisional cost true-up' if true_up else 'Weighted-average cost correction')
         change.documents.append(_Document(JournalPostInput(
-            date=date, memo=f'Weighted-average cost correction for {change.item["full_name"]}',
+            date=date, memo=f'{memo} for {change.item["full_name"]}',
             lines=lines), 'post', 'recost', pending))
     return sequence
 
@@ -450,6 +500,7 @@ def _corrections_output(change):
         item_id=change.item['id'], item_name=change.item['full_name'],
         effective_date=movement.values['effective_date'],
         corrects_movement_id=movement.values['corrects_movement_id'],
+        filled_by_movement_id=movement.values.get('filled_by_movement_id'),
         delta=Money(movement.values['value_minor_units'], change.currency).to_dict(),
         transaction_id=movement.values.get('transaction_id', ''),
         number=movement.values.get('number', ''))
@@ -528,6 +579,9 @@ def _run(s, ctx, inp, operation, *, persist):
         else:
             primary = primary or fresh.preview
     output = InventoryWriteOutput(**primary.model_dump(), adjustment=_summary(s, change, _corrections_output(change)))
+    if change.warnings:
+        output.warnings = list(output.warnings) + [
+            line for line in change.warnings if line not in output.warnings]
     return output, touched, True
 
 
@@ -571,6 +625,7 @@ def document_summary(s, header, currency=None):
     corrections = [InventoryCorrectionOutput(
         item_id=item['id'], item_name=item['full_name'], effective_date=row['effective_date'],
         corrects_movement_id=row['corrects_movement_id'],
+        filled_by_movement_id=row.get('filled_by_movement_id'),
         delta=Money(int(row['value_minor_units']), row['currency']).to_dict(),
         transaction_id=row['transaction_id'], number=numbers[row['transaction_id']])
         for row in recosts]

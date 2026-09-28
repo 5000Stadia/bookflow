@@ -194,7 +194,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         name = command_name(route)
         cmd = registry.get(name)
         if cmd is None:
-            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+            raise registry.unknown_command(name)
         if cmd.local_only:
             raise BookflowError("E_USAGE", message=f"`{name}` runs only on the host's own machine; it is not served over HTTP.")
         return cmd

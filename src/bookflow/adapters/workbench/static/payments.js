@@ -21,6 +21,8 @@
   let mode = config.mode, payment = config.initial, draft = config.draft, selected = new Map(), candidates = [];
   let customer = null, nextCursor = null, preview = null, submitted = null, busy = false, customDefinitions = [], applicationRows = [];
   let selectedApplications = new Set();
+  // Early-payment discounts typed on this page, by invoice id; sent with `payment receive` only.
+  const discounts = new Map();
   let destinationOverride = !config.preferences.use_undeposited_funds_for_payments, defaultDestination = null;
   let key = 'WB-' + crypto.randomUUID();
   let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null, reviewEpoch = 0;
@@ -32,7 +34,7 @@
   const MODE_TITLES={receive:'Receive customer payment',apply:'Apply existing payment credit',update:'Correct receipt',
     unapply:'Unapply recorded applications',void:'Void unapplied receipt',delete:'Delete this payment'};
   function resetDraftView() {
-    draft=null;draftAttempt=null;reviewedDraft=null;selected.clear();candidates=[];nextCursor=null;
+    draft=null;draftAttempt=null;reviewedDraft=null;selected.clear();discounts.clear();candidates=[];nextCursor=null;
     recoveryView=null;recoveryConfirmed=null;document.getElementById('payment-recovery-panel')?.remove();
     $('invoices').replaceChildren();$('more').hidden=true;$('balances').hidden=true;
     for(const id of ['totals','selection-status','amount-origin']) $(id).replaceChildren();
@@ -232,8 +234,21 @@
           ...(value?{amount:value,amount_origin:'entered'}:{amount_origin:'unresolved'})}]});
       });});
       const entry=el('span');entry.append(input,el('small',chosen?' '+chosen.amount_origin:' Not selected'));
-      const cells=[check,el('span',exact.day(row.date)),description,el('span',exact.amount(units(row.original_gross_minor_units))),el('span',exact.amount(units(row.gross_minor_units))),el('span',exact.amount(units(row.applied_minor_units))),el('span',exact.amount(units(row.due_minor_units))),entry];
-      const labels=['Select','Date','Job / document','Original','Current','Applied','Due','Payment'];
+      /* The early-payment discount is entered, never assumed. `payment invoices` reports what
+         the terms suggest for this receipt date; Take copies it into the field. It is sent with
+         the receipt whether or not the invoice is also selected for cash. */
+      const off=el('input');off.type='text';off.inputMode='decimal';off.className='payment-discount';off.dataset.mathCurrency=config.currency;
+      off.value=discounts.get(row.invoice_id)||'';off.setAttribute('aria-label','Discount for '+kind+' '+row.number);
+      off.disabled=mode!=='receive';
+      off.addEventListener('input',()=>{invalidate();if(off.value.trim()) discounts.set(row.invoice_id,off.value.trim()); else discounts.delete(row.invoice_id);});
+      const discountCell=el('span');discountCell.append(off);
+      if(mode==='receive'&&row.suggested_discount_minor_units>0) {
+        const take=button('Take',()=>{off.value=units(row.suggested_discount_minor_units);discounts.set(row.invoice_id,off.value);invalidate();});
+        take.className='payment-take-discount';take.setAttribute('aria-label','Take the suggested discount on '+kind+' '+row.number);
+        discountCell.append(take,el('small',' Suggested '+exact.amount(units(row.suggested_discount_minor_units))));
+      }
+      const cells=[check,el('span',exact.day(row.date)),description,el('span',exact.amount(units(row.original_gross_minor_units))),el('span',exact.amount(units(row.gross_minor_units))),el('span',exact.amount(units(row.applied_minor_units))),el('span',exact.amount(units(row.due_minor_units))),el('span',row.discount_date?exact.day(row.discount_date):''),discountCell,entry];
+      const labels=['Select','Date','Job / document','Original','Current','Applied','Due','Disc. date','Discount','Payment'];
       cells.forEach((node,index)=>{const td=el('td');td.dataset.label=labels[index];td.append(node);tr.append(td);});body.append(tr);
     }
   }
@@ -303,6 +318,14 @@
     }
     const input={operation_key:key};
     if(mode==='receive') Object.assign(input,{customer:customer.id,date:$('date').value,amount:$('amount').value,applications:selectionRef()},customInput());
+    if(mode==='receive') {
+      // A discount may stand on an invoice given no cash in this receipt (the anchor allows it);
+      // the invoice's version then travels with it, as an application's does.
+      const versions=new Map(candidates.map(row=>[row.invoice_id,row.expected_version]));
+      const taken=[...discounts.entries()].filter(([,value])=>value).map(([invoice,amount])=>({invoice,amount,
+        ...(versions.has(invoice)?{expected_version:versions.get(invoice)}:{})}));
+      if(taken.length) input.discounts=taken;
+    }
     else Object.assign(input,{payment:payment.id,expected_version:payment.version});
     if(mode==='apply') Object.assign(input,{date:$('date').value,applications:selectionRef()});
     if(mode==='unapply') input.applications=applicationRows.filter(row=>selectedApplications.has(row.application_id)).map(row=>({application_id:row.application_id,invoice_expected_version:row.invoice_version}));
@@ -353,6 +376,10 @@
         el('p','Its original details, revisions, number and audit history remain readable afterwards. There is no restore action.'));
       return;
     }
+    // Advice the command returns (a check reference already on file for this customer) shows before saving.
+    for(const warning of preview.out.warnings||[]) {const p=el('p',warning);p.className='warn';p.setAttribute('data-payment-warning','');area.append(p);}
+    // The command's own summary line: invoices paid, what each still owes, credit left, discounts.
+    if(preview.out.summary) {const p=el('p',preview.out.summary.text);p.setAttribute('data-payment-summary','');area.append(p);}
     area.append(el('p',`Received ${cash(preview.out.current.received_minor_units)}; applied ${cash(preview.out.current.applied_minor_units)}; available ${cash(preview.out.current.available_minor_units)}.`));
     if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {
@@ -362,6 +389,7 @@
         const card=el('div');card.className='payment-effect';
         if(row.invoice_id) card.append(link('Invoice',`/c/${config.company}/invoice/${row.invoice_id}`),el('span',' · '));
         card.append(el('span',row.party_name||row.kind||row.status||'Document'),el('span',row.amount?' '+money(row.amount):row.received_minor_units!==undefined?' Received '+units(row.received_minor_units)+'; available '+units(row.available_minor_units):row.due_minor_units!==undefined?' Due '+units(row.due_minor_units):''));
+        if(row.discount) {const part=el('span',' · includes discount '+money(row.discount)+(row.suggested_discount?' (suggested '+money(row.suggested_discount)+')':''));part.className='payment-discount-effect';card.append(part);}
         if(row.logical_kind) card.append(el('span',` · line ${row.target_ordinal}, ${row.logical_kind}`));container.append(card);
       }
       section.append(container);area.append(section);
@@ -384,9 +412,9 @@
         key='WB-'+crypto.randomUUID();resetDraftView();mode='receive';
         $('amount').value='';$('memo').value='';$('reference').value='';$('number').value='';
         const url=new URL(location.href);url.search='';history.replaceState(null,'',url);await drawCustom();await loadInvoices();
-        note('Payment '+payment.number+' saved. New blank payment started; customer/date/method/destination retained.');
+        note('Payment '+payment.number+' saved. '+(out.summary?out.summary.text+' ':'')+'New blank payment started; customer/date/method/destination retained.');
       } else {mode='show';await drawRecord(payment);note(out.idempotent_replay?'Recovered original payment. No new financial effect.':
-        performed==='payment delete'?'Payment deleted. Its history is retained and readable below.':'Payment saved successfully.');}
+        performed==='payment delete'?'Payment deleted. Its history is retained and readable below.':'Payment saved successfully.'+(out.summary?' '+out.summary.text:''));}
     } catch(err) {
       if(err.code && !['E_INTERNAL','E_DB_BUSY','E_UNAUTHENTICATED'].includes(err.code)) {submitted=null;sessionStorage.removeItem(storageKey);lockSubmitted(false);}
       throw err;
@@ -657,7 +685,7 @@
       const tr=el('tr');tr.dataset.application=row.application_id;
       const check=el('input');check.type='checkbox';check.setAttribute('aria-label','Unapply '+money(row.amount));check.checked=selectedApplications.has(row.application_id);
       check.addEventListener('change',()=>{invalidate();check.checked?selectedApplications.add(row.application_id):selectedApplications.delete(row.application_id);});
-      for(const [label,node] of [['Select',check],['Date',el('span',row.effective_date)],['Invoice',link('Open invoice',`/c/${config.company}/invoice/${row.invoice_id}`)],['Recorded application',el('span',money(row.amount))]]) {const td=el('td');td.dataset.label=label;td.append(node);tr.append(td);}body.append(tr);
+      for(const [label,node] of [['Select',check],['Date',el('span',row.effective_date)],['Invoice',link('Open invoice',`/c/${config.company}/invoice/${row.invoice_id}`)],['Recorded application',el('span',money(row.amount)+(row.discount?' (incl. discount '+money(row.discount)+')':''))]]) {const td=el('td');td.dataset.label=label;td.append(node);tr.append(td);}body.append(tr);
     }
     $('selection-status').textContent='Select whole recorded applications to reverse at their original dates. No ledger posting is created.';
   }
@@ -670,7 +698,8 @@
     const section=$('record'),r=record.revision,c=record.current;section.replaceChildren(el('h2','Internal payment receipt · revision '+r.revision_number),
       el('p',`${r.profile.payer.label} · ${exact.longday(r.date)} · ${shown(r.total)}`),el('p',`${r.profile.payment_method.label} · ${r.reference||'No reference'} · ${r.profile.deposit_account.full_name}`),el('p',r.memo||''),
       el('p',r.id===record.current_revision_id?'Latest recorded receipt facts.':'Historical receipt facts; actions use current settlement below.'),
-      el('h3','Current settlement'),el('p',`${record.status}. Applied ${cash(c.applied_minor_units,c.currency)}; unapplied credit ${cash(c.available_minor_units,c.currency)}.`));
+      el('h3','Current settlement'),el('p',`${record.status}. Applied ${cash(c.applied_minor_units,c.currency)}; unapplied credit ${cash(c.available_minor_units,c.currency)}.`
+        +(c.discount_minor_units?` Early-payment discounts taken: ${cash(c.discount_minor_units,c.currency)}.`:'')));
     if(record.deletion) {
       const d=record.deletion,block=el('div');block.className='warn';block.setAttribute('aria-label','Deleted payment');
       block.append(el('h3','Deleted payment'),

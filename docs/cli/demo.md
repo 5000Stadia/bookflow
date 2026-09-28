@@ -22,11 +22,20 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow demo reset --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "demo reset", "input": {}, "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `include_reference` | `--include-reference` | boolean | no | no | false | Also seed Reference Plumbing Co with the fixed 2026 reference year. Reset moves the entire existing demo organization, including every company, to trash. |
+| `as_of` | `--as-of` | string \| null | no | yes | null | The day the demo is reset as of, YYYY-MM-DD; defaults to today in the demo company's timezone. The demo's story moves back by whole months so nothing in Demo Plumbing Co is dated after this day and the stock it buys has arrived by then. |
 
 ### Command and context options
 
@@ -65,6 +74,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `display_name` | string | yes | no | — | — |
 | `path` | string \| null | yes | yes | — | — |
 | `trashed_path` | string \| null | yes | yes | — | — |
+| `as_of` | string | yes | no | — | The day the demo was reset as of: nothing in Demo Plumbing Co is dated after it. |
 | `reference_company_id` | string \| null | no | yes | null | Reference company ID when requested; null otherwise. Preview IDs are prospective. |
 | `reference_display_name` | string \| null | no | yes | null | Reference company display name when requested; null otherwise. |
 
@@ -72,6 +82,7 @@ Example JSON output:
 
 ```json
 {
+  "as_of": "value",
   "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "display_name": "value",
   "dry_run": false,
@@ -106,7 +117,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

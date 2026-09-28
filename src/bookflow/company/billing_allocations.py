@@ -1,4 +1,5 @@
 """Source basis, bounded interval reads and saved allocation representations."""
+from contextlib import contextmanager
 from fractions import Fraction
 import hashlib
 import json
@@ -62,6 +63,11 @@ def proof_basis(s, root, facts, policy=None, *, excluding=None):
     """The hash a new proof of this root carries. Every active proof of one root shares one
     hash, so when active proofs carry an accepted earlier shape of these same facts, a new
     proof continues it; otherwise today's shape."""
+    return within_reading(s, ('proof_basis',) + _facts_key(root, facts, excluding, policy),
+                          lambda: _proof_basis(s, root, facts, policy, excluding=excluding))
+
+
+def _proof_basis(s, root, facts, policy=None, *, excluding=None):
     current = basis(facts, root, policy)
     a = c.work_billing_allocations
     query = active_query([root], excluding=excluding).with_only_columns(a.c.source_basis_hash).where(
@@ -159,8 +165,75 @@ def has_active_for_document(s, document_id):
     return s.company.conn.execute(query).first() is not None
 
 
+@contextmanager
+def one_reading(s):
+    """Within one billing preparation or billing read, read each root's history once.
+
+    A preparation asks for the same root's occupied scope many times over (selection,
+    posting checks, the remaining-work forecast, validation), and each ask used to scan
+    the root's whole allocation history again, so one bill cost history x asks. Inside
+    this scope a root's occupied and free spans, its proof basis, the consumption
+    fingerprint, posting eligibility and the remaining-work forecast are each read once
+    (`within_reading`) and reused. The scope writes
+    nothing and holds nothing past its own exit: a plan phase's preview is recomputed by
+    the apply phase inside its own write transaction, and any write on the company
+    connection inside the scope drops everything read so far.
+    """
+    if getattr(s, '_allocation_reads', None) is not None:
+        yield
+        return
+    s._allocation_reads = {}
+    try:
+        yield
+    finally:
+        s._allocation_reads = None
+
+
+def _reads(s):
+    reads = getattr(s, '_allocation_reads', None)
+    if reads is None:
+        return None
+    changes = s.company.raw.total_changes
+    if reads.get('changes') != changes:
+        reads.clear()
+        reads['changes'] = changes
+    return reads
+
+
+def within_reading(s, key, compute):
+    """`compute()` once per key inside `one_reading`; every call outside it computes afresh.
+
+    Only for pure reads of the company database whose answer the key fully determines. A
+    failure is never kept: it is raised again by computing again."""
+    reads = _reads(s)
+    if reads is None:
+        return compute()
+    if key not in reads:
+        reads[key] = compute()
+    return reads[key]
+
+
+def _facts_key(root, facts, excluding, policy):
+    # The serialized facts fix the denominator and the expected basis hash (and with it
+    # the legacy-shape fallback), so equal keys give equal checked answers.
+    return (tuple(root), excluding, policy, type(facts).__name__, facts.model_dump_json())
+
+
 def occupied_spans(s, root, facts, *, excluding=None, policy=None):
-    """SQLite orders canonical hex coordinates; Python retains one row at a time."""
+    """SQLite orders canonical hex coordinates; Python retains one row at a time.
+
+    Inside `one_reading` a root's checked spans are read once and reused."""
+    reads = _reads(s)
+    if reads is None:
+        yield from _occupied_spans(s, root, facts, excluding, policy)
+        return
+    key = ('occupied',) + _facts_key(root, facts, excluding, policy)
+    if key not in reads:
+        reads[key] = tuple(_occupied_spans(s, root, facts, excluding, policy))
+    yield from reads[key]
+
+
+def _occupied_spans(s, root, facts, excluding, policy):
     from bookflow.company import billing_math as math
     denominator = math.denominator(facts.quantity_microunits, facts.net_minor_units)
     expected_basis = basis(facts, root, policy)
@@ -188,8 +261,15 @@ def occupied_spans(s, root, facts, *, excluding=None, policy=None):
 
 def free_spans(s, root, facts, *, excluding=None, policy=None):
     from bookflow.company import billing_math as math
-    return math.free_spans(occupied_spans(s, root, facts, excluding=excluding, policy=policy),
-                          math.denominator(facts.quantity_microunits, facts.net_minor_units))
+    free = lambda: math.free_spans(occupied_spans(s, root, facts, excluding=excluding, policy=policy),
+                                   math.denominator(facts.quantity_microunits, facts.net_minor_units))
+    reads = _reads(s)
+    if reads is None:
+        return free()
+    key = ('free',) + _facts_key(root, facts, excluding, policy)
+    if key not in reads:
+        reads[key] = tuple(free())
+    return iter(reads[key])
 
 
 def remaining(s, root, facts, *, policy=None):
@@ -204,6 +284,11 @@ def remaining(s, root, facts, *, policy=None):
 
 def consumption_fingerprint(s, roots):
     """Hash all current source allocations without materializing their history."""
+    return within_reading(s, ('consumption', tuple(tuple(root) for root in roots)),
+                          lambda: _consumption_fingerprint(s, roots))
+
+
+def _consumption_fingerprint(s, roots):
     a = c.work_billing_allocations
     keys = ('root_document_id', 'root_line_id', 'id', 'transaction_id', 'revision_id',
             'document_line_id', 'allocation_version', 'source_basis_hash', 'denominator_hex', 'spans_json')

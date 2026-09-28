@@ -18,7 +18,7 @@ from bookflow import BookflowError
 from bookflow.company.inventory_costing import StockRefusal, replay, totals
 
 COMPANY = "Demo Plumbing Co"
-ITEM = "Brass Shutoff Valve"
+ITEM = "Costing Test Valve"
 
 
 # ---------------------------------------------------------------- the replay itself
@@ -110,14 +110,38 @@ def test_a_void_retires_the_movement_and_backs_out_its_corrections():
     assert [(x.effective_date, x.delta_minor_units) for x in retired.corrections] == [("2026-02-10", 4000)]
 
 
-def test_every_chronological_prefix_is_checked_not_only_the_end_state():
-    with pytest.raises(StockRefusal) as caught:
-        replay([
-            row("A", "issue", -1 * MICRO, -100, "2026-01-01", 1),
-            row("B", "receipt", 10 * MICRO, 10000, "2026-02-01", 2),
-        ])
-    assert caught.value.reason == "negative_stock"
-    assert caught.value.movement["id"] == "A"
+def test_a_sale_ahead_of_its_stock_is_provisional_and_trued_up_at_the_receipt():
+    """Every prefix is still walked; a prefix below zero is costed provisionally, not refused.
+
+    One unit out on 1 January with no average and no purchase cost: provisional zero. Ten in
+    at 100.00 on 1 February fill it first: the filled unit really cost 10000 * 1 / 10 = 1000,
+    so the true-up is 0 - 1000 = -1000 (more cost of goods sold), dated 1 February.
+    """
+    posted = [
+        row("A", "issue", -1 * MICRO, 0, "2026-01-01", 1),
+        row("B", "receipt", 10 * MICRO, 10000, "2026-02-01", 2),
+    ]
+    state = replay(posted)
+    assert [(x.movement["id"], x.basis, x.provisional_minor_units, x.quantity_after_microunits)
+            for x in state.shortfalls] == [("A", "none", 0, -1 * MICRO)]
+    assert [(x.target_movement["id"], x.filled_by["id"], x.effective_date, x.delta_minor_units)
+            for x in state.corrections] == [("A", "B", "2026-02-01", -1000)]
+    assert (state.quantity_microunits, state.value_minor_units) == (9 * MICRO, 9000)
+
+
+def test_a_return_cancels_unfilled_units_first_and_shares_the_rest():
+    """1 in at 400; 3 out: 400 for the one on hand and 2 short at the 400 average, 800 --
+    the issue cost 1200 and leaves -2 / -800. All 3 come back: the 2 unfilled units cancel at
+    their provisional 800 and the third takes the whole of what is left, 1200 - 800 = 400.
+    The item ends at 1 / 400, where the purchase left it, owing no true-up."""
+    state = replay([
+        row("A", "receipt", 1 * MICRO, 400, "2026-01-01", 1),
+        row("M", "issue", -3 * MICRO, -1200, "2026-01-02", 2),
+        dict(row("R", "receipt", 3 * MICRO, 1200, "2026-01-03", 3), returns_movement_id="M"),
+    ])
+    assert state.targets["M"] == -1200 and state.targets["R"] == 1200
+    assert (state.quantity_microunits, state.value_minor_units) == (1 * MICRO, 400)
+    assert state.true_ups == {} and state.corrections == ()
 
 
 def test_stock_on_hand_may_not_be_written_down_to_nothing():
@@ -142,12 +166,18 @@ def test_same_day_movements_replay_in_recorded_order():
         row("A", "receipt", 10 * MICRO, 10000, "2026-01-01", 1),
     ])
     assert (state.quantity_microunits, state.value_minor_units) == (6 * MICRO, 6000)
-    with pytest.raises(StockRefusal):
-        # The same two rows recorded the other way round is a sale before the stock arrived.
-        replay([
-            row("A", "receipt", 10 * MICRO, 10000, "2026-01-01", 2),
-            row("B", "issue", -4 * MICRO, -4000, "2026-01-01", 1),
-        ])
+    # The same two rows recorded the other way round is a sale before the stock arrived: the
+    # sale is short on its own date (nothing to average, no purchase cost: provisional zero, so
+    # its posted -4000 owes +4000 at its date) and the receipt, recorded after it, trues it up
+    # by 0 - 4000 = -4000 on the same day. The day ends where the recorded order said it would.
+    reversed_order = replay([
+        row("A", "receipt", 10 * MICRO, 10000, "2026-01-01", 2),
+        row("B", "issue", -4 * MICRO, -4000, "2026-01-01", 1),
+    ])
+    assert [x.movement["id"] for x in reversed_order.shortfalls] == ["B"]
+    assert sorted((x.filled_by is not None, x.delta_minor_units)
+                  for x in reversed_order.corrections) == [(False, 4000), (True, -4000)]
+    assert (reversed_order.quantity_microunits, reversed_order.value_minor_units) == (6 * MICRO, 6000)
 
 
 # ---------------------------------------------------------------- through the command
@@ -155,14 +185,23 @@ def test_same_day_movements_replay_in_recorded_order():
 
 @pytest.fixture
 def books(client):
-    item = client.run("item show", {"item": ITEM}, company=COMPANY)["id"]
+    # An item of the test's own: the demo's stocked items carry seeded history, and every
+    # figure below is worked out by hand from an empty stock ledger.
+    accounts = {row["full_name"]: row["id"] for row in client.run(
+        "account query", {"limit": 200}, company=COMPANY)["items"]}
+    item = client.run("item create", dict(
+        name=ITEM, type="inventory_part", description="Costing test valve", price="20.00",
+        purchase_description="Costing test valve", cost="0.00",
+        income_account_id=accounts["Construction Income"],
+        cogs_account_id=accounts["Cost of Goods Sold"]), company=COMPANY, reason="stock")["id"]
 
     def adjust(**body):
         return client.run("inventory adjust", dict(item=item, **body), company=COMPANY, reason="stock")
 
     def valuation(as_of):
-        return client.run("report inventory-valuation", {"as_of": as_of, "limit": 200},
-                          company=COMPANY)["totals"]["asset_value"]["amount"]
+        rows = client.run("report inventory-valuation", {"as_of": as_of, "limit": 200},
+                          company=COMPANY)["rows"]
+        return next((row["asset_value"]["amount"] for row in rows if row["item_id"] == item), "0.00")
 
     return item, adjust, valuation
 
@@ -236,21 +275,36 @@ def test_a_closed_period_refuses_the_whole_change_and_names_the_period(client, b
     assert after["adjustment"]["quantity_on_hand"] == "8"
 
 
-def test_negative_stock_is_refused_including_after_a_void(client, books):
+def test_stock_taken_below_zero_warns_and_so_does_a_void_that_leaves_a_sale_short(client, books):
+    """10 in at 100.00, 7 out (70.00), then 5 out: 3 on hand worth 30.00 go at 30.00 and the 2
+    below zero at the 10.00 average, 20.00 -- 50.00 in all, leaving -2 worth -20.00.
+
+    Voiding the purchase leaves the 1 February issue short with no average and no purchase
+    cost, so it is re-costed at zero on its own date (+70.00) and the 1 March issue, already
+    short, at zero too (+50.00): -12 on hand worth nothing, and the void says which sale it
+    newly left short.
+    """
     item, adjust, valuation = books
     purchase = adjust(date="2026-01-01", adjustment_account="Opening Balance Equity",
                       quantity_change="10", value_change="100.00")
     adjust(date="2026-02-01", adjustment_account="Cost of Goods Sold", quantity_change="-7")
-    with pytest.raises(BookflowError) as caught:
-        adjust(date="2026-03-01", adjustment_account="Cost of Goods Sold", quantity_change="-5")
-    assert caught.value.code == "E_VALIDATION"
-    assert "below zero" in caught.value.message
-    before = valuation("2026-12-31")
-    with pytest.raises(BookflowError) as voided:
-        client.run("inventory void", {"adjustment": purchase["id"]}, company=COMPANY, reason="mistake")
-    assert voided.value.code == "E_VALIDATION"
-    assert voided.value.details["effective_date"] == "2026-02-01"
-    assert valuation("2026-12-31") == before
+    short = adjust(date="2026-03-01", adjustment_account="Cost of Goods Sold", quantity_change="-5")
+    assert short["adjustment"]["value_change"]["amount"] == "-50.00"
+    assert short["adjustment"]["quantity_on_hand"] == "-2"
+    assert short["adjustment"]["inventory_value"]["amount"] == "-20.00"
+    assert short["warnings"] == [
+        "Takes Costing Test Valve to -2 on 2026-03-01; its cost is provisional, at the average "
+        "cost, until a receipt brings the item back up and trues it up."]
+    assert valuation("2026-03-31") == "-20.00"
+    voided = client.run("inventory void", {"adjustment": purchase["id"]}, company=COMPANY, reason="mistake")
+    assert [(x["effective_date"], x["delta"]["amount"]) for x in voided["adjustment"]["corrections"]] == \
+        [("2026-02-01", "70.00"), ("2026-03-01", "50.00")]
+    assert voided["adjustment"]["quantity_on_hand"] == "-12"
+    assert voided["adjustment"]["inventory_value"]["amount"] == "0.00"
+    stock = [line for line in voided["warnings"] if line.startswith("Takes ")]
+    assert [line.split(";")[0] for line in stock] == ["Takes Costing Test Valve to -7 on 2026-02-01"]
+    assert "at zero" in stock[0]
+    assert valuation("2026-12-31") == "0.00"
 
 
 def test_an_adjustment_says_what_it_will_not_accept(client, books):

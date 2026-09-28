@@ -49,10 +49,13 @@ def read_line(value):
     return model.model_validate(decoded)
 
 
+_POLICY = TypeAdapter(Policy)
+
+
 def economic_basis(line, policy):
     """Exact reviewed basis2 payload; callers separately own root/proof identities."""
     line = WorkLineFacts2.model_validate(line.model_dump(mode='json') if isinstance(line, WorkLineFacts) else line)
-    mode = TypeAdapter(Policy).validate_python(policy, strict=True)
+    mode = _POLICY.validate_python(policy, strict=True)
     economics = line.model_dump(mode='json', exclude={
         'schema_version', 'completed_quantity_microunits', 'billable',
         'tax_minor_units', 'gross_minor_units', 'taxes'})

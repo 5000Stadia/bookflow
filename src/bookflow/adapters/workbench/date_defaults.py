@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 TRANSACTIONS = {
     **{name: 'date' for name in (
         'invoice post', 'sales-receipt post', 'bill post', 'check post',
-        'card-charge post', 'transfer post', 'journal post', 'register post',
+        'card-charge post', 'card-credit post', 'transfer post', 'journal post', 'register post',
         'credit-memo post', 'customer-refund post', 'vendor-credit post',
         'item-receipt post', 'purchase-order post', 'inventory adjust',
         'statement-charge post', 'sales-tax pay', 'batch-invoice post',
@@ -23,19 +23,26 @@ PERIOD_REPORTS = (
     'general-ledger', 'transaction-detail', 'profit-and-loss', 'cash-flows',
     'income-tax-summary', 'profit-and-loss-by-class', 'profit-and-loss-by-job',
     'sales-by-customer', 'sales-by-item', 'sales-by-rep', 'expenses-by-vendor',
-    'statement',
+    'statement', 'purchases-by-vendor', 'purchases-by-item', 'deposit-detail',
+    'transaction-list-by-date',
 )
 AS_OF_REPORTS = (
     'ap-aging', 'ar-aging', 'collections', 'inventory-valuation', 'missing-checks',
     'open-invoices', 'stock-status', 'unbilled-costs', 'unpaid-bills',
+    'customer-balance-summary', 'customer-balance-detail', 'vendor-balance-summary',
+    'vendor-balance-detail', 'reconciliation-discrepancy',
 )
 REPORTS = {
     **{'report ' + name: ('date_from', 'date_to') for name in PERIOD_REPORTS},
     **{'report ' + name: ('as_of',) for name in AS_OF_REPORTS},
     'report balance-sheet': ('date_to',),
     'report trial-balance': ('date_to',),
+    'report open-purchase-orders': ('date_to',),
     'sales-tax liability': ('as_of',),
 }
+# Reports read over a whole calendar year that open, as the anchor's do, on the last one: a
+# 1099 summary is prepared in January for the year just ended.
+LAST_YEAR_REPORTS = {'report vendor-1099-summary': ('date_from', 'date_to')}
 
 
 def company_today(company, *, now=None):
@@ -65,7 +72,15 @@ def seed(command, today, *, initial_get, query, originals, attempted):
     """
     if not initial_get:
         return
-    fields = REPORTS.get(command) or ((TRANSACTIONS[command],) if command in TRANSACTIONS else ())
+    if command in LAST_YEAR_REPORTS:
+        last = str(int(today[:4]) - 1)
+        if not query and not any('f:' + field in attempted or _present(originals, field)
+                                 for field in LAST_YEAR_REPORTS[command]):
+            attempted['f:date_from'], attempted['f:date_to'] = last + '-01-01', last + '-12-31'
+            return
+        fields = LAST_YEAR_REPORTS[command]
+    else:
+        fields = REPORTS.get(command) or ((TRANSACTIONS[command],) if command in TRANSACTIONS else ())
     for field in fields:
         key = 'f:' + field
         if key in attempted or _present(originals, field):
@@ -92,7 +107,7 @@ def presets(command, today):
     company's today. A period report takes a from/to pair; a report read on one date takes
     that date. A report this map does not date offers none.
     """
-    fields = REPORTS.get(command)
+    fields = REPORTS.get(command) or LAST_YEAR_REPORTS.get(command)
     if not fields:
         return []
     day = date.fromisoformat(today)

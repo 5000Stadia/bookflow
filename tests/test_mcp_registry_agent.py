@@ -2,7 +2,8 @@
 
 One scenario on identical copies of a fresh (activated) install: create an agent, preview and
 assign its principal, grant its membership, authorize it, narrow it and reauthorize it with the
-fresh-context acknowledgment, with the refusals an operator is likely to meet on the way.
+fresh-context acknowledgment, deactivate and reactivate it, and deactivate and reactivate a
+person, with the refusals an operator is likely to meet on the way.
 """
 import re
 import sqlite3
@@ -14,14 +15,15 @@ import bookflow
 from tests.mcp_matrix_support import Matrix, normalize
 
 SURFACES = ('python', 'cli', 'http', 'mcp')
-COMMANDS = frozenset(('agent create', 'agent show', 'agent list', 'agent assign', 'agent unassign', 'agent authorize'))
+COMMANDS = frozenset(('agent create', 'agent show', 'agent list', 'agent assign', 'agent unassign', 'agent authorize',
+                      'agent deactivate', 'agent activate', 'user deactivate', 'user activate'))
 
 
 @pytest.mark.timeout(900)
 def test_agent_administration_full_documents_on_four_actual_surfaces(root, tmp_path):
     seed = bookflow.connect(data_root=str(root))
     company = seed.company.list()['items'][0]['company_id']
-    for name in ('matrix-p', 'matrix-q'):
+    for name in ('matrix-p', 'matrix-q', 'matrix-r'):
         seed.user.add(username=name, company=company, role='owner', password='pw-' + name + '-12345')
     baseline_ids = set()
     for path in root.rglob('*.db'):
@@ -68,6 +70,22 @@ def test_agent_administration_full_documents_on_four_actual_surfaces(root, tmp_p
                 assert shown['authority']['epoch'] == 2
                 listed = await call('agent list', dict(principal='matrix-p'))
                 assert 'matrix-agent' in [a['username'] for a in listed['items']]
+
+                retired = await call('agent deactivate', dict(agent='matrix-agent'))
+                assert retired['changed'] and not retired['agent']['active']
+                assert retired['agent']['authority']['suspension_reason'] == 'own_authority_loss'
+                assert 'matrix-agent' not in [a['username'] for a in (await call('agent list', {}))['items']]
+                assert 'matrix-agent' in [a['username'] for a in (await call('agent list', dict(include_inactive=True)))['items']]
+                assert not (await call('agent deactivate', dict(agent='matrix-agent')))['changed']
+                assert (await call('agent assign', dict(agent='matrix-agent', principal='matrix-q', confirm_permitted_use=True),
+                                   rejected=True))['code'] == 'E_USER_NOT_FOUND'
+                back = await call('agent activate', dict(agent='matrix-agent'))
+                assert back['agent']['active'] and back['agent']['authority']['suspended']
+                assert (await call('user deactivate', dict(user='matrix-agent'), rejected=True))['code'] == 'E_VALIDATION'
+                gone = await call('user deactivate', dict(user='matrix-r'))
+                assert gone['changed'] and not gone['active'] and gone['suspended_agents'] == []
+                assert (await call('user deactivate', dict(user='matrix-r', expected_version=1), rejected=True))['code'] == 'E_VERSION_CONFLICT'
+                assert (await call('user activate', dict(user='matrix-r')))['active']
 
             expected = normalize(matrix.documents['python'], matrix.roots['python'], baseline_ids)
             for surface in ('cli', 'http', 'mcp'):

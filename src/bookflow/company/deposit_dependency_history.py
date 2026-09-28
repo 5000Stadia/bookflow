@@ -50,8 +50,18 @@ def execution_binding(s, binding):
 class ResourceRequirementDenied(BookflowError):
     """Internal evidence of a evaluated resource denial, not missing stored history."""
 
-    def __init__(self):
-        super().__init__('E_PERMISSION')
+    def __init__(self, details=None):
+        super().__init__('E_PERMISSION', details=details or {})
+
+
+def _refusal(error):
+    """The requirement that refused (blueprint 4.3b: E_PERMISSION names the capability).
+
+    Only the capability, its threshold and the rule's reason: never which identity
+    (the actor or the human it acts for), its role, or which record was involved.
+    """
+    details = error.details or {}
+    return {key: details[key] for key in ('capability', 'required_role', 'reason') if key in details}
 
 
 def _resource_denial(error):
@@ -74,23 +84,34 @@ def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write
     from bookflow.hub import schema as h, access
     from bookflow.company.deposit_dependencies import authorize
     from bookflow.company.payment_authority import authorize_events
+    from bookflow.hub.permission_access import activated
     actor, _, principal, _ = execution_binding(s, binding)
-    for identity in (actor,) if principal is None else (actor, principal):
-        row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == identity,
-            h.users.c.active.is_(True))).mappings().one_or_none()
-        if row is None:
-            raise BookflowError('E_UNAUTHENTICATED')
-        view = replace(s, actor=Actor(**{key: row[key] for key in ('id', 'kind', 'username', 'display_name', 'hub_admin', 'timezone')}), memberships=[])
-        access.load_memberships(view)
+    if activated(s):
+        # The policy owner checks the authenticated actor/bound-human intersection
+        # for every requirement from the real session and its credential. A view
+        # that swaps in the human as actor no longer matches that credential and
+        # was refused as a binding mismatch (the agent could not bank a deposit).
+        views = (s,)
+    else:
+        views = []
+        for identity in (actor,) if principal is None else (actor, principal):
+            row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == identity,
+                h.users.c.active.is_(True))).mappings().one_or_none()
+            if row is None:
+                raise BookflowError('E_UNAUTHENTICATED')
+            view = replace(s, actor=Actor(**{key: row[key] for key in ('id', 'kind', 'username', 'display_name', 'hub_admin', 'timezone')}), memberships=[])
+            access.load_memberships(view)
+            views.append(view)
+    for view in views:
         try:
             authorize(view, sources=transaction_ids, write=write)
             if event_ids:
                 authorize_events(view, event_ids)
         except BookflowError as error:
             if _resource_denial(error):
-                raise ResourceRequirementDenied() from None
+                raise ResourceRequirementDenied(_refusal(error)) from None
             if error.code in ('E_PERMISSION', 'E_COMPANY_NOT_FOUND'):
-                raise BookflowError('E_PERMISSION') from None
+                raise BookflowError('E_PERMISSION', details=_refusal(error)) from None
             raise
 
 

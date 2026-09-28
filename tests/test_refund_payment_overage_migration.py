@@ -40,7 +40,7 @@ def _at(path, revision):
 def test_the_migration_follows_the_recosting_revision():
     """Derived, never a second copy of the number: the chain is the only authority."""
     assert M.down_revision == PREVIOUS
-    assert M.revision in known_revisions('company') and HEADS['company'] == M.revision
+    assert M.revision in known_revisions('company') and M.revision <= HEADS['company']
 
 
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module():

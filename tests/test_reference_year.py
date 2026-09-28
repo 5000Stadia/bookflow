@@ -36,8 +36,8 @@ def demo_runner(client, company, why, *, dry_run=False):
     return run
 
 from bookflow.core.errors import BookflowError
-from tests.conftest import as_user, make_actor
-from tests.demo_oracle import (DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
+from tests.conftest import _checkpoint_databases, as_user, copy_seeded_root, make_actor
+from tests.demo_oracle import (DEMO_ARCS, DEMO_AS_OF, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
 from tests import provenance
 
 REFERENCE = 'Reference Plumbing Co'
@@ -69,16 +69,16 @@ def cli_run(root, *args):
 def reference_template(tmp_path_factory):
     root = tmp_path_factory.mktemp('reference-template') / 'root'
     cli_run(root, 'init')
-    result = cli_run(root, 'demo', 'reset', '--include-reference')
+    result = cli_run(root, 'demo', 'reset', '--include-reference', '--as-of', DEMO_AS_OF)
     assert result['trashed_path'] is None
     assert result['reference_company_id'] != result['company_id']
+    _checkpoint_databases(root)
     return root
 
 
 @pytest.fixture
 def reference_client(reference_template, tmp_path, monkeypatch):
-    root = tmp_path / 'reference-root'
-    shutil.copytree(reference_template, root)
+    root = copy_seeded_root(reference_template, tmp_path / 'reference-root')
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT', str(root))
     monkeypatch.delenv('BOOKFLOW_COMPANY', raising=False)
     return bookflow.connect(data_root=str(root)), root

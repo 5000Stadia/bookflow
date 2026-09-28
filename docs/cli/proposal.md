@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow proposal copy 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --date 2026-09-02 --company "Demo Plumbing Co" --reason "Prepare another option" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal copy", "input": {"proposal": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "date": "2026-09-02"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -108,6 +116,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -343,6 +359,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -374,8 +395,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -446,6 +467,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -468,6 +515,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -681,6 +730,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -723,7 +773,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -753,6 +803,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow proposal create --date 2026-09-01 --title 'Clear the main drain' --customer 'Riverside Apartments' --scope 'Inspect and clear the main drain; test normal flow.' --lines '[{"item": "Mainline Clearing", "quantity": "1", "unit_price": "125.00"}]' --company "Demo Plumbing Co" --reason "Prepare customer work" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal create", "input": {"date": "2026-09-01", "title": "Clear the main drain", "customer": "Riverside Apartments", "scope": "Inspect and clear the main drain; test normal flow.", "lines": [{"item": "Mainline Clearing", "quantity": "1", "unit_price": "125.00"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -809,6 +867,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_level` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_basis_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
@@ -889,6 +948,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1124,6 +1191,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -1155,8 +1227,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -1227,6 +1299,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -1249,6 +1347,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -1462,6 +1562,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -1504,7 +1605,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1534,6 +1635,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow proposal estimate 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --conversion-key "drain-quote-2026-09" --date 2026-09-02 --company "Demo Plumbing Co" --reason "Make an estimate from the scope" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal estimate", "input": {"proposal": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "conversion_key": "drain-quote-2026-09", "date": "2026-09-02"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1622,6 +1731,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1857,6 +1974,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -1888,8 +2010,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -1960,6 +2082,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -1982,6 +2130,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -2195,6 +2345,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -2237,7 +2388,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2265,6 +2416,14 @@ Page immutable work revisions in revision order, including decision evidence, li
 ### CLI
 
 `bookflow proposal history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal history", "input": {"proposal": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -2439,7 +2598,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2464,6 +2623,14 @@ Find work by customer, number, title, date, status, availability and net amount,
 ### CLI
 
 `bookflow proposal query --customer "Riverside Apartments" --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal query", "input": {"customer": "Riverside Apartments", "date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -2544,6 +2711,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
 | `items[].expired` | boolean | yes | no | — | — |
+| `items[].time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `items[].time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `items[].time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `items[].time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `items[].time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `items[].time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `items[].time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `items[].time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -2582,7 +2757,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -2607,6 +2782,14 @@ Show current or historical work facts, exact quoted totals, costs, completed qua
 ### CLI
 
 `bookflow proposal show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal show", "input": {"proposal": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -2677,6 +2860,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -2912,6 +3103,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -2943,8 +3139,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -3015,6 +3211,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -3037,6 +3259,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -3239,6 +3463,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -3273,7 +3498,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -3300,6 +3525,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow proposal update 01ARZ3NDEKTSV4RRFFQ69G5FAV --memo "Site visit arranged" --expected-version 1 --company "Demo Plumbing Co" --reason "Record work note" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "proposal update", "input": {"proposal": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "memo": "Site visit arranged", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -3360,6 +3593,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_level` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_basis_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
@@ -3442,6 +3676,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -3677,6 +3919,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -3708,8 +3955,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -3780,6 +4027,32 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -3802,6 +4075,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -4015,6 +4290,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -4057,7 +4333,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

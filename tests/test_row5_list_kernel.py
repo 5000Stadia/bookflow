@@ -122,8 +122,8 @@ def test_selector_is_id_first_then_canonical_name_and_keeps_hidden_ids_secret(co
     absent = _error(resolve_selector, company_db, c.terms, definition, secret["id"], visible=sa.false())
     assert hidden.to_dict() == absent.to_dict() == {
         "code": "E_RECORD_NOT_FOUND",
-        "message": "No such record.",
-        "details": {"selector": secret["id"], "suggestions": []},
+        "message": f"No term matches {secret['id']!r}; `term list` shows them all.",
+        "details": {"selector": secret["id"], "suggestions": [], "list_command": "term list"},
     }
 
 

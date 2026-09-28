@@ -23,6 +23,7 @@ import bookflow
 from bookflow.commands.host_cmds import start_serving
 from bookflow.core.config import os_login
 from bookflow.core.context import client_version
+from tests.conftest import copy_seeded_root
 
 
 PASSWORD = "correct-horse-battery"
@@ -240,14 +241,12 @@ class _Cdp:
 
 
 @pytest.fixture
-def browser_site(tmp_path, monkeypatch):
-    """Serve a fresh demo root on an OS-selected loopback port."""
-    data_root = tmp_path / "browser-root"
+def browser_site(tmp_path, monkeypatch, _seeded_template):
+    """Serve a private copy of the run's demo root on an OS-selected loopback port."""
+    data_root = copy_seeded_root(_seeded_template, tmp_path / "browser-root")
     monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(data_root))
     monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
     client = bookflow.connect(data_root=str(data_root))
-    client.init()
-    client.demo.reset()
     login = os_login()
     client.run("user set-password", {"username": login, "password": PASSWORD})
     company_id = client.company.list()["items"][0]["company_id"]

@@ -9,6 +9,9 @@ from bookflow.core.exact import INT64_MAX
 from bookflow.company.reconciliation_models import MovementKey, PRODUCER_ROLES
 
 ID = Annotated[str, Field(pattern=r'^[0-9A-HJKMNP-TV-Z]{26}$')]
+# The account a reconciliation starts on is named the way every other command names an account;
+# the command resolves it to the stable ID before anything is prepared or recorded.
+AccountSelector = Annotated[str, Field(min_length=1, max_length=1000, description='Bank or credit card account ID or canonical full name.')]
 Version = Annotated[int, Field(strict=True, ge=1)]
 Count = Annotated[int, Field(strict=True, ge=0, le=2**63-1)]
 Units = Annotated[int, Field(strict=True, ge=-(2**63), le=2**63-1)]
@@ -116,7 +119,7 @@ class PreparedChange(DraftChange):
     dependency_guard: str
 
 class OpeningStart(Mutation,Dated):
-    account: ID
+    account: AccountSelector
     opening_date: str
     # Minor units, like every other amount this system stores. Said out loud because this is one
     # of the two amounts a person types by hand, and a form that silently wanted cents would take
@@ -126,14 +129,15 @@ class OpeningStart(Mutation,Dated):
     references: tuple[EvidenceRef,...]=Field(default=(),max_length=200)
 
 class Start(Mutation,Dated):
-    account: ID
+    account: AccountSelector
     statement_date: str
     ending_balance: StatementAmount=STATEMENT_BALANCE
-    opening_id: ID|None=None
-    opening_draft_id: ID|None=None
+    opening_id: ID|None=Field(default=None,description="The account's adopted reconciliation opening; omit both this and opening_draft_id to use the account's adopted opening.")
+    opening_draft_id: ID|None=Field(default=None,description='An open `reconcile opening start` draft this statement follows, when the opening is not finished yet.')
     @model_validator(mode='after')
     def opening(self):
-        if (self.opening_id is None)==(self.opening_draft_id is None):raise ValueError('exactly one opening required')
+        if self.opening_id is not None and self.opening_draft_id is not None:
+            raise ValueError('give opening_id or opening_draft_id, not both')
         return self
 
 class DraftUpdate(DraftChange,Dated):

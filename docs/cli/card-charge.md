@@ -23,6 +23,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow card-charge delete 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key purchase-delete-1 --reason "Remove duplicate purchase" --company "Demo Plumbing Co" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge delete", "input": {"card_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "purchase-delete-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -124,7 +132,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -151,6 +159,14 @@ Page a credit card charge’s immutable revisions in revision-number order, each
 ### CLI
 
 `bookflow card-charge history 01ARZ3NDEKTSV4RRFFQ69G5FAV --include-deleted --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge history", "input": {"card_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 25, "include_deleted": true}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -262,7 +278,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].batches[].currency` | string | yes | no | — | — |
 | `items[].batches[].line_count` | integer | yes | no | — | — |
 | `items[].document` | object | yes | no | — | — |
-| `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `items[].document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
 | `items[].document.funding_details` | dict \| null | no | yes | null | — |
 | `items[].document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -363,7 +379,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -390,6 +406,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow card-charge post --account "Company Credit Card" --pay-to-name-type vendor --pay-to-name-id "Northside Supply" --date 2026-04-03 --amount 75.25 --memo "Fuel on the company card" --expenses '[{"account":"Office Supplies","amount":"75.25"}]' --company "Demo Plumbing Co" --reason "Record a card purchase" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge post", "input": {"account": "Company Credit Card", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"}, "date": "2026-04-03", "amount": "75.25", "memo": "Fuel on the company card", "expenses": [{"account": "Office Supplies", "amount": "75.25"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -615,7 +639,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -811,7 +835,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -838,6 +862,14 @@ Page credit card charges in accounting-date and stable-id order, oldest first or
 ### CLI
 
 `bookflow card-charge query --account "Company Credit Card" --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge query", "input": {"account": "Company Credit Card", "date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -928,7 +960,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].credit_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
 | `items[].document` | object | yes | no | — | — |
-| `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `items[].document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
 | `items[].document.funding_details` | dict \| null | no | yes | null | — |
 | `items[].document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -1024,7 +1056,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1049,6 +1081,14 @@ Show a credit card charge: its current or a selected earlier revision, the card 
 ### CLI
 
 `bookflow card-charge show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge show", "input": {"card_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1234,7 +1274,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -1417,7 +1457,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1444,6 +1484,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow card-charge update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --amount 300.00 --expenses '[{"account":"Office Supplies","amount":"200.00","memo":"Parts"},{"account":"Professional Fees","amount":"100.00","memo":"Filing"}]' --company "Demo Plumbing Co" --reason "Parts line was understated" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge update", "input": {"card_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "300.00", "expenses": [{"account": "Office Supplies", "amount": "200.00", "memo": "Parts"}, {"account": "Professional Fees", "amount": "100.00", "memo": "Filing"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1672,7 +1720,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -1868,7 +1916,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1898,6 +1946,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow card-charge void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --company "Demo Plumbing Co" --reason "Never cashed" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "card-charge void", "input": {"card_charge": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -2098,7 +2154,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -2291,7 +2347,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

@@ -13,7 +13,7 @@ def _write(verb, model):
     cmd = command('item-receipt ' + verb, scope='company',
         description={'post': 'Receive inventory before a vendor bill. Items debit Inventory and credit receipt-owned Accounts Payable. Product unit costs and amounts exclude shipping. Optional Shipping is charged by this vendor and spread by received quantity; product plus shipping posts once. Zero-value quantities are valid. Purchase-order selections require the displayed version and ordered line identities.',
                      'update': 'Correct a receipt. Omitted items and shipping retain captured facts; enter zero to clear shipping; metadata edits preserve stock and claim identities. Release linked bills before changing physical receipt facts.',
-                     'void': 'Void a receipt with a reason, reversing its exact stock and accounting and releasing its own physical order claims. Linked bills and insufficient historical stock refuse the whole change.'}[verb],
+                     'void': 'Void a receipt with a reason, reversing its exact stock and accounting and releasing its own physical order claims. Linked bills refuse the whole change; a sale the void leaves below zero is re-costed provisionally at its own date and named in warnings.'}[verb],
         input_model=model, output_model=ReceiptWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
         positional=[] if verb == 'post' else ['receipt'], clearable=verb == 'update',
@@ -30,7 +30,11 @@ def _read(verb, model, output):
     def planner(inp, ctx, s):
         return Plan(receiving.page(s, inp, ctx) if verb == 'query' else getattr(receiving, verb)(s, inp))
     return command('item-receipt ' + verb, scope='company',
-        description='Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
+        description={
+            'show': 'Show one item receipt (by ID or number in `receipt`, optionally an earlier revision_number): received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
+            'query': 'Page item receipts with vendor, date, status and unbilled_only filters: received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
+            'history': 'Every revision of one item receipt, oldest first: name the receipt (ID or number) in `receipt`; find it first with `item-receipt query`.',
+        }[verb],
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
         positional=[] if verb == 'query' else ['receipt'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])(planner)
 

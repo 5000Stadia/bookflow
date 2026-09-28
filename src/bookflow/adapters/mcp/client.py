@@ -20,6 +20,11 @@ log = logging.getLogger(__name__)
 RECOVERY_SECONDS = 30
 RECOVERY_INITIAL_DELAY = 0.1
 RECOVERY_MAX_DELAY = 1.0
+#: The whole recovery wait while the host keeps reporting the operation as still running;
+#: None means the operator's BOOKFLOW_MCP_JSON_SECONDS (default 300). RECOVERY_SECONDS
+#: still bounds any stretch without such a report.
+RECOVERY_PROGRESS_SECONDS = None
+_ACTIVE = frozenset({'preparing', 'ready', 'receiving', 'queued', 'started', 'delivering'})
 
 
 class Client:
@@ -152,13 +157,22 @@ class Client:
         except httpx2.ReadTimeout:
             log.warning('mcp recovery: reference=%s stage=read_timeout exception=ReadTimeout', reference)
         try:
-            # One budget covers polling, backoff, HTTP reads and framed decoding.
+            # One budget covers polling, backoff, HTTP reads and framed decoding. Each
+            # report that the operation is still running (or that a folder-changing or
+            # publishing writer holds the host) renews it, up to the progress bound, so a
+            # long command -- a demo reset, a large restore -- is waited for; silence is not.
             # Caller cancellation is not shielded or translated into server cancellation.
-            with anyio.fail_after(RECOVERY_SECONDS):
+            overall = anyio.current_time() + (self.json_seconds if RECOVERY_PROGRESS_SECONDS is None
+                                              else RECOVERY_PROGRESS_SECONDS)
+            with anyio.fail_after(RECOVERY_SECONDS) as budget:
+                def progressed():
+                    budget.deadline = max(budget.deadline, min(overall, anyio.current_time() + RECOVERY_SECONDS))
                 delay = RECOVERY_INITIAL_DELAY
                 while True:
                     try:
                         state = await self.post(f'/adapters/mcp/intents/{reference}/status', reference=reference)
+                        if state['state'] in _ACTIVE:
+                            progressed()
                         if state['state'] == 'completed':
                             if not state['receipt_available']:
                                 raise invalid('receipt_unavailable')
@@ -174,7 +188,7 @@ class Client:
                                     return result
                                 # A concurrent delivery may have claimed the receipt.
                                 # Its observation is not the original command output.
-                        elif state['state'] not in {'preparing', 'ready', 'receiving', 'queued', 'started', 'delivering'}:
+                        elif state['state'] not in _ACTIVE:
                             raise invalid('recovery_unavailable')
                     except BookflowError as exc:
                         # Folder-changing writers block readers, and lifecycle
@@ -183,6 +197,7 @@ class Client:
                         # Framed business rejections return above, never raise here.
                         if exc.code != 'E_DB_BUSY' or exc.details.get('operation') not in {'filesystem_change', 'publication_pending', 'authority_change'}:
                             raise
+                        progressed()
                     await anyio.sleep(delay)
                     delay = min(delay * 2, RECOVERY_MAX_DELAY)
         except Exception as exc:

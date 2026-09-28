@@ -17,6 +17,7 @@ reads a literal zero for what has been applied, so a bill it lists as open may a
 ``bill query`` carries each bill's own ``settlement_current``, which is what a settlement wrote,
 so that is what the window selects from.
 """
+from bookflow.adapters.workbench import list_layout
 from bookflow.adapters.workbench.date_defaults import company_today
 
 from copy import deepcopy
@@ -114,6 +115,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             cred = credential(request)
             return render('bill_payment_list.html', request, company_id=company_id,
                           payments=list_view(result, company_id, filters), filters=filters,
+                          list_state=list_layout.state(request.query_params, {}, quiet=('number',)),
                           may_pay=role_allows(registry.get('bill pay'), company,
                                               hub_admin=cred.hub_admin))
         except BookflowError as exc:

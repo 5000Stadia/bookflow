@@ -2,6 +2,177 @@
 
 # `agent` commands
 
+## `agent activate`
+
+Bring a deactivated agent back. It returns suspended with no tokens: authorize it with `agent authorize`, then issue a new token.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | write |
+| Required role | human installation administrator on an activated installation |
+| Capability | user |
+| Feature | — |
+| HTTP | `POST /commands/agent.activate` |
+| External binary body | none |
+
+### CLI
+
+`bookflow agent activate books-agent --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent activate", "input": {"agent": "books-agent"}, "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `agent` | `AGENT` | string | yes | no | — | Agent username or id; maximum length 64 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed record version (`version` from `agent show`); stale requests refuse |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+
+### HTTP
+
+Route: `POST /commands/agent.activate`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `agent` | object | yes | no | — | — |
+| `agent.id` | string | yes | no | — | — |
+| `agent.version` | integer | yes | no | — | — |
+| `agent.created_at` | string | yes | no | — | — |
+| `agent.created_by` | string | yes | no | — | — |
+| `agent.created_via` | string | yes | no | — | — |
+| `agent.updated_at` | string | yes | no | — | — |
+| `agent.updated_by` | string | yes | no | — | — |
+| `agent.updated_via` | string | yes | no | — | — |
+| `agent.agent_id` | string | yes | no | — | — |
+| `agent.username` | string | yes | no | — | — |
+| `agent.display_name` | string | yes | no | — | — |
+| `agent.owner_user_id` | string \| null | yes | yes | — | — |
+| `agent.owner_username` | string \| null | yes | yes | — | — |
+| `agent.active` | boolean | yes | no | — | — |
+| `agent.authority` | object | yes | no | — | — |
+| `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
+| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
+| `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
+| `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
+| `agent.authority.authorized_at` | string \| null | yes | yes | — | — |
+| `agent.authority.authorized_by` | string \| null | yes | yes | — | — |
+| `agent.authority.permitted_use_at` | string \| null | yes | yes | — | — |
+| `agent.authority.fresh_context_ack_at` | string \| null | yes | yes | — | — |
+| `agent.principals` | array[object] | yes | no | — | — |
+| `agent.principals[].user_id` | string | yes | no | — | — |
+| `agent.principals[].username` | string | yes | no | — | — |
+| `agent.principals[].display_name` | string | yes | no | — | — |
+| `agent.principals[].assigned_at` | string \| null | yes | yes | — | — |
+| `agent.principals[].assigned_by` | string | yes | no | — | — |
+| `changed` | boolean | yes | no | — | — |
+| `revoked_token_count` | integer | no | no | 0 | Tokens this change revoked; restoring access never revives them |
+| `message` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "agent": {
+    "active": false,
+    "agent_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "authority": {
+      "authorized_at": null,
+      "authorized_by": null,
+      "epoch": 1,
+      "fresh_context_ack_at": null,
+      "fresh_context_required": false,
+      "permitted_use_at": null,
+      "suspended": false,
+      "suspension_reason": null,
+      "version": 1
+    },
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "display_name": "value",
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "owner_user_id": null,
+    "owner_username": null,
+    "principals": [],
+    "updated_at": "2026-01-01T00:00:00Z",
+    "updated_by": "value",
+    "updated_via": "cli",
+    "username": "value",
+    "version": 1
+  },
+  "changed": false,
+  "dry_run": false,
+  "message": "value",
+  "revoked_token_count": 0,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_USER_NOT_FOUND` | No such user. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `agent assign`
 
 Let an agent act on behalf of one more human. Everyone an agent acts for must hold identical permissions; adding someone never lifts a suspension or revives a token.
@@ -21,6 +192,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow agent assign books-agent --principal jordan --confirm-permitted-use --expected-version 1 --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent assign", "input": {"agent": "books-agent", "principal": "jordan", "confirm_permitted_use": true, "expected_version": 1}, "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -159,7 +338,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -187,6 +366,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow agent authorize books-agent --confirm-permitted-use --acknowledge-fresh-context --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent authorize", "input": {"agent": "books-agent", "confirm_permitted_use": true, "acknowledge_fresh_context": true}, "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -325,7 +512,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -353,6 +540,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow agent create books-agent --display-name "Books agent" --owner jordan --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent create", "input": {"username": "books-agent", "display_name": "Books agent", "owner": "jordan"}, "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -485,13 +680,184 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_USER_NOT_FOUND` | No such user. |
 | `E_VALIDATION` | Invalid input. |
+
+## `agent deactivate`
+
+Retire an agent: it stops acting at once, every token it holds is revoked in the same audited change, and it leaves the default lists. Its history stays. Reactivating it revives no token; it must be authorized again.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | write |
+| Required role | human installation administrator on an activated installation |
+| Capability | user |
+| Feature | — |
+| HTTP | `POST /commands/agent.deactivate` |
+| External binary body | none |
+
+### CLI
+
+`bookflow agent deactivate books-agent --reason "retired" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent deactivate", "input": {"agent": "books-agent"}, "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `agent` | `AGENT` | string | yes | no | — | Agent username or id; maximum length 64 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed record version (`version` from `agent show`); stale requests refuse |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+
+### HTTP
+
+Route: `POST /commands/agent.deactivate`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `agent` | object | yes | no | — | — |
+| `agent.id` | string | yes | no | — | — |
+| `agent.version` | integer | yes | no | — | — |
+| `agent.created_at` | string | yes | no | — | — |
+| `agent.created_by` | string | yes | no | — | — |
+| `agent.created_via` | string | yes | no | — | — |
+| `agent.updated_at` | string | yes | no | — | — |
+| `agent.updated_by` | string | yes | no | — | — |
+| `agent.updated_via` | string | yes | no | — | — |
+| `agent.agent_id` | string | yes | no | — | — |
+| `agent.username` | string | yes | no | — | — |
+| `agent.display_name` | string | yes | no | — | — |
+| `agent.owner_user_id` | string \| null | yes | yes | — | — |
+| `agent.owner_username` | string \| null | yes | yes | — | — |
+| `agent.active` | boolean | yes | no | — | — |
+| `agent.authority` | object | yes | no | — | — |
+| `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
+| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
+| `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
+| `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
+| `agent.authority.authorized_at` | string \| null | yes | yes | — | — |
+| `agent.authority.authorized_by` | string \| null | yes | yes | — | — |
+| `agent.authority.permitted_use_at` | string \| null | yes | yes | — | — |
+| `agent.authority.fresh_context_ack_at` | string \| null | yes | yes | — | — |
+| `agent.principals` | array[object] | yes | no | — | — |
+| `agent.principals[].user_id` | string | yes | no | — | — |
+| `agent.principals[].username` | string | yes | no | — | — |
+| `agent.principals[].display_name` | string | yes | no | — | — |
+| `agent.principals[].assigned_at` | string \| null | yes | yes | — | — |
+| `agent.principals[].assigned_by` | string | yes | no | — | — |
+| `changed` | boolean | yes | no | — | — |
+| `revoked_token_count` | integer | no | no | 0 | Tokens this change revoked; restoring access never revives them |
+| `message` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "agent": {
+    "active": false,
+    "agent_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "authority": {
+      "authorized_at": null,
+      "authorized_by": null,
+      "epoch": 1,
+      "fresh_context_ack_at": null,
+      "fresh_context_required": false,
+      "permitted_use_at": null,
+      "suspended": false,
+      "suspension_reason": null,
+      "version": 1
+    },
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "display_name": "value",
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "owner_user_id": null,
+    "owner_username": null,
+    "principals": [],
+    "updated_at": "2026-01-01T00:00:00Z",
+    "updated_by": "value",
+    "updated_via": "cli",
+    "username": "value",
+    "version": 1
+  },
+  "changed": false,
+  "dry_run": false,
+  "message": "value",
+  "revoked_token_count": 0,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_USER_NOT_FOUND` | No such user. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
 ## `agent list`
 
@@ -510,6 +876,14 @@ List the agents on this installation with their authority state and principals.
 ### CLI
 
 `bookflow agent list --principal jordan --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent list", "input": {"principal": "jordan"}}
+```
 
 ### Input
 
@@ -604,7 +978,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -629,6 +1003,14 @@ Show an agent's authority: epoch, suspension and its reason, whether a fresh con
 ### CLI
 
 `bookflow agent show books-agent --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent show", "input": {"agent": "books-agent"}}
+```
 
 ### Input
 
@@ -744,7 +1126,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -771,6 +1153,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow agent unassign books-agent --principal jordan --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "agent unassign", "input": {"agent": "books-agent", "principal": "jordan"}, "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -907,7 +1297,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

@@ -42,7 +42,7 @@ def register_calculate(inp, ctx, s):
 
 
 @command('register query', scope='company',
-         description='Page account register history with normal-side balances and a separate all-entries balance snapshot.',
+         description='Page one account\'s register from date_from to date_to (YYYY-MM-DD; omitted, the current fiscal year to today), oldest or newest first (direction), with normal-side running balances and a separate all-entries balance snapshot.',
          input_model=RegisterQueryInput, output_model=RegisterQueryOutput,
          required_role='member', capability='ledger.read',
          error_codes=[*_REFERENCE_ERRORS, 'E_QUERY_STALE'])

@@ -29,6 +29,14 @@ a second movement on one line would double-count it.
 - ``reversal`` -- the exact inverse of one named movement, written when the document that
   caused it is voided. Never an input either; it retires the movement it names.
 
+**Stock sold before it arrives.** An issue may take an item below zero. The units below zero
+carry a provisional cost -- the running average, else the item's purchase cost captured on the
+issue in ``fallback_unit_cost_minor_units``, else zero -- and a later receipt that fills the
+shortfall owes that issue a *true-up*: a ``recost`` naming the issue in ``corrects_movement_id``
+and the filling receipt in ``filled_by_movement_id``, dated at the receipt. The fallback is
+captured rather than read from the item master, so editing an item can never change what replay
+computes for a sale already posted.
+
 **Ordering.** ``effective_date`` is what reports and the general ledger both read, and
 ``sequence`` is a company-wide monotonic counter that decides same-day order. Two movements
 on one day are replayed in the order they were recorded, which is a defined, stable order
@@ -97,6 +105,8 @@ def define_tables(metadata, column, table):
         C('corrects_movement_id', sa.String(26), 'Issue whose effective cost this delta corrects; null except on recost.', nullable=True),
         C('reverses_movement_id', sa.String(26), 'Movement this row exactly retires; null except on reversal.', nullable=True),
         C('returns_movement_id', sa.String(26), 'Issue this receipt gives back; null except on a return.', nullable=True),
+        C('filled_by_movement_id', sa.String(26), 'Receipt whose arrival trued up the provisional cost of the issue this recost corrects; null except on a true-up.', nullable=True),
+        C('fallback_unit_cost_minor_units', sa.BigInteger, "Item purchase cost per base unit captured when this issue was recorded, the provisional cost if the item has never held stock; null except on an issue.", nullable=True),
         sa.ForeignKeyConstraint(['transaction_id', 'posting_batch_id'],
                                 ['posting_batches.transaction_id', 'posting_batches.id'],
                                 name='fk_inventory_movement_batch'),
@@ -112,6 +122,8 @@ def define_tables(metadata, column, table):
                                 name='fk_inventory_movement_reverses'),
         sa.ForeignKeyConstraint(['returns_movement_id'], ['inventory_movements.id'],
                                 name='fk_inventory_movement_returns'),
+        sa.ForeignKeyConstraint(['filled_by_movement_id'], ['inventory_movements.id'],
+                                name='fk_inventory_movement_filled_by'),
         # One movement per asset posting line, both ways. Without the first half a movement
         # could claim a line already claimed and double the asset; without the second the
         # report total and the balance sheet would disagree with nothing to point at.
@@ -143,8 +155,16 @@ def define_tables(metadata, column, table):
         # Only a receipt gives stock back, so only a receipt names the issue it mirrors.
         sa.CheckConstraint("returns_movement_id IS NULL OR kind = 'receipt'",
                            name='ck_inventory_movement_returns_kind'),
+        # A true-up is a recost, and only an issue captures a fallback cost to be provisional at.
+        sa.CheckConstraint("filled_by_movement_id IS NULL OR kind = 'recost'",
+                           name='ck_inventory_movement_filled_by_kind'),
+        sa.CheckConstraint("fallback_unit_cost_minor_units IS NULL OR (kind = 'issue' "
+                           "AND typeof(fallback_unit_cost_minor_units) = 'integer' "
+                           "AND fallback_unit_cost_minor_units >= 0)",
+                           name='ck_inventory_movement_fallback_cost'),
         sa.Index('ix_inventory_movements_corrects', 'corrects_movement_id'),
         sa.Index('ix_inventory_movements_returns', 'returns_movement_id'),
+        sa.Index('ix_inventory_movements_filled_by', 'filled_by_movement_id'),
         sa.Index('ix_inventory_movements_document', 'transaction_id', 'sequence'),
         description='Immutable signed inventory quantity and value changes, one per inventory-asset posting line.')
 

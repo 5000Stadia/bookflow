@@ -38,25 +38,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R26 V1 polish: menu, icons, login feedback, version guard, public docs, drifted tests — notes/NOW.md
 - [x] R27 GitHub main current with the live release (d85e43f) — notes/status.sh
 
-## M3.5 — V1.5: finished and proven
-
-- [x] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27, gaps R66–R68 fixed and walked through by hand) — design/specs/7-identity-isolation.md
-- [x] R66 R10 membership grant/revoke over MCP stop revealing whether a username exists — design/specs/7-identity-isolation.md
-- [x] R67 R10 revocation always suspends agents: new installs start in the current permission mode, agent commands refuse in the legacy mode — design/permission-resolution.md
-- [x] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
-- [~] R13 Customer payments and invoice settlement (spec row 22; checked 2026-09-27: ledger, corrections, concurrency, permissions and agent/human continuation hold; R69–R70 remain) — design/specs/22-customer-payments.md
-- [x] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
-- [ ] R70 R13 the blind fresh-agent payment exercise with its interview, fixes and retest; the payment workflow doc gains the MCP and browser journeys — design/specs/22-customer-payments.md
-- [~] R14 Sales-tax calculation policies (spec row 24; checked 2026-09-27: policies, arithmetic, migration and every surface hold; R71–R72 remain) — design/specs/24-sales-tax-policy.md
-- [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
-- [ ] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
-- [ ] R77 concurrent requests intermittently fail with AdmissionCancelled "publication admission changed" reported as E_INTERNAL (absorbs R28, the same bug): a typed retryable error or retry, never E_INTERNAL; the remaining failing browser tests with it — notes/NOW.md
-- [~] R29 revoked streams: a revoked stream closes with no further data (the contract, witnessed in c116267); left: disconnect cleanup faster than the 15 s keep-alive — notes/NOW.md
-- [ ] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report); interview it on where it hesitated or guessed, fix what is material, retest once — notes/mcp-blind-acceptance-runbook.md
-- [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
-- [ ] R81 release v1.5: docs current, the demo resets cleanly, tag v1.5 — README.md
-
-## M4 — V2 functional roadmap (held until after v1.5; each increment chosen by the person)
+## M3.2 — Interface round (phone and desktop audit)
 
 - [x] R31 Human-directed improved UI (phone and desktop audit round, R55–R65) — design/V2-ROADMAP.md item 1
 - [x] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
@@ -70,34 +52,100 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R65 R31 live totals on documents from the core preview as you type (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
 - [x] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
 - [x] R62 R31 the account register on a phone as a list of entries with an add sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [ ] R32 Job scheduling and fuller timekeeping — design/V2-ROADMAP.md item 2
-- [ ] R33 Bulk import and migration — design/V2-ROADMAP.md item 3
-- [ ] R34 Bank imports and feeds — design/V2-ROADMAP.md item 4
-- [ ] R35 Budgets and richer reports — design/V2-ROADMAP.md item 5
-- [ ] R36 Stock sales orders and fulfillment — design/V2-ROADMAP.md item 6
-- [~] R37 Stock availability and on-order (on-order from open POs shipped; reservations wait on R36) — design/V2-ROADMAP.md item 7
-- [ ] R38 Assembly production — design/V2-ROADMAP.md item 8
-- [ ] R39 Advanced inventory — design/V2-ROADMAP.md item 9
-- [ ] R40 Advanced pricing — design/V2-ROADMAP.md item 10
-- [ ] R41 Unattended scheduling and reminders — design/V2-ROADMAP.md item 11
-- [ ] R42 External document delivery — design/V2-ROADMAP.md item 12
-- [ ] R43 Custom forms and print layouts — design/print-templates.md
-- [ ] R44 POS and commissions — design/pos-workspace.md
-- [ ] R45 CRM — design/V2-ROADMAP.md item 15
-- [ ] R46 Payroll and filing — design/V2-ROADMAP.md item 16
-- [ ] R47 Duplicate-record merge — design/V2-ROADMAP.md item 17
 
-## M5 — Later: held until after v1.5
+## M3.5 — V1.5: finished and proven
 
-- [ ] R48 Acknowledged opportunities awaiting selection (mileage, depreciation, finance charges, intercompany, OCR and others) — design/V2-ROADMAP.md
-- [ ] R49 Multi-currency ledgers and non-US tax regimes, after a new design pass — design/V2-ROADMAP.md
-- [ ] R50 Cursor signing-key rotation, required before any external or multi-tenant exposure — notes/DECISIONS-PENDING.md D3
-- [ ] R51 Same-company hardening beyond the trusted-LAN premise — notes/V1-COMPLETION-AUDIT-20260917.md
-- [ ] R52 Encryption at rest (parked) — notes/open-questions.md
-- [ ] R53 Windows port with authenticated local hand-off — notes/open-questions.md
-- [ ] R54 Hosted disposable demo sessions — notes/demo-session-preflight.md
-- [ ] R74 permission checks on activated roots cost about 3x (demo reset 104 s vs 33 s): reuse the hub permission snapshot across transactions only behind a fresh in-transaction version check — design/permission-resolution.md
-- [ ] R78 agent administration reads like the rest of the product: a New agent button on the Agents panel, agents listed before they have a membership, the finder reaching installation commands (users, tokens, agents), the one-time token secret shown plainly with a copy button, names and dates instead of raw ids and codes on agent and token pages and errors, principal as a picker, and change history saying "Office assistant for k, via agent" — notes/manual-agent-walkthrough-20260927.md
-- [ ] R79 decide from the blind trials whether agent writes default what the browser prefills (today's date, the company's sales tax item, the only company) — notes/manual-agent-walkthrough-20260927.md
-- [ ] R82 negative amounts in parentheses as a company setting — notes/mobile-audit-response-20260927.md
-- [ ] R83 re-date the demo documents dated after today — notes/stale-tests-20260927.md
+- [x] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27, gaps R66–R68 fixed and walked through by hand) — design/specs/7-identity-isolation.md
+- [x] R66 R10 membership grant/revoke over MCP stop revealing whether a username exists — design/specs/7-identity-isolation.md
+- [x] R67 R10 revocation always suspends agents: new installs start in the current permission mode, agent commands refuse in the legacy mode — design/permission-resolution.md
+- [x] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
+- [~] R13 Customer payments and invoice settlement (spec row 22; checked 2026-09-27: ledger, corrections, concurrency, permissions and agent/human continuation hold; R69–R70 remain) — design/specs/22-customer-payments.md
+- [x] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
+- [~] R70 R13 the blind fresh-agent payment trial with its interview, fixes and one retest; the payment workflow doc gains the MCP and browser journeys. Passes when a fresh agent, with only its own help and MCP and no source reading, completes every task correctly on its first attempt and its interview turns up nothing material; after fixes, one retest decides it — notes/blind-trials-20260927.md
+- [~] R14 Sales-tax calculation policies (spec row 24; checked 2026-09-27: policies, arithmetic, migration and every surface hold; R71–R72 remain) — design/specs/24-sales-tax-policy.md
+- [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
+- [~] R72 R14 the blind-agent sales-tax trial with its interview, fixes and one retest. Passes when a fresh agent, with only its own help and MCP and no source reading, completes every task correctly on its first attempt and its interview turns up nothing material; after fixes, one retest decides it — notes/blind-trials-20260927.md
+- [~] R77 concurrent requests intermittently fail with AdmissionCancelled "publication admission changed" reported as E_INTERNAL (absorbs R28, the same bug): a typed retryable error or retry, never E_INTERNAL; the remaining failing browser tests with it — notes/NOW.md
+- [~] R29 revoked streams: a revoked stream closes with no further data (the contract, witnessed in c116267); left: disconnect cleanup faster than the 15 s keep-alive — notes/NOW.md
+- [x] R84 the agent can record bank deposits: `deposit sources` and `deposit post` refuse a standard agent with a bare E_PERMISSION while the catalog asks only ordinary access — notes/blind-trials-20260927.md
+- [x] R79 invoices and other sales use the company's normal sales tax item when none is named, as the browser does; `use_defaults` resolves it, and the error says when no default exists (the trials' agents guessed a different tax item) — notes/blind-trials-20260927.md
+- [x] R85 recording a customer payment warns when the same customer and check reference are already on file — notes/blind-trials-20260927.md
+- [x] R86 help and errors an agent can act on first time: a worked example in each command's help, errors that name the reason and the valid fields (permission refusals, the reconcile opening step, plain money errors, reason needed even for previews), and findable oldest-first application, sales-tax owed, open invoices and payment methods — notes/blind-trials-20260927.md
+- [x] R83 the demo sells stock today: demo documents dated after today move into the past so demo items are on hand — notes/blind-trials-20260927.md
+- [x] R87 connecting an agent: the one-time token secret shown plainly with a Copy button, and a New agent button on the Agents panel (the person's yes on gate g9ed945) — notes/manual-agent-walkthrough-20260927.md
+- [~] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report). Passes when, with only its own help and MCP and no source reading, it completes every task in the week correctly on its first attempt and its interview turns up nothing material; after fixes, one retest decides it — notes/blind-trials-20260927.md
+- [x] R74 permission checks on current-mode installs cost about 3x; the demo reset through MCP exceeds the client time limit: reuse the permission snapshot only behind a fresh in-transaction version check, and nothing the product does times out (including a large company backup or restore forwarded from the CLI, which waits at most 30 s) — design/permission-resolution.md
+- [?] R88 agent administration reads like the rest of the product: user and membership lists page; the finder reaches users, tokens, agents and organizations; names and readable dates instead of raw ids, timestamps and codes on agent and token pages; the principal picked from a list; plain errors; document history says "for k, via agent" — notes/V1.5-resort-draft.md
+- [x] R89 agents and users can be deactivated (the gap recorded when R68 shipped) — notes/V1.5-resort-draft.md
+- [x] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
+- [x] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
+- [x] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
+- [x] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
+- [x] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
+- [?] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
+- [x] R95 small form polish: invoice and sales take today's date when none is given, as the browser does; the invoice form shows the default sales tax item before posting; "Clear Description" only when useful; register query dates and parameters consistent with other queries — notes/V1.5-resort-draft.md
+- [~] R96 diagnose and fix the older failing tests (FIRST the real defect that invoice and payment deletion is refused on activated installs even after an explicit grant; the concurrent recovery apply that errors instead of replaying; the demo-figure tests stale after R83; the ~30 tests pinned to a migration head or catalog; the error matrix missing rows for card-charge delete, check delete and item-receipt commands, the zero-value-items co45 upgrade test, the service-sales and work-billing demo tests pinned to stale whole-company figures, the Reference Plumbing Co demo option still fixed to 2026 dates, the 20 deposit authority tests that need the current permission rules, sales-tax-code list E_USAGE, delete admission, payment recheck, statement-charge surfaces, receivable report staleness, audit reachable when activated, history redirects, deleted-deposit page, routed-command delete forms): fix what is real, repair what is stale — notes/V1.5-resort-draft.md
+- [x] R97 payment calculate with auto-calculate off and no amount returns the field error row 22's spec describes — design/specs/22-customer-payments.md
+- [x] R98 notes/status.sh reports commits behind and the command count correctly (tooling) — notes/status.sh
+- [x] R99 bug sweep, one pass: every known defect in the named sources (notes, trial reports, current test runs, existing Codex reviews, TODO/FIXME) that matters to someone using Bookflow (the plumber, their agent or the books), listed as its own item or folded into one. Purely internal or theoretical faults no user would meet are dropped or go to the future list, and working choices are not re-examined. Once the list is written the sweep is closed: no further hunting or new audits for V1.5; bugs met while doing V1.5 work are still fixed Result: 24 defects still present (9 new, 15 already covered) — notes/bug-sweep-20260928.md
+- [x] R100 tests share one demo company per run: built once, each test gets its own copy, so setup takes seconds instead of minutes and the full suite is practical. One bounded tooling change, built after the current builders finish; nothing further on test methodology for V1.5 — notes/NOW.md
+- [x] R131 everyday reports the anchor has: customer and vendor balance summary and detail, open purchase orders, purchases by vendor and by item, deposit detail, and a transaction list by date — notes/V1.5-scope-sort-draft.md
+- [x] R132 early-payment discounts taken inside the terms window when receiving a customer payment or paying a bill, posted to a discount account (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
+- [x] R133 back up and restore from the product: a verified, portable copy of the company, and restoring or attaching one — notes/V1.5-scope-sort-draft.md
+- [x] R134 1099 vendor summary report (report only; filing stays in the future list) — notes/V1.5-scope-sort-draft.md
+- [x] R135 card credits (a refund onto a credit card) and a plain "Credit Card" payment method — notes/V1.5-scope-sort-draft.md
+- [x] R136 reconciling a credit card account against its statement works as a bank reconciliation does (verify; fix only if missing) — notes/V1.5-scope-sort-draft.md
+- [x] R137 selling stock not yet on hand goes through with a warning: costed provisionally at the average cost (else the item's purchase cost, else zero with a warning), trued up by an entry dated at the receipt that covers the shortfall and linked to each sale it corrects (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
+- [x] R140 lists show real figures: vendor open balance and item quantity on hand (today always 0) — notes/bug-sweep-20260928.md
+- [x] R141 the audit trail and activity respect a member's explicit capability denies — notes/bug-sweep-20260928.md
+- [x] R142 the last two unplain agent errors: an over-long reason, and a deposit over 200 rows — notes/bug-sweep-20260928.md
+- [x] R143 CLI lists print curated default columns (decision D13), not every column — notes/bug-sweep-20260928.md
+- [x] R144 time activities have browser pages like other documents — notes/bug-sweep-20260928.md
+- [x] R145 report CSV export works over the CLI and MCP as in the browser — notes/bug-sweep-20260928.md
+- [x] R146 editing or voiding a transaction after its reconciliation is finished is fenced (warn plainly as QuickBooks does; the reconciliation report shows the difference; approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
+- [x] R147 discount, subtotal and group items and percentage charges work on sales as QuickBooks does: a subtotal sums the lines above, a percentage charge or discount applies to the line or subtotal above, a discount posts to its item's account and reduces taxable sales by its tax code, a group expands into its members (approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
+- [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
+- [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current (the README says demo dates follow the reset day), the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
+
+## M4 — After V1.5: concepts to develop
+
+- [ ] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
+- [ ] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
+- [ ] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
+- [ ] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
+- [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
+- [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
+- [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
+- [ ] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
+- [ ] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
+- [ ] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
+- [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends.
+- [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches.
+- [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout.
+- [ ] R115 CRM: leads, a sales pipeline, follow-ups and customer communication history beyond contact records.
+- [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module.
+- [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
+- [ ] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
+- [ ] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
+- [ ] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
+- [ ] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
+- [ ] R122 Approvals: purchase and bill approval steps before posting.
+- [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
+- [ ] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
+- [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review.
+- [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
+- [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
+- [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
+- [ ] R130 Windows: a supported Windows build with an authenticated local hand-off.
+- [ ] R138 Find any transaction: search across every transaction type by name, number, amount or date range
+- [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
+- [ ] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
+- [ ] R149 Vendor refunds received as deposits against vendor credits
+- [ ] R150 Unit prices finer than a cent
+- [ ] R151 Restore a deleted document from its preserved history
+- [ ] R152 Check printing workflow: a print queue, reprints and alignment
+- [ ] R153 Very large deposits (over 200 rows) and billing part of a purchase order
+- [ ] R154 Convert a non-inventory item into an inventory item
+- [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
+- [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
+- [ ] R157 a saved invoice billed from a very long quote (hundreds of installments) opens faster: its technical-details section repeats every billed line's proofs (~1.5 MB, ~32 s at 201 installments)

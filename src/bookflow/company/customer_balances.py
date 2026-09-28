@@ -1,4 +1,4 @@
-"""Exact customer AR nets over all immutable posting effects.
+"""Exact customer AR and vendor AP nets over all immutable posting effects.
 
 Callers own the company authorization and read snapshot. These are net ledger
 balances, not invoice aging or application balances.
@@ -119,3 +119,34 @@ def credit_warning(
     currency = db.conn.execute(sa.select(schema.company_info.c.home_currency)).scalar_one()
     return (f"Credit limit for {owner['full_name']}: proposed net AR exposure "
             f"{Money(exposure, currency)} exceeds the limit of {Money(limit, currency)}.")
+
+
+def vendor_balance_expression(db=None):
+    """What the company owes each vendor: net Accounts Payable over every posting effect.
+
+    The same sum ``report vendor-balance-summary`` totals for the vendor (credits less debits
+    on payable accounts), over every date as the customer balance is. Settlement never
+    crosses vendors, so applications move nothing here. Same collation rules as
+    ``balance_expression``.
+    """
+    if db is not None:
+        register_functions(db)
+    lines, accounts = schema.posting_lines, schema.accounts
+    totals = sa.select(
+        lines.c.name_id,
+        sa.func.bookflow_sum_int(lines.c.credit_minor_units - lines.c.debit_minor_units).label("net"),
+    ).select_from(lines.join(accounts, accounts.c.id == lines.c.account_id)).where(
+        lines.c.name_type == "vendor", accounts.c.type == "accounts_payable",
+    ).group_by(lines.c.name_id).cte("vendor_ap_totals").prefix_with("MATERIALIZED")
+    net = sa.select(totals.c.net).where(
+        totals.c.name_id == schema.vendors.c.id,
+    ).correlate(schema.vendors).scalar_subquery()
+    return sa.type_coerce(sa.func.coalesce(net, "0").collate("bookflow_integer"), _IntegerText())
+
+
+def vendor_balance(db, id: str) -> int:
+    """Signed minor units the company owes this vendor; fail on i64 overflow."""
+    value = db.conn.execute(sa.select(vendor_balance_expression(db)).where(
+        schema.vendors.c.id == id,
+    )).scalar_one_or_none()
+    return _require_i64(int(value or "0"), field="open_balance")

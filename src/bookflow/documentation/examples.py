@@ -22,6 +22,8 @@ EXAMPLES: dict[str, Example] = {
     "attachment unlink": Example(f'bookflow attachment unlink {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Remove association" --json', {"link": ID, "expected_version": 1}),
     "attachment list": Example(f'bookflow attachment list customer {ID} --company "Demo Plumbing Co" --limit 25 --json', {"record_type": "customer", "record_id": ID, "limit": 25}),
     "attachment get": Example(f'bookflow attachment get {ID} --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json', {"attachment": ID}),
+    "company backup": Example('bookflow company backup --company "Demo Plumbing Co" --json', {}),
+    "company restore": Example('bookflow company restore "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json', {"archive": "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": True, "name": "Demo Plumbing (restored)"}),
     "company compact": Example('bookflow company compact --company "Demo Plumbing Co" --limit 200 --dry-run --reason "Preview unlinked file collection" --json', {"limit": 200}),
     "audit list": Example('bookflow audit list --company "Demo Plumbing Co" --limit 5 --json', {"limit": 5}),
     "audit show": Example(f'bookflow audit show {ID} --company "Demo Plumbing Co" --json', {"event": ID}),
@@ -83,6 +85,10 @@ EXAMPLES: dict[str, Example] = {
                               {"agent": "books-agent", "principal": "jordan"}),
     "agent authorize": Example("bookflow agent authorize books-agent --confirm-permitted-use --acknowledge-fresh-context --json",
                                {"agent": "books-agent", "confirm_permitted_use": True, "acknowledge_fresh_context": True}),
+    "agent deactivate": Example('bookflow agent deactivate books-agent --reason "retired" --json', {"agent": "books-agent"}),
+    "agent activate": Example("bookflow agent activate books-agent --json", {"agent": "books-agent"}),
+    "user deactivate": Example('bookflow user deactivate jordan --reason "left the company" --json', {"user": "jordan"}),
+    "user activate": Example("bookflow user activate jordan --json", {"user": "jordan"}),
 }
 
 
@@ -190,8 +196,11 @@ EXAMPLES.update({
     "report cash-flows": Example('bookflow report cash-flows --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report income-tax-summary": Example('bookflow report income-tax-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "report export": Example('bookflow report export profit-and-loss --filters \'{"date_from": "2026-01-01", "date_to": "2026-12-31"}\' --company "Demo Plumbing Co" --json',
+                             {"report": "profit-and-loss", "filters": {"date_from": "2026-01-01", "date_to": "2026-12-31"}}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
     "report transaction-detail": Example('bookflow report transaction-detail --date-from 2026-01-01 --date-to 2026-12-31 --accounts \'["Checking"]\' --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "accounts": ["Checking"]}),
+    "report reconciliation-discrepancy": Example('bookflow report reconciliation-discrepancy --account Checking --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"account": "Checking", "as_of": "2026-12-31"}),
     "report missing-checks": Example('bookflow report missing-checks --as-of 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "account": "Checking"}),
     "report statement": Example('bookflow report statement --date-from 2026-01-01 --date-to 2026-12-31 --customer "Adams Plumbing" --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "customer": "Adams Plumbing"}),
     "report ar-aging": Example('bookflow report ar-aging --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
@@ -208,6 +217,16 @@ EXAMPLES.update({
     "report expenses-by-vendor": Example('bookflow report expenses-by-vendor --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report inventory-valuation": Example('bookflow report inventory-valuation --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
     "report stock-status": Example('bookflow report stock-status --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report customer-balance-summary": Example('bookflow report customer-balance-summary --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report customer-balance-detail": Example('bookflow report customer-balance-detail --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report vendor-balance-summary": Example('bookflow report vendor-balance-summary --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report open-purchase-orders": Example('bookflow report open-purchase-orders --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "report purchases-by-vendor": Example('bookflow report purchases-by-vendor --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report purchases-by-item": Example('bookflow report purchases-by-item --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report deposit-detail": Example('bookflow report deposit-detail --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report transaction-list-by-date": Example('bookflow report transaction-list-by-date --date-from 2026-12-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-12-01", "date_to": "2026-12-31"}),
+    "report vendor-1099-summary": Example('bookflow report vendor-1099-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report vendor-balance-detail": Example('bookflow report vendor-balance-detail --as-of 2026-12-31 --vendor "Central Supply" --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "vendor": "Central Supply"}),
 })
 
 
@@ -282,6 +301,33 @@ for _noun, _selector, _account in (('check', 'check', 'Checking'),
         f'bookflow {_noun} history {ID} --include-deleted --limit 25 --company "Demo Plumbing Co" --json',
         {_selector: ID, 'limit': 25, 'include_deleted': True})
 
+# A card credit is a card charge in the other direction: a refund put back on the card.
+EXAMPLES.update({
+    'card-credit post': Example(
+        'bookflow card-credit post --account "Company Credit Card" --pay-to-name-type vendor --pay-to-name-id "Northside Supply" --date 2026-04-08 --amount 42.50 --memo "Returned the wrong valve" --expenses \'[{"account":"Office Supplies","amount":"42.50","memo":"Valve returned"}]\' --company "Demo Plumbing Co" --reason "Record the refund on the card" --json',
+        {"account": "Company Credit Card", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"},
+         "date": "2026-04-08", "amount": "42.50", "memo": "Returned the wrong valve",
+         "expenses": [{"account": "Office Supplies", "amount": "42.50", "memo": "Valve returned"}]}),
+    'card-credit show': Example(
+        f'bookflow card-credit show {ID} --company "Demo Plumbing Co" --json', {'card_credit': ID}),
+    'card-credit update': Example(
+        f'bookflow card-credit update {ID} --expected-version 1 --amount 45.00 '
+        f'--expenses \'[{{"account":"Office Supplies","amount":"45.00","memo":"Valve returned"}}]\' '
+        f'--company "Demo Plumbing Co" --reason "The refund was 45.00" --json',
+        {'card_credit': ID, 'expected_version': 1, 'amount': '45.00',
+         'expenses': [{'account': 'Office Supplies', 'amount': '45.00', 'memo': 'Valve returned'}]}),
+    'card-credit void': Example(
+        f'bookflow card-credit void {ID} --expected-version 2 --company "Demo Plumbing Co" '
+        f'--reason "Refund went to the other card" --json', {'card_credit': ID, 'expected_version': 2}),
+    'card-credit query': Example(
+        'bookflow card-credit query --account "Company Credit Card" --date-from 2026-01-01 --date-to 2026-12-31 '
+        '--limit 25 --company "Demo Plumbing Co" --json',
+        {'account': 'Company Credit Card', 'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25}),
+    'card-credit history': Example(
+        f'bookflow card-credit history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {'card_credit': ID, 'limit': 25}),
+})
+
 EXAMPLES.update({
     'transfer show': Example(f'bookflow transfer show {ID} --company "Demo Plumbing Co" --json',
                              {'transfer': ID}),
@@ -313,7 +359,11 @@ for _noun in ('invoice', 'sales-receipt'):
     _selector = _noun.replace('-', '_')
     _receipt = _noun == 'sales-receipt'
     _payload = {'date': '2026-09-01', 'customer': 'Riverside Apartments',
-                'lines': [{'item': 'Mainline Clearing', 'quantity': '1', 'unit_price': '125.00'}]}
+                # A subtotal sums the lines above it; the discount below it takes its
+                # percentage off that subtotal.
+                'lines': [{'item': 'Mainline Clearing', 'quantity': '1', 'unit_price': '125.00'},
+                          {'item': 'Copper Coupling', 'quantity': '2'}, {'item': 'Work Order Subtotal'},
+                          {'item': 'Loyalty Discount', 'percent': '5'}]}
     if _receipt:
         _payload.update(deposit_to='Checking', payment_method='Check')
     import json as _json
@@ -384,7 +434,10 @@ for _noun, _selector in (("estimate", "estimate"), ("work-order", "work_order"),
         {_selector: ID, 'expected_version': 2, 'conversion_key': 'paid-work-2026-09', 'date': '2026-09-04', 'deposit_to': 'Checking', 'payment_method': 'Cash', 'amount_received': '10.81'})
 
 # Row22 receipt preparation and immutable settlement commands.
-_PAYMENT_RECEIVE = dict(customer=ID, date='2026-06-01', amount='150.00', payment_method='Check', operation_key='example-receipt-1')
+_PAYMENT_RECEIVE = dict(customer='Riverside Apartments', date='2026-06-01', amount='147.00', payment_method='Check', reference='1042',
+                        operation_key='example-receipt-1',
+                        applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='147.00')]),
+                        discounts=[dict(invoice=ID, amount='3.00')])
 _PAYMENT_EXAMPLES = {
     'payment receive': _PAYMENT_RECEIVE,
     'payment apply': dict(payment=ID, expected_version=1, date='2026-06-01', operation_key='example-apply-1', applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='50.00')])),
@@ -397,8 +450,8 @@ _PAYMENT_EXAMPLES = {
     'application show': dict(application=ID),
     'application history': dict(application=ID, limit=25),
     'payment query': dict(payment_method='Check', limit=25),
-    'payment invoices': dict(mode='new_receipt', customer=ID, date='2026-06-01'),
-    'payment suggest': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00', strategy='exact_then_oldest'),
+    'payment invoices': dict(mode='new_receipt', customer='Riverside Apartments', date='2026-06-01'),
+    'payment suggest': dict(mode='new_receipt', customer='Riverside Apartments', date='2026-06-01', amount='400.00', strategy='exact_then_oldest'),
     'payment calculate': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00', amount_mode='entered'),
     'payment selection create': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00'),
     'payment selection update': dict(selection=ID, expected_version=1, set_items=[dict(invoice=ID, expected_version=1, amount='50.00')]),
@@ -429,7 +482,10 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
     for _field, _value in _payload.items():
         if _field == _positional:
             continue
-        _args.extend(['--' + _field.replace('_', '-'), _payment_json.dumps(_value, separators=(',', ':')) if isinstance(_value, (dict, list)) else str(_value)])
+        # The CLI flattens the applications object into one flag per member (blueprint 5.1).
+        for _flag, _member in ([(_field + '_' + key, member) for key, member in _value.items()]
+                               if _field == 'applications' and isinstance(_value, dict) else [(_field, _value)]):
+            _args.extend(['--' + _flag.replace('_', '-'), _payment_json.dumps(_member, separators=(',', ':')) if isinstance(_member, (dict, list)) else str(_member)])
     _args.extend(['--company', 'Demo Plumbing Co', '--json'])
     if _name in ('payment update', 'payment unapply', 'payment void'):
         _args.extend(['--reason', 'Correct recorded remittance'])
@@ -582,11 +638,12 @@ EXAMPLES.update({
     "bill pay": Example(
         'bookflow bill pay --date 2026-04-15 --funding-account "Checking" --method "Check"'
         ' --check-number 1041 --memo "April payables"'
-        ' --bills \'[{"bill":"BILL-104"},{"bill":"BILL-108","amount":"250.00"}]\''
+        ' --bills \'[{"bill":"BILL-104","amount":"607.60","discount":"12.40"},{"bill":"BILL-108","amount":"250.00"}]\''
         ' --company "Demo Plumbing Co" --reason "Pay the April bills" --json',
         {"date": "2026-04-15", "funding_account": "Checking", "method": "Check",
          "check_number": "1041", "memo": "April payables",
-         "bills": [{"bill": "BILL-104"}, {"bill": "BILL-108", "amount": "250.00"}]}),
+         "bills": [{"bill": "BILL-104", "amount": "607.60", "discount": "12.40"},
+                   {"bill": "BILL-108", "amount": "250.00"}]}),
     "bill payment show": Example(
         f'bookflow bill payment show {ID} --company "Demo Plumbing Co" --json', {"payment": ID}),
     "bill payment query": Example(
@@ -933,11 +990,11 @@ EXAMPLES.update({
 _RECONCILE_FINGERPRINT = 'c' * 64
 _RECONCILE_EXAMPLES = {
     'reconcile opening start': dict(
-        account=ID, opening_date='2026-01-31', entered_balance='1250.00',
+        account='Checking', opening_date='2026-01-31', entered_balance='1250.00',
         evidence=dict(format=1, statement_reference='Jan 2026 checking statement', entered_text=None),
         operation_key='example-opening-1'),
     'reconcile start': dict(
-        account=ID, statement_date='2026-02-28', ending_balance='1482.50', opening_id=ID,
+        account='Checking', statement_date='2026-02-28', ending_balance='1482.50',
         operation_key='example-statement-1'),
     'reconcile mark': dict(
         draft=ID, expected_version=1, operation_key='example-mark-1',
@@ -1023,3 +1080,14 @@ EXAMPLES['credit-memo delete'] = Example(
 EXAMPLES['deposit delete'] = Example(
     f'bookflow deposit delete {ID} --expected-version 1 --operation-key deposit-delete-example --dependency-guard GUARD --reason "Banked into the wrong account" --company "Demo Plumbing Co" --json',
     {'deposit': ID, 'expected_version': 1, 'operation_key': 'deposit-delete-example'})
+
+
+# The examples a first-time agent reaches for first (blind trials, 2026-09-27) show the real
+# search and filter fields rather than only a page size.
+EXAMPLES.update({
+    "customer query": Example('bookflow customer query --query Riverside --limit 25 --company "Demo Plumbing Co" --json',
+                              {"query": "Riverside", "limit": 25}),
+    "invoice query": Example('bookflow invoice query --customer "Riverside Apartments" --settlement open --direction asc'
+                             ' --limit 25 --company "Demo Plumbing Co" --json',
+                             {"customer": "Riverside Apartments", "settlement": "open", "direction": "asc", "limit": 25}),
+})

@@ -21,7 +21,7 @@ from bookflow.company.deposit_models import (ReplacementDocument, InlineDocument
 from bookflow.company.deposit_lifecycle_models import DeleteInput, PostInput, UpdateInput, VoidInput
 from bookflow.company.deposit_resolution import resolve_account, resolve_additional
 from bookflow.core import clock
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, require_reason
 from bookflow.core.ids import new_id
 from bookflow.core.exact import INT64_MAX
 
@@ -80,7 +80,7 @@ def recover(s,ctx,inp,verb,binding,*,posting=True):
         try:
             history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=posting)
         except BookflowError as error:
-            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details=history._refusal(error)) from None
             raise
     return operations.recover(s,ctx,inp,verb,binding=binding,posting=posting)
 
@@ -126,8 +126,8 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True):
     requested=[] if document is None else [r.source for r in document.sources]
     targets=dependencies.authorize(s,old['id'] if old else None,requested,write=posting)
     history._authorize_binding_graph(s,binding,targets,write=posting)
-    if verb!='post' and (not ctx.reason or not ctx.reason.strip() or len(ctx.reason)>140):
-        raise BookflowError('E_REASON_REQUIRED')
+    if verb!='post':
+        require_reason(ctx.reason)
     if operations.find(s, inp.operation_key) is not None:
         raise BookflowError('E_DEPOSIT_OPERATION_KEY_REUSED')
     if old:

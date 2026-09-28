@@ -4,7 +4,7 @@
 
 ## `audit list`
 
-List this company's audit events, newest first.
+List this company's audit events you may see, newest first; an event that touched a record type you may not read is left out.
 
 | Contract | Value |
 |---|---|
@@ -19,6 +19,14 @@ List this company's audit events, newest first.
 ### CLI
 
 `bookflow audit list --company "Demo Plumbing Co" --limit 5 --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "audit list", "input": {"limit": 5}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -129,7 +137,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -138,7 +146,7 @@ Example JSON output:
 
 ## `audit show`
 
-Show one of this company's audit events with its entries and field diffs.
+Show one of this company's audit events with its entries and field diffs; an event you may not see reads as not found.
 
 | Contract | Value |
 |---|---|
@@ -153,6 +161,14 @@ Show one of this company's audit events with its entries and field diffs.
 ### CLI
 
 `bookflow audit show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "audit show", "input": {"event": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -272,7 +288,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -281,7 +297,7 @@ Example JSON output:
 
 ## `audit tail`
 
-This company's audit events newer than a cursor, oldest first; the event feed.
+This company's audit events you may see newer than a cursor, oldest first; the event feed.
 
 | Contract | Value |
 |---|---|
@@ -296,6 +312,14 @@ This company's audit events newer than a cursor, oldest first; the event feed.
 ### CLI
 
 `bookflow audit tail --company "Demo Plumbing Co" --after 42 --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "audit tail", "input": {"after": 42}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -414,7 +438,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

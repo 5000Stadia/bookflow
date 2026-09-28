@@ -1,9 +1,11 @@
+{% import 'list_card.html' as list_card %}<link rel="stylesheet" href="{{ static_urls['browsing.css'] }}">
 <section id="stock-report" aria-label="Stock report">
+{% set home = math_company_currency | default('') %}
 <div class="table-wrap"><table id="stock-totals"><caption class="report-sr-only">Whole-report totals — all pages</caption><thead><tr><th scope="col" class="num">Asset value</th>{% if stock.verb == 'stock-status' %}<th scope="col" class="num">Items to reorder</th>{% endif %}</tr></thead><tbody>
 <tr><td class="num" data-total="asset_value">{{ stock.totals.asset_value|amount }}</td>{% if stock.verb == 'stock-status' %}<td class="num" data-total="below_reorder_point">{{ stock.totals.below_reorder_point }}</td>{% endif %}</tr>
 </tbody></table></div>
 {% if stock.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ stock.count }} items on this page; more on the next page.</p>{% endif %}
-<div class="table-wrap"><table id="stock-rows"><thead><tr>
+<div class="table-wrap list-desktop"><table id="stock-rows"><thead><tr>
 <th scope="col">{{ stock.headings.item_name }}</th>
 <th scope="col">{{ stock.headings.description }}</th>
 {% if stock.verb == 'stock-status' %}<th scope="col" class="num">{{ stock.headings.reorder_point_min }}</th>{% endif %}
@@ -22,6 +24,18 @@
 <td class="num" data-value="asset_value">{{ row.asset_value|amount }}</td>
 </tr>{% else %}<tr><td colspan="9">No inventory item holds stock on this date.</td></tr>{% endfor %}
 </tbody></table></div>
+{# On a phone each item is a card (browsing.css): its name and value on one line, the rest muted. #}
+<ul class="list-cards" aria-label="Items">
+{% for row in stock.rows %}
+{{ list_card.card(row.detail_url, row.item_name, row.asset_value|money(home=home), [
+   'Inactive' if not row.active else '', row.description,
+   'Order now' if stock.verb == 'stock-status' and row.below_reorder_point else '',
+   stock.headings.quantity_on_hand ~ ' ' ~ row.quantity_on_hand,
+   (stock.headings.reorder_point_min ~ ' ' ~ row.reorder_point_min) if stock.verb == 'stock-status' and row.reorder_point_min else '',
+   (stock.headings.quantity_available ~ ' ' ~ row.quantity_available) if stock.verb == 'stock-status' else '',
+   (stock.headings.quantity_on_order ~ ' ' ~ row.quantity_on_order) if stock.verb == 'stock-status' else '',
+   stock.headings.average_cost ~ ' ' ~ row.average_cost|money(home=home)], data={'item': row.item_id}) }}{% else %}<li class="list-card list-card-empty">No inventory item holds stock on this date.</li>{% endfor %}
+</ul>
 {% if stock.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="stock-next-page">{% for name, value in stock.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
 {% set about %}
 <p>{{ stock.metadata.basis|capitalize }} basis · {{ stock.metadata.currency }} · As of {{ stock.as_of|longday }}.</p>

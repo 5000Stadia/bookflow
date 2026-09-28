@@ -38,6 +38,7 @@ REPORTS = {
     'general-ledger': 'General ledger',
     'transaction-detail': 'Transaction detail by account',
     'missing-checks': 'Missing checks',
+    'reconciliation-discrepancy': 'Reconciliation discrepancy',
     'profit-and-loss': 'Profit and loss',
     'profit-and-loss-by-job': 'Profit and loss by job',
     'profit-and-loss-by-class': 'Profit and loss by class',
@@ -50,6 +51,16 @@ REPORTS = {
     'profit-and-loss-by-class': 'Profit and loss by class',
     'unbilled-costs': 'Unbilled costs by job',
     'collections': 'Collections',
+    'customer-balance-summary': 'Customer balance summary',
+    'customer-balance-detail': 'Customer balance detail',
+    'vendor-balance-summary': 'Vendor balance summary',
+    'vendor-balance-detail': 'Vendor balance detail',
+    'open-purchase-orders': 'Open purchase orders',
+    'purchases-by-vendor': 'Purchases by vendor summary',
+    'purchases-by-item': 'Purchases by item summary',
+    'deposit-detail': 'Deposit detail',
+    'transaction-list-by-date': 'Transaction list by date',
+    'vendor-1099-summary': '1099 summary',
 }
 
 # Pages whose title is neither the noun's own name nor a phrase the verb map knows. The

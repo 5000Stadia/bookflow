@@ -1,0 +1,29 @@
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+{% set er = everyday %}
+<section id="everyday-report" class="document-detail basic-report" aria-label="{{ heading }}" data-report="{{ er.verb }}">
+<dl class="report-totals" id="everyday-totals">
+{% for key, heading_text in er.total_columns %}{% set value = er.totals[key] %}<div data-total="{{ key }}"><dt>{{ heading_text }}</dt><dd>{% if value is mapping %}{{ value|money }}{% else %}{{ value }}{% endif %}</dd></div>{% endfor %}
+</dl>
+{% if er.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ er.count }} rows on this page; more on the next page. The totals already include them.</p>{% endif %}
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="everyday-rows" role="table">
+<caption>{{ heading }} · {{ er.metadata.currency }}</caption>
+<thead role="rowgroup"><tr role="row">{% for title, key, kind in er.layout %}<th scope="col" role="columnheader"{% if kind in ('money', 'num') %} class="num"{% endif %}>{{ title }}</th>{% endfor %}</tr></thead>
+<tbody role="rowgroup">
+{% for row in er.rows %}<tr role="row" data-kind="{{ row.kind or 'row' }}"{% if row.is_total %} class="report-subtotal"{% endif %}>
+{% for title, key, kind in er.layout %}{% set value = row[key] %}
+{% if kind == 'label' %}<td role="cell" class="document-wide">{{ label(title) }}{% if key == 'date' %}{% set text = value|day(report_view.today_date if report_view else none) if value else '' %}{% else %}{% set text = value if value is not none else '' %}{% endif %}{% if row.is_total %}<strong>{% endif %}{% if row.row_url %}<a href="{{ row.row_url }}">{{ text }}</a>{% else %}{{ text }}{% endif %}{% if row.is_total %}</strong>{% endif %}{% if row.active is defined and row.active is not none and not row.active %}<span class="report-state">Inactive</span>{% endif %}</td>
+{% elif kind == 'money' %}<td role="cell" class="num" data-value="{{ key }}">{{ label(title) }}{% if value %}{% if row.is_total %}<strong>{{ value|amount }}</strong>{% else %}{{ value|amount }}{% endif %}{% endif %}</td>
+{% elif kind == 'num' %}<td role="cell" class="num" data-value="{{ key }}">{{ label(title) }}{{ value if value is not none else '' }}</td>
+{% elif kind == 'date' %}<td role="cell">{{ label(title) }}{{ value|day(report_view.today_date if report_view else none) if value else '' }}</td>
+{% elif kind == 'document' %}<td role="cell" class="document-wide">{{ label(title) }}{% if row.transaction_type and not row.is_total %}{{ (row.money_out_kind or row.transaction_type).replace('_', ' ')|capitalize }} {% endif %}{% if row.document_url %}<a href="{{ row.document_url }}">{{ value or '' }}</a>{% elif row.is_total %}<strong>{{ value or '' }}</strong>{% else %}{{ value or '' }}{% endif %}</td>
+{% else %}<td role="cell" class="document-wide">{{ label(title) }}{{ value if value is not none else '' }}</td>
+{% endif %}{% endfor %}
+</tr>{% else %}<tr role="row"><td role="cell" colspan="{{ er.layout|length }}">Nothing matches this report's filters.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if er.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="everyday-next-page">{% for name, value in er.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
+{% set about %}
+<p>{{ company_label }} · {{ er.metadata.basis|capitalize }} basis · {{ er.metadata.currency }} · {% if er.date_from %}{{ er.date_from|longday }} to {% else %}As of {% endif %}{{ er.date_to|longday }}.</p>
+<p>{{ er.note }}</p>
+{% endset %}
+{% include "report_footer.html" %}
+</section>

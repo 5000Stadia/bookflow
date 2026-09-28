@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow customer-credit apply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --applications '[{"invoice":"INV-118","expected_version":1,"amount":"30.00"}]' --company "Demo Plumbing Co" --reason "Use the credit against the open invoice" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer-credit apply", "input": {"credit_memo": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "applications": [{"invoice": "INV-118", "expected_version": 1, "amount": "30.00"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -235,7 +243,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -264,6 +272,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow customer-credit unapply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --applications '[{"application_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","invoice_expected_version":2}]' --company "Demo Plumbing Co" --reason "Applied to the wrong invoice" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer-credit unapply", "input": {"credit_memo": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "applications": [{"application_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "invoice_expected_version": 2}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -472,7 +488,7 @@ Example JSON output:
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

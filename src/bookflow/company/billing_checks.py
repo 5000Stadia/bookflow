@@ -58,6 +58,9 @@ def selected_identities(s, inp, lines, identities):
         if explicit is not None and key not in explicit:
             continue
         facts = work.line_facts(line)
+        from bookflow.company.billing_selection import derived
+        if derived(facts):
+            continue
         root = identities[key]['root_document_id'],identities[key]['root_line_id']
         length, _ = alloc.remaining(s,root,facts,policy=alloc.source_policy(s,line))
         if explicit is not None:

@@ -62,6 +62,13 @@ class TaxLine(_Fact):
     tax_ordinal: int
     net_minor_units: int
     rules: tuple[TaxRule, ...] = ()
+    # The amount the rules apply to when it differs from the net: a line a non-taxable
+    # discount reduced still owes tax on its amount before that discount. Null means the net.
+    taxable_minor_units: int | None = None
+
+    @property
+    def base(self) -> int:
+        return self.net_minor_units if self.taxable_minor_units is None else self.taxable_minor_units
 
 
 class TaxCell(_Fact):
@@ -172,6 +179,7 @@ def calculate_tax(
             raise _invalid("tax_ordinal", "duplicate tax ordinal")
         ordinals.add(line.tax_ordinal)
         _amount(line.net_minor_units, "line.net")
+        _amount(line.base, "line.taxable")
         rule_ids = set()
         for rule in line.rules:
             for field, value in (("rule.id", rule.id), ("agency.id", rule.agency.id),
@@ -202,7 +210,7 @@ def calculate_tax(
     liability_taxes = defaultdict(int)
     account_taxes = defaultdict(int)
     for members in groups.values():
-        raw = [(line.tax_ordinal, rule, line.net_minor_units * rule.rate_percent_millionths)
+        raw = [(line.tax_ordinal, rule, line.base * rule.rate_percent_millionths)
                for line in members
                for rule in sorted(line.rules, key=lambda r: r.id.encode("utf-8"))]
         numerator = sum(n for _, _, n in raw)
@@ -226,7 +234,7 @@ def calculate_tax(
             liability_taxes[key] = _amount(liability_taxes[key] + amount, "liability.tax")
             account_id = rule.liability_account.id
             account_taxes[account_id] = _amount(account_taxes[account_id] + amount, "account.tax")
-        net = _amount(sum(line.net_minor_units for line in members), "bucket.net")
+        net = _amount(sum(line.base for line in members), "bucket.net")
         tax = _amount(sum(cents), "bucket.tax")
         buckets.append(TaxBucket(tax_ordinals=tuple(line.tax_ordinal for line in members),
                                  net_minor_units=net, exact_numerator=numerator,

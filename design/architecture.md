@@ -199,7 +199,7 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities), hub0014 (authority generation: a token that triggers on the eight permission input tables redraw on every row write)
     company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening), co0012 (exact progress allocation proofs, fractional sales quantities and overlap guards), co0013 (company work preferences)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
@@ -242,12 +242,13 @@ src/bookflow/
   adapters/cli/render.py tables, field views, JSON, errors on stderr; complete nested money values render with exact currency scale in text tables and fields, including money columns first populated after the first row; JSON preserves the command payload; money columns follow business names/numbers before metadata; an empty visible-column selection does not restore hidden identifiers
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
-  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
+  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap, 30-second request-read timeout, an empty heartbeat frame every 5 s while a forwarded command runs, and a reply phase bounded from when the reply is ready (30 s to be admitted, its own 300 s lease)
   adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), credits.py (what the three credit documents show, which lists their pickers search, the two seeded openings, and the credit apply/unapply routes), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), routing.py (the one spelling of a noun inside a URL, and the resolution of a path segment back to it), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
+  documents/report_csv.py export(read, company_id, verb, filters) -> ReportCsv: any paged report, every page, as CSV (preamble, header, rows, whole-report totals); run by `report export`, which the workbench download, the CLI's `report <name> --csv`, HTTP and MCP all call
 ```
 
 `bookflow/documents/` produces the four customer-facing documents as PDF and is the only
@@ -256,7 +257,9 @@ carries, which facts are captured and which are current, and what is deliberatel
 `render` takes a `read` callable rather than a request, so the web routes in
 `adapters/workbench/document_print.py`, and any later command that attaches or sends a
 copy, produce identical bytes from the same description. Permission and company isolation
-stay in the commands `read` runs.
+stay in the commands `read` runs. A report's CSV follows the same rule: `report export` runs
+`documents/report_csv.py` over the report as the caller, and the workbench's `export.csv`
+route serves that command's text with a byte order mark, so every surface gets one file.
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
 
@@ -279,7 +282,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Schema migrations record a `migrate` entry by the system user with `on_behalf_of` the triggering actor, and rewrite the company marker and hub projection.
 - `Client.use_company` and `company=` on a call are step 1 of selection; `BOOKFLOW_COMPANY` is step 2; the saved default is step 3.
 - The host holds the data-root lock as `serve` for its whole run and acquires it before binding TCP; `host.json` is published only after both listeners are ready. Every write and advisory request runs on one writer thread with long-lived writable connections; reads own explicit read-only snapshots for their command lifetime and close them on success or failure. Reader accounting also covers credential reads. Shutdown closes admission for readers and queued writes, drains admitted work, and only releases the root lock after final cleanup. Pooled company handles are released before a company or organization folder move, trash/reset, detach, upgrade, or attach. Even a write that raises after a durable commit runs the checkpoint-and-notify pass; checkpoint failure cannot suppress the sequence read or subscriber wake. Credential liveness refreshes are deduplicated and queued without waiting for the writer. A discarded writer hub is reopened on the writer thread before its next operation.
-- `local_only` keeps `init`, `serve`, and `company use` off HTTP. On POSIX, the local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. The forwarded JSON envelope and command handler do not depend on Unix socket names or peer-credential APIs, leaving a seam for an owner-restricted Windows named-pipe transport. Accepted connections time out after 30 seconds and frames over 8 MiB are refused before their bodies are read. `serve` requires a human hub admin. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
+- `local_only` keeps `init`, `serve`, and `company use` off HTTP. On POSIX, the local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. The forwarded JSON envelope and command handler do not depend on Unix socket names or peer-credential APIs, leaving a seam for an owner-restricted Windows named-pipe transport. Reading an accepted connection's request times out after 30 seconds and frames over 8 MiB are refused before their bodies are read. While the command runs the host sends a zero-length frame every 5 seconds (`core/forward.py` HEARTBEAT_SECONDS); the caller skips these and waits for as long as they arrive, giving up only after 60 seconds of silence (SILENCE_SECONDS), so a long backup, restore or demo reset completes over the socket. A finished reply has 30 seconds to be admitted and written, counted from when it is ready. Binary transfers keep their own 300-second lease. `serve` requires a human hub admin. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
 - The event stream validates its cursor before sending a streaming response. Each worker call drains at most 100 events, closes its snapshot before yielding frames, and immediately redrains a full page. It reauthenticates between batches. Idle streams wait on `asyncio.Event` without a reader or worker. Canonical database ids and subscribe/redrain sequence comparison close the drain/wait race. Disconnect and shutdown unregister subscriptions.
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
@@ -486,15 +489,17 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 
 ## Known gaps carried to later rows
 
-- No command deactivates a user account or maps an OS login to one; `active` is enforced everywhere a
-  credential is resolved, and `user list` reports it and hides an inactive principal unless
-  `--include-inactive` asks for it, but only a direct write sets it, which is why tests still create
-  actors through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
-  `membership revoke`.
+- `user deactivate` and `user activate` (human installation administrators, activated installations only,
+  catalog `identity-deactivation-v1`) retire and restore a person: deactivation revokes their sessions
+  and tokens and suspends every agent acting for them in one audited change, and the last active human
+  installation administrator cannot be deactivated. `active` is enforced everywhere a credential is
+  resolved; `user list` and `membership list` hide an inactive principal unless `--include-inactive`
+  asks for it (`membership list` then reports `account_active`). No command maps an OS login to a user,
+  which is why tests still create actors through the repository layer (tests/conftest.py::make_actor).
 - `user list` and `membership list` return every row their audience admits; neither pages, as no
   hub-scope `* list` command does.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
-- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. No command deactivates an agent (the general gap above); `agent unassign` of its last principal plus `membership revoke` of its access is the current way to retire one. Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
+- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent deactivate`, `agent activate`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. `agent deactivate` retires one: it is suspended, every token it holds is revoked in the same audited change, and it leaves the default lists; `agent activate` brings it back still suspended, to be authorized again (catalog `identity-deactivation-v1`). Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
 - `--follow` on `audit tail` is CLI-only and polls under the data-root lock every two seconds until the host exists.
 - The idle checkpoint is `RESTART`, which resets the WAL but never shrinks the file. A reader that pins a snapshot across a long burst leaves the file at its high-water mark until the shutdown `TRUNCATE`.
@@ -1173,6 +1178,29 @@ seed company. Exact preexisting manifest bytes remain a prefix. Independent revi
 and parent-owned combined-candidate acceptance are required; this implementation
 description does not close Row24.
 
+## Subtotal, discount, percentage-charge and group lines (R147)
+
+`company/sales_adjustments.py` is a pure pass run after every sale or quote line has its
+own amount and before the tax pass (`sales.commercial`, `work._resolve_lines`). A line's
+kind is read off its captured `SalesLineProfile.adjustment` (`subtotal`, `discount`,
+`charge`; absent = ordinary item). Subtotal and discount lines are stored as ordinary
+`sales_line_profiles` rows with quantity 1, unit price 0, net 0 and no income account;
+their shown amount lives in the adjustment. A discount records its shares by revision
+position; each share comes out of the target line's stored net, so `net` is always the
+settleable amount and every settlement component keeps one AR and one recognition source
+of equal amount. The target's income leg credits the full amount, its sources being its
+own net plus each share attributed to the discount line (`sales.income_sources`); the
+discount line debits its captured account. `TaxLine.taxable_minor_units` carries a base
+above the net when a non-taxable discount left one. Sales-by-item maps a discount share
+on a sold line's income leg back to that line's item; cash basis recognises a discount
+line at its targets' paid fraction. Group lines expand on entry (`sales.expand_groups`)
+into members carrying `LineGroup` provenance. Work lines carry the same facts plus
+`discount_minor_units`/`taxable_minor_units`. Billing (`billing.billed_lines`) carries a quote's
+subtotal and discount lines along with the lines they show or reduce, as `applies_to="billed"`
+adjustments whose shares are the quoted shares of the billed part; `sales.remap_billed` moves them
+with line identities on correction. Credit memos run the same pass and invert the postings.
+Plan and open questions: `design/specs/r147-sales-line-kinds.md`.
+
 ## Manual rates and foreign journal conversion
 
 Company migration co0008 adds the declared versioned exchange_rates table.
@@ -1813,6 +1841,39 @@ containing `Summary.COMMANDS`, so nothing names the commands a second time. All
 four are titled from `naming.REPORTS` and listed on the home window's Reports
 tile.
 
+## Everyday reports: balances, purchases, deposits, the transaction list and 1099s
+
+Ten read-only company reports at the `reports` capability, admitted through the
+`everyday-reports-v1` permission catalog delta, presented by one workbench module
+(`adapters/workbench/everyday.py`) and exported and printed by the shared report
+traversal. None introduces a schema or a cached figure.
+
+- `company/balance_reports.py`: `report customer-balance-summary` and `report
+  vendor-balance-summary` are the aging Total column per party with zero balances
+  omitted, so their totals are A/R and A/P on the balance sheet. The two detail
+  reports list every receivable or payable effect behind each non-zero balance
+  across all dates with a running balance and a total row per party; receivables
+  reuse the customer statement's `_PARTIES` effects from the start of the books.
+- `company/purchase_reports.py`: `report purchases-by-vendor` and `report
+  purchases-by-item` are item purchases only. Stock items read purchase movements
+  on the inventory ledger (receipts offset to A/P, bank or card, recosts of such a
+  receipt, and reversals of either); other items read cost posting lines other than
+  A/P attributed to `purchase_item_lines` or `money_out_item_lines`. `report
+  open-purchase-orders` reads current orders and their active receipt claims.
+- `company/transaction_list_reports.py`: `report deposit-detail` groups each deposit
+  posting's non-bank lines by the source document its deposit component names;
+  `report transaction-list-by-date` is one row per posting batch with a listed
+  account and split chosen from the entry's shape.
+- `company/vendor_1099_reports.py`: `report vendor-1099-summary` is cash by nature:
+  bank-account posting lines naming a 1099-eligible vendor, card payments shown
+  and not counted, every payment in 1099-NEC box 1 (no account-to-box mapping
+  exists), the year's threshold from `THRESHOLDS`, anchor default above threshold
+  only. The workbench opens it on the last calendar year
+  (`date_defaults.LAST_YEAR_REPORTS`).
+
+Reports whose rows are documents or list records stale their continuations on the
+audit sequence (`ledger_reports.AUDITED_REPORTS`).
+
 ## Customer work documents
 
 [Customer work](customer-work.md) owns the nonposting proposal, alternative
@@ -2020,6 +2081,10 @@ POSIX-only, with Linux tested and no macOS/WSL execution claim. `inspection.py`
 provides authorized bounded navigation of mapped, verified result files.
 
 A submitted run/execute HTTP read timeout starts one 30-second recovery budget.
+A status report that the operation is still active (preparing, ready, receiving,
+queued, started, delivering), and an E_DB_BUSY filesystem_change or publication_pending
+answer, renew that budget to 30 seconds from the report, up to BOOKFLOW_MCP_JSON_SECONDS
+(default 300) from the start of recovery; silence still ends it after 30 seconds.
 The client polls the same reference with 100 ms exponential backoff capped at 1 second;
 the budget includes all requests, waits and cached-result decoding. Only completed
 state with an available receipt permits cached execute retrieval. Only normal
@@ -3461,6 +3526,51 @@ the live graph; referenced historical openings remain validated against their
 immutable stored populations. `tests/test_reconciliation_public_successors.py`
 covers sequential statements, retry, stale-version nonmutation and an empty card.
 
+### Correcting a reconciled transaction (R146)
+
+Correcting or voiding a transaction a finished reconciliation cleared is allowed, as the anchor
+allows it, and says so; nothing is refused and no posting rule changed. Deletion and refund
+correction keep their `E_RECONCILIATION_DEPENDENCY` refusals. `company/reconciliation_changes.py`
+owns the whole of it and is reached from exactly two places in `core/dispatch.py`, so every
+update and void of every document type is covered without being listed:
+
+- **Saved.** `_apply` passes an `observed` dict to the post-apply
+  `reconciliation_materialization.drain_in_command`; `materialize` records, for every key whose
+  head it moves, the head it had before. `reconciliation_changes.saved` keeps the keys a live
+  claim (`reconciliation_current_members` → `reconciliation_claims`) holds and compares old and
+  new head per claiming reconciliation. The lines go into `applied.output.warnings` before the
+  idempotency record is written, so a replay says them too.
+- **Preview.** `run_in_session` calls `_with_reconciliation_warnings` on a dry run.
+  `reconciliation_changes.preview` finds the documents the plan changes (`data['header']`/
+  `data['before']`, a deposit `Prepared`'s `input_json`, or the journal plan a check, card
+  charge, transfer or register entry now carries as `data['prospective']`) and returns nothing
+  unless a live claim holds one of their movements. A `... void` takes every held movement to
+  nothing; any other write is projected with `reconciliation_adapters.prepare_prospective` on
+  the exact plan the save would write. A plan it cannot project still warns, without a figure.
+
+The arithmetic is one function, `amount(version, account, cutoff)`: a version counts toward a
+reconciliation when it is live, on the reconciled account and dated on or before the statement
+date (the opening date for an opening), in the statement's sign (`-signed_debit` on a card).
+A reconciliation's cleared balance now is that sum over the movements it counted as cleared
+(`opening_covered`, `prior_cleared`, `selected` members; `covered` for an opening) at their
+current heads. A warning is written per reconciliation whose sum the write moves, naming the
+account, the statement date, the new cleared balance and the statement's ending balance; a
+write that moves nothing reconciled (memo, payee, number, a date still within the statement)
+says nothing, which is the anchor's behaviour. A draft's ticks are not claims, so a transaction
+on an unfinished reconciliation is untouched by this and keeps the draft's own staleness rules.
+
+`report reconciliation-discrepancy` (`company/reconciliation_discrepancy_reports.py`) is the
+anchor's Reconciliation Discrepancy report on the same functions: per account, the opening and
+each active certificate dated on or before `as_of` with reconciled (ending) balance, cleared
+balance now and difference, and under each the transactions its claims hold whose figure on it
+changed, typed `amount`, `date`, `account` or `voided`. It is an everyday report (admitted by
+`permission_everyday_reports_catalog`, laid out by `adapters/workbench/everyday.py`) and is an
+`AUDITED_REPORTS` member, since a correction is audited. The workbench shows a preview's
+`warnings` above the result on every generated form (`[data-preview-warnings]` in `form.html`)
+and a save's in the saved notice. `tests/test_reconciliation_change_warnings.py` holds the
+hand-computed cases, `..._transports.py` the four-surface parity and `..._browser.py` the
+Chrome witness.
+
 ### Private reconciliation successor models and preparation
 
 The private `reconciliation_commands_models` module describes strict inputs,
@@ -4005,9 +4115,8 @@ strictly what it did before any of this, never worse.
 
 A correction retires the receipts the previous revision took and takes the new grid's at what it
 then says; a void reverses them exactly, one `reversal` movement per receipt bound to the leg
-that reverses the one the receipt hung off. Both are refused, naming the date, if the returned
-quantity is no longer on the shelf to take back out — the negative-stock check is on every
-chronological prefix, not on the balance as it stands today.
+that reverses the one the receipt hung off. Taking a returned quantity back out may leave the
+item below zero; that is the negative-stock rule below, not a refusal.
 
 **A credited line that *names* a stock item is still refused.** A standalone line carries an
 item, a quantity and a price, and a price is not a cost. Nothing in Bookflow derives what an
@@ -4841,3 +4950,141 @@ facts, retaining ordered checks and family-specific proofs. This does not cache 
 allow across frames or turn multiple company databases into one atomic snapshot.
 Copied async contexts cannot borrow or close another thread's handles. Exceptions
 and outer scope exit close the owned hub snapshot.
+
+## Agent-facing help and refusals (R86)
+
+`core/input_errors.fields` is the only translator from an input model's validation failure to
+`details.fields`; `dispatch.validate_input` calls it for every surface. It walks each validator
+location through the model so a field path is the caller's own (union branch tags such as
+`function-after[...]` or a discriminator value never appear), collapses a value that failed every
+branch of a union into one "must be ..." shape (money reads as a decimal string like "22.80"),
+turns a missing or mis-patterned field into "required: <shape>" from the field's JSON schema, and
+gives an unknown key `accepted_fields` for the model it was sent to, plus a `hint` naming
+`<noun> query options` for a list query. `E_PERMISSION` messages come from
+`errors.permission_message(details)` at construction and never say more than the details;
+`errors.explain_permission` fills a refusal that names nothing with the command's published
+capability and role (`reason: record_rule`) at the two command boundaries, `dispatch.run` and
+the hosted executor, before any publication document is sealed. `E_REASON_REQUIRED` for an
+agent says previews need a reason too (blueprint 5.5 and 5.8). Help views that show input carry
+`example` (`generate.run_example`) and `cli_example`; generated pages print the same example
+under `### MCP`. `list_service.resolve_selector` names `<noun> list` on a miss. `reconcile start`
+with no opening named follows the account's adopted opening, and refuses with the
+`reconcile opening start` step when there is none.
+
+V1.5 widening of the same row: `invoice query` takes `settlement` (open, unpaid, partial, paid),
+filtered in SQL by `sales._settlement_condition` with the derivation `payment_queries` uses for
+`settlement_current` (posted gross less every apply without a reversing inverse). `register
+query` defaults an omitted period to the fiscal year (company `fiscal_year_start_month`) through
+today in the company zone, and binds the resolved period into its cursor; `direction: desc`
+reads the whole period oldest first (running balances are defined that way) and returns its
+reversed slice under a watermark-checked offset cursor. `reconcile opening start`/`start` accept
+an account name, resolved to the ID before the request is recorded. `registry.unknown_command`
+is the one refusal for an unknown command name on every surface, with `suggestions` from
+`registry.similar_commands` (everyday verbs such as list/search/create map onto query/post), and
+`bookflow_list_commands` adds `suggestions` when a prefix matches nothing. A statement charge
+totalling 0.00 is refused (its E_VALIDATION rule in tests/error_matrix.py); zero-value invoices
+and sales receipts remain valid. Help caches each model's JSON schema per process and field
+constraint text in a process-wide cache that retains the fields it keys.
+
+## Negative stock: provisional cost and the receipt-dated true-up (R137)
+
+A sale, a sales receipt, an inventory adjustment, or a void or correction that takes stock back
+out may take an item below zero on its date. The write goes through and the result's
+`warnings` carries one line per issue it leaves short — its own, or an earlier one it newly
+leaves short: `Takes <item> to <qty> on <date>; its cost is provisional, <basis>, ...`.
+`inventory_effects.plan` collects them on `Change.warnings`; `inventory_effects.settle` puts them
+on every saved result, and `core/dispatch._with_stock_warnings` puts them on every dry-run
+preview from `plan.data['stock']`, so all four surfaces and the browser say the same thing
+before and after saving. `inventory.py` does the same for adjustments and their voids.
+
+**Arithmetic** lives in `inventory_costing.replay` alone. An issue larger than the stock on hand
+consumes all of it (zero residual) and costs the shortfall at a provisional rate: the running
+average `V/Q` when stock is on hand, otherwise the last average the item had while it held stock
+(or the unit cost of the receipt that last filled a shortfall to zero), otherwise the item's
+purchase cost captured on the issue row in `fallback_unit_cost_minor_units` (a cost of zero
+counts as none), otherwise zero. The item's value while below zero is minus the provisional
+cost still unsettled, which replay asserts. A receipt arriving while `Q < 0` fills open
+shortfalls oldest first; for each filled span it owes `endpoint_share(P, S, filled, filled+u) -
+endpoint_share(w, r, a, a+u)` — provisional released less actual — keyed `(issue, receipt)`.
+Both shares telescope, so an issue's settled cost is exactly the receipts that filled it and the
+remainder of the receipt carries the rest of its value: the average goes on from real receipts.
+
+**Posting.** A true-up is a `recost` movement with `corrects_movement_id` = the issue and
+`filled_by_movement_id` = the receipt, dated at the receipt, in its own `recost` journal
+document ("Provisional cost true-up"), using the issue's captured asset, COGS and class. The
+co0059 trigger `inventory_movements_true_up_link` holds it to the receipt's date and item and
+the issue's dimensions. Replay compares true-up targets with posted true-ups per key, so a retry
+writes nothing, a voided or corrected receipt backs its true-ups out at its own date, and a
+purchase backdated in front of a short sale makes the sale un-short: its own-date cost is
+corrected at the sale's date by the existing per-issue rule and the true-ups it no longer owes
+are backed out at their receipts' dates. The closing date applies to every date written, true-up
+dates included; a receipt in a closed period is refused as before.
+
+**Why the fallback is captured on the row.** Replay re-derives every target each time an item's
+history changes. Reading the purchase cost from the item master would let an item edit silently
+move the cost of an old sale (and, inside a closed period, refuse unrelated work). Issues
+written before co0059 have no captured fallback and are treated as having none; none of them was
+ever below zero when written.
+
+**Returns** (the person: "if it was sold it should be able to be returned"). A credit memo
+returning a short issue first cancels its *unfilled* shortfall units, from the back of the
+shortfall (receipts fill from the front), at `endpoint_share(P, S, ...)` — exactly their
+provisional value. They bypass the fill loop, so no receipt trues up a returned unit, and the
+shortfall entry tracks `filled` and `cancelled` separately. Units returned beyond the unfilled
+ones take the old endpoint share over the pool (issued quantity − cancelled, settled cost −
+cancelled value). The unfilled count only falls, so all cancellations precede all shares and the
+pool is fixed first; an issue never short has an empty cancellation, so its returns cost exactly
+what they did before.
+
+**Validators.** `sales_validation` and `credit_validation` require this document's own movements
+to owe no own-date correction; a true-up owed at a later receipt (a short sale entered ahead of
+a receipt already on file) is exempt, because the same change writes it.
+
+
+## Negative-number display (R82)
+
+Company migration co0062 adds `company_info.negative_number_style` (`minus`, the default and
+every upgraded company's value, or `parentheses`), set through `company update` and shown in
+`company show` info. It is display only: the workbench's `money` and `amount` filters
+(`adapters/workbench/display.py`) read it from the context variable `NEGATIVES`, which
+`pages.run` sets for the request when it reads `company show`; a page with no company keeps
+the minus sign. JSON on every interface, exports, print data and form inputs keep the minus.
+
+## Payables reports and received goods
+
+`company/payable_reports._EFFECTS` (read by `report ap-aging`, `report unpaid-bills`, `report
+vendor-balance-summary` and `report vendor-balance-detail`) attributes the Accounts Payable
+transfer a receipt-matched bill posts (debit AP for the claimed receipts, credit AP for the
+bill) to the documents it moved: `receipt_bill_claims.original_minor_units` to the receipt
+line's financial journal, and `billed - original` to the `receipt_bill_adjustments` movement's
+journal, at the bill's effective date; reversals follow their original through
+`posting_line_sources.reversed_source_id`. A bill for received goods is therefore open on
+unpaid bills for what it billed, and only unbilled received value stays on the receipt. Totals
+are unchanged. The Overview's "You owe" is the `report ap-aging` total (Accounts payable).
+
+## Company backup and restore (R133)
+
+`company/backup_archive.py` owns the archive (blueprint 3.4): `create` snapshots `company.db`
+with the SQLite backup API from a read-only connection (the command holds the company write
+transaction, so the copy is the committed state), sets the copy's journal mode to `delete`,
+hashes each referenced attachment body against its name, writes the zip beside its final name
+as a `.partial`, rereads it with `verify`, and renames it into `backups/`. `verify(archive,
+dest=None)` is the only reader: manifest shape and format version, member set equal to the
+manifest (no other names; attachment names must be `attachments/xx/<sha256>`), every member's
+size and sha256 while streaming (zip CRC on the way), then `check_database` (integrity,
+foreign keys, one `company_info` row, id and revision equal to the manifest). With `dest` it
+writes the verified members there; without, only the database goes to an OS temporary folder.
+
+`commands/backup_cmds.py`: `company backup` (company scope, `company`/`admin`, audited with one
+`company_backup` entry) and `company restore` (hub scope, `hub_admin`, commit owner
+`hub.company_restore`, in `publication.MEMBERSHIP_EFFECTS` because it grants the restorer's owner
+membership). Restore's plan reads only the manifest on a real run (full `verify` on a dry run) to
+classify the revision and check id and name; its apply reserves the folder, extracts through
+`verify`, rewrites `company_info.id` for `--as-copy`, runs `migrate_company(..., row=None)`,
+writes the display-name copy and a `company restore` company event, writes the `ready` marker and
+registers; any exception before the hub commit removes the folder. The CLI makes any input field
+marked `json_schema_extra={"x-bookflow-local-path": True}` absolute before dispatch (only
+`archive` today). Permission delta `company-backup-v1` (`hub/permission_backup_catalog.py`) over
+`card-credit-v1`. Browser: `adapters/workbench/backups.py` mounts `/c/{id}/company/backup` and
+`/c/{id}/company/restore` (multipart upload to a private temporary folder, removed after the
+command) ahead of the generic routes; the Company section links both.

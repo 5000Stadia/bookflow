@@ -121,6 +121,11 @@ def resolve_selector(
     candidates = [str(value) for value in connection.execute(base.with_only_columns(display).order_by(table.c[definition.identifier])).scalars()]
     error = _not_found(selector)
     error.details["suggestions"] = _suggest(str(trimmed), candidates, suggestion_limit)
+    # Close spellings are not always the answer ("Credit Card" when the company calls it
+    # "Visa"), so the refusal also names the command that shows every choice.
+    error.details["list_command"] = f"{definition.noun} list"
+    error.message = (f"No {definition.singular_label.lower()} matches {str(trimmed)!r}; "
+                     f"`{definition.noun} list` shows them all.")
     raise error
 
 

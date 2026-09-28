@@ -14,11 +14,17 @@ from bookflow.company.tax_attribution import TaxDetails
 
 class WorkLineOutput(CreatedOutput):
     tax_ordinal: int | None = None
+    line_kind: Literal["item", "subtotal", "discount", "charge"] | None = Field(default=None, description=(
+        "Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced."))
+    amount: MoneyOutput | None = Field(default=None, description=(
+        "The amount the line shows when it differs from net: a subtotal's sum, a discount's negative "
+        "amount, or a line's amount before the discounts taken out of its net."))
 
     @model_serializer(mode='wrap')
     def legacy_ordinal(self,handler):
         result=handler(self)
-        if self.tax_ordinal is None:result.pop('tax_ordinal',None)
+        for key in ('tax_ordinal','line_kind','amount'):
+            if getattr(self,key) is None:result.pop(key,None)
         return result
 
     document_id: str
@@ -109,6 +115,17 @@ class WorkLinkOutput(CreatedOutput):
     destination_current_revision_id: str
 
 
+class TimeSummaryOutput(StrictModel):
+    """What a time entry records, read from its one line: who, how long, charged as what."""
+    employee_id: str | None = Field(description="The employee whose time this is.")
+    employee_name: str | None = Field(description="The employee's name as captured on the entry.")
+    duration: str = Field(description="Hours worked, as decimal hours (1.5 is an hour and a half).")
+    item_id: str = Field(description="The service item the time is charged as.")
+    item_name: str = Field(description="The service item's name as captured on the entry.")
+    billable: bool = Field(description="Whether the time can be carried onto an invoice.")
+    note: str | None = Field(description="What was done; the invoice line's description.")
+
+
 class WorkSummaryOutput(CommonOut):
     kind: Literal[WORK_KINDS]
     number: str
@@ -128,6 +145,7 @@ class WorkSummaryOutput(CommonOut):
     tax: MoneyOutput
     total: MoneyOutput
     expired: bool
+    time: TimeSummaryOutput | None = Field(None, description="For a time entry, who worked how long as what; null for every other kind.")
 
 
 class WorkOutput(WorkSummaryOutput):

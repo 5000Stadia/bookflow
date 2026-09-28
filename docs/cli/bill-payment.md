@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow bill payment apply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --bills '[{"bill":"BILL-112"}]' --company "Demo Plumbing Co" --reason "Move the check to the right bill" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bill payment apply", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "bills": [{"bill": "BILL-112"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -30,6 +38,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `bills[].bill` | inside `--bills` JSON array | string | yes | no | — | minimum length 1 |
 | `bills[].amount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | — |
+| `bills[].discount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | Early-payment discount taken on this bill in addition to amount; the bill is settled by amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is {"bill": "4410", "amount": "980.00", "discount": "20.00"}. A discount alone is {"bill": "4411", "amount": "0.00", "discount": "6.00"} beside money paid on another bill. |
 | `bills[].expected_version` | inside `--bills` JSON array | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
 
@@ -126,6 +135,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -208,6 +222,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -258,6 +280,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -363,6 +390,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -425,7 +454,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -452,6 +481,14 @@ Page immutable bill-payment revisions in revision-number order with the current 
 ### CLI
 
 `bookflow bill payment history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bill payment history", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -563,6 +600,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `items[].applications[].audit_event_id` | string | yes | no | — | — |
 | `items[].applications[].active` | boolean | yes | no | — | — |
+| `items[].applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `items[].applications[].discount` | object \| null | no | yes | null | — |
+| `items[].applications[].discount.amount` | string | yes | no | — | — |
+| `items[].applications[].discount.currency` | string | yes | no | — | — |
+| `items[].applications[].discount.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -606,7 +648,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -631,6 +673,14 @@ Page bill payments in accounting-date and stable-id order, oldest first or newes
 ### CLI
 
 `bookflow bill payment query --vendor "Northside Supply" --date-from 2026-04-01 --status posted --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bill payment query", "input": {"vendor": "Northside Supply", "date_from": "2026-04-01", "status": "posted", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -731,6 +781,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.currency` | string | yes | no | — | — |
 | `items[].settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `items[].settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `items[].settlement_current.discount` | object \| null | no | yes | null | — |
+| `items[].settlement_current.discount.amount` | string | yes | no | — | — |
+| `items[].settlement_current.discount.currency` | string | yes | no | — | — |
+| `items[].settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -769,7 +824,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -794,6 +849,14 @@ Show a bill payment: who was paid, out of which account, by what method and chec
 ### CLI
 
 `bookflow bill payment show 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bill payment show", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -882,6 +945,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -964,6 +1032,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -1014,6 +1090,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -1114,6 +1195,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1167,7 +1250,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1194,6 +1277,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow bill payment unapply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --company "Demo Plumbing Co" --reason "Applied to the wrong bill" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bill payment unapply", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1296,6 +1387,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1378,6 +1474,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -1428,6 +1532,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -1533,6 +1642,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1592,7 +1703,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -1620,6 +1731,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow bill payment void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --company "Demo Plumbing Co" --reason "The check was never sent" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bill payment void", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1721,6 +1840,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1803,6 +1927,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -1853,6 +1985,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -1958,6 +2095,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -2018,7 +2157,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

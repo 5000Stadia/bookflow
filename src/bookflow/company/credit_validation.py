@@ -61,16 +61,50 @@ def validate(plan, s, ctx, *, batch_kind='original', movements=True):
              'header totals are the sum of the lines')
     _require(revision['total_minor_units'] == gross == subtotal + tax and gross > 0, 'document total')
 
-    stock = _stock_pair(s, pending, profile)
-    _balanced(pending, header, profile, revision, gross, batch_kind, stock)
-    _posting_attribution(pending, lines, profile, stock)
+    discounts = _discount_legs(pending)
+    if profile['origin'] == 'standalone':
+        # Every net is its amount less the discount shares its line names, re-derived here.
+        from bookflow.company import sales_adjustments
+        from bookflow.company.sales_facts import SalesProfile
+        ordered = [lines[row['id']] for row in sorted(pending['document_lines'], key=lambda row: row['position'])]
+        sales_adjustments.captured(SalesProfile.model_validate_json(profile['profile_snapshot']), ordered, _require)
+    stock = _stock_pair(s, pending, profile, discounts)
+    _balanced(pending, header, profile, revision, gross, batch_kind, stock, discounts)
+    _posting_attribution(pending, lines, profile, stock, discounts)
     _capacity(pending, header, revision, lines, profile)
     _returns(s, pending, lines, profile)
     if movements:
         _movements(s, data)
 
 
-def _stock_pair(s, pending, profile):
+def _discount_legs(pending):
+    """Each discount line's credit leg, and every share it names on a line's income leg.
+
+    Returns ``(legs, shares)``: the credit legs posted to discount accounts (by leg id), and
+    the expected share attributions as ``{(discount_envelope_id, line_envelope_id): amount}``.
+    """
+    import json
+    envelopes = sorted(pending['document_lines'], key=lambda row: row['position'])
+    profiles = {row['document_line_id']: row for row in pending['credit_line_profiles']}
+    by_position = {row['position']: row['id'] for row in envelopes}
+    legs, shares, owners = {}, {}, {}
+    for envelope in envelopes:
+        facts = json.loads(profiles[envelope['id']]['item_snapshot'])
+        adjustment = facts.get('adjustment')
+        if not adjustment or adjustment['kind'] != 'discount':
+            continue
+        owners[envelope['id']] = (adjustment['account']['id'], -adjustment['amount_minor_units'])
+        for target in adjustment['targets']:
+            shares[envelope['id'], by_position[target['position']]] = target['amount_minor_units']
+    for source in pending['posting_line_sources']:
+        if source['document_line_id'] in owners and source['reversed_source_id'] is None:
+            leg = next(row for row in pending['posting_lines'] if row['id'] == source['posting_line_id'])
+            if leg['credit_minor_units']:
+                legs[leg['id']] = leg
+    return dict(legs=legs, shares=shares, owners=owners)
+
+
+def _stock_pair(s, pending, profile, discounts):
     """The inventory legs in this batch, found off the posting rows and nothing else.
 
     A credit memo posts exactly one credit -- the receivable -- and debits for everything else.
@@ -85,7 +119,7 @@ def _stock_pair(s, pending, profile):
     legs = pending['posting_lines']
     assets = [leg for leg in legs if leg['account_id'] in control]
     offsets = [leg for leg in legs if leg['credit_minor_units']
-               and leg['account_id'] != profile['ar_account_id']]
+               and leg['account_id'] != profile['ar_account_id'] and leg['id'] not in discounts['legs']]
     _require(all(leg['debit_minor_units'] and not leg['credit_minor_units'] for leg in assets),
              'an inventory-asset leg of a credit memo is not a debit')
     total = sum(leg['debit_minor_units'] for leg in assets)
@@ -95,7 +129,7 @@ def _stock_pair(s, pending, profile):
     return dict(assets=assets, offsets=offsets, total=total)
 
 
-def _balanced(pending, header, profile, revision, gross, batch_kind, stock):
+def _balanced(pending, header, profile, revision, gross, batch_kind, stock, discounts):
     batches = pending['posting_batches']
     _require(len(batches) == 1 and batches[0]['kind'] == batch_kind
              and batches[0]['effective_date'] == revision['date'], 'one business batch at the document date')
@@ -104,7 +138,9 @@ def _balanced(pending, header, profile, revision, gross, batch_kind, stock):
     credits = sum(leg['credit_minor_units'] for leg in legs)
     # The inventory pair is equal and opposite, so it adds the same amount to each side and
     # the receivable still stands alone against the document gross.
-    _require(debits == credits == gross + stock['total'], 'the batch balances at the document gross')
+    given = sum(leg['credit_minor_units'] for leg in discounts['legs'].values())
+    _require(given == sum(amount for _, amount in discounts['owners'].values()), 'a discount credits exactly what it took')
+    _require(debits == credits == gross + stock['total'] + given, 'the batch balances at the document gross')
     receivable = [leg for leg in legs if leg['account_id'] == profile['ar_account_id']]
     _require(len(receivable) == 1 and receivable[0]['credit_minor_units'] == gross
              and receivable[0]['debit_minor_units'] == 0, 'exactly one receivable credit for the gross')
@@ -112,7 +148,7 @@ def _balanced(pending, header, profile, revision, gross, batch_kind, stock):
              'every leg names the exact credited party')
     cost_legs = {id(leg) for leg in stock['offsets']}
     _require(all(leg['debit_minor_units'] > 0 for leg in legs
-                 if leg is not receivable[0] and id(leg) not in cost_legs),
+                 if leg is not receivable[0] and id(leg) not in cost_legs and leg['id'] not in discounts['legs']),
              'every other leg is a debit')
     by_line = {}
     for source in pending['posting_line_sources']:
@@ -268,7 +304,14 @@ def validate_void(plan, s, ctx):
     control = inventory.asset_account_ids(s)
     stock_total = sum(leg['debit_minor_units'] + leg['credit_minor_units']
                       for leg in pending['posting_lines'] if leg['account_id'] in control)
-    _require(debit == credit == data['revision']['total_minor_units'] + stock_total,
+    # A discount on the credit posted its own credit leg beside the receivable; the reversal
+    # carries it back too.
+    import json
+    given = sum(-json.loads(row['item_snapshot'])['adjustment']['amount_minor_units']
+                for row in effects.rows(s, c.credit_line_profiles,
+                                        c.credit_line_profiles.c.revision_id == data['revision']['id'])
+                if (json.loads(row['item_snapshot']).get('adjustment') or {}).get('kind') == 'discount')
+    _require(debit == credit == data['revision']['total_minor_units'] + stock_total + given,
              'the reversal does not balance at the credit\'s own total')
     _movements(s, data)
     fields = ('credit_transaction_id', 'credit_revision_id', 'credit_document_line_id',
@@ -377,7 +420,7 @@ def validate_update(plan, s, ctx):
     validate_uses(s, data)
 
 
-def _posting_attribution(pending, lines, profile, stock):
+def _posting_attribution(pending, lines, profile, stock, discounts):
     """Each business leg must post the captured account and amount of its own component."""
     import json
     sources = {row['id']: row for row in pending['posting_line_sources']}
@@ -399,8 +442,32 @@ def _posting_attribution(pending, lines, profile, stock):
         expected[identifier] = amount
 
     for identifier, line in lines.items():
-        account = json.loads(line['item_snapshot'])['income_account']['id']
-        add(line['posting_source_id'], account, line['net_minor_units'], identifier, True)
+        income = json.loads(line['item_snapshot'])['income_account']
+        if income is not None:
+            add(line['posting_source_id'], income['id'], line['net_minor_units'], identifier, True)
+    # A discount's shares ride the income leg of the line each came off, attributed to the
+    # discount; its own leg credits its account with their sum.
+    for source in sources.values():
+        if source['document_line_id'] not in discounts['owners']:
+            continue
+        leg = legs[source['posting_line_id']]
+        if leg['id'] in discounts['legs']:
+            account, amount = discounts['owners'][source['document_line_id']]
+            _require(leg['account_id'] == account and source['amount_minor_units'] == amount
+                     and leg['credit_minor_units'] == amount, 'a discount credits its captured account')
+        else:
+            line_owner = [row for row in sources.values() if row['posting_line_id'] == leg['id']
+                          and row['document_line_id'] in lines and row['document_line_id'] not in discounts['owners']]
+            if line_owner:
+                key = (source['document_line_id'], line_owner[0]['document_line_id'])
+            else:
+                # A line the discount took entirely has no net of its own on the leg.
+                key = next(((owner, target) for (owner, target), amount in discounts['shares'].items()
+                            if owner == source['document_line_id'] and lines[target]['net_minor_units'] == 0
+                            and amount == source['amount_minor_units']), None)
+            _require(key in discounts['shares'] and discounts['shares'][key] == source['amount_minor_units']
+                     and leg['debit_minor_units'] > 0, 'a discount share rides the income leg of its line')
+        expected[source['id']] = source['amount_minor_units']
     for cell in pending['credit_tax_components']:
         add(cell['posting_source_id'], cell['liability_account_id'], cell['tax_minor_units'],
             cell['document_line_id'], True)
@@ -515,6 +582,6 @@ def _movements(s, data):
     for item_id in {row['item_id'] for row in movements}:
         stored = inventory.movements(s, item_id=item_id)
         state = replay(stored + [row for row in movements if row['item_id'] == item_id])
-        _require(not any(correction.target_movement['id'] in own_ids
+        _require(not any(correction.target_movement['id'] in own_ids and correction.filled_by is None
                          for correction in state.corrections),
                  'a stock movement is posted at a cost the ledger does not agree with')

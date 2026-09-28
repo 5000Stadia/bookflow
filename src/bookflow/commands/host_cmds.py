@@ -42,14 +42,14 @@ DEFAULT_BIND = "127.0.0.1:8765"
 
 # ---------------------------------------------------------------- shared lookups
 
-def _find_user(s: Session, selector: str) -> dict[str, Any] | None:
-    """A user by id or username; inactive users are not found."""
+def _find_user(s: Session, selector: str, *, include_inactive: bool = False) -> dict[str, Any] | None:
+    """A user by id or username; inactive users are not found unless asked for."""
     row = None
     if is_ulid(selector):
         row = users.find_user(s, id=normalize_ulid(selector))
     if row is None:
         row = users.find_user(s, username=selector)
-    return row if row and row["active"] else None
+    return row if row and (row["active"] or include_inactive) else None
 
 
 def _is_self(s: Session, selector: str) -> bool:
@@ -371,7 +371,7 @@ def make_local_handler(host, version: str):
         name = envelope.get("command")
         cmd = registry.get(name) if isinstance(name, str) else None
         if cmd is None:
-            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+            raise registry.unknown_command(name)
         if cmd.bootstrap:
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` runs in the calling process; it is never forwarded to the host.")
         from bookflow.core.publication import OSBinding
@@ -1075,13 +1075,47 @@ class UserListInput(BaseModel):
     organization: str | None = Field(None, description="Only the principals whose membership reaches this organization; name or id")
     kind: KindName | None = Field(None, description="Only principals of this kind; omit for all of them")
     include_inactive: bool = Field(False, description="Also list principals whose account has been deactivated")
+    limit: int = Field(50, ge=1, le=200, description="Most people on one page")
+    cursor: str | None = Field(None, max_length=512, description="next_cursor from the previous page; omit for the first page")
+
+
+class _Page(BaseModel):
+    """A keyset page: the sort key of the last row returned, as the next request's cursor."""
+    has_more: bool = Field(description="More rows follow this page")
+    next_cursor: str | None = Field(description="Pass as cursor for the next page; null on the last page")
+
+
+class UserListOutput(_Page):
+    items: list[UserOut]
+    count: int
+
+
+def _encode_cursor(noun: str, key: list[str]) -> str:
+    import base64
+    return base64.urlsafe_b64encode(json.dumps([noun, key], separators=(",", ":")).encode()).decode().rstrip("=")
+
+
+def _decode_cursor(noun: str, value: str | None, size: int) -> list[str] | None:
+    """The sort key a cursor carries; any other text is refused as a stale or foreign cursor."""
+    if value is None:
+        return None
+    import base64
+    from bookflow.company.query import _invalid_cursor
+    try:
+        raw = base64.urlsafe_b64decode(value.encode("ascii") + b"=" * (-len(value) % 4))
+        owner, key = json.loads(raw)
+    except (ValueError, TypeError, UnicodeError):
+        raise _invalid_cursor() from None
+    if owner != noun or not isinstance(key, list) or len(key) != size or not all(isinstance(x, str) for x in key):
+        raise _invalid_cursor()
+    return key
 
 
 user_list = command("user list", scope="hub",
                     description=("List the people on this installation, with the agent principals that act for them. "
                                  "Filtered by company or organization it answers who can reach it, through their own "
                                  "membership or their organization's. After activation, installation administration alone supplies no company access."),
-                    input_model=UserListInput, output_model=ListOutput[UserOut],
+                    input_model=UserListInput, output_model=UserListOutput,
                     error_codes=["E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS",
                                  "E_ORGANIZATION_NOT_FOUND"],
                     authorization="the principals you administer: installation-wide only in legacy mode; the members of a "
@@ -1099,13 +1133,19 @@ def plan_user_list(inp: UserListInput, ctx: Context, s: Session) -> Plan:
         q = q.where(h.users.c.kind == inp.kind)
     if not inp.include_inactive:
         q = q.where(h.users.c.active.is_(True))
-    rows = [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
+    after = _decode_cursor("user", inp.cursor, 1)
+    if after is not None:
+        q = q.where(h.users.c.username > after[0])
+    rows = [dict(r) for r in s.hub.conn.execute(q.limit(inp.limit + 1)).mappings().all()]
+    more = len(rows) > inp.limit
+    rows = rows[:inp.limit]
     owners = {r["owner_user_id"] for r in rows if r["owner_user_id"]}
     names = users.user_names(s, {r["created_by"] for r in rows})
     handles = {r["id"]: r["username"] for r in s.hub.conn.execute(sa.select(
         h.users.c.id, h.users.c.username).where(h.users.c.id.in_(owners))).mappings()} if owners else {}
     items = [_user_out(s, r, names, handles) for r in rows]
-    return Plan(preview=ListOutput[UserOut](items=items, count=len(items)))
+    return Plan(preview=UserListOutput(items=items, count=len(items), has_more=more,
+                                       next_cursor=_encode_cursor("user", [rows[-1]["username"]]) if more else None))
 
 
 def _user_out(s: Session, row: dict[str, Any], names: dict[str, str], handles: dict[str, str]) -> UserOut:
@@ -1134,6 +1174,7 @@ class MembershipRow(BaseModel):
     organization_id: str
     role: RoleName = Field(description=ROLE_HELP)
     active: bool = Field(description="Whether this access is in force; false once it has been revoked")
+    account_active: bool = Field(True, description="Whether the person's account is active; false once it has been deactivated")
     granted_at: str | None
     granted_by_name: str | None
     revoked_at: str | None
@@ -1144,14 +1185,21 @@ class MembershipListInput(BaseModel):
     user: str | None = Field(None, description="Only this person's access; username or id", max_length=64)
     company: str | None = Field(None, description="Only access reaching this company; name or id")
     organization: str | None = Field(None, description="Only access reaching this organization; name or id")
-    include_inactive: bool = Field(False, description="Also list access that has been revoked")
+    include_inactive: bool = Field(False, description="Also list access that has been revoked, and the access of deactivated accounts")
+    limit: int = Field(50, ge=1, le=200, description="Most memberships on one page")
+    cursor: str | None = Field(None, max_length=1024, description="next_cursor from the previous page; omit for the first page")
+
+
+class MembershipListOutput(_Page):
+    items: list[MembershipRow]
+    count: int
 
 
 membership_list = command("membership list", scope="hub",
                           description=("List who holds access to what, and at which role. Give --company or "
                                        "--organization for who can reach it, --user for what one person can reach, "
                                        "or neither for your own access and everyone in what you administer."),
-                          input_model=MembershipListInput, output_model=ListOutput[MembershipRow],
+                          input_model=MembershipListInput, output_model=MembershipListOutput,
                           error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                                        "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
                           authorization="the memberships you administer: installation-wide only in legacy mode; those of a "
@@ -1178,9 +1226,17 @@ def plan_membership_list(inp: MembershipListInput, ctx: Context, s: Session) -> 
     granters = users.user_names(s, {r["granted_by"] for r in rows})
     items = [_membership_row_out(s, row, people[row["user_id"]], scopes[(row["scope_type"], row["scope_id"])], handles, granters)
              for row in rows
-             if row["user_id"] in people and (row["scope_type"], row["scope_id"]) in scopes]
-    items.sort(key=lambda row: (row.scope_name, row.username))
-    return Plan(preview=ListOutput[MembershipRow](items=items, count=len(items)))
+             if row["user_id"] in people and (row["scope_type"], row["scope_id"]) in scopes
+             and (inp.include_inactive or people[row["user_id"]]["active"])]
+    key = lambda row: [row.scope_name, row.username, row.membership_id]  # noqa: E731
+    items.sort(key=key)
+    after = _decode_cursor("membership", inp.cursor, 3)
+    if after is not None:
+        items = [row for row in items if key(row) > after]
+    more = len(items) > inp.limit
+    items = items[:inp.limit]
+    return Plan(preview=MembershipListOutput(items=items, count=len(items), has_more=more,
+                                             next_cursor=_encode_cursor("membership", key(items[-1])) if more else None))
 
 
 def _membership_row_out(s: Session, row: dict[str, Any], user: dict[str, Any], scope: Scope,
@@ -1191,6 +1247,7 @@ def _membership_row_out(s: Session, row: dict[str, Any], user: dict[str, Any], s
                          acts_for=handles.get(user["owner_user_id"]) if user["owner_user_id"] else None,
                          scope_type=scope.scope_type, scope_id=scope.scope_id, scope_name=scope.scope_name,
                          organization_id=scope.organization_id, role=row["role"], active=row["revoked_at"] is None,
+                         account_active=bool(user["active"]),
                          granted_at=localize(s, row["granted_at"]), granted_by_name=granters.get(row["granted_by"]),
                          revoked_at=localize(s, row["revoked_at"]))
 

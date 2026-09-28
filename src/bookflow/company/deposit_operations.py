@@ -70,7 +70,10 @@ def recover(s, ctx, inp, verb, *, binding=None, posting=True):
     try:
         dependencies.authorize(s,saved['transaction_id'],[r['transaction_id'] for r in targets],write=posting)
     except BookflowError as error:
-        if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+        if error.code=='E_PERMISSION':
+            # The requirement that refused, never the identity or record (as history._refusal).
+            from bookflow.company.deposit_dependency_history import _refusal
+            raise BookflowError('E_PERMISSION',details=_refusal(error)) from None
         raise
     from bookflow.company import deposit_draft_consumption as consumption
     current_draft=consumption.current(s,saved['id'],ctx=ctx,binding=binding,write=posting)

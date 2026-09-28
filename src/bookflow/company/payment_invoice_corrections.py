@@ -7,7 +7,7 @@ from bookflow.company import payment_queries as query, payment_dependencies as d
 from bookflow.company import payment_restatement as restatement
 from bookflow.company.payment_outputs import InvoiceCorrectionOutput
 from bookflow.core import audit, clock
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, require_reason
 from bookflow.core.ids import new_id
 from bookflow.core.money import Money
 from bookflow.core.registry import Plan, Applied, Touched
@@ -52,8 +52,8 @@ def prepare(s, ctx, inp):
         raise BookflowError('E_VALIDATION', message='This invoice has applied payments. Supply one operation_key for this correction and a reason; reuse the key for preview, save and retries.', details={'field': 'operation_key', 'reason': 'applied_invoice_correction'})
     if apps and inp.expected_version is None:
         raise BookflowError('E_VALIDATION', details={'field': 'expected_version'})
-    if inp.operation_key and (not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140):
-        raise BookflowError('E_REASON_REQUIRED')
+    if inp.operation_key:
+        require_reason(ctx.reason)
     commercial_input = inp.model_copy(update={'expected_facts_fingerprint': None}) if inp.operation_key else inp
     plan = sales.prepare(s, ctx, commercial_input, 'invoice', 'update', _settlement_internal=True)
     data = plan.data

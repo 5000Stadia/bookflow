@@ -1,20 +1,36 @@
-{% extends "base.html" %}{% block title %}Bill payments{% endblock %}{% block body %}
-<link rel="stylesheet" href="{{ static_urls['pay-bills.css'] }}">
+{% extends "base.html" %}{% import 'list_card.html' as list_card %}{% block title %}Bill payments{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['browsing.css'] }}"><script src="{{ static_urls['browsing.js'] }}" defer></script>
 <h1>Bill payments</h1>
-<p class="pay-bills-actions">{% if may_pay %}<a href="/c/{{ company_id }}/pay-bills">Pay bills</a>{% endif %}<a href="/c/{{ company_id }}/bill">Find a bill</a><a href="/c/{{ company_id }}/report/unpaid-bills">Unpaid bills report</a></p>
-<form method="get" class="pay-bills-grid" aria-label="Find bill payments">
+<p class="actions list-actions has-list-bar">{% if may_pay %}<a href="/c/{{ company_id }}/pay-bills" class="primary-action list-create">Pay bills</a>{% endif %}<a href="/c/{{ company_id }}/bill">Find a bill</a><a href="/c/{{ company_id }}/report/unpaid-bills">Unpaid bills report</a></p>
+{# The filters submit as a plain search; on a phone they wait behind Filters in the list's sheet. #}
+<form method="get" class="list-tools list-form" id="bill-payment-filters" data-list-sheet aria-label="Find bill payments">
+<label class="list-search">Payment number contains<input type="search" name="number" value="{{ filters.get('number','') }}" placeholder="Payment number" autocomplete="off"></label>
+<div class="list-bar"><a href="#list-sheet" class="list-bar-button" data-sheet-open aria-controls="list-sheet">Filters{% if list_state.filters %} ({{ list_state.filters }}){% endif %}</a>{% if may_pay %}<a href="/c/{{ company_id }}/pay-bills" class="list-bar-add" aria-label="Pay bills" title="Pay bills">+</a>{% endif %}</div>
+<div class="list-sheet list-tools" id="list-sheet" role="group" aria-label="Filters">
+<div class="list-sheet-head"><h2>Filters</h2><a href="#" class="list-sheet-close" data-sheet-close>Close</a></div>
 <label>Vendor (ID or exact name)<input name="vendor" value="{{ filters.get('vendor','') }}"></label>
-<label>Payment number contains<input name="number" value="{{ filters.get('number','') }}"></label>
 <label>Check number<input name="check_number" value="{{ filters.get('check_number','') }}"></label>
 <label>From date<input type="text" data-date name="date_from" value="{{ filters.get('date_from','') }}"></label>
 <label>Through date<input type="text" data-date name="date_to" value="{{ filters.get('date_to','') }}"></label>
-<label>Status<select name="status"><option value="">All</option>{% for value in ('posted','voided') %}<option value="{{ value }}"{% if filters.get('status')==value %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
-<button>Find payments</button>
+<label>Status<select name="status"><option value="">All</option>{% for value in ('posted','voided') %}<option value="{{ value }}"{% if filters.get('status')==value %} selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></label>
+<button type="submit" class="list-apply">Find payments</button>
+</div>
+<a href="#" class="list-sheet-backdrop" data-sheet-close tabindex="-1" aria-hidden="true"></a>
+{% if list_state.changed %}<a href="/c/{{ company_id }}/bill-payment" class="list-reset">Reset</a>{% endif %}
 </form>
-<p>{{ payments.count }} payments on this page, newest first.</p>
-<div class="pay-bills-table-wrap"><table class="pay-bills-open payment-lines"><thead><tr><th>Date</th><th>Payment</th><th>Vendor</th><th>Method</th><th>Check no.</th><th class="num">Amount</th><th class="num">Applied</th><th class="num">Unapplied</th><th>Status</th></tr></thead><tbody>
-{% for row in payments.rows %}<tr data-payment="{{ row.id }}"><td data-label="Date"><span class="pay-bills-cell-label" aria-hidden="true">Date</span>{{ row.date|day }}</td><td data-label="Payment"><span class="pay-bills-cell-label" aria-hidden="true">Payment</span><a href="{{ row.detail_url }}">{{ row.number }}</a></td><td data-label="Vendor"><span class="pay-bills-cell-label" aria-hidden="true">Vendor</span>{{ row.vendor_name }}</td><td data-label="Method"><span class="pay-bills-cell-label" aria-hidden="true">Method</span>{{ row.payment_method_name }}</td><td data-label="Check no."><span class="pay-bills-cell-label" aria-hidden="true">Check no.</span>{{ row.check_number or '—' }}</td><td data-label="Amount" class="num"><span class="pay-bills-cell-label" aria-hidden="true">Amount</span>{{ row.total|money(row.currency, home=math_company_currency) }}</td><td data-label="Applied" class="num"><span class="pay-bills-cell-label" aria-hidden="true">Applied</span>{{ row.applied|money(row.currency, home=math_company_currency) }}</td><td data-label="Unapplied" class="num"><span class="pay-bills-cell-label" aria-hidden="true">Unapplied</span>{{ row.unapplied|money(row.currency, home=math_company_currency) }}</td><td data-label="Status"><span class="pay-bills-cell-label" aria-hidden="true">Status</span>{{ row.status }} · {{ row.settlement_status }}</td></tr>{% endfor %}
-{% if not payments.rows %}<tr><td colspan="9">No bill payment matches these filters.</td></tr>{% endif %}
+<div id="list-results">
+<p class="muted list-count">{{ payments.count }} payments on this page, newest first.</p>
+{% set home = math_company_currency | default('') %}{% set rows = payments.rows %}
+{# Payments all in the home currency name it once, in the figure headings. #}
+{% set currencies = rows | map(attribute='currency') | unique | list %}{% set one = currencies[0] if currencies | length == 1 and currencies[0] == home else '' %}
+{% if rows %}<div class="table-wrap list-scroll list-desktop"><table id="bill-payment-list" class="list-ledger"><thead><tr><th scope="col">Date</th><th scope="col">Payment</th><th scope="col">Vendor</th><th scope="col">Method</th><th scope="col">Check no.</th>{% for label in ('Amount', 'Applied', 'Unapplied') %}<th scope="col" class="num">{{ label }}{% if one %} ({{ one }}){% endif %}</th>{% endfor %}<th scope="col">Status</th></tr></thead><tbody>
+{% for row in rows %}<tr class="is-linked" data-payment="{{ row.id }}"><td data-label="Date" class="nowrap">{{ row.date|day }}</td><td data-label="Payment" class="nowrap"><a class="row-link" href="{{ row.detail_url }}">{{ row.number }}</a></td><td data-label="Vendor">{{ row.vendor_name }}</td><td data-label="Method">{{ row.payment_method_name }}</td><td data-label="Check no." class="nowrap">{{ row.check_number or '—' }}</td>{% for field, label in (('total', 'Amount'), ('applied', 'Applied'), ('unapplied', 'Unapplied')) %}<td data-label="{{ label }}" class="num">{{ row[field]|amount if one else row[field]|money(row.currency, home=home) }}</td>{% endfor %}<td data-label="Status" class="nowrap">{{ ui_words(row.status) }} · {{ ui_words(row.settlement_status) }}</td></tr>{% endfor %}
 </tbody></table></div>
-{% if payments.next_url %}<p><a href="{{ payments.next_url }}">Next page</a></p>{% endif %}
+<ul class="list-cards" aria-label="Bill payments">
+{% for row in rows %}{{ list_card.card(row.detail_url, row.number, row.total|money(row.currency, home=home),
+   [row.vendor_name, row.date|day, row.payment_method_name, 'Check no. ' ~ row.check_number if row.check_number else '', ui_words(row.status) if row.status != 'posted' else '', ui_words(row.settlement_status) if row.settlement_status != 'applied' else ''],
+   data={'payment': row.id}) }}{% endfor %}
+</ul>{% else %}<p>No bill payment matches these filters.</p>{% endif %}
+{% if payments.next_url %}<nav class="pagination" aria-label="Results pages"><a href="{{ payments.next_url }}" rel="next">Next page →</a></nav>{% endif %}
+</div>
 {% endblock %}

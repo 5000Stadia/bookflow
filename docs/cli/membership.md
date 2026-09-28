@@ -20,6 +20,14 @@ Show exact effective permissions and role/grant/deny provenance in one company; 
 
 `bookflow membership effective --company "Demo Plumbing Co" --user jordan --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "membership effective", "input": {"company": "Demo Plumbing Co", "user": "jordan"}}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -91,7 +99,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -117,6 +125,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow membership grant jordan --company 'Demo Plumbing Co' --role standard --expected-version 1 --grants '["transaction.check.delete"]' --denies '["ledger.post"]' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "membership grant", "input": {"user": "jordan", "company": "Demo Plumbing Co", "role": "standard", "expected_version": 1, "grants": ["transaction.check.delete"], "denies": ["ledger.post"]}, "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -222,7 +238,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -249,6 +265,14 @@ List who holds access to what, and at which role. Give --company or --organizati
 
 `bookflow membership list --user jordan --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "membership list", "input": {"user": "jordan"}}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -256,7 +280,9 @@ List who holds access to what, and at which role. Give --company or --organizati
 | `user` | `--user` | string \| null | no | yes | null | Only this person's access; username or id |
 | `company` | `--company` | string \| null | no | yes | null | Only access reaching this company; name or id |
 | `organization` | `--organization` | string \| null | no | yes | null | Only access reaching this organization; name or id |
-| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked |
+| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked, and the access of deactivated accounts |
+| `limit` | `--limit` | integer | no | no | 50 | Most memberships on one page; minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | next_cursor from the previous page; omit for the first page |
 
 ### Command and context options
 
@@ -282,6 +308,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `has_more` | boolean | yes | no | — | More rows follow this page |
+| `next_cursor` | string \| null | yes | yes | — | Pass as cursor for the next page; null on the last page |
 | `items` | array[object] | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].grants` | array[string] | no | no | [] | — |
@@ -298,6 +326,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].organization_id` | string | yes | no | — | — |
 | `items[].role` | literal["readonly", "standard", "admin", "owner"] | yes | no | — | Role at that scope: readonly reads, standard does the bookkeeping, admin also manages members, owner is the final say |
 | `items[].active` | boolean | yes | no | — | Whether this access is in force; false once it has been revoked |
+| `items[].account_active` | boolean | no | no | true | Whether the person's account is active; false once it has been deactivated |
 | `items[].granted_at` | string \| null | yes | yes | — | — |
 | `items[].granted_by_name` | string \| null | yes | yes | — | — |
 | `items[].revoked_at` | string \| null | yes | yes | — | — |
@@ -308,7 +337,9 @@ Example JSON output:
 ```json
 {
   "count": 0,
-  "items": []
+  "has_more": false,
+  "items": [],
+  "next_cursor": null
 }
 ```
 
@@ -332,7 +363,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -359,6 +390,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow membership revoke jordan --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "membership revoke", "input": {"user": "jordan", "company": "Demo Plumbing Co"}, "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -461,7 +500,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

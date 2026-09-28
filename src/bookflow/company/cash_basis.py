@@ -225,10 +225,25 @@ def cutoff_adjustments(db, as_of: str) -> tuple[Adjustment, ...]:
             attribution['name_id'], attribution['class_id'], profile.get('item_id'))
         result.extend((leg, replace(leg, account_id=control, amount_minor_units=-amount, control_offset=True)))
 
+    by_position = {(row['revision_id'], row['position']): row for row in documents.values()}
+
     def ar_fraction(line, family):
         profile = line_profiles.get(line['id'])
         if profile is None:
             _invalid('A receivable recognition component lacks its captured commercial line.')
+        if profile.get('item_snapshot') and '"discount"' in profile['item_snapshot']:
+            import json
+            facts = json.loads(profile['item_snapshot'])
+            if facts.get('item_type') == 'discount':
+                # A discount owns no receivable of its own: its debit and the income shares it
+                # took are recognised as the lines it discounted are paid.
+                targets = [by_position[(line['revision_id'], target['position'])]
+                           for target in facts['adjustment']['targets']]
+                weight = 'gross_minor_units' if family == 'credit_memo' else 'net_minor_units'
+                pairs = [ar_fraction(target, family) for target in targets
+                         if line_profiles[target['id']][weight]]
+                paid, whole = sum(pair[0] for pair in pairs), sum(pair[1] for pair in pairs)
+                return (paid, whole) if whole else (1, 1)
         key = (line['transaction_id'], line['line_id'])
         denominator = profile['gross_minor_units'] if family == 'credit_memo' else profile['net_minor_units']
         paid = credit_paid[key] if family == 'credit_memo' else net_paid[key]

@@ -74,16 +74,29 @@ def test_the_number_this_migration_claims_is_the_one_the_chain_gives_it():
 
 
 def test_the_frozen_ddl_is_what_the_shipped_metadata_declares():
+    # Frozen text can only equal today's metadata for the tables no later revision rebuilt;
+    # which those are is read off the later migrations, never listed here.
+    from tests.test_bill_payment_migration import _rebuilt_since
+    rebuilt = _rebuilt_since(M.revision)
     expected = []
     for name in M.NEW_TABLES:
+        if name in rebuilt:
+            continue
         table = schema.metadata.tables[name]
         expected.append(str(CreateTable(table).compile(dialect=dialect())).strip())
         expected.extend(str(CreateIndex(index).compile(dialect=dialect())).strip()
                         for index in sorted(table.indexes, key=lambda index: index.name))
-    assert list(M.DDL) == expected
-    assert set(M.OBJECTS) == {name for name in M.NEW_TABLES} | {
-        index.name for name in M.NEW_TABLES for index in schema.metadata.tables[name].indexes} | {
+    assert [statement for statement in M.DDL
+            if not any(f" {name} " in statement or f" {name} (" in statement
+                       for name in rebuilt)] == expected
+    # A rebuilt table may since have gained indexes; the ones this revision created must remain.
+    shipped = {index.name for name in M.NEW_TABLES for index in schema.metadata.tables[name].indexes}
+    frozen = {statement.split()[2] for statement in M.DDL if statement.startswith("CREATE INDEX")}
+    assert frozen <= shipped
+    assert set(M.OBJECTS) == set(M.NEW_TABLES) | frozen | {
         statement.split()[2] for statement in M.GUARDS}
+    assert {index.name for name in M.NEW_TABLES if name not in rebuilt
+            for index in schema.metadata.tables[name].indexes} <= frozen
 
 
 def test_a_fresh_database_reaches_the_head_and_reapplying_changes_nothing(tmp_path):
@@ -151,7 +164,8 @@ def test_the_guards_refuse_an_unmatched_or_mutated_movement(tmp_path):
                    corrects_movement_id=None, reverses_movement_id=None)
         columns = ", ".join(row)
         placeholders = ", ".join("?" for _ in row)
-        with pytest.raises(sqlite3.IntegrityError, match="does not match its posting line"):
+        # co0046 rewrote this guard's message when zero-value movements arrived.
+        with pytest.raises(sqlite3.IntegrityError, match="does not match its"):
             conn.execute(f"INSERT INTO inventory_movements ({columns}) VALUES ({placeholders})",
                          tuple(row.values()))
         with pytest.raises(sqlite3.IntegrityError):

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from bookflow.core.config import Config, os_login
 from bookflow.core.context import CONTEXT_FIELD_NAMES, ActorKind, Context
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, explain_permission
 from bookflow.core.fs import check_local
 from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
@@ -29,22 +29,37 @@ from bookflow.storage.migrate import HEADS, backup, classify, current_revision_o
 from bookflow.storage.paths import name_key, resolve_data_root
 
 
-def _validation_error(e: ValidationError) -> BookflowError:
-    fields = [{"field": ".".join(str(p) for p in err["loc"]) or "input", "problem": err["msg"]} for err in e.errors()]
-    return BookflowError("E_VALIDATION", details={"fields": fields})
+def _validation_error(e: ValidationError, cmd: Command | None = None) -> BookflowError:
+    """Field problems a caller can act on: its own field path, the accepted shape, the valid names."""
+    from bookflow.core import input_errors
+    fields = input_errors.fields(e, cmd.input_model if cmd is not None else None)
+    details: dict[str, Any] = {"fields": fields}
+    if cmd is not None and any("accepted_fields" in field for field in fields):
+        from bookflow.core import registry
+        options = cmd.name + " options"
+        if cmd.name.endswith(" query") and registry.get(options) is not None:
+            details["hint"] = f"`{options}` lists the filters, sorts and columns this query accepts."
+    return BookflowError("E_VALIDATION", details=details)
 
 
 CONTEXT_LIMITS = {"reason": 140, "source_ref": 512, "idempotency_key": 128}
 
+AGENT_REASON_MESSAGE = ("Writes by an agent need a reason or an active directive, dry-run previews included: "
+                        "a short phrase naming what triggered this, such as \"Record check #1042 from Riverside\" "
+                        "(top-level reason on MCP, --reason on the CLI, the X-Bookflow-Reason header on HTTP).")
+
 
 def validate_context(ctx: Context) -> None:
-    fields = []
+    fields, said = [], []
     for name, limit in CONTEXT_LIMITS.items():
         v = getattr(ctx, name)
         if v is not None and len(v) > limit:
-            fields.append({"field": name, "problem": f"at most {limit} characters"})
+            fields.append({"field": name, "problem": f"must be at most {limit} characters"})
+            said.append(f"The {name} is {len(v)} characters; it may be at most {limit}.")
     if fields:
-        raise BookflowError("E_VALIDATION", details={"fields": fields})
+        if fields[0]["field"] == "reason":
+            said.append("Shorten the reason to a short phrase naming what triggered the write.")
+        raise BookflowError("E_VALIDATION", message=" ".join(said), details={"fields": fields})
 
 
 def parse_when(value: str, zone: str | None, end: bool = False) -> str:
@@ -80,7 +95,7 @@ def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
     try:
         return cmd.input_model.model_validate(raw)
     except ValidationError as e:
-        raise _validation_error(e)
+        raise _validation_error(e, cmd)
 
 
 @performance.measured("command.resolve")
@@ -415,6 +430,16 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
         _login: str | None = None, input_stream=None, output_stream=None) -> dict[str, Any]:
     """Execute a command from a fresh process: data root, hand-off to a live host, lock, hub, actor, migration, execute."""
+    try:
+        return _run_explained(cmd, raw_input, ctx, data_root=data_root, company_selector=company_selector,
+                              company_source=company_source, dry_run=dry_run, _login=_login,
+                              input_stream=input_stream, output_stream=output_stream)
+    except BookflowError as e:
+        raise explain_permission(e, cmd)
+
+
+def _run_explained(cmd, raw_input, ctx, *, data_root, company_selector, company_source, dry_run, _login,
+                   input_stream, output_stream):
     if performance.enabled():
         performance.protect_selection(data_root)
     if cmd.transfer is not None:
@@ -540,7 +565,10 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
         ctx = ctx.model_copy(update={"directive_id": drow["id"]})
         s.directive_code = drow["code"]
     if cmd.is_write and s.actor.kind in ("agent", "system") and not ctx.reason and not ctx.directive_id:
-        raise BookflowError("E_REASON_REQUIRED")
+        # Blueprint 5.8 requires it of every agent write and 5.5 makes a dry run the same
+        # validation as the save, so a preview needs it too and says so.
+        raise BookflowError("E_REASON_REQUIRED", message=AGENT_REASON_MESSAGE,
+                            details={"required": ["reason", "directive"], "applies_to_dry_run": True})
     if ctx.idempotency_key and not cmd.accepts_idempotency_key:
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
     return ctx
@@ -628,6 +656,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                 if dry_run:
                     replay["dry_run"] = True
                 return redact_paths(replay, s.is_hub_admin)
+    inp = _dated_today(cmd, inp, s)
     with performance.span("command.plan", command=cmd.name):
         plan = cmd.plan(inp, ctx, s)
     if dry_run or not cmd.is_write:
@@ -635,6 +664,8 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
             out = plan.preview.model_dump(mode="json")
         if dry_run:
             out["dry_run"] = True
+            out = _with_stock_warnings(out, plan)
+            out = _with_reconciliation_warnings(out, cmd, plan, ctx, s)
         if cmd.kind == "advisory":
             applied = _apply(cmd, plan, ctx, s)
             out = applied.output.model_dump(mode="json")
@@ -645,6 +676,54 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
     if "warnings" in out:
         out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
     return redact_paths(out, s.is_hub_admin)
+
+
+#: Sales documents dated today in the company's timezone when `date` is omitted, as the browser
+#: form and the anchor do. Filled after the idempotency lookup, so a retry of the same request on
+#: a later day replays the original rather than posting a second document.
+TODAY_DATED = frozenset(("invoice post", "sales-receipt post", "credit-memo post", "statement-charge post"))
+
+
+def _dated_today(cmd: Command, inp: BaseModel, s: Session) -> BaseModel:
+    if cmd.name not in TODAY_DATED or getattr(inp, "date", "") is not None:
+        return inp
+    from bookflow.company.memorized_schedule import today
+    return inp.model_copy(update={"date": today(s.company_tz)})
+
+
+def _with_stock_warnings(out: dict[str, Any], plan: Any) -> dict[str, Any]:
+    """A preview says what its save would: a document that leaves stock below zero warns.
+
+    Every stock-moving write keeps its planned inventory change at ``plan.data['stock']``, and
+    the saved result gets the same lines from ``inventory_effects.settle``; reading them here
+    is what gives every such preview, on every surface, the warning before anything is saved.
+    """
+    data = getattr(plan, "data", None)
+    stock = data.get("stock") if isinstance(data, dict) else None
+    extra = list(getattr(stock, "warnings", None) or ())
+    if not extra or "warnings" not in out:
+        return out
+    current = list(out.get("warnings") or [])
+    out["warnings"] = current + [line for line in dict.fromkeys(extra) if line not in current]
+    return out
+
+
+def _with_reconciliation_warnings(out: dict[str, Any], cmd: Command, plan: Any, ctx: Context,
+                                  s: Session) -> dict[str, Any]:
+    """A preview of a correction or void says what saving it does to a finished reconciliation.
+
+    The saved result gets the same lines from ``_apply``, read off the movements the write
+    actually moved; ``company/reconciliation_changes.py`` owns both.
+    """
+    if not cmd.is_write or "warnings" not in out or s.company is None or "company" not in cmd.writes:
+        return out
+    from bookflow.company import reconciliation_changes
+    extra = reconciliation_changes.preview(s, ctx, cmd.name, plan)
+    if not extra:
+        return out
+    current = list(out.get("warnings") or [])
+    out["warnings"] = current + [line for line in extra if line not in current]
+    return out
 
 
 def _replay(cmd: Command, hit: dict[str, Any], s: Session) -> dict[str, Any] | None:
@@ -706,7 +785,15 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             # `posting_batches`, so a writer added tomorrow is covered without being listed
             # here: what makes something a posting write is that it inserts a posting batch.
             if co_tx:
-                materialization.drain_in_command(s.company, commits=s.commits, owner="dispatch.apply")
+                # Which statement movements this command moved, and from what: a movement a
+                # finished reconciliation cleared makes it stop tying, and the result says so.
+                moved: dict[str, str | None] = {}
+                materialization.drain_in_command(s.company, commits=s.commits, owner="dispatch.apply",
+                                                 observed=moved)
+                if moved:
+                    from bookflow.company import reconciliation_changes
+                    applied.output = reconciliation_changes.with_warnings(
+                        applied.output, reconciliation_changes.saved(s, moved))
             if applied.finalized:
                 if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
                     raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")

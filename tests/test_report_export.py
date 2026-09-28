@@ -84,7 +84,7 @@ def test_the_registry_declares_the_reports_this_export_covers():
     found = Export.reports()
     assert len(found) >= 20, (len(found), "far fewer reports than this product has")
     registered = sorted(cmd.verb for cmd in registry.all_commands()
-                        if cmd.noun == "report" and not cmd.is_write)
+                        if cmd.noun == "report" and not cmd.is_write and cmd.name != "report export")
     assert found == registered, "a registered report the export does not admit"
 
 

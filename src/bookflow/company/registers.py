@@ -192,7 +192,7 @@ def prepare(s, ctx, inp, operation):
     # rather than a stranger to them: it keeps each one's own shape, so the journal editor's
     # refusal of those documents is not the register's.
     fresh = journals.prepare(s, ctx, journal, operation, owner=journals.REGISTER)
-    return Plan(_output(fresh.preview, receipt), {'input': inp, 'operation': operation})
+    return Plan(_output(fresh.preview, receipt), {'input': inp, 'operation': operation, 'prospective': fresh})
 
 
 def apply(plan, ctx, s):

@@ -77,3 +77,6 @@ Database: `company`.
 | `automatically_apply_payments` | BOOLEAN | no | — | — | — | — | Suggest exact-match then oldest invoice allocations for new cash. |
 | `automatically_calculate_payments` | BOOLEAN | no | — | — | — | — | Derive amounts for selected invoices while preserving explicitly entered cash. |
 | `use_undeposited_funds_for_payments` | BOOLEAN | no | — | — | — | — | Default new receipts to Undeposited Funds unless explicitly overridden. |
+| `customer_discount_account_id` | VARCHAR(26) | yes | — | — | ix_company_info_customer_discount_account_id | accounts.id | Default account for early-payment discounts given to customers; null means Discounts Given. |
+| `vendor_discount_account_id` | VARCHAR(26) | yes | — | — | ix_company_info_vendor_discount_account_id | accounts.id | Default account for early-payment discounts taken from vendors; null means Discounts Taken. |
+| `negative_number_style` | VARCHAR(12) | no | — | — | — | — | How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign. |

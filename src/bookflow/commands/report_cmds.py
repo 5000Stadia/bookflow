@@ -42,6 +42,27 @@ from bookflow.company.unbilled_costs import (
 from bookflow.company.collection_reports import (
     CollectionsInput, CollectionsOutput, collections,
 )
+from bookflow.company.purchase_reports import (
+    OpenPurchaseOrdersInput, OpenPurchaseOrdersOutput, PurchasesByItemInput, PurchasesByItemOutput,
+    PurchasesByVendorInput, PurchasesByVendorOutput, open_purchase_orders, purchases_by_item,
+    purchases_by_vendor,
+)
+from bookflow.company.transaction_list_reports import (
+    DepositDetailInput, DepositDetailOutput, TransactionListByDateInput,
+    TransactionListByDateOutput, deposit_detail, transaction_list_by_date,
+)
+from bookflow.company.vendor_1099_reports import (
+    Vendor1099SummaryInput, Vendor1099SummaryOutput, vendor_1099_summary,
+)
+from bookflow.company.reconciliation_discrepancy_reports import (
+    ReconciliationDiscrepancyInput, ReconciliationDiscrepancyOutput, reconciliation_discrepancy,
+)
+from bookflow.company.balance_reports import (
+    CustomerBalanceDetailInput, CustomerBalanceDetailOutput, CustomerBalanceSummaryInput,
+    CustomerBalanceSummaryOutput, VendorBalanceDetailInput, VendorBalanceDetailOutput,
+    VendorBalanceSummaryInput, VendorBalanceSummaryOutput, customer_balance_detail,
+    customer_balance_summary, vendor_balance_detail, vendor_balance_summary,
+)
 
 
 @command("report ap-aging", scope="company", required_role="member", capability="reports",
@@ -222,3 +243,91 @@ def plan_unbilled_costs(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_collections(inp, ctx, s):
     return Plan(preview=collections(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report customer-balance-summary", scope="company", required_role="member", capability="reports",
+    description="What each customer or job owes as of as_of: one row per customer or job with its accrual receivable balance, in hierarchy-name order so a job reads under its customer. A job's balance is its own and is never added into its parent's. The balance is the Total column report ar-aging shows for the same customer on the same date, so an unapplied payment or credit reduces it and a customer owed money shows a negative balance. Customers with a zero balance are omitted, so the total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover every customer and rows are paged.",
+    input_model=CustomerBalanceSummaryInput, output_model=CustomerBalanceSummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_customer_balance_summary(inp, ctx, s):
+    return Plan(preview=customer_balance_summary(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report customer-balance-detail", scope="company", required_role="member", capability="reports",
+    description="Every accrual receivable effect that makes up each customer's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each customer or job. One row is one document's effect on one customer on one date -- an invoice, statement charge, payment, sales receipt, credit memo, refund or receivable journal entry -- read exactly as report statement reads it from the beginning of the books: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a receipt to the same customer's invoice moves nothing and has no row. A parent's receipt that settles a job's invoice moves that balance from the parent to the job, and each side is an applied_credit row. Customers whose balance is zero are omitted unless customer names one. A customer's total row is its report customer-balance-summary row, and the report total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole customer before a page is cut.",
+    input_model=CustomerBalanceDetailInput, output_model=CustomerBalanceDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_customer_balance_detail(inp, ctx, s):
+    return Plan(preview=customer_balance_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report vendor-balance-summary", scope="company", required_role="member", capability="reports",
+    description="What is owed to each vendor as of as_of: one row per vendor with its accrual payable balance, in name order. The balance is the Total column report ap-aging shows for the same vendor on the same date, so an unapplied bill payment or vendor credit reduces it and a vendor who owes the company shows a negative balance. Vendors with a zero balance are omitted, so the total is Accounts Payable on the accrual balance sheet for the same date. Totals cover every vendor and rows are paged.",
+    input_model=VendorBalanceSummaryInput, output_model=VendorBalanceSummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_vendor_balance_summary(inp, ctx, s):
+    return Plan(preview=vendor_balance_summary(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report vendor-balance-detail", scope="company", required_role="member", capability="reports",
+    description="Every accrual payable effect that makes up each vendor's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each vendor. One row is one document's effect on one vendor's payable on one date -- a bill, bill payment, vendor credit, item receipt, receipt price correction or payable journal entry -- signed so that what is owed to the vendor is positive: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a payment or credit to a bill moves nothing the vendor is owed and has no row. Vendors whose balance is zero are omitted unless vendor names one. A vendor's total row is its report vendor-balance-summary row, and the report total is Accounts Payable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole vendor before a page is cut.",
+    input_model=VendorBalanceDetailInput, output_model=VendorBalanceDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_vendor_balance_detail(inp, ctx, s):
+    return Plan(preview=vendor_balance_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report open-purchase-orders", scope="company", required_role="member", capability="reports",
+    description="Purchase orders with something still to receive: every open or partly received order dated on or before date_to, oldest first, with what was ordered, the ordered amount of what has arrived and the open balance of what has not. An item line's received share is the quantity its item receipts have taken against it, valued at the line's own ordered amount in proportion and rounded half to even at the cent; a line with no quantity stays open for its whole amount until the order is billed. A closed, voided or billed order has nothing to receive and is omitted. An order is not a posting, so the orders and their receipts are read as they stand now; date_to bounds which orders by their own date. vendor narrows it to one vendor. Totals cover every order and rows are paged.",
+    input_model=OpenPurchaseOrdersInput, output_model=OpenPurchaseOrdersOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_open_purchase_orders(inp, ctx, s):
+    return Plan(preview=open_purchase_orders(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report purchases-by-vendor", scope="company", required_role="member", capability="reports",
+    description="Items bought from each vendor between date_from and date_to, at the cost each purchase posted, with each vendor's share of the period as a percentage. An item purchase is what a bill, check, credit card charge or item receipt posted for an item: for a stock item, a receipt of stock against Accounts Payable, a bank account or a card, the purchase-price corrections that amend it and the reversals a void or a correction writes; for any other item, the cost it posted to an account other than Accounts Payable. A bill for goods already received moves the receipt's payable and posts no stock, so received goods are counted once, at the receipt. A purchase entered on an expense account names no item and is on report expenses-by-vendor instead; a customer return, an inventory adjustment and a sale are not purchases. A purchase belongs to the vendor its posting line names, or to the one vendor its posting names where the line names none; one naming no vendor is the row called No name. Rows worth nothing are omitted; totals cover every vendor and rows are paged.",
+    input_model=PurchasesByVendorInput, output_model=PurchasesByVendorOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_purchases_by_vendor(inp, ctx, s):
+    return Plan(preview=purchases_by_vendor(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report purchases-by-item", scope="company", required_role="member", capability="reports",
+    description="The same item purchases grouped by item: each item's quantity bought in its base unit, the cost it posted, the average cost that quantity came to, and its share of the period as a percentage. A stock item's quantity and cost are its purchase movements on the inventory ledger, so a purchase-price correction changes its cost and not its quantity, and a void takes both back off; any other item's are the quantity on the purchase line and the cost its posting line was attributed. Average cost is cost divided by quantity rounded half to even at the cent for reading, and is omitted where no quantity was bought. Totals are the report purchases-by-vendor total for the same dates; rows worth nothing are omitted and rows are paged.",
+    input_model=PurchasesByItemInput, output_model=PurchasesByItemOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_purchases_by_item(inp, ctx, s):
+    return Plan(preview=purchases_by_item(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report deposit-detail", scope="company", required_role="member", capability="reports",
+    description="Every deposit posted between date_from and date_to, oldest first, each followed by what it gathered. A deposit row is its effect on the bank account it was made to; the rows beneath it are every other line of the same posting, one per document a deposited line came from -- the payment or sales receipt waiting in Undeposited Funds, with its own type, number, date and name -- and account, plus one per additional line or cash back. Lines are signed debit minus credit, so money taken out of Undeposited Funds is negative under a positive deposit and cash back is positive, and a deposit's lines always net its bank amount to nothing. A correction appears as the reversal and replacement it posted, and a voided deposit, worth nothing on its own date, has no rows. Totals are what was deposited to the bank across the whole report and how many deposits that was; rows are paged.",
+    input_model=DepositDetailInput, output_model=DepositDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_deposit_detail(inp, ctx, s):
+    return Plan(preview=deposit_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report transaction-list-by-date", scope="company", required_role="member", capability="reports",
+    description="Every transaction posted between date_from and date_to, in accounting-date order and then the order it was recorded: one row per posting, with the document's type and number, who it names, its memo, the account it posts to, the other side of the entry and its amount. The account is the one line on the side that has one when the other side has several -- the bank on a check, Accounts Payable on a bill, Accounts Receivable on an invoice; with one line on each side it is the line on a bank, credit card, receivable or payable account in that order, else the credit line; with several on both sides it is the entry's first line. The split is the other side's account when it is one account, and -SPLIT- when it is more. The amount is the entry's total, so a correction appears as a negative reversal and a positive replacement and a void as a negative reversal on the original date, exactly as report transaction-detail shows them. The name is the listed line's party, or the one party the entry names. The total is how many postings the report lists; rows are paged.",
+    input_model=TransactionListByDateInput, output_model=TransactionListByDateOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_transaction_list_by_date(inp, ctx, s):
+    return Plan(preview=transaction_list_by_date(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report vendor-1099-summary", scope="company", required_role="member", capability="reports",
+    description="What was paid to each vendor marked eligible for a 1099 between date_from and date_to -- a calendar year for a 1099 -- as the anchor's 1099 summary reports it. This is a report, not a filing. It is cash by nature: a payment is money out of a bank account on a posting line naming the vendor -- the bank side of a bill payment or a check, less a vendor refund deposited back -- on the date it was paid, so a voided or corrected payment counts what the ledger finally says was paid. A payment by credit card is not counted, because the card company reports it, and is shown beside the payments as card_payments_excluded. Every counted payment is nonemployee compensation, box 1 of the 1099-NEC: Bookflow does not map expense accounts to 1099 boxes. The threshold is the year's 1099-NEC filing threshold for the year of date_to -- 600.00 before 2026, 2,000.00 from 2026 on, without the inflation adjustment the law applies after 2026 -- and a vendor meets it when its counted payments are at least that much. above_threshold_only, on by default as in the anchor, lists only vendors that meet it; turned off it lists every 1099 vendor paid anything. Totals give the threshold, the reportable total and count of vendors meeting it whatever is listed, and the payments and card payments of the vendors listed; rows are paged.",
+    input_model=Vendor1099SummaryInput, output_model=Vendor1099SummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_vendor_1099_summary(inp, ctx, s):
+    return Plan(preview=vendor_1099_summary(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report reconciliation-discrepancy", scope="company", required_role="member", capability="reports",
+    description="What changed in one bank or credit card account's finished reconciliations after they were finished, as the anchor's reconciliation discrepancy report shows it. Correcting or voiding a reconciled transaction is allowed and warns; this is where the difference it left can be seen and fixed. One reconciliation row for the opening balance the account adopted and for each finished statement dated on or before as_of, oldest first: reconciled is the statement's ending balance (the adopted opening balance), current is its cleared balance as the transactions it cleared stand now, and difference is current minus reconciled, zero while it still ties. Under each, one change row per transaction it cleared whose figure on it has changed: reconciled is what it was cleared at, current what it counts for now -- zero once voided, moved to another account or re-dated after the statement -- and difference the effect of the change; type_of_change is amount, date, account or voided. A later statement carries an earlier one's difference through its beginning balance, so it shows the same difference with no change rows of its own. Money is in the statement's sign: a bank balance, or what is owed on a card. Totals count the reconciliations, those out of balance and the changed transactions; rows are paged.",
+    input_model=ReconciliationDiscrepancyInput, output_model=ReconciliationDiscrepancyOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND", "E_VALIDATION"])
+def plan_reconciliation_discrepancy(inp, ctx, s):
+    return Plan(preview=reconciliation_discrepancy(inp, s, principal_id=ctx.on_behalf_of))
