@@ -29,7 +29,15 @@ def test_pending_row_patch_survives_attempted_customer_switch(register_browser,t
         if name=='Critic Bob':
             assert 'before changing its customer' in b.evaluate("document.querySelector('#payment-error').innerText")
             assert b.evaluate("document.querySelector('#payment-save').disabled")
-    click(b,'review')
+    # Review shares the retained edit as a complete recovery; the shared draft keeps its value
+    # until the person confirms it, and then carries exactly the edit they made.
+    b.evaluate("document.getElementById('payment-review').click()")
+    b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=180)
+    assert b.evaluate("document.querySelector('#payment-error').hidden"),b.evaluate("document.querySelector('#payment-error').innerText")
+    rows=run('payment selection items',dict(selection=selection))['items']
+    assert [(row['invoice_id'],row['amount_minor_units']) for row in rows]==[(invoice['id'],200)]
+    from tests.test_payment_recovery_browser import press
+    press(b,'Confirm complete recovery')
     rows=run('payment selection items',dict(selection=selection))['items']
     assert [(row['invoice_id'],row['amount_minor_units']) for row in rows]==[(invoice['id'],500)]
     assert run('payment query',dict(customer=payer))['items']==[]
@@ -68,7 +76,12 @@ def test_stale_shared_amount_review_retains_my_entered_cash(register_browser,tmp
     facts={'error':error,'typed_after_review':b.evaluate("document.querySelector('#payment-amount').value"),'message':b.evaluate("document.querySelector('#payment-message').innerText"),'draft':run('payment selection show',dict(selection=selection))}
     comparison=b.evaluate("document.querySelector('#payment-reviewed-comparisons').innerText")
     assert '10.00' in comparison and '11.00' in comparison and '12 USD' in comparison
-    assert facts['draft']['amount']['minor_units']==1200
+    # Review shares my retained entry as a complete recovery; the other writer's 11.00 stands
+    # until I confirm it, and then the shared draft carries the 12 I entered.
+    assert facts['draft']['amount']['minor_units']==1100
+    from tests.test_payment_recovery_browser import press
+    press(b,'Confirm complete recovery')
+    assert run('payment selection show',dict(selection=selection))['amount']['minor_units']==1200
     (tmp_path/'stale-selection.json').write_text(json.dumps(facts,indent=2));shot(b,tmp_path,'stale-selection',width)
     assert facts['typed_after_review']=='12',facts
     assert run('payment query',dict(customer=payer))['items']==[]
