@@ -65,8 +65,7 @@ def cli_run(root, *args):
     return json.loads(process.stdout)
 
 
-@pytest.fixture(scope='session')
-def reference_template(tmp_path_factory):
+def build_reference_template(tmp_path_factory):
     root = tmp_path_factory.mktemp('reference-template') / 'root'
     cli_run(root, 'init')
     result = cli_run(root, 'demo', 'reset', '--include-reference', '--as-of', DEMO_AS_OF)
@@ -74,6 +73,14 @@ def reference_template(tmp_path_factory):
     assert result['reference_company_id'] != result['company_id']
     _checkpoint_databases(root)
     return root
+
+
+@pytest.fixture(scope='session')
+def reference_template(request, tmp_path_factory):
+    # Built before the first test starts when the run uses it (conftest), so its minutes of
+    # seeding are not charged to whichever test happens to ask for it first.
+    built = getattr(request.config, '_bookflow_reference_template', None)
+    return built if built is not None else build_reference_template(tmp_path_factory)
 
 
 @pytest.fixture

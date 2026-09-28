@@ -45,10 +45,15 @@ def pytest_collection_modifyitems(session, config, items):
     The per-test timeout covers a test's setup, so a template built lazily inside the first
     test's setup would spend that one test's time budget on minutes of shared seeding.
     """
-    if config.option.collectonly or getattr(config, "_bookflow_seeded_template", None) is not None:
+    if config.option.collectonly:
         return
-    if any("_seeded_template" in getattr(item, "fixturenames", ()) for item in items):
+    if getattr(config, "_bookflow_seeded_template", None) is None and any(
+            "_seeded_template" in getattr(item, "fixturenames", ()) for item in items):
         config._bookflow_seeded_template = _build_seeded_template(config._tmp_path_factory)
+    if getattr(config, "_bookflow_reference_template", None) is None and any(
+            "reference_template" in getattr(item, "fixturenames", ()) for item in items):
+        from tests.test_reference_year import build_reference_template
+        config._bookflow_reference_template = build_reference_template(config._tmp_path_factory)
 
 
 @pytest.fixture(scope="session")
