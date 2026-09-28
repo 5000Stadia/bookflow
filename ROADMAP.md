@@ -61,10 +61,10 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R68 R10 agent commands: create an agent, assign and remove its principals, reauthorize it, on every surface — design/specs/7-identity-isolation.md
 - [~] R13 Customer payments and invoice settlement (spec row 22; checked 2026-09-27: ledger, corrections, concurrency, permissions and agent/human continuation hold; R69–R70 remain) — design/specs/22-customer-payments.md
 - [x] R69 R13 recover a payment whose save response was lost: the recovery button works in the browser — design/specs/22-customer-payments.md
-- [~] R70 R13 the blind fresh-agent payment exercise with its interview, fixes and retest; the payment workflow doc gains the MCP and browser journeys — design/specs/22-customer-payments.md
+- [~] R70 R13 the blind fresh-agent payment trial with its interview, fixes and one retest; the payment workflow doc gains the MCP and browser journeys. Passes when a fresh agent, with only its own help and MCP and no source reading, completes every task correctly on its first attempt and its interview turns up nothing material; after fixes, one retest decides it — notes/blind-trials-20260927.md
 - [~] R14 Sales-tax calculation policies (spec row 24; checked 2026-09-27: policies, arithmetic, migration and every surface hold; R71–R72 remain) — design/specs/24-sales-tax-policy.md
 - [x] R71 R14 legacy partly billed work stays billable after upgrade — design/specs/24-sales-tax-policy.md
-- [~] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
+- [~] R72 R14 the blind-agent sales-tax trial with its interview, fixes and one retest. Passes when a fresh agent, with only its own help and MCP and no source reading, completes every task correctly on its first attempt and its interview turns up nothing material; after fixes, one retest decides it — notes/blind-trials-20260927.md
 - [~] R77 concurrent requests intermittently fail with AdmissionCancelled "publication admission changed" reported as E_INTERNAL (absorbs R28, the same bug): a typed retryable error or retry, never E_INTERNAL; the remaining failing browser tests with it — notes/NOW.md
 - [~] R29 revoked streams: a revoked stream closes with no further data (the contract, witnessed in c116267); left: disconnect cleanup faster than the 15 s keep-alive — notes/NOW.md
 - [~] R84 the agent can record bank deposits: `deposit sources` and `deposit post` refuse a standard agent with a bare E_PERMISSION while the catalog asks only ordinary access — notes/blind-trials-20260927.md
@@ -87,9 +87,9 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R96 diagnose and fix the older failing tests (sales-tax-code list E_USAGE, delete admission, payment recheck, statement-charge surfaces, receivable report staleness, audit reachable when activated, history redirects, deleted-deposit page, routed-command delete forms): fix what is real, repair what is stale — notes/V1.5-resort-draft.md
 - [ ] R97 payment calculate with auto-calculate off and no amount returns the field error row 22's spec describes — design/specs/22-customer-payments.md
 - [ ] R98 notes/status.sh reports commits behind and the command count correctly (tooling) — notes/status.sh
-- [~] R99 bug sweep: every known defect from notes, trial reports, test runs, Codex reviews and TODO/FIXME comments (wrong results, errors, timeouts, failing or flaky tests) listed as its own item or folded into one; new capabilities go to the future list — notes/bug-sweep-20260928.md
+- [~] R99 bug sweep, one pass: every known defect in the named sources (notes, trial reports, current test runs, existing Codex reviews, TODO/FIXME) that matters to someone using Bookflow (the plumber, their agent or the books), listed as its own item or folded into one. Purely internal or theoretical faults no user would meet are dropped or go to the future list, and working choices are not re-examined. Once the list is written the sweep is closed: no further hunting or new audits for V1.5; bugs met while doing V1.5 work are still fixed — notes/bug-sweep-20260928.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
-- [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current, the demo resets cleanly, tag v1.5 — README.md
+- [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current, the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
 
 ## M4 — After V1.5: concepts to develop
 
