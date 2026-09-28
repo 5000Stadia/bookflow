@@ -1384,25 +1384,60 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     def hub_noun(noun: str, request: Request):
         return noun_page(request, None, Routing.noun(noun))
 
+    def _show_input(request: Request, show, command_noun: str, record_id: str) -> dict[str, Any]:
+        show_selector = _record_selector(show, command_noun)
+        raw = {show_selector: record_id} if show_selector else {}
+        if 'include_deleted' in show.input_model.model_fields:
+            raw['include_deleted'] = request.query_params.get('include_deleted') == '1'
+        # Ask the command whether it reads a revision rather than keeping a list of the
+        # nouns that do: a document type added without its name here would silently lose
+        # its revision arrows.
+        if "revision_number" in show.input_model.model_fields and request.query_params.get("revision_number"):
+            try:
+                raw["revision_number"] = int(request.query_params["revision_number"])
+            except ValueError:
+                raise BookflowError("E_VALIDATION", details={"fields": [{"field": "revision_number", "problem": "must be an integer"}]}) from None
+        return raw
+
+    def _details_url(request: Request, company_id: str | None, noun: str, record_id: str) -> str:
+        kept = [(k, v) for k, v in request.query_params.multi_items() if k in ('include_deleted', 'revision_number')]
+        return f"{Routing.base(company_id, noun)}/{record_id}/technical-details" + ('?' + urlencode(kept) if kept else '')
+
+    def technical_details(request: Request, company_id: str | None, noun: str, record_id: str):
+        """The record page's "All fields and technical details", fetched when opened.
+
+        It reads the record through the same show command, under the same credential and
+        the same route permission, as the page that links it, so it shows nothing the page
+        could not."""
+        command_noun = "hub audit" if company_id is None and noun == "audit" else noun
+        show = registry.get(f"{command_noun} show")
+        if show is None:
+            return page_error(request, BookflowError("E_USAGE", message=f"`{noun}` has no show command"))
+        try:
+            out = run(request, show.name, _show_input(request, show, command_noun, record_id),
+                      company_id if show.scope == "company" else None)
+            deletion = out.get('deletion') if command_noun in (*Document.MONEY_OUT, 'invoice', 'sales-receipt', 'bill', 'credit-memo') else None
+            if command_noun == 'journal' and company_id:
+                owned = Purchases.owning_record(lambda name, raw, company: run(request, name, raw, company),
+                    company_id, out['id'], out['revision']['revision_number'])
+                if owned:
+                    deletion = owned[1].get('deletion')
+        except BookflowError as err:
+            return page_error(request, err)
+        record = {key: value for key, value in out.items() if key != "editing_by"}
+        if deletion:
+            record.update(status='deleted', deletion=deletion)
+        return render("technical_details.html", request, company_id=company_id, noun=noun, record=record,
+                      billed_lines=Billing.billed_line_summaries(record))
+
     def record_page(request: Request, company_id: str | None, noun: str, record_id: str):
         command_noun = "hub audit" if company_id is None and noun == "audit" else noun
         meta = _noun_meta(command_noun)
         show = registry.get(f"{command_noun} show")
         if show is None:
             return page_error(request, BookflowError("E_USAGE", message=f"`{noun}` has no show command"))
-        show_selector = _record_selector(show, command_noun)
-        raw = {show_selector: record_id} if show_selector else {}
-        if 'include_deleted' in show.input_model.model_fields:
-            raw['include_deleted'] = request.query_params.get('include_deleted') == '1'
         try:
-            # Ask the command whether it reads a revision rather than keeping a list of the
-            # nouns that do: a document type added without its name here would silently lose
-            # its revision arrows.
-            if "revision_number" in show.input_model.model_fields and request.query_params.get("revision_number"):
-                try:
-                    raw["revision_number"] = int(request.query_params["revision_number"])
-                except ValueError:
-                    raise BookflowError("E_VALIDATION", details={"fields": [{"field": "revision_number", "problem": "must be an integer"}]}) from None
+            raw = _show_input(request, show, command_noun, record_id)
             if noun in Work.DOCUMENTS and request.query_params.get('links_cursor') and 'links_cursor' in show.input_model.model_fields:
                 raw['links_cursor'] = request.query_params['links_cursor']
             out = run(request, show.name, raw, company_id if show.scope == "company" else None)
@@ -1606,6 +1641,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     return render('error.html', request, error=err.to_dict(), restart_url=request.url.path)
                 return page_error(request, err)
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
@@ -1639,6 +1675,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if registry.get(f"{noun} {record_id}") is not None:
             return form_page(request, None, noun, record_id, None)
         return record_page(request, None, noun, record_id)
+
+    # Registered before the generic `/{verb}` routes, which would otherwise take the path.
+    @app.get("/c/{company_id}/{noun}/{record_id}/technical-details", response_class=HTMLResponse)
+    @permission_read_package(host)
+    def company_record_details(company_id: str, noun: str, record_id: str, request: Request):
+        return technical_details(request, company_id, Routing.noun(noun), record_id)
+
+    @app.get("/hub/{noun}/{record_id}/technical-details", response_class=HTMLResponse)
+    @permission_read_package(host)
+    def hub_record_details(noun: str, record_id: str, request: Request):
+        return technical_details(request, None, Routing.noun(noun), record_id)
 
     def form_page(
         request: Request,
