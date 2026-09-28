@@ -57,6 +57,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [~] R85 recording a customer payment warns when the same customer and check reference are already on file — notes/blind-trials-20260927.md
 - [~] R86 help and errors an agent can act on first time: a worked example in each command's help, errors that name the reason and the valid fields (permission refusals, the reconcile opening step, plain money errors, reason needed even for previews), and findable oldest-first application, sales-tax owed, open invoices and payment methods — notes/blind-trials-20260927.md
 - [~] R83 the demo sells stock today: demo documents dated after today move into the past so demo items are on hand — notes/blind-trials-20260927.md
+- [~] R87 connecting an agent: the one-time token secret shown plainly with a Copy button, and a New agent button on the Agents panel (the person's yes on gate g9ed945) — notes/manual-agent-walkthrough-20260927.md
 - [~] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report); interview it on where it hesitated or guessed, fix what is material, retest once — notes/mcp-blind-acceptance-runbook.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 - [ ] R81 release v1.5: docs current, the demo resets cleanly, tag v1.5 — README.md
