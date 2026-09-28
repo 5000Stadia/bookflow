@@ -4949,10 +4949,15 @@ move the cost of an old sale (and, inside a closed period, refuse unrelated work
 written before co0059 have no captured fallback and are treated as having none; none of them was
 ever below zero when written.
 
-**Returns.** A credit memo returning an issue whose shortfall is not yet wholly filled is refused
-(`provisional_return`): the returned units have no settled cost to take a share of. After the
-fill, a return takes its endpoint share of the settled cost (own value plus that issue's
-true-ups), so the returns of one issue still telescope to what it cost.
+**Returns** (the person: "if it was sold it should be able to be returned"). A credit memo
+returning a short issue first cancels its *unfilled* shortfall units, from the back of the
+shortfall (receipts fill from the front), at `endpoint_share(P, S, ...)` — exactly their
+provisional value. They bypass the fill loop, so no receipt trues up a returned unit, and the
+shortfall entry tracks `filled` and `cancelled` separately. Units returned beyond the unfilled
+ones take the old endpoint share over the pool (issued quantity − cancelled, settled cost −
+cancelled value). The unfilled count only falls, so all cancellations precede all shares and the
+pool is fixed first; an issue never short has an empty cancellation, so its returns cost exactly
+what they did before.
 
 **Validators.** `sales_validation` and `credit_validation` require this document's own movements
 to owe no own-date correction; a true-up owed at a later receipt (a short sale entered ahead of

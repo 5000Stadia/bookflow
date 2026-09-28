@@ -75,11 +75,19 @@ sale no longer short on its own date, so its own target moves back to the real a
 existing per-issue correction carries that at the sale's date, while the true-ups the old walk had
 keyed to it fall to a target of zero and are backed out at their receipts' dates.
 
-A **return** of an issue whose shortfall is not yet wholly filled is refused
-(``provisional_return``): the units it gives back have no settled cost to take a share of. Once
-the shortfall is filled the return takes its endpoint share of the issue's settled cost -- its own
-value plus every true-up keyed to it -- so the returns of one issue still telescope to exactly
-what that issue cost.
+A **return** of a short issue first cancels that issue's *unfilled* shortfall units, taken from
+the back of the shortfall while receipts fill it from the front, at exactly their provisional
+value:
+
+    cancelled = endpoint_share(P, S, S - c_before - c, S - c_before)
+
+Those units settle the issue's own shortfall and fill nobody else's, so no receipt ever trues up
+a unit that came back. Units returned beyond the unfilled ones take the existing endpoint share
+of the issue's settled cost -- its own value plus every true-up keyed to it -- less what was
+cancelled, over its quantity less what was cancelled. The unfilled count only falls, so every
+cancellation precedes every share and that pool is fixed before a share is taken; an issue that
+was never short cancels nothing and the rule is exactly the old one. Either way the returns of
+one issue telescope to exactly what that issue cost.
 
 ## Why a correction is not an input
 
@@ -228,12 +236,13 @@ def replay(rows: Iterable[Mapping]) -> Replay:
     rate: tuple[int, int] | None = None   # (value, quantity) of the last known average
     targets: dict[str, int] = {}
     true_ups: dict[tuple[str, str], int] = {}
-    open_shortfalls: list[dict] = []       # oldest first: issue, units, provisional, filled
+    open_shortfalls: list[dict] = []       # oldest first: issue, units, provisional, filled, cancelled
     shortfalls: list[Shortfall] = []
-    unsettled: set[str] = set()            # issues whose shortfall stock has not yet filled
+    shortfall_of: dict[str, dict] = {}     # issue id -> its shortfall entry, open or done
     by_id = {row['id']: row for row in rows}
     issued_rows = {row['id']: row for row in rows if row['kind'] == 'issue'}
     given_back: dict[str, int] = {}     # issue id -> quantity its returns have taken back
+    cancelled_worth: dict[str, int] = {}  # issue id -> provisional value its returns cancelled
     stale: set[str] = set()             # returns this walk cannot speak for
     for row in rows:
         if row['kind'] not in INPUT_KINDS or row['id'] in retired:
@@ -241,6 +250,7 @@ def replay(rows: Iterable[Mapping]) -> Replay:
         change = int(row['quantity_microunits'])
         if row['kind'] == 'receipt':
             issue_id = row.get('returns_movement_id')
+            cancelled = cancelled_value = 0     # units handed straight back to their own sale
             if issue_id is None:
                 # Receipt-targeted purchase-price corrections belong at acquisition,
                 # even when a bill is recorded after intervening issues.
@@ -258,47 +268,71 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 # cost. The share is the next contiguous span of the issued quantity, divided
                 # by the same endpoint rule the credit's own money goes through, so the
                 # returns of one issue telescope to exactly what that issue consumed.
-                if issue_id in unsettled:
-                    raise StockRefusal('provisional_return', row,
-                                       problem='the sale it returns still carries a provisional cost; '
-                                               'receive stock to settle that sale first')
-                whole = -int(issued_rows[issue_id]['quantity_microunits'])
+                #
+                # A sale still short on stock first gets back its *unfilled* provisional
+                # units, taken from the back of its shortfall at exactly the provisional cost
+                # they went out at, so no true-up is ever owed on a unit that came back.
+                # Only what is returned beyond them takes a share -- of the sale's settled
+                # cost less what was cancelled, over its units less those cancelled. The
+                # unfilled count only falls, so every cancellation precedes every share and
+                # that pool is fixed before any share is taken; a sale never short cancels
+                # nothing and its pool is the whole issue, exactly as before.
+                entry = shortfall_of.get(issue_id)
+                if entry is not None:
+                    unfilled = entry['units'] - entry['filled'] - entry['cancelled']
+                    cancelled = min(change, unfilled)
+                    top = entry['units'] - entry['cancelled']
+                    cancelled_value = endpoint_share(entry['provisional'], entry['units'],
+                                                     top - cancelled, top)
+                    entry['cancelled'] += cancelled
+                    cancelled_worth[issue_id] = cancelled_worth.get(issue_id, 0) + cancelled_value
+                    if entry['filled'] + entry['cancelled'] == entry['units'] and entry in open_shortfalls:
+                        open_shortfalls.remove(entry)
+                pool_units = -int(issued_rows[issue_id]['quantity_microunits']) - (
+                    entry['cancelled'] if entry is not None else 0)
                 low = given_back.get(issue_id, 0)
-                high = low + change
-                if high > whole:
-                    raise StockRefusal('over_returned', row, issued_microunits=whole,
-                                       returned_microunits=high,
+                high = low + change - cancelled
+                if high > pool_units:
+                    raise StockRefusal('over_returned', row,
+                                       issued_microunits=-int(issued_rows[issue_id]['quantity_microunits']),
+                                       returned_microunits=high + change,
                                        problem='more would come back than that sale took out')
                 given_back[issue_id] = high
-                settled = targets[issue_id] + sum(
-                    delta for (issue, _), delta in true_ups.items() if issue == issue_id)
-                worth = endpoint_share(-settled, whole, low, high)
+                shared = 0
+                if high > low:
+                    settled = targets[issue_id] + sum(
+                        delta for (issue, _), delta in true_ups.items() if issue == issue_id)
+                    shared = endpoint_share(-settled - cancelled_worth.get(issue_id, 0),
+                                            pool_units, low, high)
+                worth = cancelled_value + shared
                 targets[row['id']] = worth
             quantity += change
             value += worth
-            if open_shortfalls:
+            # Cancelled units settle their own sale; only the rest can fill anyone else's.
+            incoming, incoming_worth = change - cancelled, worth - cancelled_value
+            if open_shortfalls and incoming:
                 # Incoming units fill the shortfall first, oldest sale first. Each filled
                 # span is valued twice -- what the sale provisionally took, and what this
                 # receipt actually paid -- and the difference is that sale's true-up.
                 span = 0
-                wanting = min(change, sum(entry['units'] - entry['filled'] for entry in open_shortfalls))
+                wanting = min(incoming, sum(entry['units'] - entry['filled'] - entry['cancelled']
+                                            for entry in open_shortfalls))
                 while wanting:
                     entry = open_shortfalls[0]
-                    units = min(entry['units'] - entry['filled'], wanting)
+                    units = min(entry['units'] - entry['filled'] - entry['cancelled'], wanting)
                     released = endpoint_share(entry['provisional'], entry['units'],
                                               entry['filled'], entry['filled'] + units)
-                    actual = endpoint_share(worth, change, span, span + units)
+                    actual = endpoint_share(incoming_worth, incoming, span, span + units)
                     key = (entry['issue']['id'], row['id'])
                     true_ups[key] = true_ups.get(key, 0) + released - actual
                     value += released - actual
                     entry['filled'] += units
                     span += units
                     wanting -= units
-                    if entry['filled'] == entry['units']:
+                    if entry['filled'] + entry['cancelled'] == entry['units']:
                         open_shortfalls.pop(0)
-                        unsettled.discard(entry['issue']['id'])
                 if quantity <= 0:
-                    rate = (worth, change)
+                    rate = (incoming_worth, incoming)
         elif row['kind'] == 'value':
             if quantity <= 0:
                 raise StockRefusal('unvalued_stock', row, quantity_microunits=quantity,
@@ -334,8 +368,9 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 targets[row['id']] = -(taken + provisional)
                 quantity -= issue
                 value -= taken + provisional
-                open_shortfalls.append(dict(issue=row, units=short, provisional=provisional, filled=0))
-                unsettled.add(row['id'])
+                entry = dict(issue=row, units=short, provisional=provisional, filled=0, cancelled=0)
+                open_shortfalls.append(entry)
+                shortfall_of[row['id']] = entry
                 shortfalls.append(Shortfall(row, quantity, short, provisional, basis))
         if quantity > 0:
             rate = (value, quantity)
@@ -345,8 +380,9 @@ def replay(rows: Iterable[Mapping]) -> Replay:
         if quantity == 0 and value != 0:
             raise StockRefusal('residual_value', row, value_minor_units=value,
                                problem='no quantity on hand may not leave value behind')
-        if quantity < 0 and value != -sum(entry['provisional'] - endpoint_share(
-                entry['provisional'], entry['units'], 0, entry['filled']) for entry in open_shortfalls):
+        if quantity < 0 and value != -sum(endpoint_share(
+                entry['provisional'], entry['units'], entry['filled'],
+                entry['units'] - entry['cancelled']) for entry in open_shortfalls):
             raise StockRefusal('residual_value', row, value_minor_units=value,
                                problem='stock below zero must carry exactly its unsettled provisional cost')
 

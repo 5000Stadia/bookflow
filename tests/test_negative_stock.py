@@ -301,26 +301,72 @@ def test_a_purchase_backdated_before_a_short_sale_recosts_it_and_backs_out_its_t
     _ties(books, '2017-02-10')
 
 
-def test_a_return_of_a_provisional_sale_waits_for_the_stock_that_settles_it(books):
-    """Return, purchase cost 5.00. Sell 2 short: provisional 1000. A return now has no settled
-    cost to take a share of and is refused, writing nothing. 4 bought at 6.00 fill 2 at 1200,
-    true-up -200, on hand 2 / 1200. The return of 1 then takes half the settled 1200 = 600:
-    on hand 3 / 1800."""
+def _return(books, sale, quantity, date):
+    line = sale['revision']['lines'][0]['line_id']
+    return books['run']('credit-memo post', dict(customer=books['customer'], date=date,
+        lines=[dict(source_invoice=sale['id'], source_line=line, quantity=quantity)]),
+        reason='Customer return')
+
+
+def test_a_provisional_sale_fully_returned_before_stock_arrives_nets_to_nothing(books):
+    """The person: "if it was sold it should be able to be returned." Purchase cost 5.00, none on hand.
+
+    1 May  sell 2: provisional 2 x 500 = 1000; COGS 1000; on hand -2 / -1000
+    3 May  both come back: the two unfilled units are cancelled at their provisional 1000;
+           COGS 1000 - 1000 = 0; on hand 0 / 0
+    5 May  bill 3 @ 6.00 = 1800: nothing is short any more, so no true-up at all; 3 / 1800
+    """
+    item = _item(books, 'Fully Returned', '5.00')
+    sale = _invoice(books, item, '2017-05-01', '2')
+    assert _net(books, books['cogs']) == 1000
+    credit = _return(books, sale, '2', '2017-05-03')
+    assert _receipt(books, item, credit['id'])['value_minor_units'] == 1000
+    assert _stock(books, item) == ('0', 0)
+    assert _net(books, books['cogs']) == 0
+    _ties(books)
+    _bill(books, item, '2017-05-05', '3', '6')
+    assert _true_ups(books, item) == []
+    assert _stock(books, item) == ('3', 1800)
+    assert _net(books, books['cogs']) == 0
+    _ties(books)
+
+
+def test_a_partly_returned_provisional_sale_is_trued_up_only_for_what_stayed_sold(books):
+    """Purchase cost 5.00, nothing on hand.
+
+    1 May  sell 3: provisional 1500; on hand -3 / -1500
+    3 May  1 comes back: one unfilled unit cancelled at 500; on hand -2 / -1000; COGS 1000
+    5 May  bill 4 @ 6.00 = 2400 fills the 2 still sold: provisional released 1000, actual
+           2 x 600 = 1200, true-up -200 (COGS +200); on hand 2 / -1000 + 2400 - 200 = 1200
+    The sale's net cost is 1500 - 500 + 200 = 1200: the two units kept, at 6.00 each.
+    """
+    item = _item(books, 'Partly Returned', '5.00')
+    sale = _invoice(books, item, '2017-05-01', '3')
+    credit = _return(books, sale, '1', '2017-05-03')
+    assert _receipt(books, item, credit['id'])['value_minor_units'] == 500
+    assert _stock(books, item) == ('-2', -1000)
+    _ties(books)
+    bill = _bill(books, item, '2017-05-05', '4', '6')
+    issue = _issue(books, item, sale['id'])['id']
+    assert _true_ups(books, item) == [
+        ('2017-05-05', issue, _receipt(books, item, bill['id'])['id'], -200)]
+    assert _stock(books, item) == ('2', 1200)
+    assert _net(books, books['cogs']) == 1200
+    _ties(books)
+
+
+def test_a_return_after_the_sale_was_trued_up_takes_its_share_of_the_settled_cost(books):
+    """The existing rule. Purchase cost 5.00: sell 2 short at 1000; 2 May bill 4 @ 6.00 fills
+    them, true-up -200, 2 / 1200; 3 May one comes back at half the settled 1200 = 600:
+    3 / 1800, COGS 1000 + 200 - 600 = 600."""
     item = _item(books, 'Returnable', '5.00')
     sale = _invoice(books, item, '2017-05-01', '2')
-    line = sale['revision']['lines'][0]['line_id']
-    returned = dict(customer=books['customer'], date='2017-05-03',
-                    lines=[dict(source_invoice=sale['id'], source_line=line, quantity='1')])
-    before = _movements(books, item)
-    with pytest.raises(BookflowError) as waiting:
-        books['run']('credit-memo post', returned, reason='Customer return')
-    assert waiting.value.code == 'E_VALIDATION'
-    assert 'provisional' in waiting.value.message
-    assert _movements(books, item) == before
     _bill(books, item, '2017-05-02', '4', '6')
     assert _stock(books, item) == ('2', 1200)
-    books['run']('credit-memo post', returned, reason='Customer return')
+    credit = _return(books, sale, '1', '2017-05-03')
+    assert _receipt(books, item, credit['id'])['value_minor_units'] == 600
     assert _stock(books, item) == ('3', 1800)
+    assert _net(books, books['cogs']) == 600
     _ties(books)
 
 

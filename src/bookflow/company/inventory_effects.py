@@ -51,7 +51,6 @@ Decided before anything is built, so a refusal leaves nothing behind:
 - **A closed period**, naming it, for the document's own date and for every correction date
   the change implies -- a true-up's date included. The whole change is refused; deltas are
   never moved to today.
-- **A return of a sale whose cost is still provisional**, until stock has arrived to settle it.
 
 ## Stock sold before it arrives
 
@@ -63,7 +62,9 @@ on the result a person or an agent reads. The units below zero are costed provis
 so that fallback never moves when the item record is edited. A later receipt that fills the
 shortfall owes each sale it fills a true-up, which ``plan`` writes as its own dated correction
 document -- dated at the receipt, one line pair per sale, each movement naming the sale in
-``corrects_movement_id`` and the receipt in ``filled_by_movement_id``.
+``corrects_movement_id`` and the receipt in ``filled_by_movement_id``. A return of a sale still
+short gives back its unfilled provisional units first, at their provisional cost, and no
+receipt trues those up.
 Zero-value quantities retain their commercial ownership and batch with no monetary leg.
 Their later recost corrections still target the original movement identity.
 
