@@ -67,3 +67,27 @@ def test_payment_preferences_are_strict_booleans(client, value):
     with pytest.raises(BookflowError) as caught:
         client.run('company update', dict(expected_version=info['info_version'], automatically_apply_payments=value), company=COMPANY)
     assert caught.value.code == 'E_VALIDATION'
+
+
+def test_calculate_without_amount_asks_for_it_when_automatic_calculation_is_off(client, sale):
+    # Row 22 §5: amount_mode company, no amount and the preference off is a field error naming amount.
+    first = invoice(client, sale, 'PAY-CALC-NOAMOUNT')
+    info = client.run('company show', {}, company=COMPANY)
+    client.run('company update', dict(expected_version=info['info_version'], automatically_calculate_payments=False),
+               company=COMPANY)
+    body = dict(mode='new_receipt', customer=sale['customer'], date='2026-06-01',
+                applications=dict(mode='inline', items=[dict(invoice=first['id'], expected_version=1)]))
+    for extra in ({}, dict(amount=None), dict(amount_mode='entered')):
+        with pytest.raises(BookflowError) as caught:
+            client.run('payment calculate', dict(body, **extra), company=COMPANY)
+        assert caught.value.code == 'E_VALIDATION'
+        assert [row['field'] for row in caught.value.details['fields']] == ['amount']
+    # Explicit selection_total is a deliberate calculation request and still works with the preference off.
+    totalled = client.run('payment calculate', dict(body, amount_mode='selection_total'), company=COMPANY)
+    assert totalled['amount']['minor_units'] == 10000 and totalled['amount_origin'] == 'selection_total'
+    # With the preference on, the same request totals the selection.
+    info = client.run('company show', {}, company=COMPANY)
+    client.run('company update', dict(expected_version=info['info_version'], automatically_calculate_payments=True),
+               company=COMPANY)
+    derived = client.run('payment calculate', body, company=COMPANY)
+    assert derived['amount']['minor_units'] == 10000 and derived['amount_origin'] == 'selection_total'

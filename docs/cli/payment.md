@@ -455,7 +455,7 @@ The same example as complete `bookflow_run` arguments:
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `payment` | `--payment` | string \| null | no | yes | null | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `amount_mode` | `--amount-mode` | literal["company", "entered", "selection_total"] | no | no | "company" | — |
+| `amount_mode` | `--amount-mode` | literal["company", "entered", "selection_total"] | no | no | "company" | company: use amount when given; without one, total the selected invoices when the company automatically calculates payments, otherwise amount is required. entered: amount is required. selection_total: total the selected invoices whatever the company preference. |
 | `amount` | `--amount` | string \| object \| null | no | yes | null | — |
 | `applications.mode` | `--applications-mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | — |
 | `applications.items[].invoice` | inside `--applications-items` JSON array | string | no | no | — | Present in InlineCalculation.; minimum length 1; maximum length 1004 |

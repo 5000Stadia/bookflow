@@ -85,7 +85,10 @@ class PaymentSuggestInput(PaymentContext, Page):
 
 
 class PaymentCalculateInput(PaymentContext, Page):
-    amount_mode: Literal['company', 'entered', 'selection_total'] = 'company'
+    amount_mode: Literal['company', 'entered', 'selection_total'] = Field(default='company', description=(
+        'company: use amount when given; without one, total the selected invoices when the company automatically '
+        'calculates payments, otherwise amount is required. entered: amount is required. selection_total: total '
+        'the selected invoices whatever the company preference.'))
     amount: Amount | None = None
     applications: CalculationApplications = Field(default_factory=InlineCalculation)
 
