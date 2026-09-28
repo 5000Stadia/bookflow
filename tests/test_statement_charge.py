@@ -466,13 +466,13 @@ def test_the_shapes_a_charge_is_entered_in_and_the_four_it_is_refused_in(books):
         'rate and amount together': (
             dict(item=books['consultation'], quantity='0.25', rate=RATE, amount='15.00'),
             'input', 'give rate or amount, not both'),
-        'no item': (dict(quantity='0.25', rate=RATE), 'item', 'Field required'),
+        'no item': (dict(quantity='0.25', rate=RATE), 'item', 'required'),
         'a number where an exact decimal belongs': (
             dict(item=books['consultation'], quantity=0.25, rate=RATE),
             'quantity', 'must be a decimal string, never a number or boolean'),
         'a field this document does not have': (
             dict(item=books['consultation'], quantity='1', sales_tax_code_id='x'),
-            'sales_tax_code_id', 'Extra inputs are not permitted'),
+            'sales_tax_code_id', 'not a field here; accepted fields: '),
     }
     for label, (extra, field, problem) in refused.items():
         with pytest.raises(BookflowError) as raised:
