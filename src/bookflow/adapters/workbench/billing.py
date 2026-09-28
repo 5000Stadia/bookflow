@@ -71,3 +71,33 @@ def progress_context(result, billing):
             for kind in ('net', 'tax', 'gross'):
                 row[stage][kind] = Money(row[stage][kind + '_minor_units'], result['currency']).to_dict()['amount']
     return rows
+
+
+def _units(microunits):
+    from decimal import Decimal
+    return format(Decimal(microunits) / Decimal(1_000_000), 'f').rstrip('0').rstrip('.') or '0'
+
+
+def billed_line_summaries(record):
+    """One plain sentence per billed line, read from the record already shown.
+
+    The raw work-document facts and span proofs stay below it. Naming the earlier bills
+    that took the other parts would need further reads, so the sentence counts parts only.
+    """
+    rows = []
+    for source in (record.get('revision') or {}).get('billing_sources') or []:
+        proof = source.get('allocation_proof') or {}
+        facts = source.get('facts_snapshot') or {}
+        line = facts.get('line') or {}
+        spans = len(proof.get('spans') or [])
+        quoted = proof.get('quoted_quantity_microunits')
+        text = f"Bills {_units(source['quantity_microunits'])}"
+        if quoted:
+            text += f" of {_units(quoted)} quoted"
+        text += ' units'
+        if spans > 1:
+            text += f", in {spans} separate parts of the source line (the other parts are on other bills)"
+        rows.append(dict(source=' '.join(str(part) for part in (facts.get('source_number'), facts.get('title')) if part)
+                         or source.get('source_document_id'),
+                         line=line.get('description') or line.get('item_label') or '', text=text + '.'))
+    return rows
