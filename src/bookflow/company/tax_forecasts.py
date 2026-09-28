@@ -26,7 +26,20 @@ class WorkTaxForecast(StrictModel):
 
 
 def remaining(s,source,revision,*,pending=()):
-    """Stream all free intervals; never build an over-limit selection descriptor."""
+    """Stream all free intervals; never build an over-limit selection descriptor.
+
+    Without pending allocations the forecast depends only on the source header, its
+    revision and the company database, so one reading computes it once."""
+    if pending:
+        return _remaining(s,source,revision,pending=pending)
+    from bookflow.company.billing_allocations import within_reading
+    key=('forecast',tuple(sorted(source.items())),revision['id'])
+    forecast,values=within_reading(s,key,lambda:_remaining(s,source,revision))
+    # Callers read the forecast; each gets its own per-line value dicts.
+    return forecast,{line:dict(value) for line,value in values.items()}
+
+
+def _remaining(s,source,revision,*,pending=()):
     import hashlib
     from bookflow.company import work,billing_queries as query
     from bookflow.company import tax_attribution as tax,tax_policy,work_preferences

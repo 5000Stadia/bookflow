@@ -10,7 +10,9 @@ def register(kind, prefix, verb):
     read = verb == 'billing'
     model = getattr(models, prefix + ''.join(w.title() for w in verb.split('-')) + 'Input')
     def planner(inp, ctx, s):
-        return Plan(billing_queries.billing(s, ctx, inp, kind)) if read else billing.prepare(s, ctx, inp, kind, destination)
+        from bookflow.company.billing_allocations import one_reading
+        with one_reading(s):
+            return Plan(billing_queries.billing(s, ctx, inp, kind)) if read else billing.prepare(s, ctx, inp, kind, destination)
     cmd = command(kind.replace('_', '-') + ' ' + verb, scope='company',
         description=(
             'Show quoted, completed, billed and remaining work, exact partial quantities, original-scope percentages, current billing owner and linked invoices/receipts. Quoted tax is informational; actual installments use the captured source tax policy. Remaining tax forecasts all remaining billable nets together in current source order. Uncharged physical scope is not a debt.' if read else
