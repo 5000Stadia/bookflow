@@ -193,8 +193,8 @@ def launch(inp):
         raise BookflowError("E_USAGE", message="Install bookflow-core[mcp] in the launcher's environment.") from None
     from .files import Directories
     with ExitStack() as resources:
-        inputs = Directories(inp.input_dir)
+        inputs = Directories(inp.input_dir, flag="--input-dir")
         resources.callback(inputs.close)
-        outputs = Directories(inp.output_dir)
+        outputs = Directories(inp.output_dir, flag="--output-dir")
         resources.callback(outputs.close)
         anyio.run(serve, inp, origin, secret, inputs, outputs)

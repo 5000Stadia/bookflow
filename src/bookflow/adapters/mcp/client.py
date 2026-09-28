@@ -238,6 +238,11 @@ class Client:
             if direction == 'input' and files.input_file is None:
                 raise BookflowError('E_USAGE', message='Supply transport.input_file with the permitted business file path.')
             output_file = files.output_file or (self.outputs.destination() if direction == 'output' else None)
+            # A result or output path no output directory holds is refused here, before the
+            # command is admitted, so the refusal is certain to have written nothing (R72 #17).
+            for field, path in (('transport.result_file', files.result_file), ('transport.output_file', files.output_file)):
+                if path is not None:
+                    self.outputs.check(path, field)
             header = arguments.model_dump(exclude_unset=True, exclude={'input', 'transport'})
             admitted = await self.post('/adapters/mcp/intents/new', kind='admission', json={'arguments': header, 'company_selection': selection})
             try:

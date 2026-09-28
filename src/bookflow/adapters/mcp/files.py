@@ -51,8 +51,9 @@ def _open_directory(parts, start=None, lineage=None):
 class Directories:
     """Capabilities never authorize a bookkeeping command or a remote host path."""
 
-    def __init__(self, paths):
+    def __init__(self, paths, *, flag=None):
         self.roots = []
+        self.flag = flag
         if len(paths) > 16:
             raise BookflowError("E_USAGE", message="At most 16 directories may be configured per file direction.")
         if paths and (os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd):
@@ -82,13 +83,30 @@ class Directories:
         while self.roots:
             os.close(self.roots.pop()[1])
 
+    def outside(self, field=None, **extra):
+        """The refusal for a local path no configured directory holds, saying which ones do."""
+        allowed = ["/" + "/".join(root[0]) for root in self.roots]
+        where = (f"inside {', '.join(allowed)}" if allowed else
+                 "inside a directory this MCP server was started with" + (f" ({self.flag} DIR)" if self.flag else ""))
+        details = {"stage": "local_file", "reason": "outside_allowed_directory", "allowed_directories": allowed, **extra}
+        if field:
+            details["field"] = field
+        return BookflowError("E_PERMISSION", message=f"That local file path is not allowed: it must be {where}. "
+                             "This is a refusal of the file, not of the command.", details=details)
+
+    def check(self, value, field):
+        """Refuse a path outside every configured directory before anything is submitted."""
+        parts = _parts(value)
+        if not any(len(parts) > len(root) and parts[:len(root)] == root for root, *_ in self.roots):
+            raise self.outside(field, outcome="not_submitted")
+
     @contextmanager
     def parent(self, value):
         parts = _parts(value)
         matches = [(root, fd, identity, lineage) for root, fd, identity, lineage in self.roots
                    if len(parts) > len(root) and parts[:len(root)] == root]
         if not matches:
-            raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "outside_allowed_directory"})
+            raise self.outside()
         root, fd, identity, root_lineage = max(matches, key=lambda item: len(item[0]))
         parent = None
         try:
@@ -186,5 +204,5 @@ class Directories:
 
     def destination(self):
         if not self.roots:
-            raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "outside_allowed_directory"})
+            raise self.outside("transport.output_file", outcome="not_submitted")
         return str(Path("/", *self.roots[0][0], "bookflow-" + secrets.token_hex(16)))

@@ -204,6 +204,16 @@ def test_actual_mcp_bulk_receipt_arrives_within_budget_with_its_warning(hosted, 
                 assert outline["result_compacted"]["reason"] == "size_budget"
                 part = await session.call_tool("bookflow_help", {"command": "invoice post", "section": "Errors"})
                 assert not part.is_error and json.loads(part.content[0].text)["section"] == "Errors"
+                # R72 #17: a result_file outside every output directory is refused before anything is
+                # submitted, and says so, rather than posting and then reporting an unknown outcome.
+                refused = await session.call_tool("bookflow_run", {"command": "invoice post", "reason": "R72 file", "input": {
+                    "date": "2026-09-27", "customer": customer, "number": "R72-FILE",
+                    "lines": [{"item": "Mainline Clearing", "quantity": "1"}]}, "transport": {"result_file": str(tmp_path / "invoice.json")}})
+                error = json.loads(refused.content[0].text)
+                assert refused.is_error and error["code"] == "E_PERMISSION"
+                assert error["details"]["outcome"] == "not_submitted" and error["details"]["field"] == "transport.result_file"
+                assert error["details"]["allowed_directories"] == [] and "--output-dir" in error["message"]
+                assert hosted.call("invoice.show", {"invoice": "R72-FILE"}, company=company).status_code == 404
 
     anyio.run(witness)
 
