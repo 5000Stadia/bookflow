@@ -795,14 +795,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow reconcile start --account 01ARZ3NDEKTSV4RRFFQ69G5FAV --statement-date 2026-02-28 --ending-balance 1482.50 --operation-key example-statement-1 --company 'Demo Plumbing Co' --reason 'Reconcile the February checking statement' --json`
+`bookflow reconcile start --account Checking --statement-date 2026-02-28 --ending-balance 1482.50 --operation-key example-statement-1 --company 'Demo Plumbing Co' --reason 'Reconcile the February checking statement' --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "reconcile start", "input": {"account": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "statement_date": "2026-02-28", "ending_balance": "1482.50", "operation_key": "example-statement-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+{"command": "reconcile start", "input": {"account": "Checking", "statement_date": "2026-02-28", "ending_balance": "1482.50", "operation_key": "example-statement-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
@@ -810,7 +810,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
-| `account` | `--account` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
 | `statement_date` | `--statement-date` | string | yes | no | — | — |
 | `ending_balance` | `--ending-balance` | string \| object | yes | no | — | A statement balance, as money: "290.00", or "-15.00" when the account is overdrawn. |
 | `opening_id` | `--opening-id` | string \| null | no | yes | null | The account's adopted reconciliation opening; omit both this and opening_draft_id to use the account's adopted opening. |

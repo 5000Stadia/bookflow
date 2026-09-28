@@ -134,6 +134,10 @@ def _start_family(verb, model, description):
 
     def planner(inp, ctx, s):
         ids = dict(draft=new_id(), revision=new_id(), operation=new_id(), event=new_id())
+        # A name resolves to the stable ID first, so the recorded request and every
+        # later step carry the ID whichever way the caller named the account.
+        from bookflow.company.accounts import resolve_account
+        inp = inp.model_copy(update={'account': resolve_account(s.company, inp.account)['id']})
         value = prepare(inp, ctx, s, ids)
         return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp))
 

@@ -139,8 +139,17 @@ def test_a_wrong_payment_method_names_the_list_command(client):
 def test_reconcile_start_without_an_opening_names_the_first_step(client):
     checking = client.run("account show", {"account": "Checking"}, company=CO)
     account_id = checking.get("id") or checking["account"]["id"]
+    # The account is named like any other account: by name or by ID.
+    opening = client.run("reconcile opening start", {"operation_key": "r86-open", "account": "Checking",
+        "opening_date": "2026-01-31", "entered_balance": "1250.00",
+        "evidence": {"format": 1, "statement_reference": "January statement", "entered_text": None}},
+        company=CO, dry_run=True, reason="Adopt checking")
+    assert opening["draft"]["account_id"] == account_id
+    misspelt = _refusal(client, "reconcile start", {"operation_key": "r86-recon", "account": "Chekcing",
+        "statement_date": "2026-09-25", "ending_balance": "6111.27"}, dry_run=True, reason="Reconcile September")
+    assert misspelt.code == "E_RECORD_NOT_FOUND" and misspelt.details["suggestions"] == ["Checking"]
     error = _refusal(client, "reconcile start",
-                     {"operation_key": "r86-recon", "account": account_id, "statement_date": "2026-09-25",
+                     {"operation_key": "r86-recon", "account": "Checking", "statement_date": "2026-09-25",
                       "ending_balance": "6111.27"}, dry_run=True, reason="Reconcile September")
     assert error.code == "E_VALIDATION"
     assert error.message.startswith("this account has no reconciliation opening yet; start one with `reconcile opening start`")
