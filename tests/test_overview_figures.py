@@ -89,6 +89,9 @@ def test_the_overview_figures_are_the_reports_own_totals_and_link_to_them(hosted
     activity = page.text.split('id="activity-title"', 1)[1]
     assert f'href="/c/{hosted.company_id}/audit/{latest["id"]}"' in activity
     assert "just now" in activity or "min ago" in activity
+    # In plain words, with who did it: "Posted bill 7", not "post bill 7".
+    from bookflow.adapters.workbench.activity import sentence
+    assert sentence(latest)[0].isupper() and sentence(latest) in activity
 
 
 def test_a_reader_who_cannot_run_a_command_just_does_not_see_its_part(hosted, monkeypatch):

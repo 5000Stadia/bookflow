@@ -208,6 +208,7 @@ company_info = _table(
     _column("use_undeposited_funds_for_payments", sa.Boolean, "Default new receipts to Undeposited Funds unless explicitly overridden.", nullable=False, server_default="1"),
     _column("customer_discount_account_id", sa.String(26), "Default account for early-payment discounts given to customers; null means Discounts Given.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("vendor_discount_account_id", sa.String(26), "Default account for early-payment discounts taken from vendors; null means Discounts Taken.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
+    _column("negative_number_style", sa.String(12), "How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign.", sa.CheckConstraint("negative_number_style IN ('minus','parentheses')", name="ck_company_negative_number_style"), nullable=False, server_default="minus"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 

@@ -5008,3 +5008,12 @@ what they did before.
 to owe no own-date correction; a true-up owed at a later receipt (a short sale entered ahead of
 a receipt already on file) is exempt, because the same change writes it.
 
+
+## Negative-number display (R82)
+
+Company migration co0062 adds `company_info.negative_number_style` (`minus`, the default and
+every upgraded company's value, or `parentheses`), set through `company update` and shown in
+`company show` info. It is display only: the workbench's `money` and `amount` filters
+(`adapters/workbench/display.py`) read it from the context variable `NEGATIVES`, which
+`pages.run` sets for the request when it reads `company show`; a page with no company keeps
+the minus sign. JSON on every interface, exports, print data and form inputs keep the minus.

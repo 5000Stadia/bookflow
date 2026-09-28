@@ -14,6 +14,7 @@ from bookflow.company import schema, list_service
 from bookflow.company.lists import get_list_definition
 from bookflow.company.query import QueryInput, page_state, continuation
 from bookflow.company.query_sql import execute as execute_query
+from bookflow.core.exact import format_quantity_micro_units
 from bookflow.core.money import Money
 
 # Python str.strip() population semantics, including non-ASCII whitespace.
@@ -219,22 +220,18 @@ def _party(noun, inp, session):
             p.columns.update(customer_type=_label(schema.customer_types, effective_type), sales_rep=_label(schema.sales_reps, effective_rep))
         else:
             p.columns.update(terms=_label(schema.terms, table.c.terms_id), vendor_type=_label(schema.vendor_types, table.c.vendor_type_id))
-        balance = "current_balance" if customer else "open_balance"
-        if customer:
-            from bookflow.company.customer_balances import register_functions
-            from bookflow.core.exact import _require_i64
-            register_functions(session.company)
-            p.columns.update(current_balance=p.sorts["current_balance"], open_balance=p.sorts["current_balance"])
-            def transform(row):
-                for name in ("current_balance", "open_balance"):
-                    if name in row:
-                        row[name] = Money(_require_i64(int(row[name]), field=name),
-                            session.company_info_row["home_currency"]).to_dict()
-                return row
-            p.transform = transform
-        else:
-            p.columns[balance] = sa.literal(0)
-            p.transform = lambda row: {**row, balance: Money(0, session.company_info_row["home_currency"]).to_dict()}
+        from bookflow.company.customer_balances import register_functions
+        from bookflow.core.exact import _require_i64
+        register_functions(session.company)
+        names = ("current_balance", "open_balance") if customer else ("open_balance",)
+        p.columns.update({name: p.sorts[names[0]] for name in names})
+        def transform(row):
+            for name in names:
+                if name in row:
+                    row[name] = Money(_require_i64(int(row[name]), field=name),
+                        session.company_info_row["home_currency"]).to_dict()
+            return row
+        p.transform = transform
     elif noun == "employee":
         complete = employee_completeness(session)
         p.columns["profile_complete"] = p.filters["profile_complete"] = p.sorts["profile_complete"] = complete
@@ -286,13 +283,15 @@ def _item(inp, session):
     from bookflow.company import items
     table = schema.items
     p = _from_options(table, items.item_query_options(session.company, filters=inp.filter))
-    p.columns.update(price=sa.null(), cost=sa.null(), quantity_on_hand=sa.literal("0"),
+    p.columns.update(price=sa.null(), cost=sa.null(), quantity_on_hand=items.quantity_on_hand_expression(table),
         preferred_vendor=_label(schema.vendors, table.c.preferred_vendor_id))
     p.extra = {name: table.c[name] for name in ("price_minor_units", "price_currency", "cost_minor_units", "cost_currency")}
     def transform(row):
         for field in ("price", "cost"):
             money = items._money_output(row, field)
             row[field] = None if money is None else money.model_dump()
+        if "quantity_on_hand" in row:
+            row["quantity_on_hand"] = format_quantity_micro_units(int(row["quantity_on_hand"]))
         return row
     p.transform = transform
     return p

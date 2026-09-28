@@ -29,6 +29,20 @@ QUOTE_AND_WORK_STATUSES = ('draft', 'open', 'accepted', 'declined', 'superseded'
 LIST_STATUSES = {'time-activity': ('recorded', 'voided')}
 
 
+# A list of time reads as a timesheet: whose time, when, for whom, as what, how long, billable.
+TIME_COLUMNS = ('employee', 'date', 'customer_name', 'service_item', 'hours', 'billable', 'total', 'status')
+
+
+def time_rows(items):
+    """Lift what `time-activity query` says about each entry's one line to the row it lists."""
+    rows = []
+    for item in items:
+        time = item.get('time') or {}
+        rows.append(dict(item, employee=time.get('employee_name'), service_item=time.get('item_name'),
+            hours=time.get('duration'), billable=None if 'billable' not in time else ('Yes' if time['billable'] else 'No')))
+    return rows
+
+
 def list_statuses(noun):
     return LIST_STATUSES.get(noun, QUOTE_AND_WORK_STATUSES)
 
