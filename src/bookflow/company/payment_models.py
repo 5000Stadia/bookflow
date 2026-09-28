@@ -272,7 +272,8 @@ class PaymentQueryInput(Page):
     date_from: _Date | None = None
     date_to: _Date | None = None
     number: _Number | None = None
-    q: str | None = Field(default=None, max_length=200)
+    reference: str | None = Field(default=None, min_length=1, max_length=128, description="The customer's check number or payment reference, matched exactly (case and surrounding spaces ignored); `number` is the receipt's own number")
+    q: str | None = Field(default=None, max_length=200, description='Words found anywhere in the receipt number, memo, reference/check number or customer name')
     sort: Literal['date', 'number', 'received', 'unapplied'] = 'date'
     direction: Literal['asc', 'desc'] = 'desc'
     include_deleted: bool = Field(default=False, description='Explicitly read retained deleted receipt facts')

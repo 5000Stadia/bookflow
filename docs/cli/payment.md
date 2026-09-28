@@ -1098,7 +1098,7 @@ Example JSON output:
 
 ## `payment query`
 
-Page recorded customer payments with customer, method, status, date, number and available-credit filters.
+Page recorded customer payments with customer, method, status, date, number, reference (the customer's check number) and available-credit filters. `q` searches the receipt number, memo, reference/check number and customer name.
 
 | Contract | Value |
 |---|---|
@@ -1137,7 +1137,8 @@ The same example as complete `bookflow_run` arguments:
 | `date_from` | `--date-from` | string \| null | no | yes | null | — |
 | `date_to` | `--date-to` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
-| `q` | `--q` | string \| null | no | yes | null | — |
+| `reference` | `--reference` | string \| null | no | yes | null | The customer's check number or payment reference, matched exactly (case and surrounding spaces ignored); `number` is the receipt's own number |
+| `q` | `--q` | string \| null | no | yes | null | Words found anywhere in the receipt number, memo, reference/check number or customer name |
 | `sort` | `--sort` | literal["date", "number", "received", "unapplied"] | no | no | "date" | — |
 | `direction` | `--direction` | literal["asc", "desc"] | no | no | "desc" | — |
 | `include_deleted` | `--include-deleted` | boolean | no | no | false | Explicitly read retained deleted receipt facts |

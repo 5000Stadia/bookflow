@@ -24,7 +24,7 @@ def test_customer_payment_summary_names_paid_owing_credit_and_discount(books):
     assert summary['still_due']['amount'] == '180.00'
     assert summary['credit']['amount'] == '50.00' and summary['discount']['amount'] == '20.00'
     assert summary['text'] == (
-        'Received 1150.00 USD from Adams Plumbing. Paid in full: 1 invoice (SUM-1). '
+        'Received 1150.00 USD from Adams Plumbing. It was deposited to Checking. Paid in full: 1 invoice (SUM-1). '
         'Invoice SUM-2: 120.00 USD paid, 180.00 USD still due. Early-payment discount taken: 20.00 USD. '
         '50.00 USD left as credit for Adams Plumbing.')
     # Applying 30.00 of that credit to SUM-2 leaves 150.00 due and 20.00 of credit.

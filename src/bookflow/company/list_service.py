@@ -583,8 +583,20 @@ def blind_write_warning(meta: UpdateMeta) -> str | None:
     """Return the mandatory Row 5 warning for a changed blind write."""
     if meta.previous_version is None or not meta.changed_fields:
         return None
-    fields = ", ".join(meta.changed_fields)
-    return f"Blind write: version {meta.previous_version} and fields {fields} were not compared."
+    whole = set(meta.changed_fields) & _WHOLE_DOCUMENT
+    what = "the document" if whole else ", ".join(meta.changed_fields)
+    since = ""
+    if meta.recent_concurrent_activity:
+        who = meta.previous_updated_by_name or "someone else"
+        since = f" {who} saved version {meta.previous_version} {meta.seconds_since_previous_update:g} s ago; re-read it to check nothing of theirs was overwritten."
+    return (f"Blind write: saved over version {meta.previous_version} without a version check, because no "
+            f"expected_version was given, so any change made to {what} since you read it was not compared "
+            f"and is now replaced.{since} Harmless if no one else edits this record; to have Bookflow refuse "
+            f"instead, pass the version you read as expected_version.")
+
+
+# Change names that stand for a whole document rather than one field a person would recognise.
+_WHOLE_DOCUMENT = {"journal", "work_document", "composition", "selection", "purchase_order"}
 
 
 def insert_row(db_or_connection: Any, table: sa.Table, values: Mapping[str, Any]) -> dict[str, Any]:

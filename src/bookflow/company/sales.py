@@ -17,7 +17,7 @@ from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.company.sales_facts import DISCOUNT_ACCOUNT_TYPES
 from bookflow.company.sales_outputs import (
     SalesOutput, SalesSummaryOutput, SalesRevisionOutput, SalesRevisionSummaryOutput,
-    SalesWriteOutput, SalesPageOutput, SalesHistoryOutput,
+    SalesWriteOutput, SalesPageOutput, SalesHistoryOutput, history_revision,
 )
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
@@ -333,7 +333,7 @@ def page(s, ctx, inp, document_type, *, history=False):
         current = {k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')}
         if deletion: current.update(status='deleted', deletion=deletion)
         return SalesHistoryOutput(**current,
-            items=[revision_output(s, revision, summary_only=True) for revision in found], **shared)
+            items=[history_revision(revision_output(s, revision)) for revision in found], **shared)
     headers = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(c.transactions).where(
         c.transactions.c.id.in_([row['id'] for row in found]))).mappings()} if found else {}
     found = [headers[row['id']] for row in found]
@@ -508,7 +508,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
             resolved['profile'].group = group
         resolved['line_id'] = key
         lines.append(resolved)
-        warnings.extend(line_warnings)
+        warnings.extend(w for w in line_warnings if w not in warnings)
     if len(lines) > 200:
         raise _invalid('lines', 'a sale holds at most 200 lines once its groups are expanded')
     from bookflow.company import sales_adjustments, tax_policy

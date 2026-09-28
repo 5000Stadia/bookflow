@@ -144,7 +144,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # "suggested". The applications nodes of payment receive and of the prospective preview
     # requests move from the two-way Inline/Selection group to a new three-way group (variant
     # groups 25 -> 26) without adding a node; strategy is a literal, not a variant.
-    assert sum(len(group["paths"]) for group in mapped)==2881
+    # 2881 -> 2882 (V1.5 loose ends): payment query's optional `reference` (the customer's check
+    # number) adds its null branch; no other routed input changed.
+    assert sum(len(group["paths"]) for group in mapped)==2882
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

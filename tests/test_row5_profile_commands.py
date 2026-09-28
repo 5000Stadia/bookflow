@@ -10,6 +10,12 @@ from bookflow.core.session import now_iso
 from bookflow.storage.engine import open_database
 
 
+def _blind_warning(version, field):
+    from bookflow.company.list_service import blind_write_warning
+    from bookflow.core.versioning import UpdateMeta
+    return blind_write_warning(UpdateMeta(version=version + 1, changed_fields=[field], previous_version=version))
+
+
 PAYLOADS = {
     "item-category": {"name": "Command Category"},
     "class": {"name": "Command Class"},
@@ -168,5 +174,5 @@ def test_term_show_accepts_a_transaction_date_and_blind_update_warns(client):
     )
     assert updated["version"] == 2
     assert updated["warnings"] == [
-        "Blind write: version 1 and fields due_days were not compared."
+        _blind_warning(1, "due_days")
     ]

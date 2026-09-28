@@ -341,6 +341,8 @@ def payment_page(s, inp):
         statement = statement.where(r.c.date >= inp.date_from)
     if inp.date_to:
         statement = statement.where(r.c.date <= inp.date_to)
+    if inp.reference is not None and inp.reference.strip():
+        statement = statement.where(sa.func.lower(sa.func.trim(p.c.reference)) == inp.reference.strip().lower())
     if inp.has_available_credit is not None:
         statement = statement.where(available > 0 if inp.has_available_credit else available <= 0)
     if inp.q:

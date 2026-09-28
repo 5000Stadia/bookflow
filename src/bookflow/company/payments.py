@@ -572,6 +572,8 @@ def prepare(s, ctx, inp, operation):
     applied_cash = Money(sum(row['applied'] for row in settled), context_['currency'])
     opening = (f"Received {Money(revision['total_minor_units'], context_['currency'])} from {payer_label}."
                if operation == 'receive' else f"Applied {applied_cash} of {payer_label}'s credit.")
+    if operation == 'receive':
+        opening += ' ' + _where_the_money_went(s, profile.deposit_account)
     summary = summarize(settled, context_['currency'], opening=opening, credit=current['available_minor_units'],
                         party_label=payer_label)
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
@@ -689,3 +691,12 @@ def coordinate_rows_and_touches(plan):
     return tuple((table, tuple(data['pending'][table]), tuple(
         Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
         for row in data['pending'][table])) for table, kind, key in TABLE_KINDS)
+
+
+def _where_the_money_went(s, account):
+    """The receipt's own sentence about where the money now sits, as QuickBooks' Deposit To says it."""
+    role = s.company.conn.execute(sa.select(c.accounts.c.system_role).where(c.accounts.c.id == account.id)).scalar_one_or_none()
+    if role == 'undeposited_funds':
+        return ('It is held in Undeposited Funds until you record the bank deposit with `deposit post`; '
+                'the bank balance does not include it yet.')
+    return f'It was deposited to {account.full_name}.'

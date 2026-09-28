@@ -523,7 +523,7 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
         if group is not None:
             resolved.profile.group = group
         resolved_lines.append((key, resolved))
-        warnings.extend(line_warnings)
+        warnings.extend(w for w in line_warnings if w not in warnings)
     if len(resolved_lines) > 200:
         raise _invalid('lines', 'a quote holds at most 200 lines once its groups are expanded')
     apply_adjustments(profile, [resolved for _, resolved in resolved_lines])
@@ -779,7 +779,7 @@ def prepare(s, ctx, inp, kind, operation):
         old_facts = facts(old_rev) if old else None
         resolved, warnings = _resolve_facts(s, inp, kind, old_facts, old_rev['date'] if old else None, old['status'] if old else None)
         line_values, line_warnings = _resolve_lines(s, inp, kind, resolved.profile, old_rev, old_facts.profile if old else None)
-        warnings += line_warnings
+        warnings += [w for w in line_warnings if w not in warnings]
         custom_plan, custom_warnings = _custom_plan(s, inp, kind, header['id'], old_rev)
         warnings += custom_warnings
         number, sequence = _number(s, kind, inp.number if inp.number is not None else old['number'] if old else None, header['id'])

@@ -337,6 +337,29 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].billing_links` | array[object] | no | no | [] | — |
 | `items[].billing_links[].source_document_id` | string | yes | no | — | — |
 | `items[].billing_links[].source_revision_id` | string | yes | no | — | — |
+| `items[].lines` | array[object] | no | no | [] | — |
+| `items[].lines[].position` | integer | yes | no | — | — |
+| `items[].lines[].item` | string | yes | no | — | — |
+| `items[].lines[].description` | string \| null | yes | yes | — | — |
+| `items[].lines[].quantity` | string | yes | no | — | — |
+| `items[].lines[].unit_price` | string \| null | yes | yes | — | The rate; null on a line priced by amount |
+| `items[].lines[].amount` | string | yes | no | — | — |
+| `items[].sales_tax` | object \| null | no | yes | null | — |
+| `items[].sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
+| `items[].sales_tax.item_id` | string \| null | no | yes | null | — |
+| `items[].sales_tax.rate_percent` | string | yes | no | — | The combined rate of every component, e.g. "8.25" |
+| `items[].sales_tax.components` | array[object] | no | no | [] | — |
+| `items[].sales_tax.components[].label` | string | yes | no | — | — |
+| `items[].sales_tax.components[].rate_percent` | string | yes | no | — | — |
+| `items[].sales_tax.components[].agency` | string | yes | no | — | — |
+| `items[].sales_tax.chosen_by` | literal["this document", "customer", "parent customer", "company default", "none"] | yes | no | — | Where the tax item came from: typed on this sale, the customer's own tax item, a parent customer's, or the company's default sales tax item |
+| `items[].sales_tax.customer_tax_code` | string \| null | no | yes | null | — |
+| `items[].sales_tax.customer_taxable` | boolean | no | no | true | — |
+| `items[].sales_tax.amount` | object | yes | no | — | — |
+| `items[].sales_tax.amount.amount` | string | yes | no | — | — |
+| `items[].sales_tax.amount.currency` | string | yes | no | — | — |
+| `items[].sales_tax.amount.minor_units` | integer | yes | no | — | — |
+| `items[].sales_tax.summary` | string | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1055,6 +1078,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
+| `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
+| `sales_tax.item_id` | string \| null | no | yes | null | — |
+| `sales_tax.rate_percent` | string | yes | no | — | The combined rate of every component, e.g. "8.25" |
+| `sales_tax.components` | array[object] | no | no | [] | — |
+| `sales_tax.components[].label` | string | yes | no | — | — |
+| `sales_tax.components[].rate_percent` | string | yes | no | — | — |
+| `sales_tax.components[].agency` | string | yes | no | — | — |
+| `sales_tax.chosen_by` | literal["this document", "customer", "parent customer", "company default", "none"] | yes | no | — | Where the tax item came from: typed on this sale, the customer's own tax item, a parent customer's, or the company's default sales tax item |
+| `sales_tax.customer_tax_code` | string \| null | no | yes | null | — |
+| `sales_tax.customer_taxable` | boolean | no | no | true | — |
+| `sales_tax.amount` | object | yes | no | — | — |
+| `sales_tax.amount.amount` | string | yes | no | — | — |
+| `sales_tax.amount.currency` | string | yes | no | — | — |
+| `sales_tax.amount.minor_units` | integer | yes | no | — | — |
+| `sales_tax.summary` | string | yes | no | — | — |
 | `settlement` | object \| null | no | yes | null | — |
 | `settlement.operation_key` | string | yes | no | — | — |
 | `settlement.facts_fingerprint` | string | yes | no | — | — |
@@ -1570,6 +1609,21 @@ Example JSON output:
     },
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "sales_tax": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "chosen_by": "none",
+    "components": [],
+    "customer_tax_code": null,
+    "customer_taxable": true,
+    "item": null,
+    "item_id": null,
+    "rate_percent": "0",
+    "summary": "No sales tax item applies; tax is value."
   },
   "source_current": null,
   "source_effect": null,
@@ -2436,6 +2490,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
+| `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
+| `sales_tax.item_id` | string \| null | no | yes | null | — |
+| `sales_tax.rate_percent` | string | yes | no | — | The combined rate of every component, e.g. "8.25" |
+| `sales_tax.components` | array[object] | no | no | [] | — |
+| `sales_tax.components[].label` | string | yes | no | — | — |
+| `sales_tax.components[].rate_percent` | string | yes | no | — | — |
+| `sales_tax.components[].agency` | string | yes | no | — | — |
+| `sales_tax.chosen_by` | literal["this document", "customer", "parent customer", "company default", "none"] | yes | no | — | Where the tax item came from: typed on this sale, the customer's own tax item, a parent customer's, or the company's default sales tax item |
+| `sales_tax.customer_tax_code` | string \| null | no | yes | null | — |
+| `sales_tax.customer_taxable` | boolean | no | no | true | — |
+| `sales_tax.amount` | object | yes | no | — | — |
+| `sales_tax.amount.amount` | string | yes | no | — | — |
+| `sales_tax.amount.currency` | string | yes | no | — | — |
+| `sales_tax.amount.minor_units` | integer | yes | no | — | — |
+| `sales_tax.summary` | string | yes | no | — | — |
 
 Example JSON output:
 
@@ -2547,6 +2617,21 @@ Example JSON output:
     },
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "sales_tax": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "chosen_by": "none",
+    "components": [],
+    "customer_tax_code": null,
+    "customer_taxable": true,
+    "item": null,
+    "item_id": null,
+    "rate_percent": "0",
+    "summary": "No sales tax item applies; tax is value."
   },
   "status": "posted",
   "subtotal": {
@@ -3278,6 +3363,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
+| `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
+| `sales_tax.item_id` | string \| null | no | yes | null | — |
+| `sales_tax.rate_percent` | string | yes | no | — | The combined rate of every component, e.g. "8.25" |
+| `sales_tax.components` | array[object] | no | no | [] | — |
+| `sales_tax.components[].label` | string | yes | no | — | — |
+| `sales_tax.components[].rate_percent` | string | yes | no | — | — |
+| `sales_tax.components[].agency` | string | yes | no | — | — |
+| `sales_tax.chosen_by` | literal["this document", "customer", "parent customer", "company default", "none"] | yes | no | — | Where the tax item came from: typed on this sale, the customer's own tax item, a parent customer's, or the company's default sales tax item |
+| `sales_tax.customer_tax_code` | string \| null | no | yes | null | — |
+| `sales_tax.customer_taxable` | boolean | no | no | true | — |
+| `sales_tax.amount` | object | yes | no | — | — |
+| `sales_tax.amount.amount` | string | yes | no | — | — |
+| `sales_tax.amount.currency` | string | yes | no | — | — |
+| `sales_tax.amount.minor_units` | integer | yes | no | — | — |
+| `sales_tax.summary` | string | yes | no | — | — |
 | `settlement` | object \| null | no | yes | null | — |
 | `settlement.operation_key` | string | yes | no | — | — |
 | `settlement.facts_fingerprint` | string | yes | no | — | — |
@@ -3793,6 +3894,21 @@ Example JSON output:
     },
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "sales_tax": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "chosen_by": "none",
+    "components": [],
+    "customer_tax_code": null,
+    "customer_taxable": true,
+    "item": null,
+    "item_id": null,
+    "rate_percent": "0",
+    "summary": "No sales tax item applies; tax is value."
   },
   "source_current": null,
   "source_effect": null,
@@ -4490,6 +4606,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
+| `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
+| `sales_tax.item_id` | string \| null | no | yes | null | — |
+| `sales_tax.rate_percent` | string | yes | no | — | The combined rate of every component, e.g. "8.25" |
+| `sales_tax.components` | array[object] | no | no | [] | — |
+| `sales_tax.components[].label` | string | yes | no | — | — |
+| `sales_tax.components[].rate_percent` | string | yes | no | — | — |
+| `sales_tax.components[].agency` | string | yes | no | — | — |
+| `sales_tax.chosen_by` | literal["this document", "customer", "parent customer", "company default", "none"] | yes | no | — | Where the tax item came from: typed on this sale, the customer's own tax item, a parent customer's, or the company's default sales tax item |
+| `sales_tax.customer_tax_code` | string \| null | no | yes | null | — |
+| `sales_tax.customer_taxable` | boolean | no | no | true | — |
+| `sales_tax.amount` | object | yes | no | — | — |
+| `sales_tax.amount.amount` | string | yes | no | — | — |
+| `sales_tax.amount.currency` | string | yes | no | — | — |
+| `sales_tax.amount.minor_units` | integer | yes | no | — | — |
+| `sales_tax.summary` | string | yes | no | — | — |
 | `settlement` | object \| null | no | yes | null | — |
 | `settlement.operation_key` | string | yes | no | — | — |
 | `settlement.facts_fingerprint` | string | yes | no | — | — |
@@ -5005,6 +5137,21 @@ Example JSON output:
     },
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "sales_tax": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "chosen_by": "none",
+    "components": [],
+    "customer_tax_code": null,
+    "customer_taxable": true,
+    "item": null,
+    "item_id": null,
+    "rate_percent": "0",
+    "summary": "No sales tax item applies; tax is value."
   },
   "source_current": null,
   "source_effect": null,

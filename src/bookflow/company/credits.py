@@ -399,7 +399,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                 resolved['intervals'] = ()
                 resolved['claim_rows'] = []
                 lines.append(resolved)
-                warnings.extend(line_warnings)
+                warnings.extend(w for w in line_warnings if w not in warnings)
     attribution = None
     ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line.get('line_id') for line in lines])
     if retained:
