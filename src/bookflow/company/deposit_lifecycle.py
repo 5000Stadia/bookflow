@@ -173,7 +173,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True):
     account_ids={resolved.intent.bank.id}|{r.account.id for r in resolved.intent.additional}
     if resolved.intent.cash_back:account_ids.add(resolved.intent.cash_back.account.id)
     reference_accounts=[effects.rows(s,c.accounts,c.accounts.c.id==key)[0] for key in sorted(account_ids)]
-    facts=dict(accounts=reference_accounts,request=operations.request(inp,ctx,s,verb),before=old,sources=source_headers,claims=current_claims,
+    facts=dict(accounts=reference_accounts,request=operations.facts_request(inp,ctx,s,verb),before=old,sources=source_headers,claims=current_claims,
         resolved=_logical(resolved.model_dump(mode='json'),mapping),number=number,memo=memo,
         custom=sales._custom_semantic(custom_plan.snapshot) if custom_plan else None,
         closing=s.company_info_row.get('closing_date'),schema='co0021')

@@ -163,7 +163,7 @@ def _prepare_effect(s, ctx, inp, operation, provenance):
     if any(after['version'] > 9223372036854775807 for after in [header, *(new for before, new in touched.values())]):
         raise BookflowError('E_VALUE_RANGE')
     current['version'] = header['version']
-    fp = query.digest([operations.request(inp, ctx, s, 'payment ' + operation), old,
+    fp = query.digest([operations.facts_request(inp, ctx, s, 'payment ' + operation), old,
         facts['applications'], originals, inverse_sources, [a for a, b in touched.values()],
         s.company_info_row['closing_date']])
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fp:

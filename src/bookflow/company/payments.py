@@ -549,7 +549,7 @@ def prepare(s, ctx, inp, operation):
         if inp.deposit_to is None:
             profile_dependencies['use_undeposited_funds_for_payments'] = profile.preferences.use_undeposited_funds_for_payments
     financial_context = {key: context_[key] for key in ('mode', 'customer_id', 'ar_account_id', 'payment_id', 'date', 'currency')}
-    fp = query.digest([operations.request(inp, ctx, s, command), financial_context, recipes,
+    fp = query.digest([operations.facts_request(inp, ctx, s, command), financial_context, recipes,
         early.account_identity(discount_account.model_dump(), account_mutation) if discount_account else None,
         [header['number'], revision['date'], revision['total_minor_units'], revision['memo']],
         profile_dependencies if operation == 'receive' else [previous['id'], previous['version'], funding['available']],

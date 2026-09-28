@@ -95,7 +95,7 @@ def prepare(s, ctx, inp):
         changed_headers.append((old, after))
         payment_outputs.append(dict(_source_current(s, identifier), version=after['version']))
     data['settlement_headers'] = changed_headers
-    fp = query.digest([operations.request(inp, ctx, s, 'invoice update'), plan.preview.facts_fingerprint,
+    fp = query.digest([operations.facts_request(inp, ctx, s, 'invoice update'), plan.preview.facts_fingerprint,
         [value['header'] for _, value in sorted(funding.items())], apps, data.get('settlement_recipe', [])])
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fp:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'settlement_dependencies', 'facts_fingerprint': fp})

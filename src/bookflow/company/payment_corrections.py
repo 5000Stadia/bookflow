@@ -240,7 +240,7 @@ def prepare_effect(s, ctx, inp, provenance):
         raise BookflowError('E_VALUE_RANGE')
     # A refund landing between the preview and the save moves this receipt's capacity exactly
     # as an application does, so it is part of what the guard is taken over.
-    fp = query.digest([operations.request(inp, ctx, s, 'payment update'), semantic, old,
+    fp = query.digest([operations.facts_request(inp, ctx, s, 'payment update'), semantic, old,
         funding['applications'], funding['consumptions'], old_allocations,
         [facts['header'] for facts in targets.values()],
         defaults._info(s.company)['closing_date']])

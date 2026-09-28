@@ -20,6 +20,18 @@ def request(inp, ctx, s, command):
     return value
 
 
+def facts_request(inp, ctx, s, command):
+    """The request as a facts fingerprint sees it: the business input, without the reason.
+
+    A preview and the save that follows it may word their reason differently, and a retry key
+    sits outside the input altogether; neither changes what is written, so neither may turn a
+    matching preview stale. The reason stays in `request`, which a replay compares.
+    """
+    value = request(inp, ctx, s, command)
+    value.pop('context'); value.pop('context_provided_fields')
+    return value
+
+
 def find(s, operation_key):
     rows = effects.rows(s, c.payment_operations, c.payment_operations.c.operation_key == operation_key)
     return rows[0] if rows else None

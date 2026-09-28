@@ -34,6 +34,17 @@ def request(inp, ctx, s, verb, *, original=False):
         context_provided_fields=['reason'] if ctx.reason is not None else [])
 
 
+def facts_request(inp, ctx, s, verb):
+    """The request as a facts fingerprint sees it: the business input, without the reason.
+
+    A preview and its save may word the reason differently; that changes nothing written, so it
+    may not turn a matching preview stale. The reason stays in `request`, which a replay compares.
+    """
+    value = request(inp, ctx, s, verb)
+    value.pop('context'); value.pop('context_provided_fields')
+    return value
+
+
 def _find(s, key):
     found = rows.rows(s, c.deposit_operations, c.deposit_operations.c.operation_key == key)
     return found[0] if found else None
