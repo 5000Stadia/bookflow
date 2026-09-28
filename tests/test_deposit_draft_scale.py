@@ -9,7 +9,6 @@ from tests.test_deposit_lifecycle import driver
 from tests.test_service_sales_lifecycle import sale,COMPANY
 from tests.test_deposit_sources import uf
 from tests.test_payment_receipts import method
-from tests.test_deposit_draft_financial import run_private, financial as financial_action
 
 
 @pytest.fixture(scope='module')
@@ -178,7 +177,7 @@ def test_70_removed_work_source_beyond_200_retains_whole_history_authority(world
         assert removed.summary.source_count==402
 
 
-def test_80_post_403_source_draft_and_page_every_member(world,driver,run,run_private):
+def test_80_post_403_source_draft_and_page_every_member(world,driver,run):
     """A deposit of more than two pages of sources posts whole and reads back page by page.
 
     This replaces the retired retained-world financial suites, which needed prebuilt /tmp roots.
@@ -188,11 +187,9 @@ def test_80_post_403_source_draft_and_page_every_member(world,driver,run,run_pri
     draft=world['accepted_all'].draft
     ready=run('update',dict(draft=draft.id,expected_version=draft.version,header=dict(deposit_to=bank)))
     assert ready.summary.source_count==403 and ready.summary.bank_total==40300 and not ready.posting_issues
-    # Through the lifecycle, as the retired suites did: the public command's dry-run preview of a
-    # draft post is refused by its own output model (draft-row tokens exceed the ID length).
-    posted=financial_action(run_private,dict(operation_key='g3-403-post',document=dict(mode='draft',draft=ready.id,expected_version=ready.version)))
-    assert len(posted.effect.memberships)==403 and posted.current.revision_bank_total==40300
-    deposit=posted.current.id
+    posted=client.run('deposit post',dict(operation_key='g3-403-post',document=dict(mode='draft',draft=ready.id,expected_version=ready.version)),company=COMPANY)
+    assert posted['deposit']['bank_total']['minor_units']==40300 and len(posted['deposit']['banked_receipt_ids'])==403
+    deposit=posted['deposit']['id']
     with driver.session() as s:
         members=s.company.raw.execute('SELECT source_transaction_id,amount_minor_units FROM deposit_memberships WHERE transaction_id=? AND kind=?',(deposit,'claim')).fetchall()
         assert dict(members)=={r['source']:100 for r in world['sources']}

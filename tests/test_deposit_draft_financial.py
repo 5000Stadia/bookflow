@@ -667,3 +667,41 @@ def test_coordinate_consumption_matches_audited_build_before_writes(client,sale,
         patch.setattr(cp,'execute',checked)
         test_coordinate_draft_real_source_action_consumes(client,sale,cash,run_private,True)
     assert observed==[True]
+
+
+def _saved_one_source_draft(client,run_private,source,name):
+    bank=client.account.create(name=name,type='bank',company=COMPANY)['id']
+    draft=run_private(lambda s,ctx:drafts.run(s,ctx,m.DraftCreate(header=m.HeaderPatch(date='2026-06-03',deposit_to=bank)),'create'))
+    return bank,run_private(lambda s,ctx:drafts.run(s,ctx,m.DraftUpdate(draft=draft.id,expected_version=draft.version,set_sources=[m.SourcePatch(**source)]),'update'))
+
+
+def test_saved_draft_posts_through_the_public_command_in_python_and_http(client,sale,cash,run_private,root):
+    """The deposit window's everyday save-then-post, through `deposit post` itself.
+
+    Its preview once named each drafted row `draft-row-<draft row id>`, longer than an output ID
+    may be, so every draft post was refused by its own output model.
+    """
+    from tests.test_row3_host import hosted as host_fixture
+    from tests.test_deposit_sources import uf
+    bank,draft=_saved_one_source_draft(client,run_private,cash,'Public draft bank')
+    body=dict(operation_key='public-draft-post',document=dict(mode='draft',draft=draft.id,expected_version=draft.version))
+    preview=client.run('deposit post',body,company=COMPANY,dry_run=True)
+    assert preview['dry_run'] and preview['deposit']['bank_total']['minor_units']==6000
+    assert preview['deposit']['banked_receipt_ids']==[cash['source']]
+    posted=client.run('deposit post',body,company=COMPANY)
+    assert not posted['dry_run'] and posted['deposit']['bank_total']['minor_units']==6000
+    assert posted['deposit']['banked_receipt_ids']==[cash['source']]
+    replay=client.run('deposit post',body,company=COMPANY)  # an exact retry replays
+    assert replay['idempotent_replay'] and replay['deposit']['id']==posted['deposit']['id']
+    # The same everyday act over HTTP.
+    paid_by=client.run('payment-method create',dict(name='HTTP draft cash',kind='cash'),company=COMPANY)['id']
+    second=client.run('sales-receipt post',dict(customer=sale['customer'],deposit_to=uf(client),payment_method=paid_by,date='2026-06-02',
+        lines=[dict(item=sale['item'],quantity='1',unit_price='25')]),company=COMPANY)
+    _,other=_saved_one_source_draft(client,run_private,dict(source=second['id'],source_type='sales_receipt',expected_version=second['version']),'HTTP draft bank')
+    served=host_fixture.__wrapped__(root)
+    hosted=next(served)
+    try:
+        out=hosted.ok('deposit.post',dict(operation_key='http-draft-post',document=dict(mode='draft',draft=other.id,expected_version=other.version)),company=hosted.company_id)
+        assert out['deposit']['bank_total']['minor_units']==2500 and out['deposit']['banked_receipt_ids']==[second['id']]
+    finally:
+        next(served,None)
