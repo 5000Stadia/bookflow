@@ -1648,7 +1648,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
             page = api.get(f'/c/{hosted.company_id}/invoice/{source["id"]}/update')
             assert page.status_code == 200, page.text[:300]
             assert re.search(r'name="f:settlement_guard" value="[^"]+"', page.text)
-        if cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt", "billing"):
+        if cmd.noun in ("estimate", "work-order", "time-activity") and cmd.verb in ("invoice", "sales-receipt", "billing"):
             # Billing cards first pick a real bounded source, then expose that source's inputs.
             assert 'data-billing-source-picker' in page.text, cmd.name
             source = hosted.ok(cmd.noun + ".query", {"limit": 1}, company=hosted.company_id)["items"][0]
@@ -1690,13 +1690,13 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                 assert kinds and sorted(kinds) == sorted(values), cmd.name
                 assert len(kinds) == len(set(kinds)), cmd.name
                 if cmd.noun in commercial_fields:
-                    destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order", "estimate invoice", "estimate sales-receipt", "work-order invoice", "work-order sales-receipt") else cmd.noun
+                    destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order", "estimate invoice", "estimate sales-receipt", "work-order invoice", "work-order sales-receipt", "time-activity invoice", "time-activity sales-receipt") else cmd.noun
                     assert set(values) == commercial_fields[destination], cmd.name
             elif leaf["path"] == "cursor" and cmd.name in _cursor_free_reports():
                 # Statement continuations belong to the result's Next form;
                 # rerunning the filter form must always start a fresh report.
                 assert 'name="f:cursor"' not in form_text, cmd.name
-            elif leaf["path"] in ("line_ids", "selections", "percent") and cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt"):
+            elif leaf["path"] in ("line_ids", "selections", "percent") and cmd.noun in ("estimate", "work-order", "time-activity") and cmd.verb in ("invoice", "sales-receipt"):
                 # These shared inputs use the source-aware controls checked above.
                 assert f'name="f:{leaf["path"]}"' not in form_text, cmd.name
                 assert f'name="collection:{leaf["path"]}"' not in form_text, cmd.name

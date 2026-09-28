@@ -1682,7 +1682,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, BookflowError("E_PERMISSION", details={
                 "capability": cmd.capability, "required_role": cmd.required_role,
             }))
-        if noun in ('estimate', 'work-order') and verb in ('invoice', 'sales-receipt', 'billing') and record_id in (None, 'self'):
+        if noun in Billing.NOUNS and verb in ('invoice', 'sales-receipt', 'billing') and record_id in (None, 'self'):
             source_title = request.query_params.get('title', '')
             query = {'limit': 25}
             if source_title:
