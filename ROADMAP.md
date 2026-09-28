@@ -79,7 +79,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R89 agents and users can be deactivated (the gap recorded when R68 shipped) — notes/V1.5-resort-draft.md
 - [x] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
 - [x] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
-- [~] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
+- [x] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
 - [x] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
 - [x] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
 - [?] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
@@ -148,3 +148,4 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
 - [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
+- [ ] R157 a saved invoice billed from a very long quote (hundreds of installments) opens faster: its technical-details section repeats every billed line's proofs (~1.5 MB, ~32 s at 201 installments)
