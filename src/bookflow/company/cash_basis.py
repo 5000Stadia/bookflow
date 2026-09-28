@@ -231,7 +231,7 @@ def cutoff_adjustments(db, as_of: str) -> tuple[Adjustment, ...]:
         profile = line_profiles.get(line['id'])
         if profile is None:
             _invalid('A receivable recognition component lacks its captured commercial line.')
-        if family != 'credit_memo' and profile.get('item_snapshot') and '"discount"' in profile['item_snapshot']:
+        if profile.get('item_snapshot') and '"discount"' in profile['item_snapshot']:
             import json
             facts = json.loads(profile['item_snapshot'])
             if facts.get('item_type') == 'discount':
@@ -239,8 +239,9 @@ def cutoff_adjustments(db, as_of: str) -> tuple[Adjustment, ...]:
                 # took are recognised as the lines it discounted are paid.
                 targets = [by_position[(line['revision_id'], target['position'])]
                            for target in facts['adjustment']['targets']]
+                weight = 'gross_minor_units' if family == 'credit_memo' else 'net_minor_units'
                 pairs = [ar_fraction(target, family) for target in targets
-                         if line_profiles[target['id']]['net_minor_units']]
+                         if line_profiles[target['id']][weight]]
                 paid, whole = sum(pair[0] for pair in pairs), sum(pair[1] for pair in pairs)
                 return (paid, whole) if whole else (1, 1)
         key = (line['transaction_id'], line['line_id'])

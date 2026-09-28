@@ -901,7 +901,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -979,6 +979,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].claims[].end_quantity` | string | yes | no | — | — |
 | `revision.lines[].claims[].source_base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].claims[].source_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -1885,7 +1890,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -1963,6 +1968,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].claims[].end_quantity` | string | yes | no | — | — |
 | `revision.lines[].claims[].source_base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].claims[].source_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -2701,7 +2711,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -2779,6 +2789,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].claims[].end_quantity` | string | yes | no | — | — |
 | `revision.lines[].claims[].source_base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].claims[].source_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -3513,7 +3528,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -3591,6 +3606,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].claims[].end_quantity` | string | yes | no | — | — |
 | `revision.lines[].claims[].source_base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].claims[].source_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
