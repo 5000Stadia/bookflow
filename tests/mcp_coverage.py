@@ -413,6 +413,7 @@ report transaction-list-by-date
 report trial-balance
 report unbilled-costs
 report unpaid-bills
+report vendor-1099-summary
 report vendor-balance-detail
 report vendor-balance-summary
 sales-receipt history

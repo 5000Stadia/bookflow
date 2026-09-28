@@ -51,6 +51,9 @@ from bookflow.company.transaction_list_reports import (
     DepositDetailInput, DepositDetailOutput, TransactionListByDateInput,
     TransactionListByDateOutput, deposit_detail, transaction_list_by_date,
 )
+from bookflow.company.vendor_1099_reports import (
+    Vendor1099SummaryInput, Vendor1099SummaryOutput, vendor_1099_summary,
+)
 from bookflow.company.balance_reports import (
     CustomerBalanceDetailInput, CustomerBalanceDetailOutput, CustomerBalanceSummaryInput,
     CustomerBalanceSummaryOutput, VendorBalanceDetailInput, VendorBalanceDetailOutput,
@@ -309,3 +312,11 @@ def plan_deposit_detail(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_transaction_list_by_date(inp, ctx, s):
     return Plan(preview=transaction_list_by_date(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report vendor-1099-summary", scope="company", required_role="member", capability="reports",
+    description="What was paid to each vendor marked eligible for a 1099 between date_from and date_to -- a calendar year for a 1099 -- as the anchor's 1099 summary reports it. This is a report, not a filing. It is cash by nature: a payment is money out of a bank account on a posting line naming the vendor -- the bank side of a bill payment or a check, less a vendor refund deposited back -- on the date it was paid, so a voided or corrected payment counts what the ledger finally says was paid. A payment by credit card is not counted, because the card company reports it, and is shown beside the payments as card_payments_excluded. Every counted payment is nonemployee compensation, box 1 of the 1099-NEC: Bookflow does not map expense accounts to 1099 boxes. The threshold is the year's 1099-NEC filing threshold for the year of date_to -- 600.00 before 2026, 2,000.00 from 2026 on, without the inflation adjustment the law applies after 2026 -- and a vendor meets it when its counted payments are at least that much. above_threshold_only, on by default as in the anchor, lists only vendors that meet it; turned off it lists every 1099 vendor paid anything. Totals give the threshold, the reportable total and count of vendors meeting it whatever is listed, and the payments and card payments of the vendors listed; rows are paged.",
+    input_model=Vendor1099SummaryInput, output_model=Vendor1099SummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_vendor_1099_summary(inp, ctx, s):
+    return Plan(preview=vendor_1099_summary(inp, s, principal_id=ctx.on_behalf_of))

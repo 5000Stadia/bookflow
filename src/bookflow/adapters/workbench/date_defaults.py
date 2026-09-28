@@ -40,6 +40,9 @@ REPORTS = {
     'report open-purchase-orders': ('date_to',),
     'sales-tax liability': ('as_of',),
 }
+# Reports read over a whole calendar year that open, as the anchor's do, on the last one: a
+# 1099 summary is prepared in January for the year just ended.
+LAST_YEAR_REPORTS = {'report vendor-1099-summary': ('date_from', 'date_to')}
 
 
 def company_today(company, *, now=None):
@@ -69,7 +72,15 @@ def seed(command, today, *, initial_get, query, originals, attempted):
     """
     if not initial_get:
         return
-    fields = REPORTS.get(command) or ((TRANSACTIONS[command],) if command in TRANSACTIONS else ())
+    if command in LAST_YEAR_REPORTS:
+        last = str(int(today[:4]) - 1)
+        if not query and not any('f:' + field in attempted or _present(originals, field)
+                                 for field in LAST_YEAR_REPORTS[command]):
+            attempted['f:date_from'], attempted['f:date_to'] = last + '-01-01', last + '-12-31'
+            return
+        fields = LAST_YEAR_REPORTS[command]
+    else:
+        fields = REPORTS.get(command) or ((TRANSACTIONS[command],) if command in TRANSACTIONS else ())
     for field in fields:
         key = 'f:' + field
         if key in attempted or _present(originals, field):
@@ -96,7 +107,7 @@ def presets(command, today):
     company's today. A period report takes a from/to pair; a report read on one date takes
     that date. A report this map does not date offers none.
     """
-    fields = REPORTS.get(command)
+    fields = REPORTS.get(command) or LAST_YEAR_REPORTS.get(command)
     if not fields:
         return []
     day = date.fromisoformat(today)

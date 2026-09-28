@@ -316,6 +316,50 @@ def test_transaction_list_by_date_is_every_posting_in_order(client):
         ("DEMO-PAY-P-VOID", "original", 1000), ("DEMO-PAY-P-VOID", "reversal", -1000)]
 
 
+
+# --- 1099 summary (R134) -----------------------------------------------------------------
+#
+#   Summit Pipe Contracting, marked 1099-eligible:
+#     DEMO-1099-PAY-1  2026-12-08  check from Payment Example Bank           2,400.00
+#     DEMO-1099-PAY-2  2026-12-09  paid on Business Credit Card: the card
+#                      company reports it, so shown and not counted          150.00
+#   2026 threshold 2,000.00, met. Regional Parts is paid by check too, but is not marked
+#   eligible, and Central Supply is not either.
+def test_1099_summary_counts_bank_payments_to_eligible_vendors(client):
+    result = _run(client, "report vendor-1099-summary", {"date_from": "2026-01-01", "date_to": "2026-12-31"})
+    assert result["metadata"]["basis"] == "cash"
+    assert [(row["display_vendor_label"], row["box"], _minor(row["payments"]),
+             _minor(row["card_payments_excluded"]), row["meets_threshold"]) for row in result["rows"]] == [
+        ("Summit Pipe Contracting", "nonemployee_compensation", 240000, 15000, True)]
+    assert {key: (_minor(value) if isinstance(value, dict) else value)
+            for key, value in result["totals"].items()} == {
+        "threshold": 200000, "reportable": 240000, "vendors_meeting_threshold": 1,
+        "payments": 240000, "card_payments_excluded": 15000}
+    # Before the check was written nothing was paid, so nobody meets the threshold, and with
+    # the filter off the card payment is still not counted.
+    early = _run(client, "report vendor-1099-summary", {"date_from": "2026-01-01", "date_to": "2026-12-08",
+                                                         "above_threshold_only": False})
+    assert [(_minor(row["payments"]), _minor(row["card_payments_excluded"])) for row in early["rows"]] == [(240000, 0)]
+    none = _run(client, "report vendor-1099-summary", {"date_from": "2026-01-01", "date_to": "2026-12-07",
+                                                        "above_threshold_only": False})
+    assert none["rows"] == [] and _minor(none["totals"]["reportable"]) == 0
+    # The threshold is the year's: 600.00 for 2025 payments.
+    last_year = _run(client, "report vendor-1099-summary", {"date_from": "2025-01-01", "date_to": "2025-12-31"})
+    assert _minor(last_year["totals"]["threshold"]) == 60000 and last_year["rows"] == []
+
+
+def test_1099_summary_opens_on_the_last_calendar_year():
+    from bookflow.adapters.workbench import date_defaults
+    attempted = {}
+    date_defaults.seed("report vendor-1099-summary", "2027-01-15", initial_get=True, query={},
+                       originals={}, attempted=attempted)
+    assert attempted == {"f:date_from": "2026-01-01", "f:date_to": "2026-12-31"}
+    kept = {}
+    date_defaults.seed("report vendor-1099-summary", "2027-01-15", initial_get=True,
+                       query={"f:date_from": "2026-01-01", "f:date_to": "2026-12-31"}, originals={}, attempted=kept)
+    assert kept == {"f:date_from": "2026-01-01", "f:date_to": "2026-12-31"}
+
+
 # --- the report pages -------------------------------------------------------------------
 #
 # Each page opens already run on the filters its link carries, shows the report's own
@@ -330,6 +374,7 @@ PAGES = {
     "purchases-by-item": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "388.97"),
     "deposit-detail": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "324.00"),
     "transaction-list-by-date": ({"f:date_from": "2026-11-20", "f:date_to": "2026-12-02"}, "300.80"),
+    "vendor-1099-summary": ({"f:date_from": "2026-01-01", "f:date_to": "2026-12-31"}, "2,400.00"),
 }
 
 
@@ -347,6 +392,6 @@ def test_each_report_page_opens_with_its_figures(hosted, verb):  # noqa: F811
     assert figure in page.text
     assert "/print-all" in page.text and "/export.csv" in page.text
     exported = browser.get(f"/c/{hosted.company_id}/report/{verb}/export.csv?" + urlencode(query))
-    assert exported.status_code == 200 and figure in exported.text
+    assert exported.status_code == 200 and figure.replace(",", "") in exported.text
     printed = browser.get(f"/c/{hosted.company_id}/report/{verb}/print-all?" + urlencode(query))
     assert printed.status_code == 200 and figure in printed.text

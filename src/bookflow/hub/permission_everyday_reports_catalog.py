@@ -28,6 +28,7 @@ REPORTS = {
     'transaction-list-by-date': 'plan_transaction_list_by_date',
     'vendor-balance-detail': 'plan_vendor_balance_detail',
     'vendor-balance-summary': 'plan_vendor_balance_summary',
+    'vendor-1099-summary': 'plan_vendor_1099_summary',
 }
 ADDED_COMMANDS = tuple(
     c.CommandDescriptor('report ' + verb, 'company', 'reports', 'member', (), True, None, False, False, None, None, None, None)

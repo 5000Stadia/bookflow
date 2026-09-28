@@ -319,7 +319,9 @@ PANELS: tuple[Panel, ...] = (
                         "open invoices, A/P aging, unpaid bills, trial balance, profit and "
                         "loss, balance sheet, statement of cash flows, income tax summary, "
                         "general ledger, transaction detail by account, missing checks, "
-                        "inventory valuation and stock status.",
+                        "inventory valuation and stock status, customer and vendor "
+                        "balances, open purchase orders, purchases by vendor and item, "
+                        "deposit detail, the transaction list by date and the 1099 summary.",
                 action=Action(
                     "Choose a report to run",
                     READ,
@@ -332,6 +334,7 @@ PANELS: tuple[Panel, ...] = (
                      "report open-purchase-orders", "report purchases-by-vendor",
                      "report purchases-by-item",
                      "report deposit-detail", "report transaction-list-by-date",
+                     "report vendor-1099-summary",
                      "report inventory-valuation", "report stock-status",
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
@@ -507,6 +510,7 @@ SECTIONS: tuple[Section, ...] = (
             _report("Open purchase orders", "open-purchase-orders"),
             _report("Purchases by vendor summary", "purchases-by-vendor"),
             _report("Purchases by item summary", "purchases-by-item"),
+            _report("1099 summary", "vendor-1099-summary"),
         ),
     ),
     Section(

@@ -5648,6 +5648,182 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report vendor-1099-summary`
+
+What was paid to each vendor marked eligible for a 1099 between date_from and date_to -- a calendar year for a 1099 -- as the anchor's 1099 summary reports it. This is a report, not a filing. It is cash by nature: a payment is money out of a bank account on a posting line naming the vendor -- the bank side of a bill payment or a check, less a vendor refund deposited back -- on the date it was paid, so a voided or corrected payment counts what the ledger finally says was paid. A payment by credit card is not counted, because the card company reports it, and is shown beside the payments as card_payments_excluded. Every counted payment is nonemployee compensation, box 1 of the 1099-NEC: Bookflow does not map expense accounts to 1099 boxes. The threshold is the year's 1099-NEC filing threshold for the year of date_to -- 600.00 before 2026, 2,000.00 from 2026 on, without the inflation adjustment the law applies after 2026 -- and a vendor meets it when its counted payments are at least that much. above_threshold_only, on by default as in the anchor, lists only vendors that meet it; turned off it lists every 1099 vendor paid anything. Totals give the threshold, the reportable total and count of vendors meeting it whatever is listed, and the payments and card payments of the vendors listed; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.vendor-1099-summary` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report vendor-1099-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first payment date, YYYY-MM-DD; a 1099 year is January 1 to December 31.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last payment date, YYYY-MM-DD; its year decides the filing threshold.; minimum length 10; maximum length 10 |
+| `above_threshold_only` | `--above-threshold-only` | boolean | no | no | true | List only vendors paid at least the year's filing threshold, as the anchor does by default. False lists every 1099 vendor paid anything. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.vendor-1099-summary`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.threshold` | object | yes | no | — | — |
+| `totals.threshold.amount` | string | yes | no | — | — |
+| `totals.threshold.currency` | string | yes | no | — | — |
+| `totals.threshold.minor_units` | integer | yes | no | — | — |
+| `totals.reportable` | object | yes | no | — | — |
+| `totals.reportable.amount` | string | yes | no | — | — |
+| `totals.reportable.currency` | string | yes | no | — | — |
+| `totals.reportable.minor_units` | integer | yes | no | — | — |
+| `totals.vendors_meeting_threshold` | integer | yes | no | — | — |
+| `totals.payments` | object | yes | no | — | — |
+| `totals.payments.amount` | string | yes | no | — | — |
+| `totals.payments.currency` | string | yes | no | — | — |
+| `totals.payments.minor_units` | integer | yes | no | — | — |
+| `totals.card_payments_excluded` | object | yes | no | — | — |
+| `totals.card_payments_excluded.amount` | string | yes | no | — | — |
+| `totals.card_payments_excluded.currency` | string | yes | no | — | — |
+| `totals.card_payments_excluded.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].vendor_id` | string | yes | no | — | — |
+| `rows[].current_vendor_name` | string | yes | no | — | — |
+| `rows[].display_vendor_label` | string | yes | no | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].box` | literal["nonemployee_compensation"] | yes | no | — | — |
+| `rows[].payments` | object | yes | no | — | — |
+| `rows[].payments.amount` | string | yes | no | — | — |
+| `rows[].payments.currency` | string | yes | no | — | — |
+| `rows[].payments.minor_units` | integer | yes | no | — | — |
+| `rows[].card_payments_excluded` | object | yes | no | — | — |
+| `rows[].card_payments_excluded.amount` | string | yes | no | — | — |
+| `rows[].card_payments_excluded.currency` | string | yes | no | — | — |
+| `rows[].card_payments_excluded.minor_units` | integer | yes | no | — | — |
+| `rows[].meets_threshold` | boolean | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "card_payments_excluded": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "payments": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "reportable": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "threshold": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "vendors_meeting_threshold": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report vendor-balance-detail`
 
 Every accrual payable effect that makes up each vendor's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each vendor. One row is one document's effect on one vendor's payable on one date -- a bill, bill payment, vendor credit, item receipt, receipt price correction or payable journal entry -- signed so that what is owed to the vendor is positive: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a payment or credit to a bill moves nothing the vendor is owed and has no row. Vendors whose balance is zero are omitted unless vendor names one. A vendor's total row is its report vendor-balance-summary row, and the report total is Accounts Payable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole vendor before a page is cut.

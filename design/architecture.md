@@ -1813,6 +1813,39 @@ containing `Summary.COMMANDS`, so nothing names the commands a second time. All
 four are titled from `naming.REPORTS` and listed on the home window's Reports
 tile.
 
+## Everyday reports: balances, purchases, deposits, the transaction list and 1099s
+
+Ten read-only company reports at the `reports` capability, admitted through the
+`everyday-reports-v1` permission catalog delta, presented by one workbench module
+(`adapters/workbench/everyday.py`) and exported and printed by the shared report
+traversal. None introduces a schema or a cached figure.
+
+- `company/balance_reports.py`: `report customer-balance-summary` and `report
+  vendor-balance-summary` are the aging Total column per party with zero balances
+  omitted, so their totals are A/R and A/P on the balance sheet. The two detail
+  reports list every receivable or payable effect behind each non-zero balance
+  across all dates with a running balance and a total row per party; receivables
+  reuse the customer statement's `_PARTIES` effects from the start of the books.
+- `company/purchase_reports.py`: `report purchases-by-vendor` and `report
+  purchases-by-item` are item purchases only. Stock items read purchase movements
+  on the inventory ledger (receipts offset to A/P, bank or card, recosts of such a
+  receipt, and reversals of either); other items read cost posting lines other than
+  A/P attributed to `purchase_item_lines` or `money_out_item_lines`. `report
+  open-purchase-orders` reads current orders and their active receipt claims.
+- `company/transaction_list_reports.py`: `report deposit-detail` groups each deposit
+  posting's non-bank lines by the source document its deposit component names;
+  `report transaction-list-by-date` is one row per posting batch with a listed
+  account and split chosen from the entry's shape.
+- `company/vendor_1099_reports.py`: `report vendor-1099-summary` is cash by nature:
+  bank-account posting lines naming a 1099-eligible vendor, card payments shown
+  and not counted, every payment in 1099-NEC box 1 (no account-to-box mapping
+  exists), the year's threshold from `THRESHOLDS`, anchor default above threshold
+  only. The workbench opens it on the last calendar year
+  (`date_defaults.LAST_YEAR_REPORTS`).
+
+Reports whose rows are documents or list records stale their continuations on the
+audit sequence (`ledger_reports.AUDITED_REPORTS`).
+
 ## Customer work documents
 
 [Customer work](customer-work.md) owns the nonposting proposal, alternative

@@ -196,15 +196,15 @@ DEMO_POSITION = {
         'Opening Balance Equity': -500000,
         'Service Income': -215630,
         'Cost of Goods Sold': 523,
-        'Professional Fees': 84823,
-        'Business Credit Card': -5000,
-        'Payment Example Bank': -42220,
+        'Professional Fees': 339823,
+        'Business Credit Card': -20000,
+        'Payment Example Bank': -282220,
         'Payment Example Income': -18000,
     },
-    'trial_balance': 792664,
+    'trial_balance': 1047664,
     'journal_entries': 19,
-    'net_income': 148284,
-    'total_equity': 648284,
+    'net_income': -106716,
+    'total_equity': 393284,
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -230,6 +230,7 @@ DEMO_ARCS = {
     'DEMO-COUNT': 'the inventory count adjustment',
     'DEMO-KIT-': 'service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
+    'DEMO-1099-': 'a 1099 subcontractor: a bill paid by check and a bill paid on the card',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`
