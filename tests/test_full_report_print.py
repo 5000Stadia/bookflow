@@ -14,6 +14,7 @@ from starlette.datastructures import QueryParams
 from bookflow.adapters.workbench import report_export as Export, report_print as Print
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
+from bookflow.documents import report_csv
 from tests.test_report_export import _sample_filters, _shown
 from tests.test_row5_browser_acceptance import CHROME, PASSWORD, _Cdp
 
@@ -148,7 +149,7 @@ def test_long_filtered_route_has_all_rows_totals_and_honest_failures(print_site,
     assert 'Displayed-page copy only' not in response.text
     denied_basis = browser.get(url + '&f%3Abasis=cash')
     assert 'E_VALIDATION' in denied_basis.text and 'id="report-print-scope"' not in denied_basis.text
-    monkeypatch.setattr(Export, 'PAGES', 0)
+    monkeypatch.setattr(report_csv, 'PAGES', 0)
     capped = browser.get(url)
     assert 'exceeds the printable limit of 200 rows' in capped.text
     assert 'id="report-print-scope"' not in capped.text and 'PRINT-ROW-000' not in capped.text

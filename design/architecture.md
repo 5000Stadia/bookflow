@@ -248,6 +248,7 @@ src/bookflow/
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
+  documents/report_csv.py export(read, company_id, verb, filters) -> ReportCsv: any paged report, every page, as CSV (preamble, header, rows, whole-report totals); run by `report export`, which the workbench download, the CLI's `report <name> --csv`, HTTP and MCP all call
 ```
 
 `bookflow/documents/` produces the four customer-facing documents as PDF and is the only
@@ -256,7 +257,9 @@ carries, which facts are captured and which are current, and what is deliberatel
 `render` takes a `read` callable rather than a request, so the web routes in
 `adapters/workbench/document_print.py`, and any later command that attaches or sends a
 copy, produce identical bytes from the same description. Permission and company isolation
-stay in the commands `read` runs.
+stay in the commands `read` runs. A report's CSV follows the same rule: `report export` runs
+`documents/report_csv.py` over the report as the caller, and the workbench's `export.csv`
+route serves that command's text with a byte order mark, so every surface gets one file.
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
 

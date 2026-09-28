@@ -194,6 +194,8 @@ EXAMPLES.update({
     "report cash-flows": Example('bookflow report cash-flows --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report income-tax-summary": Example('bookflow report income-tax-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "report export": Example('bookflow report export profit-and-loss --filters \'{"date_from": "2026-01-01", "date_to": "2026-12-31"}\' --company "Demo Plumbing Co" --json',
+                             {"report": "profit-and-loss", "filters": {"date_from": "2026-01-01", "date_to": "2026-12-31"}}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
     "report transaction-detail": Example('bookflow report transaction-detail --date-from 2026-01-01 --date-to 2026-12-31 --accounts \'["Checking"]\' --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "accounts": ["Checking"]}),
     "report reconciliation-discrepancy": Example('bookflow report reconciliation-discrepancy --account Checking --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"account": "Checking", "as_of": "2026-12-31"}),

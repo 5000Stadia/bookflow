@@ -98,6 +98,8 @@ MATRIX = {
     "user activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
                       "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent activate)",
                       "E_VERSION_CONFLICT": "stale --expected-version"},
+    "report export": {"E_VALIDATION": "not an exportable report, or the report's own filters are invalid (named filters.<field>)",
+                      "E_QUERY_STALE": "the books changed on every attempt to read the report through"},
     "token revoke": {"E_TOKEN_NOT_FOUND": "unknown token id", "E_PERMISSION": "another user's token, as a non-admin"},
 }
 

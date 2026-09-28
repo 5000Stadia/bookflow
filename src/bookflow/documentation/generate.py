@@ -34,6 +34,9 @@ def _command_options(cmd: Any) -> list[tuple[str, str]]:
         else "Print one JSON object."
     )
     options = [] if getattr(cmd, "protocol_stdout", False) else [("`--json`", json_meaning)]
+    from bookflow.documents.report_csv import CSV_HELP, is_report
+    if is_report(cmd):
+        options.append(("`--csv`", CSV_HELP + "."))
     from bookflow.adapters.list_columns import COLUMNS_HELP, curated_columns
     curated = curated_columns(cmd)
     if curated is not None:

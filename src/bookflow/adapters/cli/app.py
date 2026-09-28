@@ -234,6 +234,10 @@ def _build_command(cmd: registry.Command):
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=str))
     if not cmd.protocol_stdout:
         params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
+    from bookflow.documents.report_csv import CSV_HELP, is_report
+    exportable = is_report(cmd)
+    if exportable:
+        params.append(inspect.Parameter("csv_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--csv", help=CSV_HELP), annotation=bool))
     from bookflow.adapters.list_columns import COLUMNS_HELP, curated_columns
     curated = curated_columns(cmd)
     if curated is not None:
@@ -260,6 +264,7 @@ def _build_command(cmd: registry.Command):
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
         table_columns = kw.pop("columns_", None)
+        as_csv = kw.pop("csv_", False)
         if cmd.protocol_stdout and as_json:
             raise BookflowError("E_USAGE", message=f"--json does not apply to `{cmd.name}`; stdout carries its protocol")
         local_root = kw.pop("data_root", None)
@@ -365,7 +370,10 @@ def _build_command(cmd: registry.Command):
                 except KeyboardInterrupt:
                     return
         dispatch_options = dict(data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
-        if transfer is None:
+        if exportable and as_csv:
+            # The whole report as CSV is its own command; this option is only its spelling here.
+            out = dispatch_run(registry.get("report export"), {"report": cmd.verb, "filters": raw}, ctx, **dispatch_options)
+        elif transfer is None:
             out = dispatch_run(cmd, raw, ctx, **dispatch_options)
         else:
             from pathlib import Path
@@ -392,7 +400,10 @@ def _build_command(cmd: registry.Command):
         for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
             typer.echo(f"warning: {w_}", err=True)
         with span("cli.render"):
-            if curated is not None and not as_json:
+            if not as_json and is_text_document(out):
+                # A text document (a report's CSV) is printed as itself, byte for byte.
+                typer.echo(out["content"], nl=False)
+            elif curated is not None and not as_json:
                 typer.echo(render_output(out, False, columns=chosen_columns(cmd, curated, table_columns, out)))
             else:
                 typer.echo(render_output(out, as_json))
@@ -402,6 +413,12 @@ def _build_command(cmd: registry.Command):
     run.__doc__ = cmd.description
     run.__epilog__ = _help_epilog(cmd)  # type: ignore[attr-defined]
     return run
+
+
+def is_text_document(out: Any) -> bool:
+    """An output that is a text file (content plus a text/* media type), printed as itself."""
+    return (isinstance(out, dict) and isinstance(out.get("content"), str)
+            and str(out.get("media_type") or "").startswith("text/"))
 
 
 def chosen_columns(cmd: registry.Command, curated: tuple[str, ...], requested: str | None,
