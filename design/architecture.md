@@ -5017,3 +5017,15 @@ every upgraded company's value, or `parentheses`), set through `company update` 
 (`adapters/workbench/display.py`) read it from the context variable `NEGATIVES`, which
 `pages.run` sets for the request when it reads `company show`; a page with no company keeps
 the minus sign. JSON on every interface, exports, print data and form inputs keep the minus.
+
+## Payables reports and received goods
+
+`company/payable_reports._EFFECTS` (read by `report ap-aging`, `report unpaid-bills`, `report
+vendor-balance-summary` and `report vendor-balance-detail`) attributes the Accounts Payable
+transfer a receipt-matched bill posts (debit AP for the claimed receipts, credit AP for the
+bill) to the documents it moved: `receipt_bill_claims.original_minor_units` to the receipt
+line's financial journal, and `billed - original` to the `receipt_bill_adjustments` movement's
+journal, at the bill's effective date; reversals follow their original through
+`posting_line_sources.reversed_source_id`. A bill for received goods is therefore open on
+unpaid bills for what it billed, and only unbilled received value stays on the receipt. Totals
+are unchanged. The Overview's "You owe" is the `report ap-aging` total (Accounts payable).

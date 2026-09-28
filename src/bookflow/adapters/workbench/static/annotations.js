@@ -152,13 +152,20 @@
       }));
       entry.append(status); return entry;
     }
+    async function activity(input) {
+      const query = new URLSearchParams(Object.entries(input).filter(([, value]) => value !== undefined && value !== null));
+      const response = await fetch(`/c/${encodeURIComponent(config.company)}/_activity?${query}`,
+        {credentials: 'same-origin', headers: {'Accept': 'application/json'}});
+      if (!response.ok) await responseError(response);
+      return response.json();
+    }
     function activityEntry(item) {
       const entry = el('li', undefined, 'annotation-entry');
-      attribution(entry, item.actor_name || item.actor_id, item.at);
-      entry.append(el('p', item.summary || item.command));
+      attribution(entry, item.who || item.actor_name || item.actor_id, item.at);
+      entry.append(el('p', item.sentence || item.summary || item.command));
       if (item.body != null) entry.append(el('p', item.body, 'annotation-text'));
       if (item.caption) entry.append(el('p', item.caption, 'annotation-text'));
-      if (item.on_behalf_of) entry.append(el('p', 'On behalf of ' + (item.on_behalf_of_name || item.on_behalf_of), 'muted'));
+      if (item.on_behalf_of && !item.who) entry.append(el('p', 'On behalf of ' + (item.on_behalf_of_name || item.on_behalf_of), 'muted'));
       if (item.text_truncated) entry.append(el('p', 'Excerpt; full text is in audit event ' + item.event_id, 'muted'));
       return entry;
     }
@@ -173,7 +180,9 @@
       section.refresh.disabled = section.more.disabled = true;
       message(section.status, 'Loading…');
       try {
-        const result = await command(section.command, {...config.target, limit: 20, ...(more ? {cursor: section.cursor} : {})});
+        const input = {...config.target, limit: 20, ...(more ? {cursor: section.cursor} : {})};
+        // Activity is read through the workbench, which words each entry the way the audit trail does.
+        const result = kind === 'activity' ? await activity(input) : await command(section.command, input);
         if (!more && section.items.querySelector('[data-note-edit],[aria-busy="true"]')) {
           message(section.status, 'New entries are available. Finish the current action or cancel your note edit, then refresh. Your draft is unchanged.');
           return;

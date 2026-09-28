@@ -938,6 +938,22 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             selector=_record_selector)
         return JSONResponse({"items": index}, headers={"Cache-Control": "no-store"})
 
+    @app.get("/c/{company_id}/_activity")
+    @permission_read_package(host)
+    def company_activity(company_id: str, request: Request):
+        """A record's activity for its page: the `activity` command's own result, each item
+        also carrying what happened and who did it in the audit trail's plain words."""
+        raw = {key: request.query_params[key] for key in ("record_type", "record_id", "cursor", "since", "until")
+               if request.query_params.get(key)}
+        try:
+            if request.query_params.get("limit"):
+                raw["limit"] = F.query_value(registry.get("activity").input_model, "limit", request.query_params["limit"])
+            result = run(request, "activity", raw, company_id)
+        except BookflowError as e:
+            return JSONResponse(e.to_dict(), status_code=STATUS.get(e.code, 400))
+        items = [dict(item, sentence=Activity.sentence(item), who=Activity.who(item)) for item in result.get("items", [])]
+        return JSONResponse({**result, "items": items}, headers={"Cache-Control": "no-store"})
+
     @app.get("/c/{company_id}/_registers", response_class=HTMLResponse)
     @permission_read_package(host)
     def company_registers(company_id: str, request: Request):
