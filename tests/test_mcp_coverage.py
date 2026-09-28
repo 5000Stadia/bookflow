@@ -135,7 +135,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2858 -> 2860: company restore's optional organization and name each add their null branch (R133).
     # 2860 -> 2864, measured per command on the merged tree: agent deactivate/activate and user
     # deactivate/activate add one node each (+4, R89); report export adds none (R145).
-    assert sum(len(group["paths"]) for group in mapped)==2864
+    # 2864 -> 2876: R147 (sales line kinds) adds 12 input variants to the sales and quote posts.
+    assert sum(len(group["paths"]) for group in mapped)==2876
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
