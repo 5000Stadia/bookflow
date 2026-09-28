@@ -129,11 +129,12 @@ class Start(Mutation,Dated):
     account: ID
     statement_date: str
     ending_balance: StatementAmount=STATEMENT_BALANCE
-    opening_id: ID|None=None
-    opening_draft_id: ID|None=None
+    opening_id: ID|None=Field(default=None,description="The account's adopted reconciliation opening; omit both this and opening_draft_id to use the account's adopted opening.")
+    opening_draft_id: ID|None=Field(default=None,description='An open `reconcile opening start` draft this statement follows, when the opening is not finished yet.')
     @model_validator(mode='after')
     def opening(self):
-        if (self.opening_id is None)==(self.opening_draft_id is None):raise ValueError('exactly one opening required')
+        if self.opening_id is not None and self.opening_draft_id is not None:
+            raise ValueError('give opening_id or opening_draft_id, not both')
         return self
 
 class DraftUpdate(DraftChange,Dated):

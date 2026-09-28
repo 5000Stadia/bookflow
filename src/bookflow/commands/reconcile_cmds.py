@@ -164,13 +164,18 @@ def _start_family(verb, model, description):
 
 reconcile_opening_start = _start_family(
     'opening start', m.OpeningStart,
-    'Open a draft that adopts a bank or credit card account, classifying everything dated on or '
-    'before the opening date as covered by the entered balance or still outstanding.')
+    'First step for an account never reconciled in Bookflow: open a draft that adopts a bank or '
+    'credit card account at an opening date and balance from the last statement you trust, '
+    'classifying everything dated on or before that date as covered by the entered balance or still '
+    'outstanding. Tick with `reconcile mark`, certify with `reconcile finish`, then reconcile each '
+    'later statement with `reconcile start`.')
 
 reconcile_start = _start_family(
     'start', m.Start,
-    'Open a draft for one bank or credit card statement, against an adopted opening or the '
-    'opening draft that is about to become one.')
+    'Open a draft for one bank or credit card statement. It follows the account\'s adopted opening '
+    'unless you name opening_id, or opening_draft_id for an opening not finished yet; an account '
+    'with no opening needs `reconcile opening start` first. Then `reconcile candidates`, '
+    '`reconcile mark`, `reconcile preview` and `reconcile finish`.')
 
 
 def _mark_prepare(inp, ctx, s, ids):
