@@ -28,6 +28,16 @@ two payables reports agreeing about what is outstanding -- the aging drops the
 same zero and neither total moves. ``settlement_status`` therefore has only the
 two answers a listed bill can truthfully give, ``unpaid`` and ``partly_paid``.
 
+**A bill for goods already received carries the payable it took over.** Receiving items
+credits Accounts Payable on the receipt's own journal; billing them later posts, on the bill,
+Accounts Payable debited for what the receipts held and credited for the bill, so the ledger
+never moves. Read by transaction, that transfer would net the bill to nothing and leave the
+whole amount on the receipt. Instead each transfer line (and its reversal) is attributed to
+what it moved: the claimed receipt value to the receipt's journal and the billed difference to
+the bill's cost-correction journal, dated at the bill. A transfer whose parts do not add up to
+its line stays on the bill. Only attribution between one vendor's documents changes; every
+total is still the ledger's Accounts Payable.
+
 The settlement edge is ``ap_applications`` and the vendor it belongs to is
 ``ap_obligation_keys.vendor_id``, which ``bill_validation`` requires to equal the
 vendor of every revision of the bill and which a storage trigger requires to
@@ -163,12 +173,45 @@ NO_VENDOR = "No name"
 # unapply regardless of date would silently restore a balance before the unapply
 # happened, and that is a defect nothing else here would catch.
 _EFFECTS = """
-WITH ap AS (
- SELECT l.transaction_id AS tx, l.name_id AS party,
-        l.credit_minor_units-l.debit_minor_units AS amount, b.effective_date AS effect_date
+WITH transfer AS (
+ SELECT s.id AS source_id, s.amount_minor_units AS amount, s.document_line_id AS line, s.revision_id AS rev
+ FROM posting_line_sources s JOIN posting_lines l ON l.id=s.posting_line_id
+ JOIN accounts a ON a.id=l.account_id JOIN transactions t ON t.id=l.transaction_id
+ WHERE a.type='accounts_payable' AND t.type='bill' AND s.reversed_source_id IS NULL
+   AND l.credit_minor_units=0 AND l.debit_minor_units=s.amount_minor_units
+   AND EXISTS (SELECT 1 FROM receipt_bill_claims k WHERE k.bill_line_id=s.document_line_id AND k.bill_revision_id=s.revision_id)
+), claimed AS (
+ SELECT x.source_id, k.receipt_line_id, sum(k.original_minor_units) AS original,
+        sum(k.billed_minor_units-k.original_minor_units) AS corrected
+ FROM transfer x JOIN receipt_bill_claims k ON k.bill_line_id=x.line AND k.bill_revision_id=x.rev
+ GROUP BY x.source_id, k.receipt_line_id, x.rev
+), transfer_target AS (
+ SELECT c.source_id, r.transaction_id AS target, c.original AS amount
+ FROM claimed c JOIN item_receipt_lines i ON i.id=c.receipt_line_id
+ JOIN transaction_revisions r ON r.id=i.financial_revision_id
+ UNION ALL
+ SELECT c.source_id, m.transaction_id, c.corrected
+ FROM claimed c JOIN transfer x ON x.source_id=c.source_id
+ JOIN receipt_bill_adjustments j ON j.bill_revision_id=x.rev AND j.receipt_line_id=c.receipt_line_id
+ JOIN inventory_movements m ON m.id=j.movement_id
+ WHERE c.corrected!=0
+), transfer_whole AS (
+ SELECT x.source_id FROM transfer x JOIN transfer_target g ON g.source_id=x.source_id
+ GROUP BY x.source_id, x.amount HAVING sum(g.amount)=x.amount
+), ap_line AS (
+ SELECT l.id, l.transaction_id AS tx, l.name_id AS party,
+        l.credit_minor_units-l.debit_minor_units AS amount, b.effective_date AS effect_date,
+        (SELECT coalesce(s.reversed_source_id, s.id) FROM posting_line_sources s
+         WHERE s.posting_line_id=l.id AND s.amount_minor_units=l.debit_minor_units+l.credit_minor_units
+           AND coalesce(s.reversed_source_id, s.id) IN (SELECT source_id FROM transfer_whole)) AS transfer_id
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
  JOIN accounts a ON a.id=l.account_id
  WHERE a.type='accounts_payable' AND b.effective_date<=:as_of
+), ap AS (
+ SELECT tx, party, amount, effect_date FROM ap_line WHERE transfer_id IS NULL
+ UNION ALL
+ SELECT g.target, l.party, CASE WHEN l.amount<0 THEN -g.amount ELSE g.amount END, l.effect_date
+ FROM ap_line l JOIN transfer_target g ON g.source_id=l.transfer_id
 ), settled AS (
  SELECT s.obligation_transaction_id AS bill, s.source_transaction_id AS payment,
         k.vendor_id AS party, s.amount_minor_units AS amount
