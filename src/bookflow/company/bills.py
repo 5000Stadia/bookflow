@@ -618,10 +618,27 @@ def order_ids(s, transaction_ids):
             for row in effects.rows(s, t, t.c.destination_transaction_id.in_(identifiers))}
 
 
+def early_discount(revision, profile, settlement):
+    """What the bill's terms still offer for early payment, date-free; ``bill pay`` dates it."""
+    from bookflow.company import early_discounts as early
+    terms = early.bill_terms(profile['profile_snapshot'], revision['date'])
+    if terms.discount_date is None:
+        return None, 0
+    taken = next((row.applied_minor_units for row in settlement.sources
+                  if row.source_type == 'early_discount'), 0) if settlement else 0
+    remaining = max(0, early.terms_amount(terms, revision['total_minor_units']) - taken)
+    if settlement is not None:
+        remaining = min(remaining, max(0, settlement.open_minor_units))
+    return terms.discount_date, remaining
+
+
 def summary(header, revision, profile, settlement, purchase_order_id=None):
     currency = revision['currency']
     captured = BillProfile.model_validate_json(profile['profile_snapshot'])
+    discount_date, offered = early_discount(revision, profile, settlement)
     return dict(header, purchase_order_id=purchase_order_id,
+                discount_date=discount_date, early_discount_minor_units=offered,
+                early_discount=Money(offered, revision['currency']).to_dict() if offered else None,
                 date=revision['date'], due_date=profile['due_date'],
                 vendor_id=profile['vendor_id'], vendor_name=captured.vendor.label,
                 ap_account_id=profile['ap_account_id'],

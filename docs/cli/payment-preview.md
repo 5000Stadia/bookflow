@@ -18,14 +18,14 @@ Read prospective receipt/application effect pages by pure recomputation of exact
 
 ### CLI
 
-`bookflow payment preview items --request '{"command":"payment receive","input":{"customer":"Riverside Apartments","date":"2026-06-01","amount":"150.00","payment_method":"Check","reference":"1042","operation_key":"example-receipt-1","applications":{"mode":"inline","items":[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"150.00"}]}}}' --facts-fingerprint aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --kind source_components --company 'Demo Plumbing Co' --json`
+`bookflow payment preview items --request '{"command":"payment receive","input":{"customer":"Riverside Apartments","date":"2026-06-01","amount":"147.00","payment_method":"Check","reference":"1042","operation_key":"example-receipt-1","applications":{"mode":"inline","items":[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","expected_version":1,"amount":"147.00"}]},"discounts":[{"invoice":"01ARZ3NDEKTSV4RRFFQ69G5FAV","amount":"3.00"}]}}' --facts-fingerprint aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --kind source_components --company 'Demo Plumbing Co' --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "payment preview items", "input": {"request": {"command": "payment receive", "input": {"customer": "Riverside Apartments", "date": "2026-06-01", "amount": "150.00", "payment_method": "Check", "reference": "1042", "operation_key": "example-receipt-1", "applications": {"mode": "inline", "items": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "150.00"}]}}}, "facts_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "source_components"}, "company": "Company ID or name"}
+{"command": "payment preview items", "input": {"request": {"command": "payment receive", "input": {"customer": "Riverside Apartments", "date": "2026-06-01", "amount": "147.00", "payment_method": "Check", "reference": "1042", "operation_key": "example-receipt-1", "applications": {"mode": "inline", "items": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "amount": "147.00"}]}, "discounts": [{"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "amount": "3.00"}]}}, "facts_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "source_components"}, "company": "Company ID or name"}
 ```
 
 ### Input
@@ -45,6 +45,10 @@ The same example as complete `bookflow_run` arguments:
 | `request.input.applications.items[].amount` | inside `--request-input-applications-items` JSON array | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `request.input.applications.selection` | `--request-input-applications-selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.applications.expected_version` | `--request-input-applications-expected-version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum 1 |
+| `request.input.discounts[].invoice` | inside `--request-input-discounts` JSON array | string | no | no | — | Present in ReceivePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.discounts[].amount` | inside `--request-input-discounts` JSON array | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `request.input.discounts[].expected_version` | inside `--request-input-discounts` JSON array | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `request.input.discount_account` | `--request-input-discount-account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `request.input.payment_method` | `--request-input-payment-method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `request.input.ar_account` | `--request-input-ar-account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `request.input.deposit_to` | `--request-input-deposit-to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -152,6 +156,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.currency` | string | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].amount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].effective_date` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount` | object \| null | no | yes | null | Present in PaymentApplicationOutput. |
+| `items[].discount.amount` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount.currency` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount` | object \| null | no | yes | null | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount.amount` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount.currency` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].suggested_discount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].discount_date` | string \| null | no | yes | null | Present in PaymentApplicationOutput. |
 | `items[].reverses_allocation_id` | string \| null | no | yes | null | Present in PaymentAllocationOutput. |
 | `items[].allocation_id` | string \| null | no | yes | — | Present in PaymentAllocationOutput. |
 | `items[].target_ordinal` | integer | no | no | — | Present in PaymentAllocationOutput. |
@@ -197,6 +210,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `items[].invoice` | string | no | no | — | Present in InvoiceAmount. |
 | `items[].expected_version` | integer | no | no | — | Present in InvoiceAmount. |
 | `total_count` | integer | yes | no | — | — |

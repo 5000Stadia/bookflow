@@ -811,6 +811,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `memberships[].amount.currency` | string | yes | no | — | — |
 | `posting_batch_ids` | array[string] | yes | no | — | — |
 | `audit_event_id` | string | yes | no | — | — |
+| `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
 
@@ -869,7 +870,8 @@ Example JSON output:
   "other_money": [],
   "posting_batch_ids": [],
   "receipts": [],
-  "schema_version": 1
+  "schema_version": 1,
+  "warnings": []
 }
 ```
 
@@ -1974,6 +1976,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `memberships[].amount.currency` | string | yes | no | — | — |
 | `posting_batch_ids` | array[string] | yes | no | — | — |
 | `audit_event_id` | string | yes | no | — | — |
+| `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
 
@@ -2032,7 +2035,8 @@ Example JSON output:
   "other_money": [],
   "posting_batch_ids": [],
   "receipts": [],
-  "schema_version": 1
+  "schema_version": 1,
+  "warnings": []
 }
 ```
 
@@ -2260,6 +2264,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `memberships[].amount.currency` | string | yes | no | — | — |
 | `posting_batch_ids` | array[string] | yes | no | — | — |
 | `audit_event_id` | string | yes | no | — | — |
+| `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
 
@@ -2318,7 +2323,8 @@ Example JSON output:
   "other_money": [],
   "posting_batch_ids": [],
   "receipts": [],
-  "schema_version": 1
+  "schema_version": 1,
+  "warnings": []
 }
 ```
 

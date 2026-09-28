@@ -28,7 +28,8 @@
 </fieldset>
 <section id="pay-bills-selection" aria-label="Open bills"><h2>Open bills</h2>
 <p id="pay-bills-selection-status"></p>
-<div class="pay-bills-table-wrap"><table class="pay-bills-open"><thead><tr><th>Select</th><th>Vendor</th><th>Bill</th><th>Due date</th><th>Original amount ({{ pay_bills.currency }})</th><th>Open balance</th><th>Payment</th></tr></thead><tbody id="pay-bills-rows"></tbody></table></div>
+<div class="pay-bills-table-wrap"><table class="pay-bills-open"><thead><tr><th>Select</th><th>Vendor</th><th>Bill</th><th>Due date</th><th>Original amount ({{ pay_bills.currency }})</th><th>Open balance</th><th>Disc. date</th><th>Discount</th><th>Payment</th></tr></thead><tbody id="pay-bills-rows"></tbody></table></div>
+<details class="field-help"><summary>Early-payment discounts</summary><p>A bill whose terms offer a discount shows its discount date and, when the payment date is on or before it, the suggested discount. Nothing is discounted unless you enter it or press Take; the payment then drops by the discount and the bill is settled by both. A bill may take its discount with a payment of zero, as long as the same vendor is paid some money. The discount is credited to the company's vendor discount account (Discounts Taken unless set in company preferences).</p></details>
 <button type="button" id="pay-bills-more" hidden>Next page of open bills</button>
 <div id="pay-bills-totals" aria-live="polite"></div>
 </section>

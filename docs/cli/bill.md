@@ -337,7 +337,7 @@ Example JSON output:
 
 ## `bill pay`
 
-Pay open bills. Each selected bill is settled by what you name for it, or by everything still open on it when you name nothing, and the payment debits Accounts Payable and credits the account the money came from -- a bank account, which falls, or a credit card account, which rises. Bills are grouped by vendor, payable account, currency, funding account and method, and each group is one payment, so two vendors are never paid by one check; `group_count` says how many the selection made. Paying less than what is open leaves the remainder open. A payment whose method is a check drawn on a bank account is a cheque out of that account's chequebook: it takes the account's next check number, moves that number on, and is refused if the number is already on another cheque, exactly as `check post` is. `check_number` writes a number you name instead of the next one, and is accepted only on such a payment and only when one payee is being paid. Purchase discounts and vendor credits are separate documents and are not entered here.
+Pay open bills. Each selected bill is settled by what you name for it, or by everything still open on it when you name nothing, and the payment debits Accounts Payable and credits the account the money came from -- a bank account, which falls, or a credit card account, which rises. Bills are grouped by vendor, payable account, currency, funding account and method, and each group is one payment, so two vendors are never paid by one check; `group_count` says how many the selection made. Paying less than what is open leaves the remainder open. A payment whose method is a check drawn on a bank account is a cheque out of that account's chequebook: it takes the account's next check number, moves that number on, and is refused if the number is already on another cheque, exactly as `check post` is. `check_number` writes a number you name instead of the next one, and is accepted only on such a payment and only when one payee is being paid. A row may also name an early-payment `discount`: the bill is then settled by the amount paid plus the discount (a row may pay "0.00" and take only its discount, while the payment to that vendor pays some money on another bill), Accounts Payable falls by both and the discount is credited to `discount_account` (default: the company vendor discount account, else "Discounts Taken", created as an income account when missing). A discount is never taken unless named; `bill query` shows each bill's `discount_date` and the `early_discount` its terms still offer, a dry run shows `suggested_discount_minor_units` per line for the payment date, and a discount named after the discount date is taken with a warning. Vendor credits are separate documents and are not entered here.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -353,14 +353,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow bill pay --date 2026-04-15 --funding-account "Checking" --method "Check" --check-number 1041 --memo "April payables" --bills '[{"bill":"BILL-104"},{"bill":"BILL-108","amount":"250.00"}]' --company "Demo Plumbing Co" --reason "Pay the April bills" --json`
+`bookflow bill pay --date 2026-04-15 --funding-account "Checking" --method "Check" --check-number 1041 --memo "April payables" --bills '[{"bill":"BILL-104","amount":"607.60","discount":"12.40"},{"bill":"BILL-108","amount":"250.00"}]' --company "Demo Plumbing Co" --reason "Pay the April bills" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "bill pay", "input": {"date": "2026-04-15", "funding_account": "Checking", "method": "Check", "check_number": "1041", "memo": "April payables", "bills": [{"bill": "BILL-104"}, {"bill": "BILL-108", "amount": "250.00"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+{"command": "bill pay", "input": {"date": "2026-04-15", "funding_account": "Checking", "method": "Check", "check_number": "1041", "memo": "April payables", "bills": [{"bill": "BILL-104", "amount": "607.60", "discount": "12.40"}, {"bill": "BILL-108", "amount": "250.00"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
@@ -370,6 +370,7 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `bills[].bill` | inside `--bills` JSON array | string | yes | no | — | minimum length 1 |
 | `bills[].amount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | — |
+| `bills[].discount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | Early-payment discount taken on this bill in addition to amount; the bill is settled by amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is {"bill": "4410", "amount": "980.00", "discount": "20.00"}. A discount alone is {"bill": "4411", "amount": "0.00", "discount": "6.00"} beside money paid on another bill. |
 | `bills[].expected_version` | inside `--bills` JSON array | integer \| null | no | yes | null | — |
 | `funding_account` | `--funding-account` | string | yes | no | — | minimum length 1 |
 | `method` | `--method` | string | yes | no | — | minimum length 1 |
@@ -378,6 +379,7 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `discount_account` | `--discount-account` | string \| null | no | yes | null | Account credited for any discount taken; defaults to the company vendor discount account, else "Discounts Taken", which is created as an income account if the chart lacks it. |
 
 ### Command and context options
 
@@ -473,6 +475,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payments[].settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `payments[].settlement_current.currency` | string | yes | no | — | — |
 | `payments[].settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `payments[].settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `payments[].settlement_current.discount` | object \| null | no | yes | null | — |
+| `payments[].settlement_current.discount.amount` | string | yes | no | — | — |
+| `payments[].settlement_current.discount.currency` | string | yes | no | — | — |
+| `payments[].settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `payments[].revision` | object | yes | no | — | — |
 | `payments[].revision.id` | string | yes | no | — | — |
 | `payments[].revision.created_at` | string | yes | no | — | — |
@@ -555,6 +562,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payments[].revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `payments[].revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `payments[].revision.lines[].description` | string \| null | yes | yes | — | — |
+| `payments[].revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `payments[].revision.lines[].discount` | object \| null | no | yes | null | — |
+| `payments[].revision.lines[].discount.amount` | string | yes | no | — | — |
+| `payments[].revision.lines[].discount.currency` | string | yes | no | — | — |
+| `payments[].revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `payments[].revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `payments[].revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `payments[].revision.batches` | array[object] | yes | no | — | — |
 | `payments[].revision.batches[].id` | string | yes | no | — | — |
 | `payments[].revision.batches[].created_at` | string | yes | no | — | — |
@@ -605,6 +620,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payments[].applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `payments[].applications[].audit_event_id` | string | yes | no | — | — |
 | `payments[].applications[].active` | boolean | yes | no | — | — |
+| `payments[].applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `payments[].applications[].discount` | object \| null | no | yes | null | — |
+| `payments[].applications[].discount.amount` | string | yes | no | — | — |
+| `payments[].applications[].discount.currency` | string | yes | no | — | — |
+| `payments[].applications[].discount.minor_units` | integer | yes | no | — | — |
 | `group_count` | integer | yes | no | — | — |
 | `paid_minor_units` | integer | yes | no | — | — |
 | `paid` | object | yes | no | — | — |
@@ -613,6 +633,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `paid.minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `bill_count` | integer | yes | no | — | — |
+| `discount_minor_units` | integer | no | no | 0 | — |
+| `discount` | object \| null | no | yes | null | — |
+| `discount.amount` | string | yes | no | — | — |
+| `discount.currency` | string | yes | no | — | — |
+| `discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -620,6 +645,8 @@ Example JSON output:
 {
   "bill_count": 1,
   "currency": "USD",
+  "discount": null,
+  "discount_minor_units": 0,
   "dry_run": false,
   "group_count": 1,
   "paid": {
@@ -851,13 +878,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "paid", "partial", "unpaid"] | yes | no | — | — |
 | `settlement_current.sources` | array[object] | no | no | [] | — |
-| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit"] | yes | no | — | — |
+| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit", "early_discount"] | yes | no | — | — |
 | `settlement_current.sources[].applied` | object | yes | no | — | — |
 | `settlement_current.sources[].applied.amount` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
 | `purchase_order_id` | string \| null | no | yes | null | — |
+| `discount_date` | string \| null | no | yes | null | — |
+| `early_discount_minor_units` | integer | no | no | 0 | — |
+| `early_discount` | object \| null | no | yes | null | — |
+| `early_discount.amount` | string | yes | no | — | — |
+| `early_discount.currency` | string | yes | no | — | — |
+| `early_discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1156,9 +1189,12 @@ Example JSON output:
   "currency": "USD",
   "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "date": "2026-01-01",
+  "discount_date": null,
   "dry_run": false,
   "due_date": "2026-01-01",
   "duplicate_references": [],
+  "early_discount": null,
+  "early_discount_minor_units": 0,
   "expense_total": {
     "amount": "value",
     "currency": "USD",
@@ -1477,13 +1513,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.currency` | string | yes | no | — | — |
 | `items[].settlement_current.status` | literal["voided", "paid", "partial", "unpaid"] | yes | no | — | — |
 | `items[].settlement_current.sources` | array[object] | no | no | [] | — |
-| `items[].settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit"] | yes | no | — | — |
+| `items[].settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit", "early_discount"] | yes | no | — | — |
 | `items[].settlement_current.sources[].applied` | object | yes | no | — | — |
 | `items[].settlement_current.sources[].applied.amount` | string | yes | no | — | — |
 | `items[].settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `items[].settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
 | `items[].purchase_order_id` | string \| null | no | yes | null | — |
+| `items[].discount_date` | string \| null | no | yes | null | — |
+| `items[].early_discount_minor_units` | integer | no | no | 0 | — |
+| `items[].early_discount` | object \| null | no | yes | null | — |
+| `items[].early_discount.amount` | string | yes | no | — | — |
+| `items[].early_discount.currency` | string | yes | no | — | — |
+| `items[].early_discount.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1662,13 +1704,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "paid", "partial", "unpaid"] | yes | no | — | — |
 | `settlement_current.sources` | array[object] | no | no | [] | — |
-| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit"] | yes | no | — | — |
+| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit", "early_discount"] | yes | no | — | — |
 | `settlement_current.sources[].applied` | object | yes | no | — | — |
 | `settlement_current.sources[].applied.amount` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
 | `purchase_order_id` | string \| null | no | yes | null | — |
+| `discount_date` | string \| null | no | yes | null | — |
+| `early_discount_minor_units` | integer | no | no | 0 | — |
+| `early_discount` | object \| null | no | yes | null | — |
+| `early_discount.amount` | string | yes | no | — | — |
+| `early_discount.currency` | string | yes | no | — | — |
+| `early_discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1963,8 +2011,11 @@ Example JSON output:
   "currency": "USD",
   "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "date": "2026-01-01",
+  "discount_date": null,
   "due_date": "2026-01-01",
   "duplicate_references": [],
+  "early_discount": null,
+  "early_discount_minor_units": 0,
   "expense_total": {
     "amount": "value",
     "currency": "USD",
@@ -2311,13 +2362,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "paid", "partial", "unpaid"] | yes | no | — | — |
 | `settlement_current.sources` | array[object] | no | no | [] | — |
-| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit"] | yes | no | — | — |
+| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit", "early_discount"] | yes | no | — | — |
 | `settlement_current.sources[].applied` | object | yes | no | — | — |
 | `settlement_current.sources[].applied.amount` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
 | `purchase_order_id` | string \| null | no | yes | null | — |
+| `discount_date` | string \| null | no | yes | null | — |
+| `early_discount_minor_units` | integer | no | no | 0 | — |
+| `early_discount` | object \| null | no | yes | null | — |
+| `early_discount.amount` | string | yes | no | — | — |
+| `early_discount.currency` | string | yes | no | — | — |
+| `early_discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -2616,9 +2673,12 @@ Example JSON output:
   "currency": "USD",
   "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "date": "2026-01-01",
+  "discount_date": null,
   "dry_run": false,
   "due_date": "2026-01-01",
   "duplicate_references": [],
+  "early_discount": null,
+  "early_discount_minor_units": 0,
   "expense_total": {
     "amount": "value",
     "currency": "USD",
@@ -2941,13 +3001,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "paid", "partial", "unpaid"] | yes | no | — | — |
 | `settlement_current.sources` | array[object] | no | no | [] | — |
-| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit"] | yes | no | — | — |
+| `settlement_current.sources[].source_type` | literal["bill_payment", "vendor_credit", "early_discount"] | yes | no | — | — |
 | `settlement_current.sources[].applied` | object | yes | no | — | — |
 | `settlement_current.sources[].applied.amount` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
 | `purchase_order_id` | string \| null | no | yes | null | — |
+| `discount_date` | string \| null | no | yes | null | — |
+| `early_discount_minor_units` | integer | no | no | 0 | — |
+| `early_discount` | object \| null | no | yes | null | — |
+| `early_discount.amount` | string | yes | no | — | — |
+| `early_discount.currency` | string | yes | no | — | — |
+| `early_discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -3246,9 +3312,12 @@ Example JSON output:
   "currency": "USD",
   "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "date": "2026-01-01",
+  "discount_date": null,
   "dry_run": false,
   "due_date": "2026-01-01",
   "duplicate_references": [],
+  "early_discount": null,
+  "early_discount_minor_units": 0,
   "expense_total": {
     "amount": "value",
     "currency": "USD",

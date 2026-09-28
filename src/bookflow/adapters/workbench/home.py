@@ -319,6 +319,7 @@ PANELS: tuple[Panel, ...] = (
                         "open invoices, A/P aging, unpaid bills, trial balance, profit and "
                         "loss, balance sheet, statement of cash flows, income tax summary, "
                         "general ledger, transaction detail by account, missing checks, "
+                        "reconciliation discrepancies, "
                         "inventory valuation and stock status, customer and vendor "
                         "balances, open purchase orders, purchases by vendor and item, "
                         "deposit detail, the transaction list by date and the 1099 summary.",
@@ -339,7 +340,7 @@ PANELS: tuple[Panel, ...] = (
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
                      "report general-ledger", "report transaction-detail",
-                     "report missing-checks"),
+                     "report missing-checks", "report reconciliation-discrepancy"),
                     "/_group/reports",
                 ),
             ),
@@ -563,6 +564,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
             _report("Missing checks", "missing-checks"),
+            _report("Reconciliation discrepancy", "reconciliation-discrepancy"),
             _report("Deposit detail", "deposit-detail"),
         ),
     ),

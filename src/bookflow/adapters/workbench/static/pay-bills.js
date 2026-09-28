@@ -146,19 +146,59 @@
       input.className = 'pay-bills-amount';
       input.dataset.mathCurrency = config.currency;
       input.setAttribute('aria-label', 'Payment for bill ' + row.number);
+      /* The early-payment discount is entered, never assumed: the suggestion is what the bill's
+         terms still offer (reported by `bill query`) when the payment date is on or before the
+         discount date, and Take copies it into the field for the person to keep or edit. */
+      const discount = el('input');
+      discount.type = 'text';
+      discount.inputMode = 'decimal';
+      discount.className = 'pay-bills-discount';
+      discount.dataset.mathCurrency = config.currency;
+      discount.setAttribute('aria-label', 'Discount for bill ' + row.number);
+      const hint = el('small');
+      hint.className = 'pay-bills-discount-hint';
+      const take = el('button', 'Take');
+      take.type = 'button';
+      take.className = 'pay-bills-take-discount';
+      take.setAttribute('aria-label', 'Take the suggested discount on bill ' + row.number);
+      const discountCell = el('span');
+      discountCell.append(discount, take, hint);
+      const offered = () => (row.discount_date && $('date').value && $('date').value <= row.discount_date)
+        ? BigInt(row.early_discount_minor_units || 0) : 0n;
+      tr.drawHint = () => {
+        const amount = offered();
+        hint.textContent = amount > 0n ? ' Suggested ' + exact.amount(units(amount)) : '';
+        take.hidden = !(amount > 0n);
+      };
+      tr.drawHint();
+      // What the payment defaults to while the person has not typed over it: the open balance
+      // less whatever discount is entered.
+      const followDiscount = () => {
+        if (input.dataset.auto !== 'true') return;
+        const off = toMinor(discount.value || '0');
+        if (off !== null) input.value = units(BigInt(open) - off);
+      };
       check.addEventListener('change', () => {
         if (check.checked) {
           selected.set(row.id, row);
           // Selecting a row means paying it off, which is what a person ticking a Pay Bills
           // row means; typing over it is a partial payment and the remainder stays open.
-          if (!input.value) input.value = units(open);
+          if (!input.value) { input.value = units(open); input.dataset.auto = 'true'; followDiscount(); }
         } else {
           selected.delete(row.id);
           input.value = '';
+          discount.value = '';
         }
         redrawTotals();
       });
-      input.addEventListener('input', redrawTotals);
+      input.addEventListener('input', () => { input.dataset.auto = 'false'; redrawTotals(); });
+      discount.addEventListener('input', () => { followDiscount(); redrawTotals(); });
+      take.addEventListener('click', () => {
+        if (!check.checked) { check.checked = true; check.dispatchEvent(new Event('change')); }
+        discount.value = units(offered());
+        followDiscount();
+        redrawTotals();
+      });
       // The shared arithmetic entry offers `= 50.00` under `100/2`; committing it on change is
       // what turns that offer into the value, the way a document form's Preview does.
       input.addEventListener('change', () => { window.bookflowMath?.prepare(tr); redrawTotals(); });
@@ -168,8 +208,9 @@
       if (row.supplier_reference) billCell.append(el('small', ' · ref ' + row.supplier_reference));
       const cells = [check, el('span', row.vendor_name), billCell, el('span', exact.day(row.due_date)),
                      el('span', exact.amount(units(row.total_minor_units))),
-                     el('span', exact.amount(units(open))), input];
-      const labels = ['Select', 'Vendor', 'Bill', 'Due date', 'Original amount', 'Open balance', 'Payment'];
+                     el('span', exact.amount(units(open))),
+                     el('span', row.discount_date ? exact.day(row.discount_date) : ''), discountCell, input];
+      const labels = ['Select', 'Vendor', 'Bill', 'Due date', 'Original amount', 'Open balance', 'Disc. date', 'Discount', 'Payment'];
       cells.forEach((node, index) => {
         const td = el('td');
         td.dataset.label = labels[index];
@@ -199,7 +240,8 @@
       if (!box?.checked) continue;
       const row = selected.get(tr.dataset.bill);
       const text = tr.querySelector('.pay-bills-amount').value;
-      rows.push({row, text, minor: toMinor(text)});
+      const discountText = tr.querySelector('.pay-bills-discount').value.trim();
+      rows.push({row, text, minor: toMinor(text), discount: discountText ? toMinor(discountText) : 0n});
     }
     return rows;
   }
@@ -222,9 +264,11 @@
 
   function redrawTotals() {
     const rows = entered(), groups = groupsOf(rows);
-    const bad = rows.filter(entry => entry.minor === null || entry.minor <= 0n);
-    let total = 0n;
+    // A row may pay nothing when it takes a discount: the anchor settles that bill by its discount.
+    const bad = rows.filter(entry => entry.minor === null || entry.minor < 0n || (entry.minor === 0n && !(entry.discount > 0n)));
+    let total = 0n, discounted = 0n;
     for (const entry of rows) if (entry.minor !== null) total += entry.minor;
+    for (const entry of rows) if (entry.discount !== null) discounted += entry.discount;
     const totals = $('totals');
     totals.replaceChildren();
     const line = el('p', `Total to be paid: ${money(total)} across ${rows.length} bill${rows.length === 1 ? '' : 's'}.`);
@@ -232,6 +276,12 @@
     line.dataset.totalMinor = total.toString();
     line.dataset.billCount = String(rows.length);
     totals.append(line);
+    if (discounted > 0n) {
+      const taken = el('p', `Discounts taken: ${money(discounted)}.`);
+      taken.id = 'pay-bills-discount-total';
+      taken.dataset.discountMinor = discounted.toString();
+      totals.append(taken);
+    }
     if (bad.length) totals.append(el('p', `${bad.length} selected bill${bad.length === 1 ? ' has' : 's have'} no usable amount. Enter an amount greater than zero, in ${config.currency}.`));
 
     const list = $('group-list');
@@ -267,12 +317,16 @@
     if (!$('funding').value) return 'Choose the account the money comes out of.';
     if (!$('method').value) return 'Choose the payment method.';
     if (!rows.length) return 'Select at least one bill to pay.';
-    if (rows.some(entry => entry.minor === null || entry.minor <= 0n))
-      return `Enter an amount greater than zero for every selected bill, in ${config.currency}.`;
+    if (rows.some(entry => entry.minor === null || entry.minor < 0n || (entry.minor === 0n && !(entry.discount > 0n))))
+      return `Enter an amount greater than zero for every selected bill, or zero with a discount, in ${config.currency}.`;
+    if (rows.some(entry => entry.discount === null || entry.discount < 0n))
+      return `Enter a discount of zero or more for every selected bill, in ${config.currency}.`;
     for (const entry of rows) {
-      if (entry.minor > BigInt(entry.row.settlement_current.open_minor_units))
-        return `Bill ${entry.row.number} has only ${money(BigInt(entry.row.settlement_current.open_minor_units))} open. A vendor credit is a separate document.`;
+      if (entry.minor + entry.discount > BigInt(entry.row.settlement_current.open_minor_units))
+        return `Bill ${entry.row.number} has only ${money(BigInt(entry.row.settlement_current.open_minor_units))} open; the payment and the discount together cannot exceed it. A vendor credit is a separate document.`;
     }
+    const unpaid = groups.find(group => group.total === 0n);
+    if (unpaid) return `The payment to ${unpaid.vendor} would pay no money. A discount is taken beside money paid to the same vendor.`;
     if ($('check').value.trim() && !$('check-label').hidden && groups.length > 1)
       return `A check number names one check, and this selection writes ${groups.length} payments. Clear the check number, or pay one vendor at a time.`;
     return '';
@@ -290,6 +344,7 @@
       funding_account: $('funding').value,
       method: $('method').value,
       bills: rows.map(entry => ({bill: entry.row.id, amount: units(entry.minor),
+                                 ...(entry.discount > 0n ? {discount: units(entry.discount)} : {}),
                                  expected_version: entry.row.version})),
     };
     for (const [field, id] of [['check_number', 'check'], ['reference', 'reference'], ['memo', 'memo']]) {
@@ -308,7 +363,9 @@
     area.dataset.groupCount = String(out.group_count);
     area.replaceChildren(el('h2', out.group_count === 1 ? 'Bill payment written'
       : `${out.group_count} bill payments written`));
-    area.append(el('p', `${exact.money(out.paid.amount, out.paid.currency)} paid across ${out.bill_count} bill${out.bill_count === 1 ? '' : 's'}.`));
+    area.append(el('p', `${exact.money(out.paid.amount, out.paid.currency)} paid across ${out.bill_count} bill${out.bill_count === 1 ? '' : 's'}`
+      + (out.discount ? `, with ${exact.money(out.discount.amount, out.discount.currency)} of early-payment discounts.` : '.')));
+    for (const warning of out.warnings || []) area.append(el('p', warning));
     for (const payment of out.payments) {
       const card = el('div');
       card.className = 'pay-bills-effect';
@@ -322,7 +379,8 @@
       card.append(head);
       const settled = el('ul');
       for (const line of payment.revision.lines) {
-        const item = el('li', `Bill ${line.bill_number} · ${exact.money(line.amount.amount, line.currency)}`);
+        const item = el('li', `Bill ${line.bill_number} · ${exact.money(line.amount.amount, line.currency)}`
+          + (line.discount ? ` (discount ${exact.money(line.discount.amount, line.currency)})` : ''));
         item.dataset.bill = line.bill_id;
         settled.append(item);
       }
@@ -376,6 +434,8 @@
 
   $('form').addEventListener('submit', event => event.preventDefault());
   for (const id of ['date', 'reference', 'memo', 'check']) $(id).addEventListener('change', redrawTotals);
+  // The suggestion depends on the payment date, so a new date redraws every row's offer.
+  $('date').addEventListener('change', () => { for (const tr of $('rows').querySelectorAll('tr')) tr.drawHint?.(); });
   for (const id of ['funding', 'method']) $(id).addEventListener('change', () => { drawCheckNumber(); redrawTotals(); });
   $('find-vendor').addEventListener('click', () => perform(async () => {
     const out = await command('vendor query', {query: $('vendor').value, limit: 25});

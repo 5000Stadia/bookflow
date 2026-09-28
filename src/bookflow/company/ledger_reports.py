@@ -72,7 +72,7 @@ PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability",
 # a corrected deposit) is written under an audit event, posting or not.
 AUDITED_REPORTS = frozenset({
     "open-purchase-orders", "purchases-by-vendor", "purchases-by-item", "deposit-detail",
-    "transaction-list-by-date", "vendor-1099-summary",
+    "transaction-list-by-date", "vendor-1099-summary", "reconciliation-discrepancy",
 })
 
 # Which list a reference-valued report filter names, by the input field that names it. A

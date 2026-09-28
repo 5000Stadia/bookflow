@@ -111,6 +111,9 @@ class DepositWriteOutput(StrictModel):
     memberships: list[MembershipChangeOut]
     posting_batch_ids: list[ID]
     audit_event_id: ID
+    # Plain lines for the person: a correction or void that makes a finished reconciliation
+    # stop tying says so here, on the preview and on the save.
+    warnings: list[str] = []
 
 
 class DepositCandidate(StrictModel):
