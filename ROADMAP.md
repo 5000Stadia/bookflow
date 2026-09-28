@@ -91,7 +91,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R100 tests share one demo company per run: built once, each test gets its own copy, so setup takes seconds instead of minutes and the full suite is practical. One bounded tooling change, built after the current builders finish; nothing further on test methodology for V1.5 — notes/NOW.md
 - [x] R131 everyday reports the anchor has: customer and vendor balance summary and detail, open purchase orders, purchases by vendor and by item, deposit detail, and a transaction list by date — notes/V1.5-scope-sort-draft.md
 - [x] R132 early-payment discounts taken inside the terms window when receiving a customer payment or paying a bill, posted to a discount account (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
-- [ ] R133 back up and restore from the product: a verified, portable copy of the company, and restoring or attaching one — notes/V1.5-scope-sort-draft.md
+- [~] R133 back up and restore from the product: a verified, portable copy of the company, and restoring or attaching one — notes/V1.5-scope-sort-draft.md
 - [x] R134 1099 vendor summary report (report only; filing stays in the future list) — notes/V1.5-scope-sort-draft.md
 - [x] R135 card credits (a refund onto a credit card) and a plain "Credit Card" payment method — notes/V1.5-scope-sort-draft.md
 - [x] R136 reconciling a credit card account against its statement works as a bank reconciliation does (verify; fix only if missing) — notes/V1.5-scope-sort-draft.md
