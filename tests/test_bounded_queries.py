@@ -365,3 +365,30 @@ def test_query_rejects_non_strict_or_unbounded_limit(client, limit):
     from bookflow.core.errors import BookflowError
     with pytest.raises(BookflowError, match="E_VALIDATION"):
         client.customer.query(limit=limit)
+
+
+def test_vendor_and_item_lists_show_the_balances_and_stock_their_reports_show(client):
+    """Open balance and on hand are the ledger's figures on list, query and show alike."""
+    owed = {row["vendor_id"]: row["balance"] for row in client.run(
+        "report vendor-balance-summary", {"as_of": "9999-12-31", "limit": 200}, company=COMPANY)["rows"]}
+    assert owed and any(value["minor_units"] for value in owed.values())
+    listed = client.run("vendor list", {"include_inactive": True}, company=COMPANY)["items"]
+    queried = client.run("vendor query", {"include_inactive": True, "limit": 200}, company=COMPANY)["items"]
+    for rows in (listed, queried):
+        for row in rows:
+            expected = owed.get(row["id"], {**row["open_balance"], "minor_units": 0, "amount": "0.00"})
+            assert row["open_balance"] == expected, row["name"]
+    shown = client.vendor.show(vendor=next(iter(owed)), company=COMPANY)
+    assert shown["open_balance"] == owed[shown["id"]] and shown["balances_available"] is True
+    by_balance = client.run("vendor query", {"sort": "open_balance", "direction": "desc", "limit": 1}, company=COMPANY)
+    assert by_balance["items"][0]["open_balance"]["minor_units"] == max(v["minor_units"] for v in owed.values())
+
+    stock = {row["item_id"]: row["quantity_on_hand"] for row in client.run(
+        "report inventory-valuation", {"as_of": "9999-12-31", "limit": 200}, company=COMPANY)["rows"]}
+    assert any(quantity not in ("0", "0.00") for quantity in stock.values())
+    items = client.run("item query", {"include_inactive": True, "limit": 200}, company=COMPANY)["items"]
+    listed = {row["id"]: row["quantity_on_hand"] for row in client.run("item list", {"include_inactive": True}, company=COMPANY)["items"]}
+    for row in items:
+        assert row["quantity_on_hand"] == listed[row["id"]], row["full_name"]
+        if row["id"] in stock:
+            assert row["quantity_on_hand"] == stock[row["id"]], row["full_name"]
