@@ -1418,7 +1418,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           and command_noun.replace("-", "_") not in c.input_model.model_fields)]
         if company_id and not company_view.get('info', {}).get('estimates_enabled', True):
             verbs = [cmd for cmd in verbs if cmd.name not in ('estimate copy', 'proposal estimate')]
-        if command_noun == "customer":
+        if command_noun in ("customer", "agent"):
             verbs = [
                 command
                 for command in verbs
@@ -1429,6 +1429,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     or (command.verb == "deactivate" and not out.get("active"))
                 )
             ]
+        if command_noun == "agent" and not out.get("active"):
+            # A deactivated agent can only be brought back; everything else would refuse.
+            verbs = [command for command in verbs if command.verb == "activate"]
         audit_undo = None
         if company_id is not None and command_noun == "audit":
             if out.get("undo_of_event_id"):

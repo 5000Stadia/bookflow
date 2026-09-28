@@ -14,6 +14,7 @@ from starlette.datastructures import QueryParams
 from bookflow.adapters.workbench import report_export as Export, report_print as Print
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
+from bookflow.documents import report_csv
 from tests.test_report_export import _sample_filters, _shown
 from tests.test_row5_browser_acceptance import CHROME, PASSWORD, _Cdp
 
@@ -121,7 +122,11 @@ def test_print_and_return_links_preserve_typed_filters(verb):
 @pytest.mark.parametrize('verb', Export.reports())
 def test_all_registered_report_presenters_have_complete_views(print_site, browser, verb):
     cmd = registry.get('report ' + verb)
-    raw = {name: ('2026-09-01' if name == 'date_from' else '2026-09-30')
+    # Every required filter gets a real value of its own kind: the period's dates, and the
+    # fixture's bank for a report that is about one account (reconciliation discrepancy).
+    # Filling `account` with a date asked for an account that does not exist.
+    real = {'date_from': '2026-09-01', 'account': print_site.bank}
+    raw = {name: real.get(name, '2026-09-30')
            for name, field in cmd.input_model.model_fields.items() if field.is_required()}
     response = browser.get(Print.print_url(print_site.company, verb, raw))
     assert response.status_code == 200, response.text
@@ -148,7 +153,7 @@ def test_long_filtered_route_has_all_rows_totals_and_honest_failures(print_site,
     assert 'Displayed-page copy only' not in response.text
     denied_basis = browser.get(url + '&f%3Abasis=cash')
     assert 'E_VALIDATION' in denied_basis.text and 'id="report-print-scope"' not in denied_basis.text
-    monkeypatch.setattr(Export, 'PAGES', 0)
+    monkeypatch.setattr(report_csv, 'PAGES', 0)
     capped = browser.get(url)
     assert 'exceeds the printable limit of 200 rows' in capped.text
     assert 'id="report-print-scope"' not in capped.text and 'PRINT-ROW-000' not in capped.text

@@ -234,6 +234,14 @@ def _build_command(cmd: registry.Command):
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=str))
     if not cmd.protocol_stdout:
         params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
+    from bookflow.documents.report_csv import CSV_HELP, is_report
+    exportable = is_report(cmd)
+    if exportable:
+        params.append(inspect.Parameter("csv_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--csv", help=CSV_HELP), annotation=bool))
+    from bookflow.adapters.list_columns import COLUMNS_HELP, curated_columns
+    curated = curated_columns(cmd)
+    if curated is not None:
+        params.append(inspect.Parameter("columns_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--columns", help=COLUMNS_HELP.format(default=",".join(curated)), metavar="LIST"), annotation=str | None))
     if not cmd.standalone:
         params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
     if cmd.is_write:
@@ -255,6 +263,8 @@ def _build_command(cmd: registry.Command):
     def run(**kw: Any) -> None:
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
+        table_columns = kw.pop("columns_", None)
+        as_csv = kw.pop("csv_", False)
         if cmd.protocol_stdout and as_json:
             raise BookflowError("E_USAGE", message=f"--json does not apply to `{cmd.name}`; stdout carries its protocol")
         local_root = kw.pop("data_root", None)
@@ -367,7 +377,10 @@ def _build_command(cmd: registry.Command):
                 except KeyboardInterrupt:
                     return
         dispatch_options = dict(data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
-        if transfer is None:
+        if exportable and as_csv:
+            # The whole report as CSV is its own command; this option is only its spelling here.
+            out = dispatch_run(registry.get("report export"), {"report": cmd.verb, "filters": raw}, ctx, **dispatch_options)
+        elif transfer is None:
             out = dispatch_run(cmd, raw, ctx, **dispatch_options)
         else:
             from pathlib import Path
@@ -394,13 +407,53 @@ def _build_command(cmd: registry.Command):
         for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
             typer.echo(f"warning: {w_}", err=True)
         with span("cli.render"):
-            typer.echo(render_output(out, as_json))
+            if not as_json and is_text_document(out):
+                # A text document (a report's CSV) is printed as itself, byte for byte.
+                typer.echo(out["content"], nl=False)
+            elif curated is not None and not as_json:
+                typer.echo(render_output(out, False, columns=chosen_columns(cmd, curated, table_columns, out)))
+            else:
+                typer.echo(render_output(out, as_json))
 
     run.__signature__ = inspect.Signature(params)  # type: ignore[attr-defined]
     run.__name__ = cmd.verb or cmd.noun
     run.__doc__ = cmd.description
     run.__epilog__ = _help_epilog(cmd)  # type: ignore[attr-defined]
     return run
+
+
+def is_text_document(out: Any) -> bool:
+    """An output that is a text file (content plus a text/* media type), printed as itself."""
+    return (isinstance(out, dict) and isinstance(out.get("content"), str)
+            and str(out.get("media_type") or "").startswith("text/"))
+
+
+def chosen_columns(cmd: registry.Command, curated: tuple[str, ...], requested: str | None,
+                   out: dict[str, Any]) -> list[str] | None:
+    """What `--columns` asked for: the declared defaults, every column (None), or a named set."""
+    if requested is None:
+        return list(curated)
+    names = [name.strip() for name in requested.split(",") if name.strip()]
+    if names == ["all"]:
+        return None
+    items = out.get("items") or []
+    known = set(items[0]) if items else set()
+    item_model = _list_item_model(cmd)
+    if item_model is not None:
+        known |= set(item_model.model_fields)
+    unknown = [name for name in names if known and name not in known]
+    if not names or unknown:
+        raise BookflowError("E_USAGE", message=(
+            f"--columns names {', '.join(unknown) or 'nothing'}; give column names from "
+            f"`{cmd.name} --json`, comma-separated, or `all`"), details={"unknown_columns": unknown})
+    return names
+
+
+def _list_item_model(cmd: registry.Command) -> type[BaseModel] | None:
+    import typing
+    field = cmd.output_model.model_fields.get("items")
+    args = typing.get_args(field.annotation) if field is not None else ()
+    return args[0] if args and isinstance(args[0], type) and issubclass(args[0], BaseModel) else None
 
 
 def _output_fields(model: type[BaseModel], prefix: str = "", depth: int = 0) -> list[str]:

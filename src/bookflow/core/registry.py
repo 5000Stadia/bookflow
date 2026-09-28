@@ -295,7 +295,7 @@ def all_commands(*, include_standalone: bool = False) -> list[Command]:
 # with the command count; tests/test_registry.py asserts this index matches what the modules register.
 NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.permission_cmds": ["permission", "membership"],
-    "bookflow.commands.agent_cmds": ["agent"],
+    "bookflow.commands.agent_cmds": ["agent", "user"],
     "bookflow.commands.hub_cmds": ["init", "upgrade", "organization", "company", "demo"],
     "bookflow.commands.company_cmds": ["company", "directive", "presence"],
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
@@ -314,7 +314,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.time_cmds": ["time-activity"],
     "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity"],
     "bookflow.commands.register_cmds": ["register"],
-    "bookflow.commands.check_cmds": ["check", "card-charge"],
+    "bookflow.commands.check_cmds": ["check", "card-charge", "card-credit"],
     "bookflow.commands.credit_memo_cmds": ["credit-memo"],
     "bookflow.commands.credit_settlement_cmds": ["customer-credit"],
     "bookflow.commands.refund_cmds": ["customer-refund"],
@@ -328,6 +328,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.sales_tax_cmds": ["sales-tax", "sales-tax payment"],
     "bookflow.commands.report_cmds": ["report"],
+    "bookflow.commands.report_export_cmds": ["report"],
     "bookflow.commands.inventory_cmds": ["inventory"],
     "bookflow.commands.rate_cmds": ["rate"],
     "bookflow.commands.activity_cmds": ["activity"],

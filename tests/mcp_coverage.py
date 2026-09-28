@@ -118,9 +118,11 @@ account query
 account show
 account update
 activity
+agent activate
 agent assign
 agent authorize
 agent create
+agent deactivate
 agent list
 agent show
 agent unassign
@@ -400,6 +402,7 @@ report customer-balance-detail
 report customer-balance-summary
 report deposit-detail
 report expenses-by-vendor
+report export
 report general-ledger
 report income-tax-summary
 report inventory-valuation
@@ -487,7 +490,9 @@ unit-of-measure query
 unit-of-measure show
 unit-of-measure update
 upgrade
+user activate
 user add
+user deactivate
 user list
 user set-password
 vendor activate
@@ -603,6 +608,7 @@ def execution_map():
     from tests.test_credit_memo_deletion_transports import COMMANDS as CREDIT_DELETE_COMMANDS
     from tests.test_deposit_deletion_transports import COMMANDS as DEPOSIT_DELETE_COMMANDS
     from tests.test_journal_deletion_transports import COMMANDS as JOURNAL_DELETE_COMMANDS
+    from tests.test_report_export_surfaces import COMMANDS as REPORT_EXPORT_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -662,6 +668,7 @@ def execution_map():
                    'tests/test_credit_memo_deletion_transports.py::test_credit_memo_deletion_crosses_all_four_actual_transports' if cmd.name in CREDIT_DELETE_COMMANDS else
                    'tests/test_deposit_deletion_transports.py::test_deposit_deletion_crosses_all_four_actual_transports' if cmd.name in DEPOSIT_DELETE_COMMANDS else
                    'tests/test_journal_deletion_transports.py::test_journal_deletion_crosses_all_four_actual_transports' if cmd.name in JOURNAL_DELETE_COMMANDS else
+                   'tests/test_report_export_surfaces.py::test_report_csv_is_the_same_file_on_every_surface' if cmd.name in REPORT_EXPORT_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

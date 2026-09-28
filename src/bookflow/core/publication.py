@@ -443,7 +443,7 @@ class PublicationPermit:
             host_cmds._target_user(s, self.inp.user)
         elif name == "token revoke":
             host_cmds.authorize_token_revoke(self.inp, self.ctx, s)
-        elif name.startswith("agent "):
+        elif name.startswith("agent ") or name in ("user deactivate", "user activate"):
             from bookflow.commands import agent_cmds
             agent_cmds.republish(name, self.inp, s)
 

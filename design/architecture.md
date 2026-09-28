@@ -248,6 +248,7 @@ src/bookflow/
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
+  documents/report_csv.py export(read, company_id, verb, filters) -> ReportCsv: any paged report, every page, as CSV (preamble, header, rows, whole-report totals); run by `report export`, which the workbench download, the CLI's `report <name> --csv`, HTTP and MCP all call
 ```
 
 `bookflow/documents/` produces the four customer-facing documents as PDF and is the only
@@ -256,7 +257,9 @@ carries, which facts are captured and which are current, and what is deliberatel
 `render` takes a `read` callable rather than a request, so the web routes in
 `adapters/workbench/document_print.py`, and any later command that attaches or sends a
 copy, produce identical bytes from the same description. Permission and company isolation
-stay in the commands `read` runs.
+stay in the commands `read` runs. A report's CSV follows the same rule: `report export` runs
+`documents/report_csv.py` over the report as the caller, and the workbench's `export.csv`
+route serves that command's text with a byte order mark, so every surface gets one file.
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
 
@@ -486,15 +489,17 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 
 ## Known gaps carried to later rows
 
-- No command deactivates a user account or maps an OS login to one; `active` is enforced everywhere a
-  credential is resolved, and `user list` reports it and hides an inactive principal unless
-  `--include-inactive` asks for it, but only a direct write sets it, which is why tests still create
-  actors through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
-  `membership revoke`.
+- `user deactivate` and `user activate` (human installation administrators, activated installations only,
+  catalog `identity-deactivation-v1`) retire and restore a person: deactivation revokes their sessions
+  and tokens and suspends every agent acting for them in one audited change, and the last active human
+  installation administrator cannot be deactivated. `active` is enforced everywhere a credential is
+  resolved; `user list` and `membership list` hide an inactive principal unless `--include-inactive`
+  asks for it (`membership list` then reports `account_active`). No command maps an OS login to a user,
+  which is why tests still create actors through the repository layer (tests/conftest.py::make_actor).
 - `user list` and `membership list` return every row their audience admits; neither pages, as no
   hub-scope `* list` command does.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
-- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. No command deactivates an agent (the general gap above); `agent unassign` of its last principal plus `membership revoke` of its access is the current way to retire one. Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
+- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent deactivate`, `agent activate`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. `agent deactivate` retires one: it is suspended, every token it holds is revoked in the same audited change, and it leaves the default lists; `agent activate` brings it back still suspended, to be authorized again (catalog `identity-deactivation-v1`). Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
 - `--follow` on `audit tail` is CLI-only and polls under the data-root lock every two seconds until the host exists.
 - The idle checkpoint is `RESTART`, which resets the WAL but never shrinks the file. A reader that pins a snapshot across a long burst leaves the file at its high-water mark until the shutdown `TRUNCATE`.

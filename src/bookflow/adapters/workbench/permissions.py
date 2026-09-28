@@ -65,7 +65,7 @@ def install(app, *, run, render, page_error):
 
         Whether the viewer administers agents is the dispatcher's own answer to `agent show`,
         so the controls can never offer what the command would refuse."""
-        ids = sorted({row['user_id'] for row in rows if row['kind'] == 'agent' and row['active']})
+        ids = sorted({row['user_id'] for row in rows if row['kind'] == 'agent' and row['active'] and row.get('account_active', True)})
         agents, admin = [], True
         for agent_id in ids:
             name = next(row['username'] for row in rows if row['user_id'] == agent_id)
