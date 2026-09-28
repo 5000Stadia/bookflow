@@ -660,6 +660,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
             out = plan.preview.model_dump(mode="json")
         if dry_run:
             out["dry_run"] = True
+            out = _with_stock_warnings(out, plan)
         if cmd.kind == "advisory":
             applied = _apply(cmd, plan, ctx, s)
             out = applied.output.model_dump(mode="json")
@@ -670,6 +671,23 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
     if "warnings" in out:
         out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
     return redact_paths(out, s.is_hub_admin)
+
+
+def _with_stock_warnings(out: dict[str, Any], plan: Any) -> dict[str, Any]:
+    """A preview says what its save would: a document that leaves stock below zero warns.
+
+    Every stock-moving write keeps its planned inventory change at ``plan.data['stock']``, and
+    the saved result gets the same lines from ``inventory_effects.settle``; reading them here
+    is what gives every such preview, on every surface, the warning before anything is saved.
+    """
+    data = getattr(plan, "data", None)
+    stock = data.get("stock") if isinstance(data, dict) else None
+    extra = list(getattr(stock, "warnings", None) or ())
+    if not extra or "warnings" not in out:
+        return out
+    current = list(out.get("warnings") or [])
+    out["warnings"] = current + [line for line in dict.fromkeys(extra) if line not in current]
+    return out
 
 
 def _replay(cmd: Command, hit: dict[str, Any], s: Session) -> dict[str, Any] | None:

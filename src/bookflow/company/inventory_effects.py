@@ -48,13 +48,22 @@ written.
 
 Decided before anything is built, so a refusal leaves nothing behind:
 
-- **Negative stock**, checked on every chronological prefix of the item's whole history, not
-  on the balance as it stands today. A backdated sale, a correction that raises a quantity and
-  a void of a purchase are all the same check. This is the parity limitation the costing
-  decision recorded: the anchor product permits negative stock with a warning and Bookflow
-  refuses, because a warning-only mode needs a provisional-cost rule and a settlement pass.
 - **A closed period**, naming it, for the document's own date and for every correction date
-  the change implies. The whole change is refused; deltas are never moved to today.
+  the change implies -- a true-up's date included. The whole change is refused; deltas are
+  never moved to today.
+- **A return of a sale whose cost is still provisional**, until stock has arrived to settle it.
+
+## Stock sold before it arrives
+
+Stock may go below zero, as in the anchor product, and the change says so rather than refusing:
+``Change.warnings`` carries one line per sale that takes an item below zero -- this document's
+own, and any earlier sale a void or a correction newly leaves short -- and ``settle`` puts them
+on the result a person or an agent reads. The units below zero are costed provisionally by
+``inventory_costing.replay``; the item's purchase cost is captured on every issue written here
+so that fallback never moves when the item record is edited. A later receipt that fills the
+shortfall owes each sale it fills a true-up, which ``plan`` writes as its own dated correction
+document -- dated at the receipt, one line pair per sale, each movement naming the sale in
+``corrects_movement_id`` and the receipt in ``filled_by_movement_id``.
 Zero-value quantities retain their commercial ownership and batch with no monetary leg.
 Their later recost corrections still target the original movement identity.
 
@@ -74,7 +83,7 @@ from dataclasses import dataclass, field
 
 from bookflow.company import inventory, journals, schema as c
 from bookflow.company.document_effects import allocate
-from bookflow.company.inventory_costing import StockRefusal, replay
+from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_schema import INPUT_KINDS
 from bookflow.company.journal_models import JournalPostInput
 from bookflow.core import audit, clock
@@ -183,6 +192,7 @@ class Change:
     movements: list = field(default_factory=list)      # this document's own, in write order
     corrections: list = field(default_factory=list)    # one per affected earlier date
     costs: dict = field(default_factory=dict)          # entry key -> signed value minor units
+    warnings: list = field(default_factory=list)       # sales this leaves below zero
 
     @property
     def moves_stock(self):
@@ -222,10 +232,12 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     """
     sequence = inventory.next_sequence(s) if sequence is None else sequence
     working: dict[str, list] = {}
+    stored: dict[str, list] = {}
 
     def rows(item_id):
         if item_id not in working:
-            working[item_id] = list(inventory.movements(s, item_id=item_id))
+            stored[item_id] = list(inventory.movements(s, item_id=item_id))
+            working[item_id] = list(stored[item_id])
         return working[item_id]
 
     def refuse(refusal, item_id, item_name):
@@ -242,6 +254,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
             corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
+            filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
             transaction_id=row['transaction_id'], revision_id=row['revision_id'], document_line_id=row['document_line_id'],
             posting_line_id=None, posting_batch_id=None)
         rows(row['item_id']).append(values)
@@ -262,7 +275,9 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             effective_date=date, sequence=sequence, currency=currency,
             asset_account_id=entry.asset_account_id, offset_account_id=entry.offset_account_id,
             class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None,
-            returns_movement_id=entry.returns_movement_id)
+            returns_movement_id=entry.returns_movement_id, filled_by_movement_id=None,
+            fallback_unit_cost_minor_units=(inventory.fallback_cost(s, entry.item_id, currency)
+                                            if entry.kind == 'issue' else None))
         if entry.kind == 'issue' or entry.returns_movement_id is not None:
             # What it is worth is costing's answer, not the caller's, so the value is read off
             # a first replay and written back before the corrections are worked out. An issue
@@ -294,34 +309,51 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             quantity_microunits=0, value_minor_units=delta, effective_date=target['effective_date'],
             sequence=sequence, currency=currency, asset_account_id=target['asset_account_id'],
             offset_account_id=target['offset_account_id'], class_id=target['class_id'],
-            corrects_movement_id=target['id'], reverses_movement_id=None, returns_movement_id=None)
+            corrects_movement_id=target['id'], reverses_movement_id=None, returns_movement_id=None,
+            filled_by_movement_id=None, fallback_unit_cost_minor_units=None)
         rows(target['item_id']).append(values)
         change.corrections.append(Correction(target['effective_date'], 'Receipt purchase-price correction',
             lines, [Movement(values, line_index=1)]))
         sequence += 1
 
     owed = []
+    own = {movement.values['id'] for movement in change.movements}
+    names = {entry.item_id: entry.item_name for entry in entries}
     for item_id, history in working.items():
         try:
             state = replay(history)
         except StockRefusal as refusal:
-            name = next((entry.item_name for entry in entries if entry.item_id == item_id),
-                        item_id)
-            raise refuse(refusal, item_id, name) from None
+            raise refuse(refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)) from None
         owed.extend((item_id, correction) for correction in state.corrections)
+        if state.shortfalls:
+            try:
+                before = {shortfall.movement['id'] for shortfall in replay(stored[item_id]).shortfalls}
+            except StockRefusal:
+                before = set()
+            for shortfall in state.shortfalls:
+                if shortfall.movement['id'] in own or shortfall.movement['id'] not in before:
+                    change.warnings.append(shortfall_warning(
+                        names.get(item_id) or inventory.item_name(s, item_id), shortfall))
 
-    by_date: dict[str, list] = {}
+    # One correction document per affected date, and a true-up -- dated at the receipt that
+    # settled a provisional cost -- in a document of its own, so the kind of every correction
+    # a person reads in the journal is the kind its memo says it is.
+    by_date: dict[tuple, list] = {}
     for item_id, correction in owed:
-        by_date.setdefault(correction.effective_date, []).append((item_id, correction))
-    for affected in sorted(by_date):
+        by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+                           []).append((item_id, correction))
+    for affected, true_up in sorted(by_date):
         lines, movements = [], []
-        for item_id, correction in by_date[affected]:
+        for item_id, correction in by_date[(affected, true_up)]:
             target = correction.target_movement
+            description = (f'Provisional cost true-up for movement {target["id"]} dated '
+                           f'{target["effective_date"]}, filled by receipt movement '
+                           f'{correction.filled_by["id"]}' if true_up else
+                           f'Weighted-average cost correction for movement {target["id"]} '
+                           f'dated {target["effective_date"]}')
             lines.extend(inventory.pair(
                 target['asset_account_id'], target['offset_account_id'],
-                correction.delta_minor_units, currency, target['class_id'],
-                f'Weighted-average cost correction for movement {target["id"]} '
-                f'dated {target["effective_date"]}'))
+                correction.delta_minor_units, currency, target['class_id'], description))
             movements.append(Movement(dict(
                 id=new_id(), item_id=item_id, kind=CORRECTION_KIND,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
@@ -329,11 +361,14 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 asset_account_id=target['asset_account_id'],
                 offset_account_id=target['offset_account_id'], class_id=target['class_id'],
                 corrects_movement_id=target['id'], reverses_movement_id=None,
-                returns_movement_id=None),
+                returns_movement_id=None,
+                filled_by_movement_id=correction.filled_by['id'] if true_up else None,
+                fallback_unit_cost_minor_units=None),
                 line_index=len(movements) * 2 + 1))
             sequence += 1
         change.corrections.append(Correction(
-            affected, 'Weighted-average cost correction', lines, movements))
+            affected, 'Provisional cost true-up' if true_up else 'Weighted-average cost correction',
+            lines, movements))
     return change
 
 
@@ -470,7 +505,26 @@ def settle(applied, change, ctx, s, *, command_name, summary, created_at=None):
     touched = write_movements(s, ctx, change, command_name=command_name, summary=summary,
                               created_at=at)
     touched += write_corrections(s, ctx, change, command_name=command_name, created_at=at)
+    output = warn(applied.output, change)
     if not touched:
-        return applied
-    return Applied(applied.output, list(applied.touched) + touched, applied.summary,
+        return applied if output is applied.output else Applied(
+            output, applied.touched, applied.summary, finalized=applied.finalized,
+            audited=applied.audited, after_commit=applied.after_commit)
+    return Applied(output, list(applied.touched) + touched, applied.summary,
                    finalized=applied.finalized, audited=True, after_commit=applied.after_commit)
+
+
+def warn(output, change):
+    """``output`` with this change's below-zero warnings added once, where it carries any.
+
+    Every result a stock-moving write returns -- its preview and its saved answer alike --
+    passes through here, so a sale that takes an item below zero says so on every surface.
+    """
+    extra = list(getattr(change, 'warnings', None) or ())
+    if not extra or not hasattr(output, 'warnings'):
+        return output
+    current = list(output.warnings or [])
+    merged = current + [line for line in dict.fromkeys(extra) if line not in current]
+    if merged == current:
+        return output
+    return output.model_copy(update={'warnings': merged})

@@ -2271,3 +2271,36 @@ input = { default_sales_tax_item_id = "${tax_group_item.id}" }
 [calendar]
 written_as_of = "2026-12-12"
 fiscal_year_start = "2026-01-01"
+
+# A subcontractor the company files a 1099 for: marked eligible, paid 2,400.00 by check for
+# drain relining (over the year's threshold), and 150.00 for materials put on the company
+# card, which the 1099 summary shows but does not count because the card company reports it.
+[[commands]]
+command = "vendor create"
+capture = "contractor_1099"
+reason = "Add the relining subcontractor the company files a 1099 for"
+input = { name = "Summit Pipe Contracting", company_name = "Summit Pipe Contracting LLC", eligible_1099 = true, terms_id = "${net_30.id}", notes = "Subcontracted drain relining" }
+
+[[commands]]
+command = "bill post"
+capture = "contractor_bill"
+reason = "Enter the subcontractor's bill for the relining job"
+input = { vendor = "${contractor_1099.id}", number = "DEMO-1099-BILL-1", date = "2026-12-07", supplier_reference = "SPC-1207", memo = "Drain relining, subcontracted", expenses = [{ account = "${expense_account.id}", amount = "2400.00", memo = "Relining labor" }] }
+
+[[commands]]
+command = "bill pay"
+capture = "contractor_payment"
+reason = "Pay the subcontractor by check"
+input = { number = "DEMO-1099-PAY-1", date = "2026-12-08", bills = [{ bill = "${contractor_bill.id}" }], funding_account = "${pay_bank.id}", method = "check", memo = "Relining job, paid in full" }
+
+[[commands]]
+command = "bill post"
+capture = "contractor_materials_bill"
+reason = "Enter the subcontractor's materials bill"
+input = { vendor = "${contractor_1099.id}", number = "DEMO-1099-BILL-2", date = "2026-12-08", supplier_reference = "SPC-1208", memo = "Liner resin", expenses = [{ account = "${expense_account.id}", amount = "150.00", memo = "Liner resin" }] }
+
+[[commands]]
+command = "bill pay"
+capture = "contractor_card_payment"
+reason = "Pay the materials bill on the company card"
+input = { number = "DEMO-1099-PAY-2", date = "2026-12-09", bills = [{ bill = "${contractor_materials_bill.id}" }], funding_account = "${register_card.id}", method = "Visa", memo = "Liner resin on the card" }

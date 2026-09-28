@@ -8,6 +8,8 @@ table it rebuilt says what the shipped metadata says, and whether the guards it 
 the ones it meant to.
 """
 import importlib
+
+import pytest
 import sqlite3
 from pathlib import Path
 
@@ -57,11 +59,18 @@ def test_the_number_this_migration_claims_is_the_one_the_chain_gives_it():
     """
     chain = _chain()
     assert M.revision == "co0057" and chain[M.revision] == PREVIOUS
-    assert HEADS["company"] == M.revision
+    reachable, cursor = set(), HEADS["company"]
+    while cursor:
+        reachable.add(cursor)
+        cursor = chain.get(cursor)
+    assert M.revision in reachable
 
 
 def test_the_rebuilt_table_is_what_the_shipped_metadata_declares():
     """The literal in the migration and the table in the code are one table, not two."""
+    from tests.test_bill_payment_migration import _rebuilt_since
+    if TABLE in _rebuilt_since(M.revision):
+        pytest.skip("a later revision rebuilt the inventory ledger and owns this comparison")
     expected = str(CreateTable(schema.metadata.tables[TABLE]).compile(dialect=dialect()))
     assert M.DDL == expected.replace(
         "CREATE TABLE " + TABLE + " (", "CREATE TABLE " + M.TEMP + " (", 1)

@@ -209,8 +209,9 @@ credit_memo_update = command(
                  ' date too. A correction that would post a line *naming* a stock-carrying item'
                  ' is refused, whether you supply it or it is retained, because a price is not a'
                  ' cost: return the invoice line instead, or put the credit on a non-stock item.'
-                 ' A correction that would leave stock below zero on any date is refused naming'
-                 ' that date, and writes nothing. Preview with'
+                 ' A return of an invoice line whose cost is still provisional -- it took its item'
+                 ' below zero and no receipt has yet filled that -- is refused naming the date, and'
+                 ' writes nothing. Preview with'
                  ' expected_version, then save with expected_facts_fingerprint and an idempotency key'
                  ' reused for retries.'),
     input_model=CreditMemoUpdateInput, output_model=CreditMemoWriteOutput, writes={'company'},

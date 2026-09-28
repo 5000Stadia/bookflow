@@ -26,6 +26,7 @@ from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
 from bookflow.adapters.workbench import payables as Payable
 from bookflow.adapters.workbench import summaries as Summary
+from bookflow.adapters.workbench import everyday as Everyday
 from bookflow.adapters.workbench import inventory as Stock
 from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import transaction_detail as Detail
@@ -79,7 +80,8 @@ env.filters.update(Display.FILTERS)
 # continuation against different inputs. A report joins this set by being listed
 # in its own presentation module; nothing names the commands a second time.
 CURSOR_FREE_REPORTS = (S.COMMANDS | Statement.COMMANDS | Receivable.COMMANDS | Payable.COMMANDS
-                       | Detail.COMMANDS | MissingChecks.COMMANDS | Summary.COMMANDS | Stock.COMMANDS)
+                       | Detail.COMMANDS | MissingChecks.COMMANDS | Summary.COMMANDS | Stock.COMMANDS
+                       | Everyday.COMMANDS)
 
 
 class _FlashStore:
@@ -2185,6 +2187,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
                       summaries=Summary.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Summary.COMMANDS else None,
+                      everyday=Everyday.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Everyday.COMMANDS else None,
                       stock=Stock.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Stock.COMMANDS else None,
                       customer_statement=Statement.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Statement.COMMANDS else None,
                       transaction_detail=Detail.view(result, report_input, company_id, source_report_watermark) if result and report_input is not None and cmd.name in Detail.COMMANDS else None,

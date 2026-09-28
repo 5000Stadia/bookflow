@@ -487,8 +487,13 @@ def test_voiding_the_credit_takes_the_stock_back_out_exactly(books):
     assert _stock(books, item, '2017-01-04') == ('2', STOCK)
 
 
-def test_voiding_a_return_whose_goods_were_sold_on_is_refused_and_writes_nothing(books):
-    """Stock cannot come back out of a shelf that no longer holds it, so nothing is written."""
+def test_voiding_a_return_whose_goods_were_sold_on_leaves_the_later_sale_short_and_says_so(books):
+    """Stock may go below zero (R137): taking the returned unit back out is saved with a warning.
+
+    Bought 2 at 8.00, sold 1, took it back, sold both on 4 January: 0 on hand. Voiding the
+    return leaves the 4 January sale with 1 on hand (800) and 1 below zero at the 800 average:
+    its cost is still 1600, so no correction is owed, and the item stands at -1 worth -800.
+    """
     run = books['run']
     item = _inventory_part(books)
     invoice = _stocked_invoice(books, item)
@@ -497,14 +502,14 @@ def test_voiding_a_return_whose_goods_were_sold_on_is_refused_and_writes_nothing
         lines=[dict(item=item, quantity='2', unit_price=SOLD)]), reason='Sell both on')
     assert _stock(books, item, '2017-01-04') == ('0', 0)
 
-    before = database(_path(books))
-    with pytest.raises(BookflowError) as caught:
-        run('credit-memo void', dict(credit_memo=credit['id'], expected_version=1),
-            reason='Try to take it back')
+    voided = run('credit-memo void', dict(credit_memo=credit['id'], expected_version=1),
+                 reason='Take it back')
 
-    assert caught.value.code == 'E_VALIDATION'
-    assert database(_path(books)) == before
-    assert run('credit-memo show', dict(credit_memo=credit['id']))['status'] == 'posted'
+    assert [line.split(';')[0] for line in voided['warnings'] if line.startswith('Takes ')] == [
+        'Takes Copper Elbow to -1 on 2017-01-04']
+    assert run('credit-memo show', dict(credit_memo=credit['id']))['status'] == 'voided'
+    assert _stock(books, item, '2017-01-04') == ('-1', -COST)
+    assert [row for row in _movements(books, item) if row['kind'] == 'recost'] == []
 
 
 def test_correcting_a_stocked_return_retires_its_receipt_and_takes_the_new_quantity(books):

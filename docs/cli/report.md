@@ -1154,6 +1154,480 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report customer-balance-detail`
+
+Every accrual receivable effect that makes up each customer's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each customer or job. One row is one document's effect on one customer on one date -- an invoice, statement charge, payment, sales receipt, credit memo, refund or receivable journal entry -- read exactly as report statement reads it from the beginning of the books: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a receipt to the same customer's invoice moves nothing and has no row. A parent's receipt that settles a job's invoice moves that balance from the parent to the job, and each side is an applied_credit row. Customers whose balance is zero are omitted unless customer names one. A customer's total row is its report customer-balance-summary row, and the report total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole customer before a page is cut.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.customer-balance-detail` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report customer-balance-detail --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report customer-balance-detail", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer or job with a balance on the as-of date. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.customer-balance-detail`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.balance` | object | yes | no | — | — |
+| `totals.balance.amount` | string | yes | no | — | — |
+| `totals.balance.currency` | string | yes | no | — | — |
+| `totals.balance.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["activity", "total"] | yes | no | — | — |
+| `rows[].customer_id` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_label` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_name` | string \| null | yes | yes | — | — |
+| `rows[].display_customer_label` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].date` | string \| null | yes | yes | — | — |
+| `rows[].entry` | literal["document", "applied_credit", "total"] | yes | no | — | — |
+| `rows[].transaction_id` | string \| null | yes | yes | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].due_date` | string \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].balance` | object | yes | no | — | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "balance": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report customer-balance-summary`
+
+What each customer or job owes as of as_of: one row per customer or job with its accrual receivable balance, in hierarchy-name order so a job reads under its customer. A job's balance is its own and is never added into its parent's. The balance is the Total column report ar-aging shows for the same customer on the same date, so an unapplied payment or credit reduces it and a customer owed money shows a negative balance. Customers with a zero balance are omitted, so the total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover every customer and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.customer-balance-summary` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report customer-balance-summary --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report customer-balance-summary", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.customer-balance-summary`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.balance` | object | yes | no | — | — |
+| `totals.balance.amount` | string | yes | no | — | — |
+| `totals.balance.currency` | string | yes | no | — | — |
+| `totals.balance.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].customer_id` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_label` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_name` | string \| null | yes | yes | — | — |
+| `rows[].display_customer_label` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].balance` | object | yes | no | — | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "balance": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report deposit-detail`
+
+Every deposit posted between date_from and date_to, oldest first, each followed by what it gathered. A deposit row is its effect on the bank account it was made to; the rows beneath it are every other line of the same posting, one per document a deposited line came from -- the payment or sales receipt waiting in Undeposited Funds, with its own type, number, date and name -- and account, plus one per additional line or cash back. Lines are signed debit minus credit, so money taken out of Undeposited Funds is negative under a positive deposit and cash back is positive, and a deposit's lines always net its bank amount to nothing. A correction appears as the reversal and replacement it posted, and a voided deposit, worth nothing on its own date, has no rows. Totals are what was deposited to the bank across the whole report and how many deposits that was; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.deposit-detail` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report deposit-detail --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report deposit-detail", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.deposit-detail`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.deposited` | object | yes | no | — | — |
+| `totals.deposited.amount` | string | yes | no | — | — |
+| `totals.deposited.currency` | string | yes | no | — | — |
+| `totals.deposited.minor_units` | integer | yes | no | — | — |
+| `totals.deposits` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["deposit", "line"] | yes | no | — | — |
+| `rows[].deposit_transaction_id` | string | yes | no | — | — |
+| `rows[].deposit_number` | string | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].transaction_id` | string \| null | yes | yes | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].party_name` | string \| null | yes | yes | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "deposited": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "deposits": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report expenses-by-vendor`
 
 Uses the company cash/accrual report preference unless basis is supplied. Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer or job filter: a bill posts its vendor onto every leg including the expense ones, so the customer typed in a bill's Customer:Job column never reaches the posting line and a job-filtered expense report would silently omit every bill. Under a filter the total is the expense the filter admits, and scope states the whole period and what was kept out of it, so the total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every vendor the filter admits and rows are paged.
@@ -2270,6 +2744,188 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report open-purchase-orders`
+
+Purchase orders with something still to receive: every open or partly received order dated on or before date_to, oldest first, with what was ordered, the ordered amount of what has arrived and the open balance of what has not. An item line's received share is the quantity its item receipts have taken against it, valued at the line's own ordered amount in proportion and rounded half to even at the cent; a line with no quantity stays open for its whole amount until the order is billed. A closed, voided or billed order has nothing to receive and is omitted. An order is not a posting, so the orders and their receipts are read as they stand now; date_to bounds which orders by their own date. vendor narrows it to one vendor. Totals cover every order and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.open-purchase-orders` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report open-purchase-orders --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report open-purchase-orders", "input": {"date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been received today.; minimum length 10; maximum length 10 |
+| `vendor` | `--vendor` | string \| null | no | yes | null | Optional vendor ID or name; omit for every vendor with an open order. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.open-purchase-orders`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.amount` | object | yes | no | — | — |
+| `totals.amount.amount` | string | yes | no | — | — |
+| `totals.amount.currency` | string | yes | no | — | — |
+| `totals.amount.minor_units` | integer | yes | no | — | — |
+| `totals.received` | object | yes | no | — | — |
+| `totals.received.amount` | string | yes | no | — | — |
+| `totals.received.currency` | string | yes | no | — | — |
+| `totals.received.minor_units` | integer | yes | no | — | — |
+| `totals.open_balance` | object | yes | no | — | — |
+| `totals.open_balance.amount` | string | yes | no | — | — |
+| `totals.open_balance.currency` | string | yes | no | — | — |
+| `totals.open_balance.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].purchase_order_id` | string | yes | no | — | — |
+| `rows[].number` | string | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].expected_date` | string \| null | yes | yes | — | — |
+| `rows[].status` | literal["open", "partly_received"] | yes | no | — | — |
+| `rows[].vendor_id` | string \| null | yes | yes | — | — |
+| `rows[].current_vendor_name` | string \| null | yes | yes | — | — |
+| `rows[].display_vendor_label` | string | yes | no | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].reference` | string \| null | yes | yes | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].received` | object | yes | no | — | — |
+| `rows[].received.amount` | string | yes | no | — | — |
+| `rows[].received.currency` | string | yes | no | — | — |
+| `rows[].received.minor_units` | integer | yes | no | — | — |
+| `rows[].open_balance` | object | yes | no | — | — |
+| `rows[].open_balance.amount` | string | yes | no | — | — |
+| `rows[].open_balance.currency` | string | yes | no | — | — |
+| `rows[].open_balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "open_balance": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "received": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report profit-and-loss`
 
 Uses the company cash/accrual report preference unless basis is supplied. Income, costs and net profit for inclusive accounting dates. Own-account rows are paged; statement totals cover all accounts. Ordinary journal transfers affect income exactly as entered.
@@ -3000,6 +3656,316 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report purchases-by-item`
+
+The same item purchases grouped by item: each item's quantity bought in its base unit, the cost it posted, the average cost that quantity came to, and its share of the period as a percentage. A stock item's quantity and cost are its purchase movements on the inventory ledger, so a purchase-price correction changes its cost and not its quantity, and a void takes both back off; any other item's are the quantity on the purchase line and the cost its posting line was attributed. Average cost is cost divided by quantity rounded half to even at the cent for reading, and is omitted where no quantity was bought. Totals are the report purchases-by-vendor total for the same dates; rows worth nothing are omitted and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.purchases-by-item` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report purchases-by-item --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report purchases-by-item", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.purchases-by-item`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.amount` | object | yes | no | — | — |
+| `totals.amount.amount` | string | yes | no | — | — |
+| `totals.amount.currency` | string | yes | no | — | — |
+| `totals.amount.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].item_id` | string \| null | yes | yes | — | — |
+| `rows[].current_item_label` | string \| null | yes | yes | — | — |
+| `rows[].current_item_name` | string \| null | yes | yes | — | — |
+| `rows[].display_item_label` | string | yes | no | — | — |
+| `rows[].item_type` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].quantity` | string | yes | no | — | — |
+| `rows[].quantity_microunits` | integer | yes | no | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].average_cost` | object \| null | yes | yes | — | — |
+| `rows[].average_cost.amount` | string | yes | no | — | — |
+| `rows[].average_cost.currency` | string | yes | no | — | — |
+| `rows[].average_cost.minor_units` | integer | yes | no | — | — |
+| `rows[].percent_of_total` | string \| null | yes | yes | — | — |
+| `rows[].percent_of_total_millionths` | integer \| null | yes | yes | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report purchases-by-vendor`
+
+Items bought from each vendor between date_from and date_to, at the cost each purchase posted, with each vendor's share of the period as a percentage. An item purchase is what a bill, check, credit card charge or item receipt posted for an item: for a stock item, a receipt of stock against Accounts Payable, a bank account or a card, the purchase-price corrections that amend it and the reversals a void or a correction writes; for any other item, the cost it posted to an account other than Accounts Payable. A bill for goods already received moves the receipt's payable and posts no stock, so received goods are counted once, at the receipt. A purchase entered on an expense account names no item and is on report expenses-by-vendor instead; a customer return, an inventory adjustment and a sale are not purchases. A purchase belongs to the vendor its posting line names, or to the one vendor its posting names where the line names none; one naming no vendor is the row called No name. Rows worth nothing are omitted; totals cover every vendor and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.purchases-by-vendor` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report purchases-by-vendor --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report purchases-by-vendor", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.purchases-by-vendor`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.amount` | object | yes | no | — | — |
+| `totals.amount.amount` | string | yes | no | — | — |
+| `totals.amount.currency` | string | yes | no | — | — |
+| `totals.amount.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].vendor_id` | string \| null | yes | yes | — | — |
+| `rows[].current_vendor_name` | string \| null | yes | yes | — | — |
+| `rows[].display_vendor_label` | string | yes | no | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].percent_of_total` | string \| null | yes | yes | — | — |
+| `rows[].percent_of_total_millionths` | integer \| null | yes | yes | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -4228,6 +5194,158 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report transaction-list-by-date`
+
+Every transaction posted between date_from and date_to, in accounting-date order and then the order it was recorded: one row per posting, with the document's type and number, who it names, its memo, the account it posts to, the other side of the entry and its amount. The account is the one line on the side that has one when the other side has several -- the bank on a check, Accounts Payable on a bill, Accounts Receivable on an invoice; with one line on each side it is the line on a bank, credit card, receivable or payable account in that order, else the credit line; with several on both sides it is the entry's first line. The split is the other side's account when it is one account, and -SPLIT- when it is more. The amount is the entry's total, so a correction appears as a negative reversal and a positive replacement and a void as a negative reversal on the original date, exactly as report transaction-detail shows them. The name is the listed line's party, or the one party the entry names. The total is how many postings the report lists; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.transaction-list-by-date` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report transaction-list-by-date --date-from 2026-12-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report transaction-list-by-date", "input": {"date_from": "2026-12-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.transaction-list-by-date`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.transactions` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].transaction_id` | string | yes | no | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].number` | string | yes | no | — | — |
+| `rows[].batch_id` | string | yes | no | — | — |
+| `rows[].batch_kind` | literal["original", "reversal", "replacement"] | yes | no | — | — |
+| `rows[].party_name` | string \| null | yes | yes | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].split_account_id` | string \| null | yes | yes | — | — |
+| `rows[].split_account_label` | string | yes | no | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "transactions": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report trial-balance`
 
 Accrual ending account nets as of date_to; zero balances omitted unless include_zero is true. Totals cover all accounts; rows are paged.
@@ -4763,6 +5881,500 @@ Example JSON output:
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report vendor-1099-summary`
+
+What was paid to each vendor marked eligible for a 1099 between date_from and date_to -- a calendar year for a 1099 -- as the anchor's 1099 summary reports it. This is a report, not a filing. It is cash by nature: a payment is money out of a bank account on a posting line naming the vendor -- the bank side of a bill payment or a check, less a vendor refund deposited back -- on the date it was paid, so a voided or corrected payment counts what the ledger finally says was paid. A payment by credit card is not counted, because the card company reports it, and is shown beside the payments as card_payments_excluded. Every counted payment is nonemployee compensation, box 1 of the 1099-NEC: Bookflow does not map expense accounts to 1099 boxes. The threshold is the year's 1099-NEC filing threshold for the year of date_to -- 600.00 before 2026, 2,000.00 from 2026 on, without the inflation adjustment the law applies after 2026 -- and a vendor meets it when its counted payments are at least that much. above_threshold_only, on by default as in the anchor, lists only vendors that meet it; turned off it lists every 1099 vendor paid anything. Totals give the threshold, the reportable total and count of vendors meeting it whatever is listed, and the payments and card payments of the vendors listed; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.vendor-1099-summary` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report vendor-1099-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report vendor-1099-summary", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first payment date, YYYY-MM-DD; a 1099 year is January 1 to December 31.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last payment date, YYYY-MM-DD; its year decides the filing threshold.; minimum length 10; maximum length 10 |
+| `above_threshold_only` | `--above-threshold-only` | boolean | no | no | true | List only vendors paid at least the year's filing threshold, as the anchor does by default. False lists every 1099 vendor paid anything. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.vendor-1099-summary`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.threshold` | object | yes | no | — | — |
+| `totals.threshold.amount` | string | yes | no | — | — |
+| `totals.threshold.currency` | string | yes | no | — | — |
+| `totals.threshold.minor_units` | integer | yes | no | — | — |
+| `totals.reportable` | object | yes | no | — | — |
+| `totals.reportable.amount` | string | yes | no | — | — |
+| `totals.reportable.currency` | string | yes | no | — | — |
+| `totals.reportable.minor_units` | integer | yes | no | — | — |
+| `totals.vendors_meeting_threshold` | integer | yes | no | — | — |
+| `totals.payments` | object | yes | no | — | — |
+| `totals.payments.amount` | string | yes | no | — | — |
+| `totals.payments.currency` | string | yes | no | — | — |
+| `totals.payments.minor_units` | integer | yes | no | — | — |
+| `totals.card_payments_excluded` | object | yes | no | — | — |
+| `totals.card_payments_excluded.amount` | string | yes | no | — | — |
+| `totals.card_payments_excluded.currency` | string | yes | no | — | — |
+| `totals.card_payments_excluded.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].vendor_id` | string | yes | no | — | — |
+| `rows[].current_vendor_name` | string | yes | no | — | — |
+| `rows[].display_vendor_label` | string | yes | no | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].box` | literal["nonemployee_compensation"] | yes | no | — | — |
+| `rows[].payments` | object | yes | no | — | — |
+| `rows[].payments.amount` | string | yes | no | — | — |
+| `rows[].payments.currency` | string | yes | no | — | — |
+| `rows[].payments.minor_units` | integer | yes | no | — | — |
+| `rows[].card_payments_excluded` | object | yes | no | — | — |
+| `rows[].card_payments_excluded.amount` | string | yes | no | — | — |
+| `rows[].card_payments_excluded.currency` | string | yes | no | — | — |
+| `rows[].card_payments_excluded.minor_units` | integer | yes | no | — | — |
+| `rows[].meets_threshold` | boolean | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "card_payments_excluded": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "payments": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "reportable": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "threshold": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "vendors_meeting_threshold": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report vendor-balance-detail`
+
+Every accrual payable effect that makes up each vendor's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each vendor. One row is one document's effect on one vendor's payable on one date -- a bill, bill payment, vendor credit, item receipt, receipt price correction or payable journal entry -- signed so that what is owed to the vendor is positive: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a payment or credit to a bill moves nothing the vendor is owed and has no row. Vendors whose balance is zero are omitted unless vendor names one. A vendor's total row is its report vendor-balance-summary row, and the report total is Accounts Payable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole vendor before a page is cut.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.vendor-balance-detail` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report vendor-balance-detail --as-of 2026-12-31 --vendor "Central Supply" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report vendor-balance-detail", "input": {"as_of": "2026-12-31", "vendor": "Central Supply"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `vendor` | `--vendor` | string \| null | no | yes | null | Optional vendor ID or name; omit for every vendor with a balance on the as-of date. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.vendor-balance-detail`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.balance` | object | yes | no | — | — |
+| `totals.balance.amount` | string | yes | no | — | — |
+| `totals.balance.currency` | string | yes | no | — | — |
+| `totals.balance.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["activity", "total"] | yes | no | — | — |
+| `rows[].vendor_id` | string \| null | yes | yes | — | — |
+| `rows[].current_vendor_name` | string \| null | yes | yes | — | — |
+| `rows[].display_vendor_label` | string | yes | no | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].date` | string \| null | yes | yes | — | — |
+| `rows[].transaction_id` | string \| null | yes | yes | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].due_date` | string \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].balance` | object | yes | no | — | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "balance": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report vendor-balance-summary`
+
+What is owed to each vendor as of as_of: one row per vendor with its accrual payable balance, in name order. The balance is the Total column report ap-aging shows for the same vendor on the same date, so an unapplied bill payment or vendor credit reduces it and a vendor who owes the company shows a negative balance. Vendors with a zero balance are omitted, so the total is Accounts Payable on the accrual balance sheet for the same date. Totals cover every vendor and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.vendor-balance-summary` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report vendor-balance-summary --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report vendor-balance-summary", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.vendor-balance-summary`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.balance` | object | yes | no | — | — |
+| `totals.balance.amount` | string | yes | no | — | — |
+| `totals.balance.currency` | string | yes | no | — | — |
+| `totals.balance.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].vendor_id` | string \| null | yes | yes | — | — |
+| `rows[].current_vendor_name` | string \| null | yes | yes | — | — |
+| `rows[].display_vendor_label` | string | yes | no | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].balance` | object | yes | no | — | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "balance": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

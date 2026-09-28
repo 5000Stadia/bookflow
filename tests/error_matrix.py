@@ -385,6 +385,49 @@ MATRIX['report open-invoices'] = {
     'E_VALUE_RANGE': 'public invoice amount or open-invoice total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
 }
+MATRIX['report customer-balance-summary'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public customer balance or report total exceeds signed 64-bit range',
+}
+MATRIX['report customer-balance-detail'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between detail pages',
+    'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+}
+MATRIX['report vendor-balance-summary'] = {
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public vendor balance or report total exceeds signed 64-bit range',
+}
+MATRIX['report vendor-balance-detail'] = {
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between detail pages',
+    'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
+MATRIX['report open-purchase-orders'] = {
+    'E_QUERY_STALE': 'an order, a receipt against one or vendor display facts changed between pages',
+    'E_VALUE_RANGE': 'public order amount or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
+MATRIX['report purchases-by-vendor'] = {
+    'E_QUERY_STALE': 'posting, stock movement or vendor display facts changed between pages',
+    'E_VALUE_RANGE': 'public purchase amount or report total exceeds signed 64-bit range',
+}
+MATRIX['report purchases-by-item'] = {
+    'E_QUERY_STALE': 'posting, stock movement or item display facts changed between pages',
+    'E_VALUE_RANGE': 'public purchase amount, average cost or report total exceeds signed 64-bit range',
+}
+MATRIX['report deposit-detail'] = {
+    'E_QUERY_STALE': 'a deposit, its sources or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public deposit amount or report total exceeds signed 64-bit range',
+}
+MATRIX['report transaction-list-by-date'] = {
+    'E_QUERY_STALE': 'a posting or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public transaction amount exceeds signed 64-bit range',
+}
+MATRIX['report vendor-1099-summary'] = {
+    'E_QUERY_STALE': 'a posting or vendor facts changed between pages',
+    'E_VALUE_RANGE': 'public payment total exceeds signed 64-bit range',
+}
 MATRIX['report ap-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',
@@ -416,7 +459,7 @@ MATRIX['report stock-status'] = {
 MATRIX['inventory adjust'] = {
     'E_RECORD_NOT_FOUND': 'unknown item, adjustment account or class',
     'E_INACTIVE_REFERENCE': 'inactive item, account or class',
-    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, negative stock on an affected date, stock left worth nothing, or a movement worth nothing at the current average',
+    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, stock left worth nothing, or a movement worth nothing at the current average',
     'E_VALUE_RANGE': 'quantity or value outside signed 64-bit storage',
     'E_AMOUNT_PRECISION': 'value_change with more decimal places than the currency allows',
     'E_UNBALANCED_ENTRY': 'the generated posting does not balance',
@@ -429,7 +472,7 @@ MATRIX['inventory adjust'] = {
 MATRIX['inventory void'] = {
     'E_RECORD_NOT_FOUND': 'no inventory adjustment with that id or number',
     'E_VERSION_CONFLICT': 'stale expected_version',
-    'E_VALIDATION': 'the reversal would take the item below zero on an affected date',
+    'E_VALIDATION': 'the reversal would leave value with no quantity, or a return standing against a sale whose cost is still provisional',
     'E_VALUE_RANGE': 'a reversed or corrected value outside signed 64-bit storage',
     'E_REASON_REQUIRED': 'void without a reason',
     'E_PERIOD_CLOSED': 'the adjustment date or any correction date falls in a closed period',

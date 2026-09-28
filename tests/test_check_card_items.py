@@ -122,16 +122,21 @@ def test_item_storage_additive_migration_preserves_prior_database(tmp_path):
         before = {name:table(raw,name) for name in names}
     with open_database(path,writable=True) as db:
         assert migrate_to_head(db,'company',tmp_path/'backups') == ('co0044', HEADS['company'])
-        assert {name:table(db.raw,name) for name in names} == before
         from tests.test_bill_payment_migration import _rebuilt_since
         owned = _rebuilt_since('co0044')
+        # A table a later revision rebuilt gains columns; its rows are what must survive.
+        after = {name:table(db.raw,name) for name in names}
+        assert {name: value for name, value in after.items() if name not in owned} == \
+            {name: value for name, value in before.items() if name not in owned}
+        assert {name: after[name]['count'] for name in names if name in owned} == \
+            {name: before[name]['count'] for name in names if name in owned}
         assert {row for row in ddl if row[1] not in owned} <= set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
         assert migrate_to_head(db,'company',tmp_path/'backups') == (HEADS['company'],HEADS['company'])
 
 
-def test_direct_purchase_cost_edit_recosts_sale_and_refuses_unsafe_void(books):
+def test_direct_purchase_cost_edit_recosts_sale_and_a_void_leaves_it_provisional(books):
     item = _inventory_part(books)
     asset = _inventory_asset(books)
     posted = books['run']('check post', dict(account=books['bank'], date='2017-01-01', amount='100.00',
@@ -146,15 +151,19 @@ def test_direct_purchase_cost_edit_recosts_sale_and_refuses_unsafe_void(books):
     assert early[asset] == 20000 and early[books['bank']] == -20000
     assert later[asset] == 12000 and later[books['cogs']] == 8000
     path = Path(books['client'].company.show(company=books['company'])['path']) / 'company.db'
-    before = database(path)
-    with pytest.raises(BookflowError) as failed:
-        books['run']('check void', {'check':posted['id']}, reason='Cannot remove sold stock')
-    assert failed.value.code == 'E_VALIDATION'
-    assert database(path) == before
+    # Voiding the purchase of stock already sold leaves the sale below zero (R137): it is
+    # saved with a warning and the sale is re-costed at its own date from 4 x 20.00 = 8000 to
+    # the 4 x 1.80 = 720 purchase cost on the item record, so cost of goods sold is 720.
+    voided = books['run']('check void', {'check':posted['id']}, reason='Remove sold stock')
+    assert [line.split(';')[0] for line in voided['warnings'] if line.startswith('Takes ')] == [
+        'Takes Copper Elbow to -4 on 2017-02-10']
+    assert _net(books, date_to='2017-02-28')[books['cogs']] == 720
+    second = books['run']('check post', dict(account=books['bank'], date='2017-01-05', amount='100.00',
+        items=[dict(item=item, quantity='10', unit_cost='10.00')]), reason='Receive paid stock')
     books['run']('company update', {'closing_date':'2017-02-28'}, reason='Close posted dates')
     before = database(path)
     with pytest.raises(BookflowError) as failed:
-        books['run']('check update', {'check':posted['id'], 'memo':'Closed'}, reason='Cannot edit closed purchase')
+        books['run']('check update', {'check':second['id'], 'memo':'Closed'}, reason='Cannot edit closed purchase')
     assert failed.value.code == 'E_PERIOD_CLOSED'
     assert database(path) == before
 
