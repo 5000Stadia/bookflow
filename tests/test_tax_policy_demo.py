@@ -3,12 +3,13 @@ from importlib.resources import files
 import subprocess
 import tomllib
 import pytest
+from tests.demo_oracle import as_edited_by_r83
 from tests.test_reference_year import reference_client, reference_template
 
 
 @pytest.mark.parametrize('resource', ['seed.toml', 'reference.toml'])
 def test_exact_prior_tax_prefix(resource):
-    old = subprocess.check_output(['git','show','15f3e034a773f0b227150403e491f2c5a5edcf5e:src/bookflow/demo/'+resource])
+    old = as_edited_by_r83(subprocess.check_output(['git','show','15f3e034a773f0b227150403e491f2c5a5edcf5e:src/bookflow/demo/'+resource]), resource)
     current = files('bookflow.demo').joinpath(resource).read_bytes()
     assert current.startswith(old)
     old_commands = tomllib.loads(old.decode())['commands']

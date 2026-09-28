@@ -76,6 +76,15 @@ def install(app, *, run, render, page_error):
                     raise
                 admin = False
                 agents.append({'agent_id':agent_id,'username':name,'authority':None,'principals':[]})
+        if not ids:
+            # No agent here to ask about, so ask the dispatcher the same question through
+            # `agent list`, which admits exactly the viewers `agent show` does.
+            try:
+                run(request,'agent list',{},None)
+            except BookflowError as exc:
+                if exc.code != 'E_PERMISSION':
+                    raise
+                admin = False
         return agents, admin and current['mode'] == 'policy_v1'
 
     @app.get('/c/{company_id}/users',response_class=HTMLResponse)

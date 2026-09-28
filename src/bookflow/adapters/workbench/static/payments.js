@@ -353,6 +353,8 @@
         el('p','Its original details, revisions, number and audit history remain readable afterwards. There is no restore action.'));
       return;
     }
+    // Advice the command returns (a check reference already on file for this customer) shows before saving.
+    for(const warning of preview.out.warnings||[]) {const p=el('p',warning);p.className='warn';p.setAttribute('data-payment-warning','');area.append(p);}
     area.append(el('p',`Received ${cash(preview.out.current.received_minor_units)}; applied ${cash(preview.out.current.applied_minor_units)}; available ${cash(preview.out.current.available_minor_units)}.`));
     if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {

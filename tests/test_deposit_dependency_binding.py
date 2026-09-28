@@ -10,6 +10,11 @@ from tests.test_deposit_lifecycle import driver, additional_document
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_commit_hooks import owner_host
 
+# A refusal names the requirement that refused (capability, threshold, rule) and
+# never an identity, a role or a record (R84; blueprint 4.3b).
+REFUSAL={'capability','required_role','reason'}
+
+
 
 def observe(client, monkeypatch, callback, company=COMPANY):
     command = registry.get('company show'); original = command.plan; found = []
@@ -262,7 +267,7 @@ def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(roo
         for key in ('bound-live','never-posted-readonly'):
             body=lifecycle.INPUTS['post'].model_validate(dict(operation_key=key,document=document))
             with pytest.raises(BookflowError) as denied:lifecycle.prepare(s,ctx,body,'post',binding=credential)
-            assert denied.value.code=='E_PERMISSION' and not denied.value.details
+            assert denied.value.code=='E_PERMISSION' and set(denied.value.details)<=REFUSAL
     observe(people['bot'],monkeypatch,read_but_not_write,people['company'])
     assert _storage(root,database_path(client))==before
 

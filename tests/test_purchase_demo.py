@@ -37,7 +37,7 @@ def assert_inventory(path, before, after, before_bill):
     assert all(before[t] for t in (*FINANCIAL, 'inventory_movements'))
     with sqlite3.connect(path) as db:
         accounts = dict(db.execute('SELECT id,name FROM accounts'))
-        item, = db.execute("SELECT id FROM items WHERE name='December Service Kit'").fetchone()
+        item, = db.execute("SELECT id FROM items WHERE name='Service Call Kit'").fetchone()
     transactions = {r['id']: r for r in added['transactions']}
     markers = {r['kind']: r['transaction_id'] for r in added['money_out_documents']}
     assert set(markers) == {'check', 'card_charge'}

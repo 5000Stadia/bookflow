@@ -3,19 +3,21 @@ import subprocess
 import tomllib
 from importlib.resources import files
 import pytest
+from tests.demo_oracle import as_edited_by_r83
 from tests.test_reference_year import reference_client, reference_template
 
 
 @pytest.mark.parametrize('resource,count', [('seed.toml',283), ('reference.toml',189)])
 def test_exact_prior_prefix(resource, count):
     current = files('bookflow.demo').joinpath(resource).read_bytes()
-    old = subprocess.check_output(['git','show','3644f3fb50a9b74203a366228f4285c24e39c978:src/bookflow/demo/'+resource])
+    old = as_edited_by_r83(subprocess.check_output(['git','show','3644f3fb50a9b74203a366228f4285c24e39c978:src/bookflow/demo/'+resource]), resource)
     assert current.startswith(old)
     old_commands = tomllib.loads(old.decode())['commands']
     commands = tomllib.loads(current.decode())['commands']
     assert len(old_commands) == count and commands[:count] == old_commands
     assert len(commands[count:count + 12]) == 12  # Row19 preference block
-    assert len(commands) == count + 12 + 17 + 33  # active tax and payment union
+    # The active tax and payment union follows; later examples own their own appends.
+    assert len(commands) >= count + 12 + 17 + 33
 
 
 @pytest.mark.parametrize('company,prefix', [('Demo Plumbing Co','DEMO'), ('Reference Plumbing Co','REF')])
@@ -40,7 +42,7 @@ def test_complete_tax_payment_append_union_preserves_each_frozen_command(resourc
     import json
     import re
     def frozen(commit):
-        raw = subprocess.check_output(['git','show',commit+':src/bookflow/demo/'+resource])
+        raw = as_edited_by_r83(subprocess.check_output(['git','show',commit+':src/bookflow/demo/'+resource]), resource)
         return raw, tomllib.loads(raw.decode())['commands']
     base_bytes, base = frozen('3f9a307e7b8f878d613f915087f6b552a17a04da')
     _, tax = frozen('ac059ac26b0d86fa8e035ad57f876f6b0c6c9729')
@@ -50,7 +52,9 @@ def test_complete_tax_payment_append_union_preserves_each_frozen_command(resourc
     assert current.startswith(base_bytes)
     assert len(base) == base_count and tax[:base_count] == payment[:base_count] == base
     assert len(tax[base_count:]) == 17 and len(payment[base_count:]) == 33
-    assert commands == base + tax[base_count:] + payment[base_count:]
+    union = base + tax[base_count:] + payment[base_count:]
+    # This oracle owns the union and nothing after it; later examples have their own witnesses.
+    assert commands[:len(union)] == union
     captures = {'null'}  # seed language literal, not a capture
     for entry in commands:
         references = re.findall(r'\$\{([^}.]+)(?:\.[^}]+)?\}', json.dumps(entry))

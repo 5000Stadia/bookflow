@@ -229,6 +229,28 @@ def _profile(s, inp, context_):
         preferences={field: bool(info[field]) for field in PREFERENCES})
 
 
+def repeated_reference(s, customer_id, reference):
+    """Warnings for this customer's live receipts that carry the same check reference.
+
+    Not a refusal: two checks can share a number. The person or agent sees the receipt
+    already on file and decides. Voided and deleted receipts are not live and never match.
+    """
+    key = (reference or '').strip().casefold()
+    if not key:
+        return []
+    t, p, r = c.transactions, c.payment_profiles, c.transaction_revisions
+    rows = s.company.conn.execute(sa.select(t.c.id, t.c.number, r.c.date, r.c.total_minor_units, r.c.currency,
+                                            p.c.reference)
+        .join(p, p.c.revision_id == t.c.current_revision_id).join(r, r.c.id == t.c.current_revision_id)
+        .where(t.c.type == 'payment', t.c.status == 'posted', p.c.payer_id == customer_id,
+               p.c.reference.is_not(None))
+        .order_by(r.c.date, t.c.number)).mappings().all()
+    rows = [row for row in rows if row['reference'].strip().casefold() == key]
+    return [f"reference: this customer already has receipt {row['number']} (payment {row['id']}) dated {row['date']} "
+            f"for {Money(row['total_minor_units'], row['currency'])} with reference {row['reference']!r}; "
+            f"make sure this is not the same check recorded twice" for row in rows]
+
+
 def prepare(s, ctx, inp, operation):
     command = 'payment ' + operation
     if operations.find(s, inp.operation_key):
@@ -259,6 +281,7 @@ def prepare(s, ctx, inp, operation):
         if amount <= 0:
             raise _invalid('amount', 'cash received must be positive')
         profile = _profile(s, inp, context_)
+        repeated = repeated_reference(s, context_['customer_id'], inp.reference)
         targets, selected = _applications(s, inp, context_, amount=amount)
         _capacity('source', sum(row['amount'] for row in targets), amount, context_['currency'], context_['customer_id'])
         components = calc.receipt_components(context_['customer_id'], amount,
@@ -418,6 +441,7 @@ def prepare(s, ctx, inp, operation):
         source_components=component_outputs, applications=app_outputs, allocations=allocation_outputs, document_changes=changes)
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
         facts_fingerprint=fp, effect=effect, current=current,
+        warnings=repeated if operation == 'receive' else [],
         effect_counts={key: len(effect[key]) for key in ('source_components', 'applications', 'allocations', 'document_changes')})
     return Plan(output, dict(input=inp, operation=operation, header=header, before=previous, pending=pending,
         changed_headers=changed_headers, event=event, operation_id=operation_id, selected=selected,
@@ -461,7 +485,9 @@ def apply(plan, ctx, s):
         request_snapshot=query.canonical(dict(original_request=operations.original_request(data['input'], ctx, s, 'payment ' + data['operation']),
             resolved_transaction_ids=[header['id'], *(after['id'] for _, after in data['changed_headers'])],
             expanded_selection_hash=data['selected']['revision']['manifest_hash'] if data['selected'] else None)),
-        effect_snapshot=query.canonical(fresh.preview.model_dump(mode='json')),
+        # The recorded effect omits advice about other receipts, so an exact replay of this
+        # operation returns its effect alone rather than warning about itself.
+        effect_snapshot=query.canonical(fresh.preview.model_copy(update={'warnings': []}).model_dump(mode='json')),
         execution_snapshot=query.canonical(dict(actor_id=s.actor.id, interface=ctx.interface.value,
             on_behalf_of=ctx.on_behalf_of, reason=ctx.reason, directive_id=ctx.directive_id, directive_code=getattr(s, 'directive_code', None))),
         created_at=data.get('at', header['updated_at']), created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=data['event'])

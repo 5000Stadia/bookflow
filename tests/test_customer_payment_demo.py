@@ -8,6 +8,7 @@ from pathlib import Path
 import bookflow
 import pytest
 from bookflow.commands import hub_cmds
+from tests.demo_oracle import as_edited_by_r83
 
 BASE='3f9a307e7b8f878d613f915087f6b552a17a04da'
 RESOURCE=Path(__file__).parents[1]/'src/bookflow/demo'
@@ -16,7 +17,7 @@ EXPECTED=json.loads((RESOURCE/'payment-expected.json').read_text())
 
 @pytest.mark.parametrize('filename,count',[('seed.toml',295),('reference.toml',201)])
 def test_payment_append_keeps_exact_frozen_bytes_and_command_prefix(filename,count):
-    old=subprocess.check_output(['git','show',BASE+':src/bookflow/demo/'+filename])
+    old=as_edited_by_r83(subprocess.check_output(['git','show',BASE+':src/bookflow/demo/'+filename]),filename)
     current=(RESOURCE/filename).read_bytes()
     assert current.startswith(old)
     before=tomllib.loads(old.decode())['commands'];after=tomllib.loads(current.decode())['commands']

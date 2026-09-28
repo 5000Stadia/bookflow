@@ -495,6 +495,32 @@ def _derived_price(profile):
     return nonnegative(base, 'unit_price')
 
 
+def _missing_tax_item(db, header):
+    """A taxable line with no tax item: say whether a default exists, and name the choices."""
+    rows = db.conn.execute(sa.select(schema.items.c.full_name).where(
+        schema.items.c.type.in_(('sales_tax_item', 'sales_tax_group')), schema.items.c.active.is_(True))
+        .order_by(schema.items.c.full_name_key).limit(21)).scalars().all()
+    choices = ', '.join(rows[:20]) + (', ...' if len(rows) > 20 else '')
+    origin = (header.origins or {}).get('sales_tax_item')
+    customer = getattr(header, 'customer', None)
+    current = customer and db.conn.execute(sa.select(schema.customers.c.sales_tax_item_id).where(
+        schema.customers.c.id == customer.id)).scalar()
+    current = current or _info(db)['default_sales_tax_item_id']
+    if current and (origin is None or origin.kind == 'default'):
+        # A correction keeps what the document captured; the default set since is taken on request.
+        name = db.conn.execute(sa.select(schema.items.c.full_name).where(schema.items.c.id == current)).scalar()
+        problem = (f'this document captured no sales tax item; name one in sales_tax_item, or pass use_defaults '
+                   f'["sales_tax_item"] to take the current default ({name})')
+    elif origin is None or origin.kind == 'default':
+        problem = ('no default sales tax item is set for this company or customer; name one in sales_tax_item'
+                   + (f' (one of: {choices})' if choices else ' (none exists yet: create a sales tax item first)')
+                   + ', or set the company default with `company update` default_sales_tax_item_id')
+    else:
+        problem = ('taxable lines need a sales tax item; name one in sales_tax_item'
+                   + (f' (one of: {choices})' if choices else ' (none exists yet: create a sales tax item first)'))
+    return _invalid('sales_tax_item', problem)
+
+
 def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict | None = None,
                  previous_header: SalesProfile | None = None, refresh: bool = False,
                  nonposting: bool = False, price_override: Callable | None = None,
@@ -709,7 +735,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     taxes = []
     if taxable:
         if not header.tax_rules:
-            raise _invalid('sales_tax_item', 'taxable treatment requires a valid captured tax item; select one or use_defaults')
+            raise _missing_tax_item(db, header)
         if not nonposting and header.preferences.sales_tax_liability_basis != 'invoice_date':
             raise _invalid('sales_tax_item', 'taxable sales require invoice_date liability policy')
         taxes = [dict(rule=rule, taxable_minor_units=net, tax_minor_units=0 if defer_tax else tax(net, rule.rate_percent_millionths))
