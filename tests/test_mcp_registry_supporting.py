@@ -26,8 +26,10 @@ FAMILIES = {
                 'report ap-aging', 'report unpaid-bills', 'report missing-checks',
                 'report sales-by-customer', 'report sales-by-item', 'report sales-by-rep',
                 'report expenses-by-vendor',
-                'report profit-and-loss-by-job', 'report profit-and-loss-by-class', 'report collections', 'report unbilled-costs',
-                'report customer-balance-summary', 'report customer-balance-detail',
+                'report profit-and-loss-by-job', 'report profit-and-loss-by-class', 'report collections', 'report unbilled-costs'),
+    # The everyday reports (R131, R134) are their own family so that one witness stays inside
+    # the matrix time bound; they are exercised exactly as the reports above are.
+    'everyday_reports': ('report customer-balance-summary', 'report customer-balance-detail',
                 'report vendor-balance-summary', 'report vendor-balance-detail',
                 'report open-purchase-orders', 'report purchases-by-vendor', 'report purchases-by-item',
                 'report deposit-detail', 'report transaction-list-by-date',
@@ -124,7 +126,7 @@ def test_supporting_family_full_documents_and_rejections(root, tmp_path, family)
                 for index, (a, b) in enumerate(zip(expected, actual)):
                     assert a == b, (surface, index, a, b)
             # Preview/replay/rejections must not create extra attributed writes.
-            expected_audits = {'rates': 2, 'annotations': 4, 'links': 3, 'reports': 0}[family]
+            expected_audits = {'rates': 2, 'annotations': 4, 'links': 3, 'reports': 0, 'everyday_reports': 0}[family]
             for surface, data_root in matrix.roots.items():
                 with sqlite3.connect((data_root / 'hub.db').as_uri() + '?mode=ro', uri=True) as db:
                     relative = db.execute('SELECT path FROM companies WHERE id=?', (company,)).fetchone()[0]
