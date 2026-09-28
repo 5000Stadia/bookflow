@@ -347,7 +347,10 @@ def test_stream_uses_bounded_reauthorized_snapshot_batches(hosted, live, monkeyp
     seen = _collect(live, f"/companies/{cid}/events?after={start}&command=company%20update",
                     {"Authorization": f"Bearer {token['secret']}"},
                     101 if revoke_between_batches else 250, timeout=15)
-    assert all(sum(candidate is session for candidate in plans) == 1 for session in sessions)
+    # Each batch plans in a reader session of its own. The same reader also opens the
+    # publication checks that release each frame, which plan nothing.
+    assert plans and all(any(candidate is session for session in sessions) for candidate in plans)
+    assert all(sum(candidate is session for candidate in plans) <= 1 for session in sessions)
     assert all(session.hub.conn.closed for session in sessions)
     if revoke_between_batches:
         assert len(plans) == 1
