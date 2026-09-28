@@ -62,7 +62,10 @@ def test_a_period_needs_one_end_on_or_after_its_start(client, raw):
     assert error.value.code == 'E_VALIDATION'
 
 
-def test_help_says_how_to_ask_for_a_month(client):
+def test_help_says_how_to_ask_for_a_period_without_a_date_that_reads_as_today(client):
     from bookflow.core.registry import REGISTRY
     cmd = REGISTRY['sales-tax liability']
-    assert "date_from=2026-09-01" in cmd.description and 'not one month' in cmd.description
+    assert 'date_from=2025-01-01 and date_to=2025-03-31' in cmd.description
+    assert 'the first of the month and today' in cmd.description and 'not one month' in cmd.description
+    # A fixed recent date in the example was read by a trial's agent as the books' today (R72).
+    assert '2026' not in cmd.description and 'September' not in cmd.description
