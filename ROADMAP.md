@@ -77,10 +77,10 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R74 permission checks on current-mode installs cost about 3x; the demo reset through MCP exceeds the client time limit: reuse the permission snapshot only behind a fresh in-transaction version check, and nothing the product does times out — design/permission-resolution.md
 - [ ] R88 agent administration reads like the rest of the product: user and membership lists page; the finder reaches users, tokens, agents and organizations; names and readable dates instead of raw ids, timestamps and codes on agent and token pages; the principal picked from a list; plain errors; document history says "for k, via agent" — notes/V1.5-resort-draft.md
 - [ ] R89 agents and users can be deactivated (the gap recorded when R68 shipped) — notes/V1.5-resort-draft.md
-- [~] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
-- [~] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
+- [x] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
+- [x] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
 - [ ] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
-- [~] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
+- [x] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
 - [~] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
 - [ ] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
 - [~] R95 small form polish: invoice and sales take today's date when none is given, as the browser does; the invoice form shows the default sales tax item before posting; "Clear Description" only when useful; register query dates and parameters consistent with other queries — notes/V1.5-resort-draft.md
@@ -96,11 +96,11 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [~] R135 card credits (a refund onto a credit card) and a plain "Credit Card" payment method — notes/V1.5-scope-sort-draft.md
 - [~] R136 reconciling a credit card account against its statement works as a bank reconciliation does (verify; fix only if missing) — notes/V1.5-scope-sort-draft.md
 - [x] R137 selling stock not yet on hand goes through with a warning: costed provisionally at the average cost (else the item's purchase cost, else zero with a warning), trued up by an entry dated at the receipt that covers the shortfall and linked to each sale it corrects (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
-- [~] R140 lists show real figures: vendor open balance and item quantity on hand (today always 0) — notes/bug-sweep-20260928.md
+- [x] R140 lists show real figures: vendor open balance and item quantity on hand (today always 0) — notes/bug-sweep-20260928.md
 - [ ] R141 the audit trail and activity respect a member's explicit capability denies — notes/bug-sweep-20260928.md
 - [~] R142 the last two unplain agent errors: an over-long reason, and a deposit over 200 rows — notes/bug-sweep-20260928.md
 - [ ] R143 CLI lists print curated default columns (decision D13), not every column — notes/bug-sweep-20260928.md
-- [~] R144 time activities have browser pages like other documents — notes/bug-sweep-20260928.md
+- [x] R144 time activities have browser pages like other documents — notes/bug-sweep-20260928.md
 - [ ] R145 report CSV export works over the CLI and MCP as in the browser — notes/bug-sweep-20260928.md
 - [x] R146 editing or voiding a transaction after its reconciliation is finished is fenced (warn plainly as QuickBooks does; the reconciliation report shows the difference; approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
 - [~] R147 discount, subtotal and group items and percentage charges work on sales as QuickBooks does: a subtotal sums the lines above, a percentage charge or discount applies to the line or subtotal above, a discount posts to its item's account and reduces taxable sales by its tax code, a group expands into its members (approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
