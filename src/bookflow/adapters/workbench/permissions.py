@@ -38,7 +38,7 @@ def grant_controls():
 def install(app, *, run, render, page_error):
     def view(request,company_id,values=None,result=None,error=None):
         current = run(request,'membership effective',{'company':company_id},None)
-        rows = run(request,'membership list',{'company':company_id,'include_inactive':True},None)['items']
+        rows = memberships(request,company_id)
         selected = (values or {}).get('user') or request.query_params.get('user')
         member = next((row for row in rows if row['scope_type']=='company' and row['scope_id']==company_id and
                        selected in (row['user_id'],row['username'])),None)
@@ -53,12 +53,34 @@ def install(app, *, run, render, page_error):
         effective = run(request,'membership effective',{'company':company_id,'user':selected},None) if selected else None
         agents, agent_admin = agent_panel(request, rows, current)
         controls = grant_controls()
+        from bookflow.adapters.workbench import admin as Admin
+        lookup = lambda name, raw: run(request, name, raw, None)  # noqa: E731
+        people = []
+        if current.get('can_administer'):
+            known = {row['user_id']: row for row in rows}
+            for person in Admin.users(lookup):
+                known.setdefault(person['user_id'], person)
+            people = sorted({(row['username'], row['display_name']) for row in known.values()}, key=lambda x: x[1].lower())
+        selected_name = next((row['display_name'] for row in rows if selected in (row['user_id'], row['username'])),
+                             next((label for value, label in people if value == selected), selected))
         return render('permissions.html',request,company_id=company_id,company_label=current['company_name'],
+            admin=Admin, people=people, selected_name=selected_name,
             current=current,rows=rows,values=values,result=result,error=error,effective=effective,
             agents=agents,agent_admin=agent_admin,
             delete_grants=controls,delete_nouns=', '.join(label.lower() for _,label in controls),
             shown_capabilities=('ledger.read','ledger.post')+CAPS,
             status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
+
+    def memberships(request, company_id):
+        """Every membership reaching this company, read a page at a time."""
+        rows, cursor = [], None
+        while True:
+            page = run(request,'membership list',{'company':company_id,'include_inactive':True,'limit':200,
+                                                  **({'cursor':cursor} if cursor else {})},None)
+            rows += page['items']
+            cursor = page.get('next_cursor')
+            if not cursor:
+                return rows
 
     def agent_panel(request, rows, current):
         """Agents whose membership reaches this company, with their authority when the viewer may see it.

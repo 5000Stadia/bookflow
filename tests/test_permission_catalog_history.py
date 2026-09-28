@@ -44,6 +44,7 @@ ACCEPTED = {
     'company-backup-v1': (498, '75c05cd2dc074a26bd218ab7e48d12c09a5dbeadefb46de0475ca4bb1028f070'),
     'identity-deactivation-v1': (502, '51f5128ce50d04fd36fdc9000c3879e404d02a862009906b121a590c1c85ced7'),
     'report-export-v1': (503, '585047459e889e7b48af181307386d6eb476454fd3de624b04c4916455652611'),
+    'audit-visibility-v1': (503, '1a6e263186f929c26d8749f6ba1b6c1ec16706287b9db0b09affeb6442789433'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -80,6 +81,7 @@ CHAIN_ADDITIONS = {
     'company-backup-v1': {'company backup', 'company restore'},
     'identity-deactivation-v1': {'agent activate', 'agent deactivate', 'user activate', 'user deactivate'},
     'report-export-v1': {'report export'},
+    'audit-visibility-v1': set(),
 }
 
 _ANCESTOR_EDIT = """

@@ -281,6 +281,8 @@ The same example as complete `bookflow_run` arguments:
 | `company` | `--company` | string \| null | no | yes | null | Only access reaching this company; name or id |
 | `organization` | `--organization` | string \| null | no | yes | null | Only access reaching this organization; name or id |
 | `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked, and the access of deactivated accounts |
+| `limit` | `--limit` | integer | no | no | 50 | Most memberships on one page; minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | next_cursor from the previous page; omit for the first page |
 
 ### Command and context options
 
@@ -306,6 +308,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `has_more` | boolean | yes | no | — | More rows follow this page |
+| `next_cursor` | string \| null | yes | yes | — | Pass as cursor for the next page; null on the last page |
 | `items` | array[object] | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].grants` | array[string] | no | no | [] | — |
@@ -333,7 +337,9 @@ Example JSON output:
 ```json
 {
   "count": 0,
-  "items": []
+  "has_more": false,
+  "items": [],
+  "next_cursor": null
 }
 ```
 

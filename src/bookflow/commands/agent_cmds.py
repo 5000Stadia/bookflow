@@ -32,6 +32,11 @@ VIA = lambda ctx: ctx.interface.value  # noqa: E731
 
 NOT_YET_AUTHORIZED = "not_yet_authorized"
 ADMIN_ONLY = "human installation administrator on an activated installation"
+PERMITTED_USE_REQUIRED = ("Confirm that the people this agent acts for permit it to act for them with their full "
+                          "permissions.")
+FRESH_CONTEXT_REQUIRED = ("Acknowledge a fresh context: the people this agent acts for, or their permissions, were "
+                          "narrowed, so it must start again in a fresh, isolated context; Bookflow cannot erase what "
+                          "it already saw.")
 FRESH_CONTEXT = ("Acknowledge that the agent will resume in a fresh, isolated execution context: its "
                  "principals or authority were narrowed, and its old context may hold data the new set may not "
                  "share. Bookflow cannot erase what an external agent already saw.")
@@ -101,8 +106,12 @@ def translate(error) -> None:
         raise BookflowError("E_AGENT_PRINCIPAL_MISMATCH", details={
             "suggestion": "These people do not hold identical permissions. Give each one a separate agent identity."}) from None
     if category == "confirmation_required":
-        name = "acknowledge_fresh_context" if field == "fresh_context" else "confirm_permitted_use"
-        raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "required"}]}) from None
+        if field == "fresh_context":
+            name, problem = "acknowledge_fresh_context", FRESH_CONTEXT_REQUIRED
+        else:
+            name, problem = "confirm_permitted_use", PERMITTED_USE_REQUIRED
+        raise BookflowError("E_VALIDATION", message=problem,
+                            details={"fields": [{"field": name, "problem": problem}]}) from None
     if category == "invalid_assignment":
         raise BookflowError("E_VALIDATION", details={"fields": [
             {"field": "principal", "problem": "the agent needs at least one active human principal"}]}) from None
@@ -362,7 +371,8 @@ def _set_intent(s: Session, inp, principals: tuple[str, ...], confirmed: bool):
 def plan_agent_assign(inp: AgentAssignInput, ctx: Context, s: Session) -> Plan:
     require_agent_administration(s)
     if not inp.confirm_permitted_use:
-        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "confirm_permitted_use", "problem": "required"}]})
+        raise BookflowError("E_VALIDATION", message=PERMITTED_USE_REQUIRED, details={"fields": [
+            {"field": "confirm_permitted_use", "problem": PERMITTED_USE_REQUIRED}]})
     agent = _find_agent(s, inp.agent)
     person = _find_principal(s, inp.principal)
     current = _principals(s, agent["id"])
@@ -440,7 +450,8 @@ def plan_agent_authorize(inp: AgentAuthorizeInput, ctx: Context, s: Session) -> 
     from bookflow.hub import identity_admin as b
     require_agent_administration(s)
     if not inp.confirm_permitted_use:
-        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "confirm_permitted_use", "problem": "required"}]})
+        raise BookflowError("E_VALIDATION", message=PERMITTED_USE_REQUIRED, details={"fields": [
+            {"field": "confirm_permitted_use", "problem": PERMITTED_USE_REQUIRED}]})
     agent = _find_agent(s, inp.agent)
     authority = _current_authority(s, agent, inp.expected_version)
     intent = b.AuthorizeAgent(agent["id"], authority["version"], authority["epoch"], True, inp.acknowledge_fresh_context)

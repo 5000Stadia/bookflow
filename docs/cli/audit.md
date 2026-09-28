@@ -4,7 +4,7 @@
 
 ## `audit list`
 
-List this company's audit events, newest first.
+List this company's audit events you may see, newest first; an event that touched a record type you may not read is left out.
 
 | Contract | Value |
 |---|---|
@@ -146,7 +146,7 @@ Example JSON output:
 
 ## `audit show`
 
-Show one of this company's audit events with its entries and field diffs.
+Show one of this company's audit events with its entries and field diffs; an event you may not see reads as not found.
 
 | Contract | Value |
 |---|---|
@@ -297,7 +297,7 @@ Example JSON output:
 
 ## `audit tail`
 
-This company's audit events newer than a cursor, oldest first; the event feed.
+This company's audit events you may see newer than a cursor, oldest first; the event feed.
 
 | Contract | Value |
 |---|---|

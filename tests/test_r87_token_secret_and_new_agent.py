@@ -74,7 +74,9 @@ def test_new_agent_is_offered_to_agent_administrators_only_and_returns_to_the_pa
     assert target.path == back and parse_qs(target.query)["user"] == ["panel-agent"]
     landed = installer.get(made.headers["location"])
     assert landed.status_code == 200 and "Saved successfully" in landed.text
-    assert 'name="user" value="panel-agent" readonly' in landed.text  # the next step, granting access, is loaded
+    # The next step, granting access, is loaded for the new agent, named as it is named elsewhere.
+    assert 'type="hidden" name="user" value="panel-agent"' in landed.text
+    assert 'aria-label="Company user permissions"' in landed.text and "<b>panel-agent</b>" in landed.text
 
     # Anything but a company's Users & permissions page is ignored as a destination.
     stray = installer.post("/hub/agent/create", headers=WB,
