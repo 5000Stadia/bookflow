@@ -205,8 +205,14 @@ class Company:
         self._activated = True
 
     def my_membership(self):
+        """The signed-in person's own membership here -- not the first one listed.
+
+        The demo company has more than one member (its owner and the Demo Assistant agent),
+        so a grant made to whichever row comes first can land on someone else.
+        """
         return next(row for row in self.hosted.ok('membership.list', {'company': self.id})['items']
-                    if row['scope_type'] == 'company' and row['scope_id'] == self.id)
+                    if row['scope_type'] == 'company' and row['scope_id'] == self.id
+                    and row['username'] == self.hosted.login)
 
     def grant_myself(self, *capabilities):
         """Give the signed-in person an explicit family grant, through the real command.

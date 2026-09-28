@@ -189,6 +189,12 @@ def permission_message(details: dict[str, Any]) -> str:
                 if need else f"`{command}` was refused by a rule on a record or account it reads or changes.")
     if reason in _PERMISSION_REASONS:
         return _PERMISSION_REASONS[reason]
+    if (reason == "unavailable_target" and isinstance(capability, str)
+            and capability.startswith("transaction.") and capability.endswith(".delete") and required):
+        # No role includes Delete: an owner refused here is missing the grant, not a role.
+        return (f"Deleting needs an explicit {capability} grant for you in this company's user "
+                f"setup, at role {required} or above; no role includes it. An administrator "
+                "grants it with `membership grant`.")
     if required in _ROLE_WORDS:
         return f"Only {_ROLE_WORDS[required]} may do this" + (f" ({capability})." if capability else ".")
     if required and capability:

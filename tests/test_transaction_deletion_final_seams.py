@@ -14,6 +14,10 @@ from tests.test_row8_journal import journal_accounts
 from tests.test_transaction_deletion_preparation import session_call, raw
 from tests.test_transaction_deletion_review import claimed, grant, intent, journal
 
+# A new root starts activated; like the review module whose fixtures these are, this drives
+# Delete through a legacy session and the legacy explicit-grant gate the `grant` fixture opens.
+pytestmark = pytest.mark.legacy_permissions
+
 
 def test_closed_period_claim_returns_blocker_but_unblocked_still_checks_date(
     client, claimed, journal, grant, monkeypatch,
