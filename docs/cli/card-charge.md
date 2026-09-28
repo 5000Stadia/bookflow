@@ -493,7 +493,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `type` | literal["journal_entry"] | yes | no | — | — |
+| `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
@@ -795,7 +795,7 @@ Example JSON output:
     "minor_units": 1
   },
   "total_minor_units": 1,
-  "type": "journal_entry",
+  "type": "check",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -923,7 +923,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
-| `items[].type` | literal["journal_entry"] | yes | no | — | — |
+| `items[].type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].current_revision_id` | string | yes | no | — | — |
 | `items[].status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
@@ -1132,7 +1132,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `type` | literal["journal_entry"] | yes | no | — | — |
+| `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
@@ -1425,7 +1425,7 @@ Example JSON output:
     "minor_units": 1
   },
   "total_minor_units": 1,
-  "type": "journal_entry",
+  "type": "check",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -1574,7 +1574,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `type` | literal["journal_entry"] | yes | no | — | — |
+| `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
@@ -1876,7 +1876,7 @@ Example JSON output:
     "minor_units": 1
   },
   "total_minor_units": 1,
-  "type": "journal_entry",
+  "type": "check",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -2008,7 +2008,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `type` | literal["journal_entry"] | yes | no | — | — |
+| `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
@@ -2310,7 +2310,7 @@ Example JSON output:
     "minor_units": 1
   },
   "total_minor_units": 1,
-  "type": "journal_entry",
+  "type": "check",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",

@@ -372,17 +372,40 @@ class PurchaseDeletionInfo(_Input):
     cancellation_batch_id: str | None
 
 
-class MoneyOutOutput(JournalOutput):
+class _DocumentType:
+    """The type a person entered, not the journal entry it is stored as.
+
+    A check, a card charge and a card credit post through the register and are stored as
+    ``transactions.type = 'journal_entry'``; ``document.kind`` is what makes each one itself
+    (QuickBooks keeps them as CHK, CC and CC Credit). Every read and write of one reports that
+    kind as ``type``, so a card charge is never described as a journal entry.
+    """
+
+    @model_validator(mode='before')
+    @classmethod
+    def _type_is_the_document(cls, data):
+        if isinstance(data, dict):
+            document = data.get('document')
+            kind = document.get('kind') if isinstance(document, dict) else getattr(document, 'kind', None)
+            if kind:
+                data = {**data, 'type': kind}
+        return data
+
+
+class MoneyOutOutput(_DocumentType, JournalOutput):
+    type: Literal['check', 'card_charge', 'card_credit']
     status: Literal['posted', 'voided', 'deleted']
     deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     document: MoneyOutSummary
 
 
-class MoneyOutWriteOutput(JournalWriteOutput):
+class MoneyOutWriteOutput(_DocumentType, JournalWriteOutput):
+    type: Literal['check', 'card_charge', 'card_credit']
     document: MoneyOutSummary
 
 
-class MoneyOutSummaryOutput(JournalSummaryOutput):
+class MoneyOutSummaryOutput(_DocumentType, JournalSummaryOutput):
+    type: Literal['check', 'card_charge', 'card_credit']
     status: Literal['posted', 'voided', 'deleted']
     deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     """One row of a money-out list: the journal header with the document's own footer."""
