@@ -59,7 +59,8 @@ class _Cdp:
         )
         active_port = profile / "DevToolsActivePort"
         deadline = time.monotonic() + 10
-        while not active_port.exists() and time.monotonic() < deadline:
+        # Chrome creates the file before writing it; wait for the port line itself.
+        while not (active_port.exists() and active_port.read_text().strip()) and time.monotonic() < deadline:
             if self._process.poll() is not None:
                 raise AssertionError(f"Chrome exited during startup ({self._process.returncode})")
             time.sleep(0.02)
@@ -383,7 +384,8 @@ def _assert_rendered_page(
         })()
         """,
         await_promise=True,
-        timeout=30,
+        # Every shown link is fetched in turn; the audit page of the full demo lists dozens.
+        timeout=240,
     )
     assert broken == [], (label, broken)
 

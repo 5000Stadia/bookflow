@@ -396,6 +396,10 @@ def hosted_reader(host, admitted, *, request_id):
                 host.reader_done()
             reader = session = None
             if isinstance(exc, AdmissionCancelled) and attempt < 2:
+                # Nothing ran on the discarded reader. A barrier that is still
+                # closed is a commit in flight: wait for it rather than spending
+                # the remaining attempts inside the same commit.
+                host.publication_admission.wait_open_blocking(5.0)
                 continue
             raise
         break

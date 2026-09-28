@@ -17,7 +17,10 @@ TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$")
 def normalize(obj):
     """Replace ULIDs and timestamps with placeholders after checking their shape."""
     if isinstance(obj, dict):
-        return {k: normalize(v) for k, v in obj.items()}
+        # A relative age ("seconds since the last update") depends on when each run reads it,
+        # not on the interface; check its shape and compare the rest.
+        return {k: ("<age>" if k.startswith("seconds_since") and type(v) is int and v >= 0 else normalize(v))
+                for k, v in obj.items()}
     if isinstance(obj, list):
         return [normalize(v) for v in obj]
     if isinstance(obj, str):

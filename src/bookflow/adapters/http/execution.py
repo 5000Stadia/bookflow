@@ -30,14 +30,42 @@ class PublishedDocument(dict):
 
 
 def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None):
-    from bookflow.core.permission_package import read_package, before_write
+    from bookflow.core.permission_package import read_package, before_write, authority_busy
+    from bookflow.core.publication_admission import AdmissionCancelled
     if cmd.is_write and not dry_run or cmd.kind == "advisory":
         before_write(host)
-        return _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run,
-                           before_execute=before_execute)
-    with read_package(host):
-        return _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run,
-                           before_execute=before_execute)
+        try:
+            return _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run,
+                               before_execute=before_execute)
+        except AdmissionCancelled:
+            # A write is never repeated here: where the race landed decides
+            # whether it committed, and this boundary cannot prove which.
+            log.warning("write interrupted by an authority change: command=%s request=%s",
+                        cmd.name, getattr(ctx, "request_id", None))
+            raise BookflowError("E_DB_BUSY", message="Permissions or records changed while this write "
+                                "was being checked; it may or may not have been applied. Check the "
+                                "record, or repeat it with the same idempotency key.",
+                                details={"operation": "authority_change", "outcome": "unknown"}) from None
+    # A read has no effects, so a read whose authority snapshot was overtaken by
+    # a commit is simply read again on a fresh snapshot -- unless the caller's
+    # one-shot execution claim (an MCP intent start) already ran; then the typed
+    # answer goes back instead of claiming it twice.
+    claimed = []
+    def claim(session):
+        claimed.append(True)
+        before_execute(session)
+    for attempt in range(3):
+        try:
+            with read_package(host):
+                return _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run,
+                                   before_execute=claim if before_execute is not None else None)
+        except AdmissionCancelled:
+            log.info("read overtaken by an authority change: command=%s attempt=%s request=%s",
+                     cmd.name, attempt + 1, getattr(ctx, "request_id", None))
+            if claimed:
+                break
+            host.publication_admission.wait_open_blocking(5.0)
+    raise authority_busy()
 
 
 def _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None):

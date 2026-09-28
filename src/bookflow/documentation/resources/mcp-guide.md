@@ -76,7 +76,7 @@ retrieval within that deadline. Each status that reports the operation still act
 that report, up to BOOKFLOW_MCP_JSON_SECONDS (default 300) in all, so a long command
 such as demo reset or a large restore is waited for. A completed state with an available receipt permits
 retrieving the original verified result under current authority. Temporary
-E_DB_BUSY filesystem_change or publication_pending responses while checking
+E_DB_BUSY filesystem_change, publication_pending or authority_change responses while checking
 status or retrieving the receipt retry, and renew the deadline the same way; other failures and original business
 rejections do not receive that retry. Status alone is
 not command success. Failed recovery returns unknown outcome with the reference

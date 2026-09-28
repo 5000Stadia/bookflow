@@ -248,6 +248,7 @@ def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register
                      'Status'], heads
     rows = b.evaluate('''[...document.querySelectorAll("table tr")].slice(1)
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))''')
+    listed = len([row for row in rows if len(row) > 2])
     # The demo company lists bills of its own; these two keep their newest-first order among them.
     rows = [row for row in rows if len(row) > 2 and row[2] == 'Listing supply']
     assert [row[0] for row in rows] == [second['number'], first['number']], rows
@@ -260,8 +261,9 @@ def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register
     b.wait_for('!!document.querySelector(".document-nav")')
     assert 'LIST-2' in _text(b, '.sales-document')
     nav = _text(b, '.document-nav')
-    assert 'Find a bill' in nav and 'This is the latest bill' in nav, nav
-    assert '2 of 2' in nav, nav
+    # The demo's own bills are dated after these two, so the second is the second of them all.
+    assert 'Find a bill' in nav and f'2 of {listed}' in nav, nav
+    assert '← Previous bill\n' + first['number'] + ' · ' in nav, nav
 
     # The arrow walks to the bill written before it, in the list's own order.
     b.evaluate('document.querySelector(".document-step[rel=prev]").click()')

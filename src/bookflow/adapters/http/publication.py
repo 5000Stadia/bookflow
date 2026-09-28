@@ -95,7 +95,22 @@ class PublicationMiddleware:
                     await run_in_threadpool(check)
             for part in bounded_messages(message):
                 if not integrated:
-                    await validate_current()
+                    # A server without the owned transport (an embedder, a test
+                    # host) still validates each part before sending it. A commit
+                    # racing that validation is waited out and validated afresh:
+                    # nothing of this part has been sent.
+                    while True:
+                        try:
+                            await validate_current()
+                            break
+                        except AdmissionCancelled:
+                            if gate is None:
+                                raise
+                            response_state.start()
+                            response_state.retry()
+                            await before_wait()
+                            await gate.wait_open(response_state, cancelled)
+                            await after_wait()
                     await send(part)
                     continue
                 for transfer in resources():

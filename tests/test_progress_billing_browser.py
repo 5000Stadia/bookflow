@@ -68,7 +68,9 @@ def test_progress_correction_and_exact_rebill(register_browser, width, tmp_path)
     link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "Add an unlinked line").href')
     visit(b, link)
     assert b.evaluate('document.querySelectorAll("[data-allocated-line]").length') == 2
-    assert not b.evaluate('document.querySelector("[data-allocated-line]").closest("fieldset").querySelector("[name$=quantity]")')
+    # The allocated line is a row of the line grid now, not a fieldset; it still offers no quantity.
+    assert b.evaluate('!!document.querySelector("[data-allocated-line]").closest("[data-collection-item]")')
+    assert not b.evaluate('document.querySelector("[data-allocated-line]").closest("[data-collection-item]").querySelector("[name$=quantity]")')
     b.evaluate('document.querySelector("[data-collection-path=lines] > [data-collection-add]").click()')
     _choose(b, 'c:lines:2:item', 'Progress labor'); _fill(b, 'c:lines:2:net_amount', '2')
     _preview(b); capture(b, tmp_path, 'retained-proof-extra-charge', width)
