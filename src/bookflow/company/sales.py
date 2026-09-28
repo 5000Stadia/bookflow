@@ -189,12 +189,17 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         issuer_snapshot=json.loads(revision['issuer_snapshot']), custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot))
 
 
-def _deletion(s, header, include_deleted):
+def _deletion_rows(s, ids):
+    """Retained deletions for these sales, by transaction id, in one read (not one per row)."""
+    if not ids or not sa.inspect(s.company.conn).has_table('sales_deletions'):
+        return {}
+    return {row['transaction_id']: dict(row) for row in s.company.conn.execute(sa.select(c.sales_deletions).where(
+        c.sales_deletions.c.transaction_id.in_(sorted(set(ids))))).mappings()}
+
+
+def _deletion(s, header, include_deleted, rows=None):
     from bookflow.company.sales_deletion_models import SalesDeletionInfo
-    if not sa.inspect(s.company.conn).has_table('sales_deletions'):
-        return None
-    row = s.company.conn.execute(sa.select(c.sales_deletions).where(
-        c.sales_deletions.c.transaction_id == header['id'])).mappings().first()
+    row = (rows if rows is not None else _deletion_rows(s, [header['id']])).get(header['id'])
     if row is None:
         return None
     if not include_deleted:
@@ -205,9 +210,9 @@ def _deletion(s, header, include_deleted):
         created_by_name=names.get(row['created_by']),principal_name=names.get(row['principal_id']))
 
 
-def _visible_summary(s, header, revision, profile, include_deleted):
+def _visible_summary(s, header, revision, profile, include_deleted, deletions=None):
     value = summary(header, revision, profile)
-    deletion = _deletion(s, header, include_deleted)
+    deletion = _deletion(s, header, include_deleted, deletions)
     if deletion:
         value.update(status='deleted', deletion=deletion)
     return value
@@ -318,9 +323,11 @@ def page(s, ctx, inp, document_type, *, history=False):
         from bookflow.company.payment_outputs import InvoiceSettlementOutput
         settlements = invoice_currents(s, found, revisions)
     items = []
+    deletions = _deletion_rows(s, [header['id'] for header in found])
     for header in found:
         revision = revisions[header['current_revision_id']]
-        item = SalesSummaryOutput(**_visible_summary(s, header, revision, profiles[revision['id']], getattr(inp, 'include_deleted', False)))
+        item = SalesSummaryOutput(**_visible_summary(s, header, revision, profiles[revision['id']],
+            getattr(inp, 'include_deleted', False), deletions))
         if settleable:
             item.settlement_current = InvoiceSettlementOutput(**settlements[header['id']])
         items.append(item)
