@@ -70,6 +70,13 @@ def posting_eligibility(s, source, selected):
         if current['type'] not in ('sales_tax_item', 'sales_tax_group'):
             raise _invalid('sales_tax_item', 'captured tax item no longer has an eligible type')
     for row, root, lf in selected:
+        if lf.profile.adjustment is not None or getattr(lf, 'discount_minor_units', None):
+            # Billing carries each quoted line's exact net into the sale; a discount's shares,
+            # a subtotal and a percentage charge are worked out over a whole sale and have no
+            # billing proof yet. Refused rather than billed at a different amount.
+            raise _invalid('lines', 'billing a subtotal, discount or percentage-charge line, or a line a discount '
+                                    'reduced, from an estimate or work order is not supported yet; select the other '
+                                    'lines, or enter the discount on the invoice itself')
         item = defaults._row(s.company, 'item', lf.item_id)
         if item['type'] != lf.profile.item_type or not item['sales_enabled']:
             raise _invalid('item', 'current selling-item type differs from the quoted type')

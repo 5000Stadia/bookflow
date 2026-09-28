@@ -1173,6 +1173,26 @@ seed company. Exact preexisting manifest bytes remain a prefix. Independent revi
 and parent-owned combined-candidate acceptance are required; this implementation
 description does not close Row24.
 
+## Subtotal, discount, percentage-charge and group lines (R147)
+
+`company/sales_adjustments.py` is a pure pass run after every sale or quote line has its
+own amount and before the tax pass (`sales.commercial`, `work._resolve_lines`). A line's
+kind is read off its captured `SalesLineProfile.adjustment` (`subtotal`, `discount`,
+`charge`; absent = ordinary item). Subtotal and discount lines are stored as ordinary
+`sales_line_profiles` rows with quantity 1, unit price 0, net 0 and no income account;
+their shown amount lives in the adjustment. A discount records its shares by revision
+position; each share comes out of the target line's stored net, so `net` is always the
+settleable amount and every settlement component keeps one AR and one recognition source
+of equal amount. The target's income leg credits the full amount, its sources being its
+own net plus each share attributed to the discount line (`sales.income_sources`); the
+discount line debits its captured account. `TaxLine.taxable_minor_units` carries a base
+above the net when a non-taxable discount left one. Sales-by-item maps a discount share
+on a sold line's income leg back to that line's item; cash basis recognises a discount
+line at its targets' paid fraction. Group lines expand on entry (`sales.expand_groups`)
+into members carrying `LineGroup` provenance. Work lines carry the same facts plus
+`discount_minor_units`/`taxable_minor_units`; billing such lines from work is refused.
+Plan and open questions: `design/specs/r147-sales-line-kinds.md`.
+
 ## Manual rates and foreign journal conversion
 
 Company migration co0008 adds the declared versioned exchange_rates table.
