@@ -15,7 +15,7 @@ from sqlalchemy.schema import CreateIndex
 from sqlalchemy.dialects.sqlite import dialect
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head
+from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.test_payment_migration import raw_snapshot
 from tests import provenance
 
@@ -40,7 +40,19 @@ def co16(tmp_path_factory):
     return root
 
 
-def test_exact_fresh_indexes(tmp_path):
+@pytest.fixture
+def at_co17(monkeypatch):
+    """The runner stopped at this migration: a claim about co0017 is made at co0017.
+
+    Later migrations legitimately rebuild these tables, and co0028 deliberately refuses to
+    carry a local trigger on a settlement table through its rebuild, so the local objects this
+    file adds could not survive to today's head. The whole-chain retention witness is
+    test_deposit_coordinate_migration.test_whole_chain_upgrade_to_head_preserves_customer_file.
+    """
+    monkeypatch.setitem(HEADS, 'company', MIGRATION.revision)
+
+
+def test_exact_fresh_indexes(tmp_path, at_co17):
     expected = {sql.rstrip(';') for sql in MIGRATION.DDL}
     compiled = {str(CreateIndex(index).compile(dialect=dialect()))
                 for table in schema.metadata.tables.values() for index in table.indexes
@@ -62,7 +74,7 @@ def test_exact_fresh_indexes(tmp_path):
 
 
 @pytest.mark.parametrize('statistics', [False, True])
-def test_public_preserving_upgrade(co16, tmp_path, statistics):
+def test_public_preserving_upgrade(co16, tmp_path, statistics, at_co17, monkeypatch):
     root = tmp_path / 'data'
     shutil.copytree(co16, root)
     path = next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
@@ -81,10 +93,13 @@ def test_public_preserving_upgrade(co16, tmp_path, statistics):
         xinfo = {table: raw.execute(f'PRAGMA table_xinfo("{table}")').fetchall() for table in tables}
         objects = raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall()
     files = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file() and 'attachments' in p.parts}
-    args = [str(Path(sys.executable).parent / 'bookflow'), 'upgrade', '--data-root', str(root),
-            '--reason', 'Disposable co17 preserving witness', '--json']
-    result = subprocess.run(args, capture_output=True, text=True, env=provenance.child_env())
-    assert result.returncode == 0, result.stdout + result.stderr
+    # The public `upgrade` command, in this process so it stops at co0017 (see at_co17).
+    import bookflow
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT', str(root))
+    def upgrade():
+        return bookflow.connect(data_root=str(root)).run('upgrade', {}, reason='Disposable co17 preserving witness')
+    result = upgrade()
+    assert not result['companies_failed'] and len(result['companies_migrated']) == 1, result
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0017',)
         after_objects = raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall()
@@ -118,8 +133,8 @@ def test_public_preserving_upgrade(co16, tmp_path, statistics):
         assert raw.execute('PRAGMA integrity_check').fetchone() == ('ok',)
     assert {name:(root/name).read_bytes() for name in files} == files
     assert list(path.parent.glob('backups/*from-co0016.db'))
-    result = subprocess.run(args, capture_output=True, text=True, env=provenance.child_env())
-    assert result.returncode == 0, result.stdout + result.stderr
+    again = upgrade()
+    assert again['companies_migrated'] == [] and not again['companies_failed']
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall() == after_objects
 
@@ -142,7 +157,7 @@ def test_reserved_names_reject_before_ddl(co16, tmp_path, kind):
         assert db.raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall() == before
 
 
-def test_late_failure_rolls_back_and_retry(co16, tmp_path):
+def test_late_failure_rolls_back_and_retry(co16, tmp_path, at_co17):
     path = tmp_path / 'company.db'
     shutil.copyfile(next(co16.glob('organizations/*/Demo Plumbing Co/company.db')), path)
     with open_database(path, writable=True) as db:

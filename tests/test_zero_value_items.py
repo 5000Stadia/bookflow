@@ -107,25 +107,31 @@ def test_original_zero_issue_is_recosted_and_bill_obligation_survives_zero(books
 
 
 def test_populated_co45_upgrade_preserves_commercial_rows_links_and_owned_guards(tmp_path, monkeypatch):
+    """A stocked bill and sale written at co0045 by that release, then carried forward by today's.
+
+    The claim about co0046 is made at co0046: every row exact, every object it does not own
+    unchanged, its guards the ones it declares. Then the whole chain to today's head retains
+    every stored value, and today's release still reads the original bill.
+    """
     import importlib
     from bookflow.storage.migrate import HEADS, migrate_to_head
     from bookflow.storage.engine import open_database
-    from tests.payment_raw_evidence import table
-    head=HEADS['company']
-    monkeypatch.setitem(HEADS, 'company', 'co0045')
-    old=books.__wrapped__(tmp_path, monkeypatch)
-    item=_inventory_part(old)
-    bill=old['run']('bill post',dict(vendor=old['vendor'],date='2017-01-01',items=[dict(item=item,quantity='2',unit_cost='10.00')]),reason='Old populated receipt')
-    old['run']('invoice post',dict(customer=old['customer'],date='2017-01-02',lines=[dict(item=item,quantity='1',unit_price='15.00')]),reason='Old populated sale')
-    path=Path(old['client'].company.show(company=old['company'])['path'])/'company.db'
+    from tests.historical_books import books_at
+    from tests.payment_raw_evidence import table, preserved, upgrade_to
+    old=books_at(tmp_path,'co0045',
+        "item=_inventory_part(b)\n"
+        "result['bill']=b['run']('bill post',dict(vendor=b['vendor'],date='2017-01-01',items=[dict(item=item,quantity='2',unit_cost='10.00')]),reason='Old populated receipt')\n"
+        "b['run']('invoice post',dict(customer=b['customer'],date='2017-01-02',lines=[dict(item=item,quantity='1',unit_price='15.00')]),reason='Old populated sale')\n")
+    bill=old['historical']['bill']
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(tmp_path/'items'))
+    path=next((tmp_path/'items').rglob('company.db'))
     before=database(path)
     assert before['tables']['inventory_movements']['count']==2
     assert before['tables']['purchase_item_lines']['count']==1
     assert before['tables']['sales_line_profiles']['count']==1
-    monkeypatch.setitem(HEADS, 'company', head)
     migration=importlib.import_module('bookflow.storage.company_migrations.versions.0046_zero_value_items')
     with open_database(path,writable=True) as db:
-        assert migrate_to_head(db,'company',tmp_path/'owned-backups')==('co0045',head)
+        assert upgrade_to(db,migration.revision)==migration.revision
         for name, snapshot in before['tables'].items():
             if name!='alembic_version': assert table(db.raw,name)==snapshot, name
         replaced=set(migration.CHANGED)|set(migration.REPLACED)|set(migration.TRIGGERS)
@@ -135,6 +141,9 @@ def test_populated_co45_upgrade_preserves_commercial_rows_links_and_owned_guards
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
         for guard in migration.GUARDS:
             assert db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?',(guard.split()[2],)).fetchone()==(guard,)
+        assert migrate_to_head(db,'company',tmp_path/'owned-backups')==(migration.revision,HEADS['company'])
+        for name, snapshot in before['tables'].items():
+            if name!='alembic_version': assert preserved(db.raw,name,snapshot)==snapshot, name
         cursor=db.raw.execute('SELECT * FROM inventory_movements LIMIT 1')
         movement=dict(zip([column[0] for column in cursor.description],cursor.fetchone()))
         from bookflow.core.ids import new_id

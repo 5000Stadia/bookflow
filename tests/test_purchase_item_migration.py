@@ -20,6 +20,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
+from tests.test_bill_payment_migration import _revisions_after
 from tests.payment_raw_evidence import preserved, table
 from tests.test_bill_payment_migration import _rebuilt_since, _superseded_after
 from tests.test_vendor_credit_migration import _at, _insert
@@ -35,7 +36,10 @@ def test_frozen_ddl_is_the_current_metadata(tmp_path):
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())).strip()
                      for name in M.NEW_TABLES if name not in rebuilt)
     compiled += tuple(str(CreateIndex(index).compile(dialect=dialect())).strip() for index in indexes)
-    assert M.DDL == compiled
+    # A table a later revision rewrote (co0048 adds shipping columns to it) no longer reads as
+    # this revision froze it; its indexes are carried verbatim and still have to match.
+    assert tuple(statement for statement in M.DDL
+                 if not any(statement.startswith(f'CREATE TABLE {name} (') for name in rebuilt)) == compiled
     superseded = _superseded_after(M.revision) & {statement.split()[2] for statement in M.GUARDS}
     assert not superseded
     # Every composite foreign key names a real key of its target, not an arbitrary column pair.
@@ -53,7 +57,8 @@ def test_the_migration_follows_the_vendor_credit_revision():
     """Derived, never a second copy of the number: the chain is the only authority."""
     assert M.down_revision == PREVIOUS
     assert M.revision in known_revisions('company')
-    assert HEADS['company'] == M.revision
+    # On the chain every company is built to, not necessarily its newest step.
+    assert M.revision in _revisions_after(M.down_revision)
 
 
 def test_the_rebuilt_header_is_exactly_what_the_metadata_says_it_is(tmp_path):

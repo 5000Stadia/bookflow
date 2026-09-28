@@ -66,14 +66,23 @@ def test_the_number_this_migration_claims_is_the_one_the_chain_gives_it():
     assert M.revision in reachable
 
 
-def test_the_rebuilt_table_is_what_the_shipped_metadata_declares():
-    """The literal in the migration and the table in the code are one table, not two."""
+def test_the_rebuilt_table_is_what_the_shipped_metadata_declares(tmp_path):
+    """The literal in the migration and the table in the code are one table, not two.
+
+    Once a later revision rebuilds the ledger, today's metadata is that revision's table, so the
+    literal is held to the table this migration itself leaves behind at its own revision.
+    """
     from tests.test_bill_payment_migration import _rebuilt_since
+    header = "CREATE TABLE " + M.TEMP + " ("
     if TABLE in _rebuilt_since(M.revision):
-        pytest.skip("a later revision rebuilt the inventory ledger and owns this comparison")
+        _at(tmp_path / "own.db", M.revision)
+        with sqlite3.connect(tmp_path / "own.db") as conn:
+            stored = conn.execute("SELECT sql FROM sqlite_schema WHERE name=?", (TABLE,)).fetchone()[0]
+        assert stored.startswith('CREATE TABLE "' + TABLE + '" (')
+        assert M.DDL.strip().replace(header, "", 1) == stored.split("(", 1)[1]
+        return
     expected = str(CreateTable(schema.metadata.tables[TABLE]).compile(dialect=dialect()))
-    assert M.DDL == expected.replace(
-        "CREATE TABLE " + TABLE + " (", "CREATE TABLE " + M.TEMP + " (", 1)
+    assert M.DDL == expected.replace("CREATE TABLE " + TABLE + " (", header, 1)
 
 
 def test_a_populated_previous_revision_upgrades_with_its_rows_and_neighbours_untouched(tmp_path):

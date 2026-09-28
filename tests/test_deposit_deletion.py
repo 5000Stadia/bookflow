@@ -292,31 +292,42 @@ def test_tombstone_failure_rolls_the_whole_deletion_back(books, monkeypatch):
 def test_co54_rebuild_preserves_every_stored_operation_value(tmp_path, monkeypatch):
     """The widened CHECK is a table rebuild, so the rows are the thing to prove.
 
-    A deposit and its void are banked at co0053, where the operation ledger's frozen CHECK
-    still refuses `deposit delete`. The upgrade to co0054 rebuilds that table to admit the
-    new verb; every stored raw value in the whole database is compared before and after,
-    and only then is a deletion recorded against it.
+    A deposit and its void are banked at co0053 by the release whose head that was, where the
+    operation ledger's frozen CHECK still refuses `deposit delete`. Today's release carries the
+    file through co0054, which rebuilds that table to admit the new verb, and on to its head;
+    every stored raw value in the whole database is compared before and after (read through
+    the columns that existed at co0053), and only then is a deletion recorded against it.
     """
     from bookflow.storage import migrate
-    from tests.payment_raw_evidence import table
-    with monkeypatch.context() as historical:
-        historical.setitem(migrate.HEADS, 'company', 'co0053')
-        b = books.__wrapped__(tmp_path, historical)
-        posted, _, _, _ = banked(b, key='historical-deposit')
-        identity = posted['deposit']['id']
-        void = dict(deposit=identity, expected_version=posted['deposit']['version'],
-                    operation_key='historical-void')
-        guard = b['client'].run('deposit void', void, company=COMPANY,
-                                reason='Historical cancellation', dry_run=True)['dependency_guard']
-        posted = b['client'].run('deposit void', dict(void, dependency_guard=guard), company=COMPANY,
-                                 reason='Historical cancellation')
-        path = location(b)
-        with sqlite3.connect(path) as db:
-            commands = {row[0] for row in db.execute('SELECT command FROM deposit_operations')}
-        assert commands == {'deposit post', 'deposit void'}
-        current = posted['deposit']['version']
-        enable(b)
+    from tests.historical_books import books_at
+    from tests.payment_raw_evidence import preserved
+    b = books_at(tmp_path, 'co0053',
+        "from tests.test_deposit_command import COMPANY, receipts_in_undeposited_funds\n"
+        "client = b['client']\n"
+        "receipts_in_undeposited_funds(b)\n"
+        "available = client.run('deposit sources', dict(date='2026-06-03'), company=COMPANY)\n"
+        "document = dict(mode='inline', deposit_to=b['bank'], date='2026-06-03', sources=[dict("
+        "source_type=row['source_type'], source=row['source'], expected_version=row['expected_version'])"
+        " for row in available['items']])\n"
+        "posted = client.run('deposit post', dict(operation_key='historical-deposit', document=document),"
+        " company=COMPANY, reason='bank Saturday receipts')\n"
+        "void = dict(deposit=posted['deposit']['id'], expected_version=posted['deposit']['version'],"
+        " operation_key='historical-void')\n"
+        "guard = client.run('deposit void', void, company=COMPANY, reason='Historical cancellation',"
+        " dry_run=True)['dependency_guard']\n"
+        "result['posted'] = client.run('deposit void', dict(void, dependency_guard=guard), company=COMPANY,"
+        " reason='Historical cancellation')\n",
+        module='tests.test_deposit_command', imports='', data='root', company=COMPANY)
+    posted = b['historical']['posted']
+    identity = posted['deposit']['id']
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT', str(tmp_path / 'root'))
+    path = next((tmp_path / 'root').rglob('company.db'))
+    with sqlite3.connect(path) as db:
+        commands = {row[0] for row in db.execute('SELECT command FROM deposit_operations')}
+    assert commands == {'deposit post', 'deposit void'}
+    current = posted['deposit']['version']
+    # Nothing of today's opens the company before the witnessed upgrade below; the grant
+    # (which reads the company) follows it.
     before = database(path)
     observed = []
     original = migrate.migrate_to_head
@@ -326,7 +337,7 @@ def test_co54_rebuild_preserves_every_stored_operation_value(tmp_path, monkeypat
         if chain == 'company' and result == ('co0053', migrate.HEADS['company']):
             for name, rows in before['tables'].items():
                 if name != 'alembic_version':
-                    assert table(db.raw, name) == rows, name
+                    assert preserved(db.raw, name, rows) == rows, name
             assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
             observed.append(result)
         return result
@@ -336,6 +347,7 @@ def test_co54_rebuild_preserves_every_stored_operation_value(tmp_path, monkeypat
     # ordinary write opens the door, and the preservation is asserted as it goes through.
     b['client'].customer.create(name='Post-upgrade customer', company=COMPANY)
     assert observed == [('co0053', migrate.HEADS['company'])]
+    enable(b)
     raw = dict(deposit=identity, expected_version=current, operation_key='co53-first')
     preview = b['client'].run('deposit delete', raw, company=COMPANY,
                               reason='First keyed deposit deletion', dry_run=True)

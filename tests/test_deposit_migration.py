@@ -16,7 +16,7 @@ from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS,migrate_to_head,FeatureRevision,feature_admission
 from bookflow.core.errors import BookflowError
-from tests.payment_raw_evidence import table,attachments
+from tests.payment_raw_evidence import table,attachments,preserved
 
 BASE='57314722e8b2cd7e4402feaf059a244794f0efca'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0020_deposits')
@@ -120,11 +120,15 @@ def test_all_raw_values_local_ddl_attachments_and_rollback(co19,tmp_path):
         # Columns later revisions add to a rebuilt table are the one difference allowed,
         # and which those are is derived from the migrations themselves: a literal list
         # here is what made every new migration falsify this test.
-        omit=dict(_later_additions(M.revision),posting_line_sources=('deposit_component_id',))
-        after={name:table(db.raw,name,omit_columns=tuple(omit.get(name,()))) for name in names}
+        # Retention through the chain: every stored value read through the columns that
+        # existed at co0019; the columns this and later revisions add are theirs.
+        after={name:preserved(db.raw,name,before[name]) for name in names}
         assert before==after
         stored={(kind,name):(owner,sql) for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema')}
         rebuilt,rewritten=_later_rebuilds(M.revision)
+        # Also every object a later revision altered in place (co0039 adds a column to accounts).
+        from tests.test_bill_payment_migration import _rebuilt_since
+        rebuilt=set(rebuilt)|_rebuilt_since(M.revision);rewritten=set(rewritten)|_rebuilt_since(M.revision)
         for kind,name,owner,sql in ddl:
             if kind=='table' and name in {'transactions','document_lines','posting_line_sources'}|rebuilt:continue
             if name in {'document_lines_type_insert'}|rewritten:continue
@@ -222,7 +226,8 @@ def test_n4_storage_claim_release_redeposit_and_owned_inverse(client,sale,monkey
         source_key=dict(id=new_id(),transaction_id=first.intent.deposit_id,row_id=rowid,ordinal=0,kind=source.components[0].key.kind,semantic_identity='invalid-zero',tax_item_id='',**audited)
         with pytest.raises(IntegrityError):
             db.conn.execute(c.deposit_component_keys.insert().values(**source_key))
-        assert db.raw.execute('SELECT k.kind,k.ordinal,c.role,c.component_ordinal FROM deposit_component_keys k JOIN deposit_components c ON c.transaction_id=k.transaction_id AND c.row_id=k.row_id AND c.component_ordinal=k.ordinal ORDER BY k.rowid').fetchall()==[
+        # Only this deposit's rows: the demo company carries deposits of its own.
+        assert db.raw.execute('SELECT k.kind,k.ordinal,c.role,c.component_ordinal FROM deposit_component_keys k JOIN deposit_components c ON c.transaction_id=k.transaction_id AND c.row_id=k.row_id AND c.component_ordinal=k.ordinal WHERE k.transaction_id=? ORDER BY k.rowid',(first.intent.deposit_id,)).fetchall()==[
             (source.components[0].key.kind,1,'funding',1),('additional',0,'funding',0),('additional',0,'offset',0),('header',1,'cash_back',1)]
         claim=dict(id=new_id(),kind='claim',transaction_id=first.intent.deposit_id,revision_id=rid,batch_id=bid,row_id=rowid,
             source_transaction_id=source.transaction_id,source_revision_id=source.revision_id,source_batch_id=source.business_batch_id,amount_minor_units=700,currency='USD',source_date=source.receipt_date,facts_snapshot=source.model_dump_json(),reverses_membership_id=None,**audited)
@@ -255,8 +260,9 @@ def test_n4_storage_claim_release_redeposit_and_owned_inverse(client,sale,monkey
         again=dict(claim,id=new_id(),transaction_id=second,revision_id=r2,batch_id=b2,row_id=row2)
         db.conn.execute(c.deposit_memberships.insert().values(**again))
         db.conn.execute(c.deposit_current_memberships.insert().values(source_transaction_id=source.transaction_id,transaction_id=second,membership_id=again['id']))
-        assert db.raw.execute('SELECT kind,amount_minor_units FROM deposit_memberships ORDER BY rowid').fetchall()==[('claim',700),('release',700),('claim',700)]
-        assert db.raw.execute('SELECT source_transaction_id,transaction_id FROM deposit_current_memberships').fetchall()==[(source.transaction_id,second)]
+        # Only this receipt's memberships: the demo company banks deposits of its own.
+        assert db.raw.execute('SELECT kind,amount_minor_units FROM deposit_memberships WHERE source_transaction_id=? ORDER BY rowid',(source.transaction_id,)).fetchall()==[('claim',700),('release',700),('claim',700)]
+        assert db.raw.execute('SELECT source_transaction_id,transaction_id FROM deposit_current_memberships WHERE source_transaction_id=?',(source.transaction_id,)).fetchall()==[(source.transaction_id,second)]
         assert db.raw.execute('SELECT status FROM transactions WHERE id=?',(receipt['id'],)).fetchone()==('posted',)
         assert table(db.raw,'posting_lines',through_rowid=old_source_rows['max_rowid'])==old_source_rows
         assert db.raw.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE transaction_id IN (?,?,?) AND account_id=?',(receipt['id'],first.intent.deposit_id,second,source.uf_account)).fetchone()==(0,)

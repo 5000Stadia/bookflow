@@ -109,6 +109,8 @@ def test_rate_identity_pair_unique_and_downgrade_rejected(client):
         with pytest.raises(sqlite3.IntegrityError):
             db.raw.execute("INSERT INTO exchange_rates SELECT 'other', version,date,from_currency,to_currency,rate,source,entered_by,entered_at FROM exchange_rates WHERE id=?", (row['id'],))
         before = table_rows(db)
-        with pytest.raises(NotImplementedError):
+        # Every company migration refuses to go backwards (older ones with NotImplementedError,
+        # later ones with RuntimeError); a downgrade from today's head meets the newest first.
+        with pytest.raises((NotImplementedError, RuntimeError)):
             command.downgrade(_config('company', db.conn), 'co0007')
         assert table_rows(db) == before

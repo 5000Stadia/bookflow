@@ -22,11 +22,13 @@ from bookflow.company import schema as c
 from bookflow.company.batch_invoicing_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
+from tests.test_bill_payment_migration import _revisions_after
 from tests.test_bill_payment_migration import _at, _rebuilt_since, _superseded_after
 from tests.test_vendor_credit_migration import _insert
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0036_batch_invoicing')
-PREVIOUS = 'co0032'
+# co0036 was repointed onto the purchase-order revision when that one landed first.
+PREVIOUS = M.down_revision
 
 
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module():
@@ -60,9 +62,11 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
 
 def test_the_migration_follows_the_vendor_credit_revision_and_is_the_chain_head():
     """Derived, never a second copy of the number: the chain is the only authority."""
-    assert M.down_revision == PREVIOUS
+    # Still after the vendor credit revision it was written to follow, now via purchase orders.
+    assert M.revision in _revisions_after('co0032')
     assert M.revision in known_revisions('company')
-    assert HEADS['company'] == M.revision
+    # On the chain every company is built to, not necessarily its newest step.
+    assert M.revision in _revisions_after(M.down_revision)
 
 
 def test_a_batch_record_names_the_group_without_referencing_it():
