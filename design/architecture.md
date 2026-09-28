@@ -1190,7 +1190,10 @@ above the net when a non-taxable discount left one. Sales-by-item maps a discoun
 on a sold line's income leg back to that line's item; cash basis recognises a discount
 line at its targets' paid fraction. Group lines expand on entry (`sales.expand_groups`)
 into members carrying `LineGroup` provenance. Work lines carry the same facts plus
-`discount_minor_units`/`taxable_minor_units`; billing such lines from work is refused.
+`discount_minor_units`/`taxable_minor_units`. Billing (`billing.billed_lines`) carries a quote's
+subtotal and discount lines along with the lines they show or reduce, as `applies_to="billed"`
+adjustments whose shares are the quoted shares of the billed part; `sales.remap_billed` moves them
+with line identities on correction. Credit memos run the same pass and invert the postings.
 Plan and open questions: `design/specs/r147-sales-line-kinds.md`.
 
 ## Manual rates and foreign journal conversion

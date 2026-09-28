@@ -194,7 +194,10 @@ class LineAdjustment(StrictModel):
     """
     schema_version: Literal[1] = 1
     kind: Literal["subtotal", "discount", "charge"]
-    applies_to: Literal["line", "subtotal"] | None = None
+    # "billed": a discount or charge billed from an estimate or work order. Its amounts are
+    # the quote's (a discount's shares follow the part of each line billed), never worked out
+    # again from the lines above it on the sale.
+    applies_to: Literal["line", "subtotal", "billed"] | None = None
     percent_millionths: int | None = Field(default=None, ge=0, le=100_000_000)
     fixed_minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX)
     base_minor_units: int | None = Field(default=None, ge=-INT64_MAX, le=INT64_MAX)
@@ -287,7 +290,8 @@ class SalesLineProfile(StrictModel):
         elif self.income_account is None:
             raise ValueError('a sold line requires its income account')
         elif adjustment is not None and (adjustment.kind != 'charge' or self.item_type != 'other_charge'
-                                         or self.pricing_basis != 'amount'):
+                                         or self.pricing_basis not in ('amount', 'allocated')
+                                         or (self.pricing_basis == 'allocated') != (adjustment.applies_to == 'billed')):
             raise ValueError('only an amount-priced other charge carries a percentage charge')
         return self
 

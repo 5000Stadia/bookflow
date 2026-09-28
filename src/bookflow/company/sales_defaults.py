@@ -741,6 +741,9 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     if adjustment_role == 'discount' and percent_line[2] is not None:
         fields.origins['percent'] = percent_line[2]
 
+    retained_billed = (adjustment_role == 'charge' and old is not None and old.adjustment is not None
+                       and old.adjustment.applies_to == 'billed' and not item_changed and not refresh
+                       and 'percent' not in fields.supplied and 'percent' not in fields.defaults)
     if adjustment_role in ADJUSTMENT_ITEM_TYPES:
         amount_mode = False
         price = 0
@@ -750,6 +753,10 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         profile.standard_price_minor_units = profile.cost_minor_units = None
         for field in ('unit_price', 'price_level', 'price_basis_amount', 'net_amount'):
             fields.origins.pop(field, None)
+    elif retained_billed:
+        # Billed from quoted work: the quote fixed its amount, and the sale keeps it.
+        amount_mode = True
+        profile.adjustment = old.adjustment.model_copy(deep=True)
     elif adjustment_role == 'charge':
         # Worked out over the whole document once every line above has its amount.
         amount_mode = True
@@ -767,7 +774,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         profile.schema_version = 2
         profile.pricing_basis = 'amount'
         profile.net_amount_minor_units = (
-            0 if adjustment_role == 'charge' else
+            old.net_amount_minor_units if retained_billed else 0 if adjustment_role == 'charge' else
             money(inp.net_amount, currency, 'net_amount').minor_units
             if 'net_amount' in fields.supplied else old.net_amount_minor_units)
         profile.price_rule = None

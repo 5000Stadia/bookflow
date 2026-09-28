@@ -88,18 +88,34 @@ def saved_lines(s, revision):
     return [dict(row) for row in s.company.conn.execute(query).mappings()]
 
 
-def shown_amount(line, currency):
-    """``line_kind`` and ``amount`` for a line that is not a plain item line, else nothing."""
+def shown_amount(line, currency, restored=0):
+    """``line_kind`` and ``amount`` for a line that is not a plain item line, else nothing.
+
+    ``restored`` is what billed discounts took from a line billed by allocation, which has no
+    pricing of its own to show its amount before them.
+    """
     from bookflow.company import sales_adjustments
     facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
     role = sales_adjustments.kind(facts)
     if role in ('subtotal', 'discount'):
         shown = facts.adjustment.amount_minor_units
     else:
-        shown = sales_adjustments.own_amount(line, facts)
+        shown = (line['net_minor_units'] + restored if facts.pricing_basis == 'allocated'
+                 else sales_adjustments.own_amount(line, facts))
         if role == 'item' and shown == line['net_minor_units']:
             return {}
     return dict(line_kind=role, amount=Money(shown, currency).to_dict())
+
+
+def _restored(lines):
+    """Billed discount shares per position, for allocated lines' shown amounts."""
+    result = {}
+    for line in lines:
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        if facts.adjustment is not None and facts.adjustment.kind == 'discount':
+            for target in facts.adjustment.targets:
+                result[target.position] = result.get(target.position, 0) + target.amount_minor_units
+    return result
 
 
 def component_attribution(sources, *, document_line_id, item_snapshot, tax, control_account_id,
@@ -187,6 +203,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         tax_mapping = effects.rows(s, c.sales_tax_attribution_lines, c.sales_tax_attribution_lines.c.revision_id == revision['id'])
     tax_ordinals = {r['document_line_id']: r['tax_ordinal'] for r in tax_mapping}
     rendered = []
+    restored = _restored(lines)
     for line in lines:
         taxes = []
         for component in sorted((row for row in components if row['document_line_id'] == line['id']),
@@ -196,7 +213,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
         from bookflow.company.billing_allocations import quantity_output
         rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
-            **shown_amount(line, currency),
+            **shown_amount(line, currency, restored.get(line['position'], 0)),
             unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
@@ -488,6 +505,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     if len(lines) > 200:
         raise _invalid('lines', 'a sale holds at most 200 lines once its groups are expanded')
     from bookflow.company import sales_adjustments, tax_policy
+    remap_billed(old_lines, lines)
     sales_adjustments.apply(lines, tax_policy.effective(profile))
     tax_ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line['line_id'] for line in lines])
     attribution = tax_facts.calculate(lines, profile, info['home_currency'], tax_ordinals)
@@ -534,6 +552,26 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     return dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
         lines=lines, custom_plan=custom_plan, warnings=warnings, semantic=semantic, fingerprint=fingerprint,
         subtotal=subtotal, tax=tax, total=total, currency=info['home_currency'], tax_attribution=attribution, tax_keys=tax_keys)
+
+
+def remap_billed(old_lines, lines):
+    """Point a retained billed discount's shares at where their lines now sit.
+
+    A discount billed from quoted work names each line it took a share from by position. A
+    correction can move, add or remove lines; the shares follow the stable line identities,
+    and a share on a removed line goes with it.
+    """
+    from bookflow.company.sales_facts import AdjustmentTarget
+    before = {line['position']: line['line_id'] for line in old_lines}
+    now = {line['line_id']: position for position, line in enumerate(lines, 1) if line['line_id']}
+    for line in lines:
+        adjustment = line['profile'].adjustment
+        if line['line_id'] is None or adjustment is None or adjustment.applies_to != 'billed' or adjustment.kind != 'discount':
+            continue
+        moved = [(now[before[target.position]], target.amount_minor_units) for target in adjustment.targets
+                 if before.get(target.position) in now]
+        adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=units)
+                              for position, units in sorted(moved)]
 
 
 def expand_groups(s, entered):
@@ -779,7 +817,7 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         changed_fields=changed_fields)
     plan = Plan(output, dict(input=inp, operation=operation, document_type=document_type, changed=True, header=header,
         before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan, billing_source=billing_source,
-        stock=stock,
+        stock=stock, billed_sources=resolved.get('billed_sources') if resolved else None,
         semantic=resolved['semantic'] if resolved else None))
     from bookflow.company.billing_edits import carry_allocations
     carry_allocations(plan, s)

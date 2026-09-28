@@ -73,11 +73,21 @@ def apply(lines: list[dict], policy: str) -> None:
     shown, nets, reduced = [], [], []
     spans = {}
     start = 0
+    # A billed discount's shares were taken out of lines billed from quoted work. A line billed
+    # by allocation carries its net after the discount, so its amount is that net plus its shares.
+    restored = [0] * len(lines)
+    for line in lines:
+        adjustment = line['profile'].adjustment
+        if adjustment is not None and adjustment.kind == 'discount' and adjustment.applies_to == 'billed':
+            for target in adjustment.targets:
+                if lines[target.position - 1]['profile'].pricing_basis == 'allocated':
+                    restored[target.position - 1] += target.amount_minor_units
     for index, line in enumerate(lines):
         profile = line['profile']
         role = kind(profile)
-        if role == 'item':
-            amount = line['net_minor_units']
+        billed = profile.adjustment is not None and profile.adjustment.applies_to == 'billed'
+        if role == 'item' or (role == 'charge' and billed):
+            amount = line['net_minor_units'] + restored[index]
             shown.append(amount)
             nets.append(amount)
             reduced.append(0)
@@ -89,6 +99,25 @@ def apply(lines: list[dict], policy: str) -> None:
             start = index + 1
             adjustment.amount_minor_units = value
             shown.append(value)
+            nets.append(0)
+            reduced.append(0)
+            continue
+        if billed:
+            # The quote decided every share; only their positions here are this sale's.
+            taxable = line['adjustment_taxable']
+            value = 0
+            for target in adjustment.targets:
+                j = target.position - 1
+                if not 0 <= j < index or kind(lines[j]['profile']) not in ('item', 'charge'):
+                    raise _invalid(_where(index), 'a billed discount names a line that is not above it on this sale')
+                if target.amount_minor_units > nets[j]:
+                    raise _invalid(_where(index), 'a billed discount is larger than the line it applies to')
+                nets[j] -= target.amount_minor_units
+                if taxable:
+                    reduced[j] += target.amount_minor_units
+                value += target.amount_minor_units
+            adjustment.amount_minor_units = -value
+            shown.append(-value)
             nets.append(0)
             reduced.append(0)
             continue
@@ -200,5 +229,13 @@ def captured(header, rows, require):
     taxable = [bool(header.preferences.sales_tax_enabled and fact.tax_code is not None
                     and fact.tax_code.taxable and not exempt) for fact in facts]
     amounts = [own_amount(row, fact) for row, fact in zip(rows, facts, strict=True)]
+    # A line billed by allocation has no pricing of its own to derive its amount from: it is its
+    # billed net plus the shares billed discounts name on it. Those shares are checked against
+    # the quote by the billing validators.
+    for index, fact in enumerate(facts):
+        if fact.pricing_basis == 'allocated':
+            amounts[index] = rows[index]['net_minor_units'] + sum(
+                target.amount_minor_units for other in facts if kind(other) == 'discount'
+                for target in other.adjustment.targets if target.position == index + 1)
     bases = check(facts, amounts, [row['net_minor_units'] for row in rows], taxable, require)
     return facts, amounts, bases

@@ -799,7 +799,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -1571,7 +1571,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -2405,7 +2405,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -3498,7 +3498,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -4875,7 +4875,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -5967,7 +5967,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
@@ -6784,7 +6784,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
-| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal", "billed"] \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |

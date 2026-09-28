@@ -51,11 +51,31 @@ base; a discount larger than the nets it applies to; group members with zero qua
 group lines with anything but item and quantity; quantity other than 1 on subtotal, discount
 and charge lines.
 
+## Billing from estimates and work orders
+
+A selection bills sold lines (whole or by progress share) as before. Subtotal and discount lines
+are never selected: a quoted subtotal comes along when a line of its span is billed, a quoted
+discount when a line it reduced is billed, carrying that line's quoted share of the part billed
+(the same exact endpoint portion as the line's net). A charge is billed as the amount the quote
+fixed. On the sale these are "billed" adjustments: nothing is worked out again from percentages,
+a correction keeps them and moves their shares with the lines' identities, and the billing
+validator rebuilds every carried line from the quote alone.
+
+## Credit memos
+
+A standalone credit takes the same lines by the same rules; its postings are the invoice's
+inverted (income debited at full amounts, the discount credited to its account). A returned line
+of a discounted invoice comes back at its net; a discount or subtotal line is not returned.
+
 ## Edges
 
 Touches: sales_facts, sales_models, sales_defaults, a new pure `sales_adjustments`, sales
-posting/validation/outputs, tax_attribution/tax_calculations (taxable base), sales-by-item
-attribution, workbench line grid, demo seed. Estimates and work orders quote these lines;
-billing a work document whose selected lines carry discounts or subtotals is refused with a
-plain error until the billing proof carries them. Credit memos keep refusing these items.
-Payments, bill payments and deposits are not modified.
+posting/validation/outputs, tax_attribution/tax_calculations (taxable base), work facts/tax/
+validation, billing resolution/selection/validation, credit memos, sales-by-item attribution,
+cash basis, printing, workbench line grid, demo seed. Payments, bill payments and deposits are
+not modified.
+
+## Open with the person (gate on R147)
+
+A taxable discount over a span holding non-taxable lines is refused. Sharing a subtotal discount
+by net, which decides tax cents under the two per-line policies, stands as built until answered.
