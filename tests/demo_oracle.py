@@ -194,17 +194,21 @@ DEMO_POSITION = {
         'Accounts Payable': -7810,
         'Sales Tax Payable': -4004,
         'Opening Balance Equity': -500000,
-        'Service Income': -215630,
+        # Early-payment discounts: +500.00 invoiced, 490.00 received plus a 10.00 discount;
+        # a 300.00 bill paid with 294.00 plus a 6.00 discount, both through the example bank.
+        'Service Income': -265630,         # -215630 - 50000
         'Cost of Goods Sold': 523,
-        'Professional Fees': 339823,
+        'Professional Fees': 369823,       # 339823 + 30000
         'Business Credit Card': -20000,
-        'Payment Example Bank': -282220,
+        'Discounts Given': 1000,
+        'Discounts Taken': -600,
+        'Payment Example Bank': -262620,   # -282220 + 49000 - 29400
         'Payment Example Income': -18000,
     },
-    'trial_balance': 1047664,
+    'trial_balance': 1078664,              # 1047664 + 30000 + 1000
     'journal_entries': 19,
-    'net_income': -106716,
-    'total_equity': 393284,
+    'net_income': -87116,                  # -106716 + 50000 - 1000 - 30000 + 600
+    'total_equity': 412884,                # 393284 + 19600
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -231,6 +235,7 @@ DEMO_ARCS = {
     'DEMO-KIT-': 'service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
     'DEMO-1099-': 'a 1099 subcontractor: a bill paid by check and a bill paid on the card',
+    'DEMO-DISC-': 'early-payment discounts: a receipt and a bill payment each taking 2%',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`

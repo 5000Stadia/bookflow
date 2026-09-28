@@ -25,8 +25,15 @@ like any other cheque. There is no second allocation path here to fall out of st
 one. ``ap_payment_profiles.check_number`` still records what the payment was written with, but
 it is now what was allocated rather than free text ``report missing-checks`` could not place.
 
-**What this does not write.** A purchase discount is its own document with its own accounts and
-does not exist yet; every cent here is cash or card. A vendor credit does exist, in
+**An early-payment discount is part of the payment.** A row may name a ``discount`` beside its
+``amount``: the bill is then settled by both, Accounts Payable falls by both, the funding account
+by the money alone and the discount account (``company/early_discounts.py``) is credited with the
+rest. The discount rides the same source component and the same application as the money, so
+every reader of an open balance works unchanged; ``bill_payment_discounts`` records which part of
+the edge was a discount. Unapplying such a bill frees the whole component, discount included, as
+an unapplied debit against the vendor, and a void reverses the whole posting.
+
+**What this does not write.** A vendor credit does exist, in
 ``company/vendor_credits.py``, and it settles through the same ``ap_applications`` edge -- but it
 is entered as its own document and never as a line on a check, which is why a selection here that
 would settle nothing is refused rather than posted as a payment for zero.
@@ -38,7 +45,8 @@ import json
 import sqlalchemy as sa
 
 from bookflow.company import (
-    accounts, ap_settlement, bills, check_numbers, journals, list_service, schema as c)
+    accounts, ap_settlement, bills, check_numbers, early_discounts as early, journals, list_service,
+    schema as c)
 from bookflow.company import document_effects as effects
 from bookflow.company.bill_payment_facts import Account, BillPaymentProfile, Origin, PaymentMethod, Reference, Vendor
 from bookflow.company.bill_payment_models import (
@@ -74,6 +82,7 @@ TABLE_KINDS = (
     ('ap_source_keys', 'ap_source_key', 'id'),
     ('ap_source_components', 'ap_source_component', 'id'),
     ('ap_applications', 'ap_application', 'id'),
+    ('bill_payment_discounts', 'bill_payment_discount', 'id'),
 )
 
 # What a bill payment may be drawn on, and what crediting it means. A debit card or an EFT is
@@ -184,7 +193,7 @@ def _cheque(inp, method, funding_kind):
 # ---------------------------------------------------------------- what is being paid
 
 
-def _selected(s, rows, date, currency, *, capacity=None):
+def _selected(s, rows, date, currency, *, capacity=None, discounts=False):
     """Every bill named, what is open on it, and what this settlement takes off it.
 
     Every settlement of a payable reads this: ``bill pay``, where ``date`` is the day the money
@@ -198,6 +207,10 @@ def _selected(s, rows, date, currency, *, capacity=None):
     means the whole open balance; ``bill payment apply`` is spending money that already exists,
     so an unnamed row means the open balance or what is left of the payment, whichever is less.
     A named amount is taken as named either way, and refused above what is open.
+
+    ``discounts`` is true only for ``bill pay``: a row there may name an early-payment discount,
+    and then settles its amount plus its discount; everywhere else a discount is refused, because
+    only writing a payment posts one.
     """
     chosen, remaining = [], capacity
     for index, row in enumerate(rows):
@@ -219,8 +232,16 @@ def _selected(s, rows, date, currency, *, capacity=None):
                                   f'which is dated {revision["date"]}')
         applied = ap_settlement.applied_totals(s, [obligation['id']])[obligation['id']]
         open_amount = revision['total_minor_units'] - applied
+        discount = 0
+        if getattr(row, 'discount', None) is not None:
+            if not discounts:
+                raise _invalid(field + '.discount', 'an early-payment discount is taken when the bill is '
+                                                    'paid with bill pay; applying existing capacity takes none')
+            discount = parse_domestic_amount(row.discount, currency, field + '.discount').minor_units
+            if discount < 0:
+                raise _invalid(field + '.discount', 'must not be negative')
         if row.amount is None:
-            amount = open_amount if remaining is None else min(open_amount, remaining)
+            amount = open_amount - discount if remaining is None else min(open_amount - discount, remaining)
         else:
             amount = parse_domestic_amount(row.amount, currency, field + '.amount').minor_units
         if amount <= 0 and remaining is not None and remaining <= 0 and row.amount is None:
@@ -234,16 +255,24 @@ def _selected(s, rows, date, currency, *, capacity=None):
             # selection from posting a payment written for zero.
             raise _invalid(field + '.amount', f'must be more than zero; bill {header["number"]} has '
                                               f'{Money(open_amount, currency).to_dict()["amount"]} {currency} open')
-        if amount > open_amount:
+        if amount + discount > open_amount:
             raise BookflowError('E_APPLICATION_CAPACITY', details={
-                'field': field + '.amount', 'bill_id': header['id'], 'bill_number': header['number'],
-                'requested_minor_units': amount, 'available_minor_units': open_amount,
-                'requested': Money(amount, currency).to_dict(),
+                'field': field + ('.discount' if discount else '.amount'), 'bill_id': header['id'],
+                'bill_number': header['number'],
+                'requested_minor_units': amount + discount, 'available_minor_units': open_amount,
+                'requested': Money(amount + discount, currency).to_dict(),
                 'available': Money(open_amount, currency).to_dict(),
-                'next': 'Settle at most what is still open on this bill.'})
+                'next': 'Settle at most what is still open on this bill; the amount paid and the '
+                        'discount together cannot exceed it.'})
         if remaining is not None:
             remaining -= amount
-        chosen.append(dict(header=header, revision=revision, obligation=obligation, amount=amount))
+        terms = suggested = None
+        if discounts:
+            terms = early.bill_terms(bills.profile_row(s, revision)['profile_snapshot'], revision['date'])
+            already = ap_settlement.discounts_by_bill(s, [header['id']]).get(header['id'], 0)
+            suggested = early.suggested(terms, revision['total_minor_units'], date, taken=already, due=open_amount)
+        chosen.append(dict(header=header, revision=revision, obligation=obligation, amount=amount,
+                           discount=discount, terms=terms, suggested=suggested))
     return chosen
 
 
@@ -313,11 +342,12 @@ def _cheques(s, resolved, count):
 # ---------------------------------------------------------------- reads
 
 
-def settlement_output(header, revision, source, applied):
-    amount = revision['total_minor_units'] if header['status'] == 'posted' else 0
+def settlement_output(header, revision, source, applied, discount=0):
+    amount = revision['total_minor_units'] + discount if header['status'] == 'posted' else 0
     unapplied = amount - applied
     currency = revision['currency']
     return BillPaymentSettlementOutput(
+        discount_minor_units=discount, discount=Money(discount, currency).to_dict() if discount else None,
         payment_id=header['id'], source_key_id=source['id'] if source else '',
         version=header['version'], revision_id=revision['id'],
         amount_minor_units=amount, applied_minor_units=applied, unapplied_minor_units=unapplied,
@@ -352,12 +382,28 @@ def _bill_numbers(s, identifiers, pending=None):
     return found
 
 
-def application_outputs(rows, currency, numbers):
+def application_outputs(rows, currency, numbers, discounts=None):
+    """``discounts`` maps an apply's id to its discount row; an unapply inherits its original's."""
+    discounts = discounts or {}
+
+    def part(row):
+        found = discounts.get(row['reverses_application_id'] or row['id'])
+        return found['amount_minor_units'] if found else 0
+
     return [BillApplicationOutput(
         **{k: v for k, v in row.items() if k != 'active'},
         bill_number=numbers.get(row['obligation_transaction_id'], ''),
         amount=Money(row['amount_minor_units'], currency).to_dict(),
+        discount_minor_units=part(row),
+        discount=Money(part(row), currency).to_dict() if part(row) else None,
         active=row['active']) for row in rows]
+
+
+def discount_rows(s, header, pending=None):
+    """Every discount this payment took, by the application it was taken on."""
+    saved = effects.rows(s, c.bill_payment_discounts, c.bill_payment_discounts.c.transaction_id == header['id'])
+    combined = saved + [dict(row) for row in (pending or {}).get('bill_payment_discounts', [])]
+    return {row['application_id']: row for row in combined}
 
 
 def _edges(s, header, pending=None):
@@ -403,6 +449,8 @@ def revision_output(s, header, revision, edges, pending=None):
                                                 else '')
     numbers = _bill_numbers(s, sorted({value for value in targets.values() if value}), pending)
     currency = revision['currency']
+    by_component = {row['source_component_id']: row for row in discount_rows(s, {'id': revision['transaction_id']}, pending).values()
+                    if row['revision_id'] == revision['id']}
     saved_batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
                                  order=c.posting_batches.c.id)
     summaries = [journals.batch_output(s, batch) for batch in saved_batches]
@@ -414,7 +462,13 @@ def revision_output(s, header, revision, edges, pending=None):
         component = by_line[envelope['id']]
         bill_id = targets.get(component['id']) or ''
         applied = attached.get(component['id'], 0)
+        taken = by_component.get(component['id'])
+        discount = taken['amount_minor_units'] if taken else 0
         lines.append(BillPaymentLineOutput(
+            discount_minor_units=discount, discount=Money(discount, currency).to_dict() if taken else None,
+            suggested_discount_minor_units=taken['suggested_minor_units'] if taken else 0,
+            discount_date=taken['discount_date'] if taken else None,
+            discount_account_id=taken['discount_account_id'] if taken else None,
             **{key: envelope[key] for key in ('id', 'created_at', 'created_by', 'created_via',
                                               'transaction_id', 'revision_id', 'line_id', 'position',
                                               'kind', 'class_id', 'class_name', 'description')},
@@ -441,6 +495,7 @@ def revision_summary(s, revision, edges):
         s, c.ap_source_components, c.ap_source_components.c.revision_id == revision['id'])}
     mine = [row for row in edges if row['source_component_id'] in owned]
     numbers = _bill_numbers(s, sorted({row['obligation_transaction_id'] for row in mine}))
+    discounts = discount_rows(s, {'id': revision['transaction_id']})
     count = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.document_lines)
                                    .where(c.document_lines.c.revision_id == revision['id'])).scalar_one()
     batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
@@ -450,7 +505,7 @@ def revision_summary(s, revision, edges):
     return BillPaymentRevisionSummaryOutput(
         **values, line_count=count,
         batches=[journals.batch_output(s, batch) for batch in batches],
-        applications=application_outputs(mine, currency, numbers))
+        applications=application_outputs(mine, currency, numbers, discounts))
 
 
 def _output(s, header, revision, profile, pending=None, *, model=BillPaymentOutput, **extra):
@@ -458,10 +513,12 @@ def _output(s, header, revision, profile, pending=None, *, model=BillPaymentOutp
     source = ap_settlement.source_key_row(s, header['id'], pending)
     applied = sum(row['amount_minor_units'] for row in edges if row['active'])
     numbers = _bill_numbers(s, sorted({row['obligation_transaction_id'] for row in edges}), pending)
+    discounts = discount_rows(s, header, pending)
+    taken = sum(row['amount_minor_units'] for row in discounts.values())
     return model(
-        **summary(header, revision, profile, settlement_output(header, revision, source, applied)),
+        **summary(header, revision, profile, settlement_output(header, revision, source, applied, taken)),
         revision=revision_output(s, header, revision, edges, pending),
-        applications=application_outputs(edges, revision['currency'], numbers), **extra)
+        applications=application_outputs(edges, revision['currency'], numbers, discounts), **extra)
 
 
 def show(s, inp):
@@ -530,6 +587,7 @@ def page(s, ctx, inp, *, history=False):
         sa.select(c.ap_source_keys).where(
             c.ap_source_keys.c.transaction_id.in_(identifiers))).mappings()} if found else {}
     applied = ap_settlement.source_applied_totals(s, [row['id'] for row in sources.values()])
+    discounted = ap_settlement.discount_totals(s, identifiers)
     items = []
     for header in ordered:
         revision = revisions[header['current_revision_id']]
@@ -537,7 +595,8 @@ def page(s, ctx, inp, *, history=False):
         total = applied.get(source['id'], 0) if source else 0
         items.append(BillPaymentSummaryOutput(**summary(
             header, revision, profiles[revision['id']],
-            settlement_output(header, revision, source, 0 if header['status'] == 'voided' else total))))
+            settlement_output(header, revision, source, 0 if header['status'] == 'voided' else total,
+                              discounted.get(header['id'], 0)))))
     return BillPaymentPageOutput(items=items, count=len(found), has_more=more,
                                  next_cursor=continuation(state, len(found), more),
                                  audit_watermark=state.sequence)
@@ -575,6 +634,7 @@ def _document(s, ctx, inp, at, event, group, rows, number, resolved, cheque):
 
     provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     total = checked_sum((row['amount'] for row in rows), 'bills.total')
+    discounted = checked_sum((row['discount'] for row in rows), 'bills.discount')
     vendor = resolved['vendors'][vendor_id]
     ap_account = resolved['payables'][ap_account_id]
     profile = BillPaymentProfile(
@@ -642,27 +702,41 @@ def _document(s, ctx, inp, at, event, group, rows, number, resolved, cheque):
         return source
 
     # The payable falls by the whole amount once, and the account that funded it rises or falls
-    # by the same figure once; each entered row's share of both is an attribution on those legs,
+    # by the money once; each entered row's share of both is an attribution on those legs,
     # which is the shape the bill used for its own payable and what an allocation later names.
-    payable = leg(ap_account, total, True, inp.memo)
+    # A discount is the payable falling by more than the money: its credit is its own leg.
+    payable = leg(ap_account, checked_sum((total, discounted), 'bills.settled'), True, inp.memo)
     funding = leg(resolved['funding'], total, False, inp.memo)
+    discount_leg = leg(resolved['discount_account'], discounted, False, inp.memo) if discounted else None
     source_key = dict(**audited(), transaction_id=header['id'], ordinal=1, source_type=DOCUMENT_TYPE,
                       vendor_id=vendor_id, ap_account_id=ap_account_id, currency=currency)
     pending['ap_source_keys'].append(source_key)
     for envelope, row in zip(pending['document_lines'], rows):
-        payable_source = attribute(payable, envelope, row['amount'])
+        settled = row['amount'] + row['discount']
+        payable_source = attribute(payable, envelope, settled)
         attribute(funding, envelope, row['amount'])
         component = dict(**audited(), transaction_id=header['id'], revision_id=revision['id'],
                          key_id=source_key['id'], document_line_id=envelope['id'], ordinal=1,
-                         posting_source_id=payable_source['id'], amount_minor_units=row['amount'],
+                         posting_source_id=payable_source['id'], amount_minor_units=settled,
                          currency=currency)
         pending['ap_source_components'].append(component)
-        pending['ap_applications'].append(dict(
+        application = dict(
             **audited(), kind='apply', source_transaction_id=header['id'],
             source_key_id=source_key['id'], source_component_id=component['id'],
             obligation_transaction_id=row['header']['id'], obligation_key_id=row['obligation']['id'],
-            amount_minor_units=row['amount'], currency=currency, effective_date=inp.date,
-            reverses_application_id=None))
+            amount_minor_units=settled, currency=currency, effective_date=inp.date,
+            reverses_application_id=None)
+        pending['ap_applications'].append(application)
+        if row['discount']:
+            terms = row['terms']
+            pending['bill_payment_discounts'].append(dict(
+                **audited(), transaction_id=header['id'], revision_id=revision['id'],
+                source_component_id=component['id'], application_id=application['id'],
+                bill_id=row['header']['id'], discount_account_id=resolved['discount_account'].id,
+                posting_source_id=attribute(discount_leg, envelope, row['discount'])['id'],
+                amount_minor_units=row['discount'], currency=currency,
+                suggested_minor_units=row['suggested'], discount_date=terms.discount_date,
+                terms_percent_millionths=terms.percent_millionths))
     # The paper this payment was written on, in the one place every cheque in the company
     # lives. Written by ``check_numbers.write`` in ``apply`` below, beside the pointer move.
     instrument = check_numbers.rows(s, ctx, header, revision, cheque, None, at=at, event=event)
@@ -686,12 +760,22 @@ def _resolved(s, inp, currency):
 def prepare_pay(s, ctx, inp):
     currency = _info(s)['home_currency']
     resolved = _resolved(s, inp, currency)
-    chosen = _selected(s, inp.bills, inp.date, currency)
+    chosen = _selected(s, inp.bills, inp.date, currency, discounts=True)
     journals.open_dates(s, [inp.date])
     groups = _groups(chosen)
     numbers, sequence = _numbers(s, len(groups), inp.number)
     cheques = _cheques(s, resolved, len(groups))
     at, event = clock.now_iso(), new_id()
+    resolved['discount_account'] = resolved['discount_mutation'] = None
+    warnings = []
+    if any(row['discount'] for row in chosen):
+        facts, resolved['discount_mutation'] = early.resolve_account(s, ctx, 'vendor', inp.discount_account, at=at)
+        resolved['discount_account'] = Account(**facts)
+        for row in chosen:
+            if row['discount']:
+                late = early.late_warning('bill', row['header']['number'], row['terms'], inp.date)
+                if late:
+                    warnings.append(late)
     resolved['vendors'] = {key[0]: Vendor(**_reference(row := resolve_party(s.company, 'vendor', key[0])).model_dump(),
                                           **{k: row.get(k) for k in ('company_name', 'email', 'phone', 'account_number')})
                            for key, _ in groups}
@@ -715,11 +799,15 @@ def prepare_pay(s, ctx, inp):
             seen_bills[old['id']] = changed
             changed_headers.append((old, changed))
     total = checked_sum((row['amount'] for row in chosen), 'bills.total')
+    discounted = checked_sum((row['discount'] for row in chosen), 'bills.discount')
     preview = BillPayOutput(payments=outputs, group_count=len(groups), paid_minor_units=total,
                             paid=Money(total, currency).to_dict(), currency=currency,
-                            bill_count=len(chosen))
+                            bill_count=len(chosen), discount_minor_units=discounted,
+                            discount=Money(discounted, currency).to_dict() if discounted else None,
+                            warnings=warnings)
     return Plan(preview, dict(input=inp, operation='pay', documents=documents, event=event, at=at,
-                              sequence=sequence, changed_headers=changed_headers, currency=currency))
+                              sequence=sequence, changed_headers=changed_headers, currency=currency,
+                              account_mutation=resolved['discount_mutation']))
 
 
 # ------------------------------------------------ re-pointing the money, and taking it back
@@ -970,9 +1058,13 @@ def apply(plan, ctx, s):
                            after, old, db='company') for old, after in data['changed_headers'])
     command_name = 'bill ' + ('pay' if operation == 'pay' else 'payment ' + operation)
     summary_text = f"{operation} bill payment {', '.join(summaries)}"
+    created_account = data.get('account_mutation')
+    touched[:0] = early.created_account_touches(created_account)
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
                          actor_id=s.actor.id, actor_kind=s.actor.kind,
                          directive_code=getattr(s, 'directive_code', None), event_id=data['event'])
+    # A discount account the chart did not have yet exists before the leg that posts to it.
+    early.persist_created_account(s, created_account)
     for document in data['documents']:
         header, before = document['header'], document.get('before')
         if before:

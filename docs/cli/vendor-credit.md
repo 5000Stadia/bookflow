@@ -210,6 +210,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `revision.applications[].audit_event_id` | string | yes | no | — | — |
 | `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.applications[].discount` | object \| null | no | yes | null | — |
+| `revision.applications[].discount.amount` | string | yes | no | — | — |
+| `revision.applications[].discount.currency` | string | yes | no | — | — |
+| `revision.applications[].discount.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.profile` | object | yes | no | — | — |
 | `revision.profile.vendor` | object | yes | no | — | — |
@@ -335,6 +340,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -649,6 +659,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `items[].applications[].audit_event_id` | string | yes | no | — | — |
 | `items[].applications[].active` | boolean | yes | no | — | — |
+| `items[].applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `items[].applications[].discount` | object \| null | no | yes | null | — |
+| `items[].applications[].discount.amount` | string | yes | no | — | — |
+| `items[].applications[].discount.currency` | string | yes | no | — | — |
+| `items[].applications[].discount.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -916,6 +931,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `revision.applications[].audit_event_id` | string | yes | no | — | — |
 | `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.applications[].discount` | object \| null | no | yes | null | — |
+| `revision.applications[].discount.amount` | string | yes | no | — | — |
+| `revision.applications[].discount.currency` | string | yes | no | — | — |
+| `revision.applications[].discount.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.profile` | object | yes | no | — | — |
 | `revision.profile.vendor` | object | yes | no | — | — |
@@ -1041,6 +1061,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -1571,6 +1596,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `revision.applications[].audit_event_id` | string | yes | no | — | — |
 | `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.applications[].discount` | object \| null | no | yes | null | — |
+| `revision.applications[].discount.amount` | string | yes | no | — | — |
+| `revision.applications[].discount.currency` | string | yes | no | — | — |
+| `revision.applications[].discount.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.profile` | object | yes | no | — | — |
 | `revision.profile.vendor` | object | yes | no | — | — |
@@ -1696,6 +1726,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -2058,6 +2093,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `revision.applications[].audit_event_id` | string | yes | no | — | — |
 | `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.applications[].discount` | object \| null | no | yes | null | — |
+| `revision.applications[].discount.amount` | string | yes | no | — | — |
+| `revision.applications[].discount.currency` | string | yes | no | — | — |
+| `revision.applications[].discount.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.profile` | object | yes | no | — | — |
 | `revision.profile.vendor` | object | yes | no | — | — |
@@ -2183,6 +2223,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -2570,6 +2615,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `revision.applications[].audit_event_id` | string | yes | no | — | — |
 | `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.applications[].discount` | object \| null | no | yes | null | — |
+| `revision.applications[].discount.amount` | string | yes | no | — | — |
+| `revision.applications[].discount.currency` | string | yes | no | — | — |
+| `revision.applications[].discount.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.profile` | object | yes | no | — | — |
 | `revision.profile.vendor` | object | yes | no | — | — |
@@ -2695,6 +2745,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -3074,6 +3129,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `revision.applications[].audit_event_id` | string | yes | no | — | — |
 | `revision.applications[].active` | boolean | yes | no | — | — |
+| `revision.applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.applications[].discount` | object \| null | no | yes | null | — |
+| `revision.applications[].discount.amount` | string | yes | no | — | — |
+| `revision.applications[].discount.currency` | string | yes | no | — | — |
+| `revision.applications[].discount.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.profile` | object | yes | no | — | — |
 | `revision.profile.vendor` | object | yes | no | — | — |
@@ -3199,6 +3259,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 

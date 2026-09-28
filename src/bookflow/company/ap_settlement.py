@@ -74,6 +74,53 @@ def applied_by_source_kind(s, obligation_ids):
     for row in s.company.conn.execute(query).mappings():
         if row['net']:
             totals[row['obligation_key_id']][row['source_type']] = row['net']
+    # An early-payment discount rides a bill payment's own edge, so the part of that edge that
+    # was a discount is moved out of ``bill_payment`` into its own kind; the kinds still add up
+    # to exactly what ``applied_totals`` says.
+    d, inverse = c.bill_payment_discounts, a.alias('inverse')
+    discounted = (sa.select(a.c.obligation_key_id, sa.func.sum(d.c.amount_minor_units).label('net'))
+                  .select_from(d.join(a, a.c.id == d.c.application_id))
+                  .where(a.c.obligation_key_id.in_(identifiers),
+                         ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id)))
+                  .group_by(a.c.obligation_key_id))
+    for row in s.company.conn.execute(discounted).mappings():
+        if row['net']:
+            kinds = totals[row['obligation_key_id']]
+            kinds['bill_payment'] = kinds.get('bill_payment', 0) - row['net']
+            if not kinds['bill_payment']:
+                del kinds['bill_payment']
+            kinds['early_discount'] = row['net']
+    return totals
+
+
+def discounts_by_bill(s, bill_ids):
+    """Early-payment discount still standing on each bill: taken on an edge nothing has unapplied."""
+    identifiers = list(bill_ids)
+    totals = {identifier: 0 for identifier in identifiers}
+    if not identifiers:
+        return totals
+    a, d = c.ap_applications, c.bill_payment_discounts
+    inverse = a.alias('inverse')
+    query = (sa.select(d.c.bill_id, sa.func.sum(d.c.amount_minor_units).label('net'))
+             .select_from(d.join(a, a.c.id == d.c.application_id))
+             .where(d.c.bill_id.in_(identifiers),
+                    ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id)))
+             .group_by(d.c.bill_id))
+    for row in s.company.conn.execute(query).mappings():
+        totals[row['bill_id']] = row['net']
+    return totals
+
+
+def discount_totals(s, payment_ids):
+    """Every discount each bill payment took, standing or unapplied: part of what it carries."""
+    identifiers = list(payment_ids)
+    totals = {identifier: 0 for identifier in identifiers}
+    if not identifiers:
+        return totals
+    d = c.bill_payment_discounts
+    for row in s.company.conn.execute(sa.select(d.c.transaction_id, sa.func.sum(d.c.amount_minor_units).label('net'))
+                                      .where(d.c.transaction_id.in_(identifiers)).group_by(d.c.transaction_id)).mappings():
+        totals[row['transaction_id']] = row['net']
     return totals
 
 

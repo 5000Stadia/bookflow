@@ -79,7 +79,7 @@ def _document(s, ctx, payments, data, document, currency, operation):
                 'incorrect creation provenance')
     for name in ('transaction_revisions', 'document_line_identities', 'document_lines',
                  'ap_payment_profiles', 'posting_batches', 'posting_lines', 'posting_line_sources',
-                 'ap_source_keys', 'ap_source_components'):
+                 'ap_source_keys', 'ap_source_components', 'bill_payment_discounts'):
         require(all(row['transaction_id'] == header['id'] for row in pending[name]),
                 'cross-document history')
     require(all(row['source_transaction_id'] == header['id'] for row in pending['ap_applications']),
@@ -212,12 +212,21 @@ def _document(s, ctx, payments, data, document, currency, operation):
     batch = batches[0]
     own = [leg for leg in legs if leg['batch_id'] == batch['id']]
     total = revision['total_minor_units']
+    discounts = pending['bill_payment_discounts']
+    discounted = sum(amount(row['amount_minor_units'], positive=True) for row in discounts)
     payable = [leg for leg in own if leg['account_id'] == profile['ap_account_id'] and leg['debit_minor_units']]
     funding = [leg for leg in own if leg['account_id'] == profile['funding_account_id'] and leg['credit_minor_units']]
-    require(len(own) == 2 and len(payable) == 1 and len(funding) == 1,
-            'a bill payment posts one payable debit and one funding credit and nothing else')
-    require(payable[0]['debit_minor_units'] == funding[0]['credit_minor_units'] == total == profile['amount_minor_units'],
-            'the two legs disagree with what the payment is written for')
+    rest = [leg for leg in own if leg not in payable and leg not in funding]
+    require(len(payable) == 1 and len(funding) == 1 and len(rest) == (1 if discounts else 0),
+            'a bill payment posts one payable debit, one funding credit, a discount credit only '
+            'when it takes a discount, and nothing else')
+    require(funding[0]['credit_minor_units'] == total == profile['amount_minor_units']
+            and payable[0]['debit_minor_units'] == total + discounted,
+            'the legs disagree with what the payment is written for and the discount it took')
+    if discounts:
+        require(rest[0]['credit_minor_units'] == discounted
+                and {row['discount_account_id'] for row in discounts} == {rest[0]['account_id']},
+                'the discount credit disagrees with the discounts recorded')
 
     attributions = {source['id']: source for source in sources
                     if source['posting_line_id'] == payable[0]['id']}
@@ -232,7 +241,8 @@ def _document(s, ctx, payments, data, document, currency, operation):
                 'a source component belongs elsewhere')
         by_envelope[component['document_line_id']] = component
         settled += amount(component['amount_minor_units'], positive=True)
-    require(settled == total, 'the source components do not add up to what the payment is written for')
+    require(settled == total + discounted,
+            'the source components do not add up to what the payment is written for and its discount')
     require(set(by_envelope) == {line['id'] for line in envelopes},
             'an entered line without its source component')
 
@@ -245,6 +255,30 @@ def _document(s, ctx, payments, data, document, currency, operation):
                 and application['kind'] == 'apply' and application['reverses_application_id'] is None,
                 'an application does not match the capacity it consumes')
         _settled_bill(s, application, key, currency)
+
+    # What left the funding account for each line is the line's capacity less its discount, and
+    # the discount is the exact attribution on the discount leg of the same line and edge.
+    by_component = {row['source_component_id']: row for row in discounts}
+    require(len(by_component) == len(discounts), 'two discounts on one line')
+    for component in components:
+        taken = by_component.get(component['id'])
+        part = taken['amount_minor_units'] if taken else 0
+        paid = [source for source in sources if source['posting_line_id'] == funding[0]['id']
+                and source['document_line_id'] == component['document_line_id']]
+        require(len(paid) == 1 and paid[0]['amount_minor_units'] == component['amount_minor_units'] - part,
+                'a line pays something other than its capacity less its discount')
+        if taken is None:
+            continue
+        application = indexed['ap_applications'].get(taken['application_id'])
+        source = indexed['posting_line_sources'].get(taken['posting_source_id'])
+        require(application is not None and application['source_component_id'] == component['id']
+                and application['obligation_transaction_id'] == taken['bill_id']
+                and source is not None and source['posting_line_id'] == rest[0]['id']
+                and source['document_line_id'] == component['document_line_id']
+                and source['amount_minor_units'] == part < component['amount_minor_units']
+                and taken['transaction_id'] == header['id'] and taken['revision_id'] == revision['id']
+                and taken['currency'] == currency and amount(taken['suggested_minor_units']) >= 0,
+                'a discount does not name its own line, edge and attribution')
 
 
 def _settled_bill(s, application, key, currency):

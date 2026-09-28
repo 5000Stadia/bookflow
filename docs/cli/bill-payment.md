@@ -38,6 +38,7 @@ The same example as complete `bookflow_run` arguments:
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `bills[].bill` | inside `--bills` JSON array | string | yes | no | — | minimum length 1 |
 | `bills[].amount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | — |
+| `bills[].discount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | Early-payment discount taken on this bill in addition to amount; the bill is settled by amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is {"bill": "4410", "amount": "980.00", "discount": "20.00"}. |
 | `bills[].expected_version` | inside `--bills` JSON array | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
 
@@ -134,6 +135,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -216,6 +222,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -266,6 +280,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -371,6 +390,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -579,6 +600,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `items[].applications[].audit_event_id` | string | yes | no | — | — |
 | `items[].applications[].active` | boolean | yes | no | — | — |
+| `items[].applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `items[].applications[].discount` | object \| null | no | yes | null | — |
+| `items[].applications[].discount.amount` | string | yes | no | — | — |
+| `items[].applications[].discount.currency` | string | yes | no | — | — |
+| `items[].applications[].discount.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -755,6 +781,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.currency` | string | yes | no | — | — |
 | `items[].settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `items[].settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `items[].settlement_current.discount` | object \| null | no | yes | null | — |
+| `items[].settlement_current.discount.amount` | string | yes | no | — | — |
+| `items[].settlement_current.discount.currency` | string | yes | no | — | — |
+| `items[].settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -914,6 +945,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -996,6 +1032,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -1046,6 +1090,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -1146,6 +1195,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1336,6 +1387,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1418,6 +1474,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -1468,6 +1532,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -1573,6 +1642,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1769,6 +1840,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
 | `settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `settlement_current.discount_minor_units` | integer | no | no | 0 | — |
+| `settlement_current.discount` | object \| null | no | yes | null | — |
+| `settlement_current.discount.amount` | string | yes | no | — | — |
+| `settlement_current.discount.currency` | string | yes | no | — | — |
+| `settlement_current.discount.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1851,6 +1927,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount` | object \| null | no | yes | null | — |
+| `revision.lines[].discount.amount` | string | yes | no | — | — |
+| `revision.lines[].discount.currency` | string | yes | no | — | — |
+| `revision.lines[].discount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].suggested_discount_minor_units` | integer | no | no | 0 | — |
+| `revision.lines[].discount_date` | string \| null | no | yes | null | — |
+| `revision.lines[].discount_account_id` | string \| null | no | yes | null | — |
 | `revision.batches` | array[object] | yes | no | — | — |
 | `revision.batches[].id` | string | yes | no | — | — |
 | `revision.batches[].created_at` | string | yes | no | — | — |
@@ -1901,6 +1985,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].reverses_application_id` | string \| null | yes | yes | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
 | `applications[].active` | boolean | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
+| `applications[].discount` | object \| null | no | yes | null | — |
+| `applications[].discount.amount` | string | yes | no | — | — |
+| `applications[].discount.currency` | string | yes | no | — | — |
+| `applications[].discount.minor_units` | integer | yes | no | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -2006,6 +2095,8 @@ Example JSON output:
     },
     "applied_minor_units": 1,
     "currency": "USD",
+    "discount": null,
+    "discount_minor_units": 0,
     "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "source_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
