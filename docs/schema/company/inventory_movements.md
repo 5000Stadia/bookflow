@@ -31,3 +31,5 @@ Database: `company`.
 | `corrects_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_corrects | inventory_movements.id | Issue whose effective cost this delta corrects; null except on recost. |
 | `reverses_movement_id` | VARCHAR(26) | yes | — | unique | — | inventory_movements.id | Movement this row exactly retires; null except on reversal. |
 | `returns_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_returns | inventory_movements.id | Issue this receipt gives back; null except on a return. |
+| `filled_by_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_filled_by | inventory_movements.id | Receipt whose arrival trued up the provisional cost of the issue this recost corrects; null except on a true-up. |
+| `fallback_unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Item purchase cost per base unit captured when this issue was recorded, the provisional cost if the item has never held stock; null except on an issue. |
