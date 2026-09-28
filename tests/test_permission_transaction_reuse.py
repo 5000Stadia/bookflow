@@ -1,4 +1,6 @@
 """Real authority facts remain fresh across mutation and transaction lifetimes."""
+import sqlite3
+
 import pytest
 from bookflow.hub import permission_runtime as runtime, permission_catalog as catalog
 from bookflow.hub.identity_admin import AdministrationError
@@ -25,6 +27,13 @@ def test_repeated_requirement_reuses_facts_but_explicit_observation_is_fresh(pat
         assert runtime.observe_current(db) is not None
         assert len(calls) == 2
         db.raw.execute('ROLLBACK')
+        db.raw.execute('BEGIN')
+        # A new transaction reuses only behind its own fresh authority token read (R74).
+        assert require(db) == first
+        assert len(calls) == 2
+        db.raw.execute('ROLLBACK')
+        with sqlite3.connect(path) as other:  # any committed authority write, from anywhere
+            other.execute("UPDATE users SET display_name=display_name WHERE id='Q'")
         db.raw.execute('BEGIN')
         assert require(db) == first
         assert len(calls) == 3
