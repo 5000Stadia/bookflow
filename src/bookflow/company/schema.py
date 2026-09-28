@@ -206,6 +206,8 @@ company_info = _table(
     _column("automatically_apply_payments", sa.Boolean, "Suggest exact-match then oldest invoice allocations for new cash.", nullable=False, server_default="0"),
     _column("automatically_calculate_payments", sa.Boolean, "Derive amounts for selected invoices while preserving explicitly entered cash.", nullable=False, server_default="0"),
     _column("use_undeposited_funds_for_payments", sa.Boolean, "Default new receipts to Undeposited Funds unless explicitly overridden.", nullable=False, server_default="1"),
+    _column("customer_discount_account_id", sa.String(26), "Default account for early-payment discounts given to customers; null means Discounts Given.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
+    _column("vendor_discount_account_id", sa.String(26), "Default account for early-payment discounts taken from vendors; null means Discounts Taken.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 
@@ -1158,3 +1160,6 @@ globals().update(_define_deposit_deletions(metadata, _column, _table))
 
 from bookflow.company.journal_deletion_schema import define_tables as _define_journal_deletions
 globals().update(_define_journal_deletions(metadata, _column, _table))
+
+from bookflow.company.discount_schema import define_tables as _define_discount_tables
+globals().update(_define_discount_tables(metadata, _column, _table))
