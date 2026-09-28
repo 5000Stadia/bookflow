@@ -50,13 +50,16 @@ AGENT_REASON_MESSAGE = ("Writes by an agent need a reason or an active directive
 
 
 def validate_context(ctx: Context) -> None:
-    fields = []
+    fields, said = [], []
     for name, limit in CONTEXT_LIMITS.items():
         v = getattr(ctx, name)
         if v is not None and len(v) > limit:
-            fields.append({"field": name, "problem": f"at most {limit} characters"})
+            fields.append({"field": name, "problem": f"must be at most {limit} characters"})
+            said.append(f"The {name} is {len(v)} characters; it may be at most {limit}.")
     if fields:
-        raise BookflowError("E_VALIDATION", details={"fields": fields})
+        if fields[0]["field"] == "reason":
+            said.append("Shorten the reason to a short phrase naming what triggered the write.")
+        raise BookflowError("E_VALIDATION", message=" ".join(said), details={"fields": fields})
 
 
 def parse_when(value: str, zone: str | None, end: bool = False) -> str:

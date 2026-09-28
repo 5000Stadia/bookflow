@@ -212,3 +212,18 @@ def explain_permission(error: BookflowError, command: Any) -> BookflowError:
     error.message = permission_message(error.details)
     error.args = (f"{error.code}: {error.message}",)
     return error
+
+
+REASON_LIMIT = 140
+
+
+def require_reason(reason: str | None) -> None:
+    """A write that needs a reason: missing is E_REASON_REQUIRED, over-long a plain field error."""
+    if not reason or not reason.strip():
+        raise BookflowError("E_REASON_REQUIRED")
+    if len(reason) > REASON_LIMIT:
+        raise BookflowError(
+            "E_VALIDATION",
+            message=f"The reason is {len(reason)} characters; a reason may be at most {REASON_LIMIT}. "
+                    "Shorten it to a short phrase naming what triggered the write.",
+            details={"fields": [{"field": "reason", "problem": f"must be at most {REASON_LIMIT} characters"}]})

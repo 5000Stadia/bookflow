@@ -716,7 +716,7 @@ MATRIX['payment unapply'].update({
 MATRIX['payment void'].update({
     'E_HAS_APPLICATIONS': 'the receipt still carries active applications; unapply them before voiding',
     'E_HAS_REFUND': 'a live refund paid this receipt\'s overpayment back; void the refund before voiding the receipt',
-    'E_REASON_REQUIRED': 'the void has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the void has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
     'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
     'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
@@ -746,7 +746,7 @@ MATRIX['payment delete'] = {
 MATRIX['payment update'].update({
     'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',
-    'E_REASON_REQUIRED': 'the correction has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the correction has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on a related invoice named by invoice_versions',
     'E_PREVIEW_STALE': 'the supplied settlement_guard no longer matches, or invoice_versions omits a related invoice; a fresh guard is returned',
     'E_DUPLICATE_NUMBER': 'the corrected receipt number belongs to another payment',

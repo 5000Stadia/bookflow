@@ -13,7 +13,7 @@ from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteO
 from bookflow.company.sales_models import money, _invalid
 from bookflow.core import clock
 from bookflow.core.ids import new_id
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, require_reason
 from bookflow.core.money import Money
 from bookflow.core.registry import Plan
 
@@ -37,8 +37,7 @@ def prepare_effect(s, ctx, inp, provenance):
     dependencies.payment_version(s, old, inp.expected_version)
     if old['status'] != 'posted':
         raise BookflowError('E_VALIDATION', details={'state': 'voided'})
-    if not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140:
-        raise BookflowError('E_REASON_REQUIRED')
+    require_reason(ctx.reason)
     profile = PaymentProfileOutput.model_validate_json(saved['profile_snapshot'])
     original_profile = profile.model_dump(mode='json')
     if inp.payment_method is not None:
