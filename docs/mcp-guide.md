@@ -41,8 +41,11 @@ currently records `interface=http`, `client_name=bookflow-workbench`.
 prefix and follow next_cursor. `bookflow_help` defaults to concise usage with the
 complete input schema, context and errors. Select `view=input_schema`,
 `view=output_schema` or `view=full` for the other complete views. No schema or full
-help is truncated. A command without business fields still needs `input: {}`.
-Reason is a short trigger, at most 140 characters. Reads accept inactive null
+help is truncated. Every view that shows input also carries `example`, one complete
+`bookflow_run` argument object to copy and edit, and `cli_example`. A command without
+business fields still needs `input: {}`.
+Reason is a short trigger, at most 140 characters; an agent write needs one (or an
+active directive) even for a `dry_run` preview. Reads accept inactive null
 optional context and false dry_run; active unsupported context is an error.
 Preview does not save proposed IDs or posted status. Posting an invoice saves it
 to the books and does not send it to the customer.

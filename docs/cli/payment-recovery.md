@@ -22,6 +22,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 `bookflow payment recovery abort --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-recovery-version 2 --disposition discard_entire_attempt --company 'Demo Plumbing Co' --json --reason 'Recover the complete intended draft'`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery abort", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_recovery_version": 2, "disposition": "discard_entire_attempt"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -189,7 +197,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -222,6 +230,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment recovery apply --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --attempt-generation 11111111-1111-4111-8111-111111111111 --intent-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --expected-recovery-version 3 --expected-selection-version 2 --expected-facts-fingerprint bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --company 'Demo Plumbing Co' --json --reason 'Recover the complete intended draft'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery apply", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "attempt_generation": "11111111-1111-4111-8111-111111111111", "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected_recovery_version": 3, "expected_selection_version": 2, "expected_facts_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -393,7 +409,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -426,6 +442,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment recovery begin --recovery-key example-recovery --selection 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --local-baseline-revision 01ARZ3NDEKTSV4RRFFQ69G5FAV --attempt-generation 11111111-1111-4111-8111-111111111111 --declared-entry-count 0 --intent-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --header-intent-action keep --company 'Demo Plumbing Co' --json --reason 'Recover the complete intended draft'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery begin", "input": {"recovery_key": "example-recovery", "selection": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "local_baseline_revision": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "attempt_generation": "11111111-1111-4111-8111-111111111111", "declared_entry_count": 0, "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "header_intent": {"action": "keep"}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -602,7 +626,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -633,6 +657,14 @@ Review the complete sealed attempt against current authorized facts without chan
 ### CLI
 
 `bookflow payment recovery compare --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --attempt-generation 11111111-1111-4111-8111-111111111111 --intent-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery compare", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "attempt_generation": "11111111-1111-4111-8111-111111111111", "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -742,7 +774,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -773,6 +805,14 @@ Read every change or problem in the confirmed generation; relevant fact changes 
 ### CLI
 
 `bookflow payment recovery compare-items --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --attempt-generation 11111111-1111-4111-8111-111111111111 --intent-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --facts-fingerprint bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --kind changes --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery compare-items", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "attempt_generation": "11111111-1111-4111-8111-111111111111", "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "facts_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "kind": "changes"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -850,7 +890,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -881,6 +921,14 @@ Page acknowledged edits, original chunk receipts, or exact missing chunk ranges 
 ### CLI
 
 `bookflow payment recovery items --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --kind missing_ranges --limit 50 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery items", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "kind": "missing_ranges", "limit": 50}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -955,7 +1003,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -986,6 +1034,14 @@ Discover complete and interrupted payment recovery attempts with authorized coun
 ### CLI
 
 `bookflow payment recovery query --state uploading --limit 50 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery query", "input": {"state": "uploading", "limit": 50}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1135,7 +1191,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -1168,6 +1224,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment recovery replace --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-recovery-version 2 --replacement-recovery-key example-recovery --replacement-selection 01ARZ3NDEKTSV4RRFFQ69G5FAV --replacement-expected-version 2 --replacement-local-baseline-revision 01ARZ3NDEKTSV4RRFFQ69G5FAV --replacement-attempt-generation 11111111-1111-4111-8111-111111111111 --replacement-declared-entry-count 0 --replacement-intent-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --replacement-header-intent-action keep --company 'Demo Plumbing Co' --json --reason 'Recover the complete intended draft'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery replace", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_recovery_version": 2, "replacement": {"recovery_key": "example-recovery", "selection": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "local_baseline_revision": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "attempt_generation": "11111111-1111-4111-8111-111111111111", "declared_entry_count": 0, "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "header_intent": {"action": "keep"}}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1346,7 +1410,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -1379,6 +1443,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment recovery seal --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-recovery-version 2 --company 'Demo Plumbing Co' --json --reason 'Recover the complete intended draft'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery seal", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_recovery_version": 2}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1546,7 +1618,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -1577,6 +1649,14 @@ Resolve an acknowledged or uncertain recovery by its identity or original key, w
 ### CLI
 
 `bookflow payment recovery show --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery show", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -1761,7 +1841,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |
@@ -1794,6 +1874,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow payment recovery upload --recovery-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --chunk-index 0 --entries '[{"invoice_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","observed_invoice_version":1,"action":"remove"}]' --company 'Demo Plumbing Co' --json --reason 'Recover the complete intended draft'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment recovery upload", "input": {"recovery_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "chunk_index": 0, "entries": [{"invoice_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "observed_invoice_version": 1, "action": "remove"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1969,7 +2057,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_RECOVERY_FINALIZED` | This recovery action is finalized; inspect its original receipt and current state. |
 | `E_RECOVERY_INCOMPLETE` | The complete attempted edits must be uploaded and reviewed before confirmation. |

@@ -20,6 +20,14 @@ Page the movements a reconciliation draft can clear, newest filters first; each 
 
 `bookflow reconcile candidates 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 50 --filters '{"from_date":"2026-02-01","to_date":"2026-02-28","sort":"date"}' --company 'Demo Plumbing Co' --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile candidates", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "limit": 50, "filters": {"from_date": "2026-02-01", "to_date": "2026-02-28", "sort": "date"}}, "company": "Company ID or name"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -137,7 +145,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
@@ -177,6 +185,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow reconcile finish 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --operation-key example-finish-1 --expected-facts-fingerprint cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --dependency-guard cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --company 'Demo Plumbing Co' --reason 'Certify the February checking statement' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile finish", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "operation_key": "example-finish-1", "expected_facts_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "dependency_guard": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -370,7 +386,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
@@ -411,6 +427,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow reconcile mark 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key example-mark-1 --entries '[{"movement":{"producer":"journal_entry","transaction_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","revision_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","account_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","role":"entered","component_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"},"group_fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","action":"mark"}]' --company 'Demo Plumbing Co' --reason 'Clear the movements the statement shows' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile mark", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "example-mark-1", "entries": [{"movement": {"producer": "journal_entry", "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "role": "entered", "component_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "group_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "action": "mark"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -577,7 +601,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
@@ -616,6 +640,14 @@ Show what a reconciliation draft currently comes to, and hand back the exact fac
 ### CLI
 
 `bookflow reconcile preview 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --company 'Demo Plumbing Co' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile preview", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -723,7 +755,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
@@ -747,7 +779,7 @@ Example JSON output:
 
 ## `reconcile start`
 
-Open a draft for one bank or credit card statement, against an adopted opening or the opening draft that is about to become one.
+Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; an account with no opening needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -763,7 +795,15 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow reconcile start --account 01ARZ3NDEKTSV4RRFFQ69G5FAV --statement-date 2026-02-28 --ending-balance 1482.50 --opening-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --operation-key example-statement-1 --company 'Demo Plumbing Co' --reason 'Reconcile the February checking statement' --json`
+`bookflow reconcile start --account 01ARZ3NDEKTSV4RRFFQ69G5FAV --statement-date 2026-02-28 --ending-balance 1482.50 --operation-key example-statement-1 --company 'Demo Plumbing Co' --reason 'Reconcile the February checking statement' --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile start", "input": {"account": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "statement_date": "2026-02-28", "ending_balance": "1482.50", "operation_key": "example-statement-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -773,8 +813,8 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `account` | `--account` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
 | `statement_date` | `--statement-date` | string | yes | no | — | — |
 | `ending_balance` | `--ending-balance` | string \| object | yes | no | — | A statement balance, as money: "290.00", or "-15.00" when the account is overdrawn. |
-| `opening_id` | `--opening-id` | string \| null | no | yes | null | — |
-| `opening_draft_id` | `--opening-draft-id` | string \| null | no | yes | null | — |
+| `opening_id` | `--opening-id` | string \| null | no | yes | null | The account's adopted reconciliation opening; omit both this and opening_draft_id to use the account's adopted opening. |
+| `opening_draft_id` | `--opening-draft-id` | string \| null | no | yes | null | An open `reconcile opening start` draft this statement follows, when the opening is not finished yet. |
 
 ### Command and context options
 
@@ -925,7 +965,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |

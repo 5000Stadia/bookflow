@@ -384,7 +384,9 @@ for _noun, _selector in (("estimate", "estimate"), ("work-order", "work_order"),
         {_selector: ID, 'expected_version': 2, 'conversion_key': 'paid-work-2026-09', 'date': '2026-09-04', 'deposit_to': 'Checking', 'payment_method': 'Cash', 'amount_received': '10.81'})
 
 # Row22 receipt preparation and immutable settlement commands.
-_PAYMENT_RECEIVE = dict(customer=ID, date='2026-06-01', amount='150.00', payment_method='Check', operation_key='example-receipt-1')
+_PAYMENT_RECEIVE = dict(customer='Riverside Apartments', date='2026-06-01', amount='150.00', payment_method='Check', reference='1042',
+                        operation_key='example-receipt-1',
+                        applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='150.00')]))
 _PAYMENT_EXAMPLES = {
     'payment receive': _PAYMENT_RECEIVE,
     'payment apply': dict(payment=ID, expected_version=1, date='2026-06-01', operation_key='example-apply-1', applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='50.00')])),
@@ -397,8 +399,8 @@ _PAYMENT_EXAMPLES = {
     'application show': dict(application=ID),
     'application history': dict(application=ID, limit=25),
     'payment query': dict(payment_method='Check', limit=25),
-    'payment invoices': dict(mode='new_receipt', customer=ID, date='2026-06-01'),
-    'payment suggest': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00', strategy='exact_then_oldest'),
+    'payment invoices': dict(mode='new_receipt', customer='Riverside Apartments', date='2026-06-01'),
+    'payment suggest': dict(mode='new_receipt', customer='Riverside Apartments', date='2026-06-01', amount='400.00', strategy='exact_then_oldest'),
     'payment calculate': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00', amount_mode='entered'),
     'payment selection create': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00'),
     'payment selection update': dict(selection=ID, expected_version=1, set_items=[dict(invoice=ID, expected_version=1, amount='50.00')]),
@@ -429,7 +431,10 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
     for _field, _value in _payload.items():
         if _field == _positional:
             continue
-        _args.extend(['--' + _field.replace('_', '-'), _payment_json.dumps(_value, separators=(',', ':')) if isinstance(_value, (dict, list)) else str(_value)])
+        # The CLI flattens the applications object into one flag per member (blueprint 5.1).
+        for _flag, _member in ([(_field + '_' + key, member) for key, member in _value.items()]
+                               if _field == 'applications' and isinstance(_value, dict) else [(_field, _value)]):
+            _args.extend(['--' + _flag.replace('_', '-'), _payment_json.dumps(_member, separators=(',', ':')) if isinstance(_member, (dict, list)) else str(_member)])
     _args.extend(['--company', 'Demo Plumbing Co', '--json'])
     if _name in ('payment update', 'payment unapply', 'payment void'):
         _args.extend(['--reason', 'Correct recorded remittance'])
@@ -937,7 +942,7 @@ _RECONCILE_EXAMPLES = {
         evidence=dict(format=1, statement_reference='Jan 2026 checking statement', entered_text=None),
         operation_key='example-opening-1'),
     'reconcile start': dict(
-        account=ID, statement_date='2026-02-28', ending_balance='1482.50', opening_id=ID,
+        account=ID, statement_date='2026-02-28', ending_balance='1482.50',
         operation_key='example-statement-1'),
     'reconcile mark': dict(
         draft=ID, expected_version=1, operation_key='example-mark-1',
@@ -1023,3 +1028,14 @@ EXAMPLES['credit-memo delete'] = Example(
 EXAMPLES['deposit delete'] = Example(
     f'bookflow deposit delete {ID} --expected-version 1 --operation-key deposit-delete-example --dependency-guard GUARD --reason "Banked into the wrong account" --company "Demo Plumbing Co" --json',
     {'deposit': ID, 'expected_version': 1, 'operation_key': 'deposit-delete-example'})
+
+
+# The examples a first-time agent reaches for first (blind trials, 2026-09-27) show the real
+# search and filter fields rather than only a page size.
+EXAMPLES.update({
+    "customer query": Example('bookflow customer query --query Riverside --limit 25 --company "Demo Plumbing Co" --json',
+                              {"query": "Riverside", "limit": 25}),
+    "invoice query": Example('bookflow invoice query --customer "Riverside Apartments" --status posted --direction asc'
+                             ' --limit 25 --company "Demo Plumbing Co" --json',
+                             {"customer": "Riverside Apartments", "status": "posted", "direction": "asc", "limit": 25}),
+})

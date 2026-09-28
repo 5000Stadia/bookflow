@@ -20,6 +20,14 @@ Calculate exact positive split net movement; validate offset accounts, parties a
 
 `bookflow register calculate --account Checking --direction decrease --allocations '[{"account":"Professional Fees","amount":"120.00"},{"account":"Professional Fees","amount":"20.00","direction":"increase"}]' --company "Demo Plumbing Co" --json`
 
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "register calculate", "input": {"account": "Checking", "direction": "decrease", "allocations": [{"account": "Professional Fees", "amount": "120.00"}, {"account": "Professional Fees", "amount": "20.00", "direction": "increase"}]}, "company": "Company ID or name"}
+```
+
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
@@ -105,7 +113,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -133,6 +141,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow register post --account Checking --date 2026-04-01 --direction decrease --amount 125.00 --category "Professional Fees" --company "Demo Plumbing Co" --reason "Record professional fees" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "register post", "input": {"account": "Checking", "date": "2026-04-01", "direction": "decrease", "amount": "125.00", "category": "Professional Fees"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -487,7 +503,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -500,7 +516,7 @@ Example JSON output:
 
 ## `register query`
 
-Page account register history with normal-side balances and a separate all-entries balance snapshot.
+Page one account's register between date_from and date_to (both required, YYYY-MM-DD) with normal-side running balances and a separate all-entries balance snapshot.
 
 | Contract | Value |
 |---|---|
@@ -515,6 +531,14 @@ Page account register history with normal-side balances and a separate all-entri
 ### CLI
 
 `bookflow register query --account Checking --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "register query", "input": {"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}, "company": "Company ID or name"}
+```
 
 ### Input
 
@@ -782,7 +806,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -810,6 +834,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 ### CLI
 
 `bookflow register update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --selected-line-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --category-line-id 01ARZ3NDEKTSV4RRFFQ69G5FAV --account Checking --date 2026-04-01 --direction decrease --amount 125.00 --category "Professional Fees" --memo "Professional fee receipt" --company "Demo Plumbing Co" --reason "Clarify payment memo" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "register update", "input": {"journal": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "selected_line_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "category_line_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "account": "Checking", "date": "2026-04-01", "direction": "decrease", "amount": "125.00", "category": "Professional Fees", "memo": "Professional fee receipt"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
 
 ### Input
 
@@ -1169,7 +1201,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
