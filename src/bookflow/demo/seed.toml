@@ -2253,3 +2253,11 @@ command = "bill post"
 capture = "shipping_demo_bill"
 input = { date = "2026-12-12", receipts = [{ receipt_line = "${shipping_demo_receipt.items.0.id}", expected_receipt_version = "${shipping_demo_receipt.version}", quantity = "2", unit_cost = "8.00" }] }
 reason = "Bill two products at eight plus their retained eight shipping; no second receipt"
+
+# The company's most common sales tax item, as the anchor asks for whenever sales
+# tax is on: a sale that names none captures it. Set last, so every example above
+# keeps exactly the facts it captured.
+[[commands]]
+command = "company update"
+reason = "Most common sales tax item for new sales"
+input = { default_sales_tax_item_id = "${tax_group_item.id}" }
