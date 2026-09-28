@@ -688,6 +688,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -719,8 +724,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -791,6 +796,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -813,6 +843,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -1428,6 +1460,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -1459,8 +1496,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -1531,6 +1568,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -1553,6 +1615,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -1914,6 +1978,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_level` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_basis_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
@@ -2229,6 +2294,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -2260,8 +2330,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -2332,6 +2402,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -2354,6 +2449,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -3273,6 +3370,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -3321,8 +3423,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -3393,6 +3495,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -3671,8 +3798,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -4603,6 +4731,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -4651,8 +4784,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -4723,6 +4856,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -5001,8 +5159,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -5665,6 +5824,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -5696,8 +5860,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -5768,6 +5932,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -5790,6 +5979,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
@@ -6131,6 +6322,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_level` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_basis_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
@@ -6449,6 +6641,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. |
+| `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows when it differs from net: a subtotal's sum, a discount's negative amount, or a line's amount before the discounts taken out of its net. |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].document_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -6480,8 +6677,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.version` | integer | yes | no | — | — |
-| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].facts.profile.income_account` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].facts.profile.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.income_account.full_name` | string | yes | no | — | — |
@@ -6552,6 +6749,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].facts.profile.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].facts.profile.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].facts.profile.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.item` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -6574,6 +6796,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.lines[].facts.taxes[].taxable_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |

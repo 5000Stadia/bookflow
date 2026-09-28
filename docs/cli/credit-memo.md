@@ -826,8 +826,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -898,6 +898,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -1785,8 +1810,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -1857,6 +1882,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2576,8 +2626,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -2648,6 +2698,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -3363,8 +3438,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
-| `revision.lines[].item_snapshot.income_account` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part", "subtotal", "discount"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.income_account` | object \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot.income_account.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.name` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.income_account.full_name` | string | yes | no | — | — |
@@ -3435,6 +3510,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
+| `revision.lines[].item_snapshot.adjustment` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.adjustment.kind` | literal["subtotal", "discount", "charge"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.applies_to` | literal["line", "subtotal"] \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.percent_millionths` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.base_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.adjustment.account.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.type` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.item.version` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.group.description` | string \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.group.print_members` | boolean | yes | no | — | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |

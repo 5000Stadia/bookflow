@@ -2304,3 +2304,19 @@ command = "bill pay"
 capture = "contractor_card_payment"
 reason = "Pay the materials bill on the company card"
 input = { number = "DEMO-1099-PAY-2", date = "2026-12-09", bills = [{ bill = "${contractor_materials_bill.id}" }], funding_account = "${register_card.id}", method = "Visa", memo = "Liner resin on the card" }
+
+# R147: one invoice that uses the line kinds a sales form carries besides sold items. Two
+# services and a part, a subtotal of them, the loyalty discount taking 5% off that subtotal
+# (shared over the three lines by their amounts, taxable, so tax is charged on what is left),
+# then the drain bundle, which expands into its member line when it is entered.
+[[commands]]
+command = "customer create"
+capture = "line_kinds_customer"
+reason = "A customer for the subtotal, discount and group example"
+input = { name = "Line Kinds Example Customer" }
+
+[[commands]]
+command = "invoice post"
+capture = "line_kinds_invoice"
+reason = "Keep an active example of a subtotal, a percentage discount and a group item on one sale"
+input = { date = "2026-12-10", number = "DEMO-LINE-KINDS", customer = "${line_kinds_customer.id}", lines = [{ item = "${service_item.id}", quantity = "2" }, { item = "${noninventory_item.id}", quantity = "4" }, { item = "${subtotal_item.id}" }, { item = "${discount_item.id}" }, { item = "${group_item.id}" }] }

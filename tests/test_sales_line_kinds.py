@@ -278,3 +278,12 @@ def test_sales_receipt_takes_the_same_lines(client, kinds):
         lines=[dict(item=k['labor']), dict(item=k['five_off'])]), company=COMPANY)
     assert shown(result) == [('item', 10000, 9500, 950, [9500]), ('discount', -500, 0, 0, [])]
     assert result['total_minor_units'] == 10450
+
+
+def test_a_cleared_unit_is_no_unit_on_subtotal_and_discount_lines(client, kinds):
+    # A form (and an agent copying it) sends an explicit null unit once an item is chosen.
+    k = kinds
+    result = post(client, k, [dict(item=k['labor'], unit=None), dict(item=k['subtotal'], unit=None, tax_code=None),
+                              dict(item=k['off_taxed'], unit=None)])
+    assert shown(result) == [('item', 10000, 9000, 900, [9000]), ('subtotal', 10000, 0, 0, []),
+                             ('discount', -1000, 0, 0, [])]

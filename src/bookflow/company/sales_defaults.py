@@ -602,9 +602,11 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                        'charge' if percent_line is not None else None)
     if adjustment_role is not None:
         # Nothing on these lines is priced per unit: the amount comes from the lines above.
-        banned = sorted(fields.supplied & {'unit', 'unit_price', 'price_level', 'price_basis_amount'})
+        # A cleared value is no value: a form sends an empty unit once an item is chosen.
+        given = {field for field in fields.supplied if getattr(inp, field, None) is not None}
+        banned = sorted(given & {'unit', 'unit_price', 'price_level', 'price_basis_amount'})
         if adjustment_role == 'subtotal':
-            banned += sorted(fields.supplied & {'net_amount', 'percent', 'tax_code'})
+            banned += sorted(given & {'net_amount', 'percent', 'tax_code'})
         if banned:
             raise _invalid(banned[0], f'a {"percentage charge" if adjustment_role == "charge" else adjustment_role} '
                                       'line takes no ' + banned[0].replace('_', ' '))

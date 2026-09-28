@@ -189,22 +189,22 @@ def posting_documents(client, company):
 DEMO_POSITION = {
     'balances': {
         'Checking': 657295,
-        'Accounts Receivable': 13839,
+        'Accounts Receivable': 61621,
         'Inventory Asset': 36184,
         'Accounts Payable': -7810,
-        'Sales Tax Payable': -4004,
+        'Sales Tax Payable': -7646,
         'Opening Balance Equity': -500000,
-        'Service Income': -215630,
+        'Service Income': -259770,
         'Cost of Goods Sold': 523,
         'Professional Fees': 339823,
         'Business Credit Card': -20000,
         'Payment Example Bank': -282220,
         'Payment Example Income': -18000,
     },
-    'trial_balance': 1047664,
+    'trial_balance': 1095446,
     'journal_entries': 19,
-    'net_income': -106716,
-    'total_equity': 393284,
+    'net_income': -62576,
+    'total_equity': 437424,
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -231,6 +231,7 @@ DEMO_ARCS = {
     'DEMO-KIT-': 'service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
     'DEMO-1099-': 'a 1099 subcontractor: a bill paid by check and a bill paid on the card',
+    'DEMO-LINE-KINDS': 'a subtotal, a percentage discount and a group item on one invoice',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`
