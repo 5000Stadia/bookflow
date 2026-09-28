@@ -137,7 +137,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # deactivate/activate add one node each (+4, R89); report export adds none (R145).
     # 2864 -> 2876: R147 (sales line kinds) adds 12 input variants to the sales and quote posts.
     # 2876 -> 2878: user list and membership list gain optional paging (the cursor null branch each, R88).
-    assert sum(len(group["paths"]) for group in mapped)==2878
+    # 2878 -> 2881: sales-tax liability reads a period (R72 trial fix). Its optional as_of,
+    # date_from and date_to each add one null branch: 2 -> 5 nodes on that command, measured per
+    # command on both trees; the reconcile inputs are unchanged (only preview's output grew).
+    assert sum(len(group["paths"]) for group in mapped)==2881
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

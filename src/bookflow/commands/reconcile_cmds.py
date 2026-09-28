@@ -169,10 +169,15 @@ def _start_family(verb, model, description):
 reconcile_opening_start = _start_family(
     'opening start', m.OpeningStart,
     'First step for an account never reconciled in Bookflow: open a draft that adopts a bank or '
-    'credit card account at an opening date and balance from the last statement you trust, '
-    'classifying everything dated on or before that date as covered by the entered balance or still '
-    'outstanding. Tick with `reconcile mark`, certify with `reconcile finish`, then reconcile each '
-    'later statement with `reconcile start`.')
+    'credit card account at an opening date and balance. If you have an earlier statement you '
+    'trust, use its date and ending balance and mark what it covered. If this is the first '
+    'statement ever (no earlier one), start from zero the way a first reconciliation does: an '
+    'opening_date before the account\'s first movement and entered_balance 0.00, marking nothing. '
+    'The opening is not finished on its own: next run `reconcile start` with opening_draft_id set '
+    'to this draft and the statement\'s date (after the opening date) and ending balance, tick its '
+    'movements with `reconcile mark`, and `reconcile finish` that statement draft, which '
+    'certifies the opening and the statement together. Later statements use `reconcile start` '
+    'alone.')
 
 reconcile_start = _start_family(
     'start', m.Start,
@@ -252,6 +257,10 @@ def _finish_prepare(inp, ctx, s, ids):
     account_id = _account_of(s, inp.draft)
     snapshot = _loaded(s, account_id)
     value = _draft(snapshot, inp.draft)
+    # Named before any fingerprint: an opening draft is finished through its first statement,
+    # and the refusal says so instead of reporting a stale or mismatched guard.
+    preparation.require(value.kind in ('statement', 'amendment') and value.state == 'open',
+                        'E_RECONCILIATION_DRAFT_STATE', lambda: preparation.statement_only(value))
     preparation.require(value.version == inp.expected_version, 'E_VERSION_CONFLICT')
     preparation.require(inp.dependency_guard == dependency_guard(value), 'E_RECONCILIATION_CHAIN_STALE')
     preparation.require(inp.expected_facts_fingerprint == preparation.fingerprint(snapshot, value),
@@ -262,8 +271,10 @@ def _finish_prepare(inp, ctx, s, ids):
 
 reconcile_finish = command(
     'reconcile finish', scope='company',
-    description='Certify a reconciliation whose difference is zero, storing the statement it '
-                'reconciles to and the account exactly as it stood when it was certified.',
+    description='Certify a statement reconciliation whose difference is zero, storing the statement '
+                'it reconciles to and the account exactly as it stood when it was certified. Takes a '
+                'statement draft from `reconcile start`, never an opening draft: on an account\'s '
+                'first reconciliation the opening that statement follows is certified with it.',
     input_model=m.Finish, output_model=m.FinishOutput, writes={'company'}, required_role='standard',
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
     error_codes=list(ERRORS))(
@@ -450,6 +461,7 @@ def _preview(inp, ctx, s):
         draft=value.id, account_id=account_id,
         currency=snapshot.source.accounts[account_id]['currency'],
         kind=value.kind, version=value.version,
+        next_step=preparation.FIRST_RECONCILIATION if value.kind == 'opening' else None,
         totals=totals, expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
         dependency_guard=dependency_guard(value), balanced=totals.difference == 0))
 
@@ -457,6 +469,7 @@ def _preview(inp, ctx, s):
 reconcile_preview = command(
     'reconcile preview', scope='company',
     description='Show what a reconciliation draft currently comes to, and hand back the exact '
-                'facts fingerprint and dependency guard `reconcile finish` requires.',
+                'facts fingerprint and dependency guard `reconcile finish` requires. On an opening '
+                'draft, next_step says how it is finished: through its first statement.',
     input_model=m.Preview, output_model=m.PreviewOutput, required_role='member',
     capability='ledger.read', positional=['draft'], error_codes=list(ERRORS))(_preview)

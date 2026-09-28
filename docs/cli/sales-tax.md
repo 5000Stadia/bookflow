@@ -4,7 +4,7 @@
 
 ## `sales-tax liability`
 
-How much sales tax is owed, by agency, as of a date (as_of), from the tax the books recorded. Each row is one agency with the tax charged on posted sales, the tax taken back by credit memos, what has been remitted, and the balance still owed; an effect on the sales tax payable account that names no agency -- a journal entry posted straight at it -- is its own row rather than dropped, so the total is that account's balance on the balance sheet for the same date. Accrual only: the liability is recorded when the invoice is, which is the only basis on which this product records tax at all, and a company set to the payment-receipt basis is refused rather than answered. Totals cover every agency and rows are paged.
+How much sales tax is owed, by agency, from the tax the books recorded -- for one date (as_of) or for a period (date_from and date_to). For one month's tax, such as September so far, pass date_from=2026-09-01 and date_to=2026-09-28: tax_charged is the tax collected in that period, tax_credited, remitted and unattributed (adjustments) are what moved in it, beginning_balance is what was owed the day before date_from and balance is what is owed at date_to. With as_of alone every column runs from the start of the books and balance is the running total owed, not one month's tax. Each row is one agency with the tax charged on posted sales, the tax taken back by credit memos, what has been remitted, and the balance still owed; an effect on the sales tax payable account that names no agency -- a journal entry posted straight at it -- is its own row rather than dropped, so the total is that account's balance on the balance sheet for the same date. Accrual only: the liability is recorded when the invoice is, which is the only basis on which this product records tax at all, and a company set to the payment-receipt basis is refused rather than answered. Totals cover every agency and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -18,21 +18,23 @@ How much sales tax is owed, by agency, as of a date (as_of), from the tax the bo
 
 ### CLI
 
-`bookflow sales-tax liability --as-of 2026-03-31 --limit 25 --company "Demo Plumbing Co" --json`
+`bookflow sales-tax liability --date-from 2026-01-01 --date-to 2026-03-31 --limit 25 --company "Demo Plumbing Co" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "sales-tax liability", "input": {"as_of": "2026-03-31", "limit": 25}, "company": "Company ID or name"}
+{"command": "sales-tax liability", "input": {"date_from": "2026-01-01", "date_to": "2026-03-31", "limit": 25}, "company": "Company ID or name"}
 ```
 
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; tax effects on or before it are counted.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string \| null | no | yes | null | Inclusive last accounting date, YYYY-MM-DD: the balance owed on this date. The same as date_to; pass one or the other. |
+| `date_from` | `--date-from` | string \| null | no | yes | null | Optional inclusive first accounting date, YYYY-MM-DD. With it, the charged, credited, remitted and adjustment columns cover only the period date_from..date_to (a month's tax: 2026-09-01..2026-09-30), beginning_balance is what was owed the day before it, and balance is what is owed at date_to. Without it, the columns run from the start of the books. |
+| `date_to` | `--date-to` | string \| null | no | yes | null | Inclusive last accounting date, YYYY-MM-DD; another name for as_of. |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `agency` | `--agency` | string \| null | no | yes | null | Optional tax agency vendor ID or name; omit for every agency with a balance. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -78,6 +80,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
 | `next_cursor` | string \| null | yes | yes | — | — |
 | `totals` | object | yes | no | — | — |
+| `totals.beginning_balance` | object \| null | no | yes | null | — |
+| `totals.beginning_balance.amount` | string | yes | no | — | — |
+| `totals.beginning_balance.currency` | string | yes | no | — | — |
+| `totals.beginning_balance.minor_units` | integer | yes | no | — | — |
 | `totals.tax_charged` | object | yes | no | — | — |
 | `totals.tax_charged.amount` | string | yes | no | — | — |
 | `totals.tax_charged.currency` | string | yes | no | — | — |
@@ -104,6 +110,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].display_agency_label` | string | yes | no | — | — |
 | `rows[].active` | boolean \| null | yes | yes | — | — |
 | `rows[].is_tax_agency` | boolean \| null | yes | yes | — | — |
+| `rows[].beginning_balance` | object \| null | no | yes | null | — |
+| `rows[].beginning_balance.amount` | string | yes | no | — | — |
+| `rows[].beginning_balance.currency` | string | yes | no | — | — |
+| `rows[].beginning_balance.minor_units` | integer | yes | no | — | — |
 | `rows[].tax_charged` | object | yes | no | — | — |
 | `rows[].tax_charged.amount` | string | yes | no | — | — |
 | `rows[].tax_charged.currency` | string | yes | no | — | — |
@@ -151,6 +161,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "beginning_balance": null,
     "remitted": {
       "amount": "value",
       "currency": "USD",

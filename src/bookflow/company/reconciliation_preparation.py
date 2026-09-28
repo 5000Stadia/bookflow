@@ -21,14 +21,14 @@ from contextlib import contextmanager
 PRIVATE_REASONS=frozenset({'E_RECONCILIATION_ATTEMPT_STATE','E_RECONCILIATION_CHAIN_STALE','E_RECONCILIATION_DATE','E_RECONCILIATION_DEPENDENCY','E_RECONCILIATION_DIFFERENCE','E_RECONCILIATION_DRAFT_STATE','E_RECONCILIATION_MANIFEST','E_RECONCILIATION_MEMBERSHIP_CONFLICT','E_RECONCILIATION_OPENING_UNPROVEN','E_RECONCILIATION_OPERATION_KEY_REUSED','E_RECONCILIATION_SELECTION_STALE','E_RECONCILIATION_SOURCE_INVALID','E_RECONCILIATION_UNSUPPORTED'})
 
 class ReconciliationError(BookflowError):
-    def __init__(self,rule):
+    def __init__(self,rule,details=None):
         if rule not in ALL_CODES and rule not in PRIVATE_REASONS:raise ValueError('unknown private reconciliation rule')
         self.rule=rule
         if rule in ALL_CODES:
-            super().__init__(rule)
+            super().__init__(rule,details=details)
         else:
             code='E_INTERNAL' if rule=='E_RECONCILIATION_SOURCE_INVALID' else 'E_VALIDATION'
-            super().__init__(code,message=rule,details={'reason':rule})
+            super().__init__(code,message=rule,details={'reason':rule,**(details or {})})
 
 @contextmanager
 def adapter_errors():
@@ -40,8 +40,31 @@ def adapter_errors():
         raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID') from exc
 
 
-def require(condition,code):
-    if not condition:raise ReconciliationError(code)
+def require(condition,code,details=None):
+    """Refuse with ``code``; ``details`` may be a callable so a passing check builds nothing."""
+    if not condition:raise ReconciliationError(code,details() if callable(details) else details)
+
+# How an account's first reconciliation goes, for the refusals that meet someone on the wrong
+# step. The opening is never certified alone: `reconcile finish` writes it together with the
+# first statement's certificate (design/architecture.md, the reconcile writes).
+FIRST_RECONCILIATION=('An opening is certified together with the first statement, not by itself: run '
+    '`reconcile start` with opening_draft_id set to the opening draft and a statement_date after the '
+    'opening date, tick the statement with `reconcile mark`, then `reconcile finish` that statement '
+    'draft. With no earlier statement, open the opening before the account\'s first movement with '
+    'entered_balance 0.00 and tick every movement on the statement, as a first reconciliation '
+    'starts from zero.')
+
+def statement_only(draft):
+    """Details for a statement step handed a draft it does not take."""
+    if draft.state!='open':
+        return {'draft_kind':draft.kind,'draft_state':draft.state,'accepts':['statement','amendment'],
+                'next':'This draft is '+draft.state+'; start a new one with `reconcile start`.'}
+    if draft.kind=='opening':
+        return {'draft_kind':'opening','accepts':['statement','amendment'],
+                'opening_date':draft.header.opening_date,'next_command':'reconcile start',
+                'next_input':{'opening_draft_id':draft.id,'statement_date':'a date after '+draft.header.opening_date},
+                'next':FIRST_RECONCILIATION}
+    return {'draft_kind':draft.kind,'accepts':['statement','amendment']}
 
 def bounded(value):
     require(type(value) is int and -(2**63)<=value<2**63,'E_VALUE_RANGE')
@@ -166,28 +189,31 @@ def claimed(s):
 _HEAD = object()
 
 def _statement(s,draft, *, predecessor=_HEAD, released_keys=frozenset(), opening_draft=None, replacement_opening=None):
-    require(draft.kind in ('statement','amendment') and draft.state=='open','E_RECONCILIATION_DRAFT_STATE')
+    require(draft.kind in ('statement','amendment') and draft.state=='open','E_RECONCILIATION_DRAFT_STATE',lambda:statement_only(draft))
     account_population(s,draft.account_id,draft.header.statement_date)
     state=next((v for v in s.rows['accounts'] if v['account_id']==draft.account_id),None)
     require(draft.base_chain_version==(state['version'] if state else 0),'E_RECONCILIATION_CHAIN_STALE')
     if opening_draft is not None:
         require(state is None and opening_draft.account_id==draft.account_id,'E_RECONCILIATION_MANIFEST')
-        opening(s,opening_draft);beginning=opening_draft.header.entered_balance;previous_date=opening_draft.header.opening_date
+        opening(s,opening_draft);beginning=opening_draft.header.entered_balance;previous_date=opening_draft.header.opening_date;after='opening date'
         excluded={v.key_id for v in opening_draft.selections if v.action=='covered'}
     else:
         require(state is not None and state['opening_id']==draft.base_opening_id,'E_RECONCILIATION_CHAIN_STALE')
         base=s.by('openings')[state['opening_id']]
         old=predecessor if predecessor is not _HEAD else (s.by('certificates')[state['head_certificate_id']] if state['head_certificate_id'] else None)
         if draft.kind=='statement':require(draft.base_head_id==state['head_certificate_id'],'E_RECONCILIATION_CHAIN_STALE')
-        beginning=old['ending_balance'] if old else base['balance'];previous_date=old['statement_date'] if old else base['opening_date']
+        beginning=old['ending_balance'] if old else base['balance'];previous_date=old['statement_date'] if old else base['opening_date'];after='previous statement date' if old else 'opening date'
         excluded={v['key_id'] for v in s.rows['opening_members'] if v['opening_id']==base['id'] and v['classification']=='covered'}
     if replacement_opening is not None:
         require(replacement_opening.account_id==draft.account_id,'E_RECONCILIATION_MANIFEST')
         opening(s,replacement_opening)
         excluded={v.key_id for v in replacement_opening.selections if v.action=='covered'}
         if predecessor is None:
-            beginning=replacement_opening.header.entered_balance;previous_date=replacement_opening.header.opening_date
-    require(previous_date<draft.header.statement_date,'E_RECONCILIATION_DATE')
+            beginning=replacement_opening.header.entered_balance;previous_date=replacement_opening.header.opening_date;after='opening date'
+    require(previous_date<draft.header.statement_date,'E_RECONCILIATION_DATE',lambda:{
+        'draft_kind':draft.kind,'statement_date':draft.header.statement_date,'previous_date':previous_date,
+        'next':'The statement date must be after '+previous_date+', the '+after
+               +('. '+FIRST_RECONCILIATION if opening_draft is not None else '.')})
     selected=whole_selection(s,draft)
     require(all(v.action=='mark' for v in draft.selections),'E_RECONCILIATION_MANIFEST')
     require(all(v['effective_date']<=draft.header.statement_date for v in selected),'E_RECONCILIATION_DATE')

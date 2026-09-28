@@ -4,7 +4,7 @@
 
 ## `reconcile opening start`
 
-First step for an account never reconciled in Bookflow: open a draft that adopts a bank or credit card account at an opening date and balance from the last statement you trust, classifying everything dated on or before that date as covered by the entered balance or still outstanding. Tick with `reconcile mark`, certify with `reconcile finish`, then reconcile each later statement with `reconcile start`.
+First step for an account never reconciled in Bookflow: open a draft that adopts a bank or credit card account at an opening date and balance. If you have an earlier statement you trust, use its date and ending balance and mark what it covered. If this is the first statement ever (no earlier one), start from zero the way a first reconciliation does: an opening_date before the account's first movement and entered_balance 0.00, marking nothing. The opening is not finished on its own: next run `reconcile start` with opening_draft_id set to this draft and the statement's date (after the opening date) and ending balance, tick its movements with `reconcile mark`, and `reconcile finish` that statement draft, which certifies the opening and the statement together. Later statements use `reconcile start` alone.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
