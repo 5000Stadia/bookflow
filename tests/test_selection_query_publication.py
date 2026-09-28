@@ -62,8 +62,12 @@ def test_201_registered_pages_cursors_and_sql_slope(hosted,drafts,monkeypatch,tm
     command=registry.get('payment selection query');current=command.plan
     original,source_hash=old_planner();old=frozen('src/bookflow/core/publication_payment.py');check=pp.check
     executions={'old':0,'new':0};fences=[]
+    traced=[None];fence_work=[]
     def observed(s,roots):
-        fences.append((s.company,tuple(roots)));return check(s,roots)
+        fences.append((s.company,tuple(roots)));mark=None if traced[0] is None else len(traced[0])
+        try:return check(s,roots)
+        finally:
+            if mark is not None:fence_work.append(len(traced[0])-mark)
     def run(which,args):
         planner=original if which=='old' else current
         def counted(*a,**kw):executions[which]+=1;return planner(*a,**kw)
@@ -89,7 +93,7 @@ def test_201_registered_pages_cursors_and_sql_slope(hosted,drafts,monkeypatch,tm
     if state!='open' or limit!=200:
         assert raw_snapshot(hosted.root,hosted.company_id)==before
         return
-    counts={};cohorts={};helper=[];init=pa._PublicationSelectionCohort.__init__
+    counts={};cohorts={};per_fence={};helper=[];init=pa._PublicationSelectionCohort.__init__
     def measured(self,db,ids):helper.append((db,list(ids)));init(self,db,ids)
     monkeypatch.setattr(pa._PublicationSelectionCohort,'__init__',measured)
     # The seed includes consumed/recovery histories. Use a current ordinary open
@@ -97,7 +101,7 @@ def test_201_registered_pages_cursors_and_sql_slope(hosted,drafts,monkeypatch,tm
     for limit in (10,200):
         counts[limit]={}
         for which in ('old','new'):
-            statements=[];connections=[]
+            statements=[];connections=[];fence_work.clear();traced[0]=statements if which=='new' else None
             def attach(connection,record,proxy):connection.set_trace_callback(statements.append);connections.append(connection)
             sa.event.listen(sa.engine.Engine,'checkout',attach)
             try:
@@ -112,13 +116,15 @@ def test_201_registered_pages_cursors_and_sql_slope(hosted,drafts,monkeypatch,tm
             if which=='new':
                 # Every publication fence reads the whole page as one cohort, never row by row.
                 assert helper and all(len(ids)==limit for _,ids in helper)
-                cohorts[limit]=len(helper)
-    # The new planner's work is flat in the page size: the same statements and the same number
-    # of cohort reads for 10 rows as for 200. The frozen old planner grows by its known slope.
-    # (How many fences a request runs is the host's business, not a number pinned here.)
-    assert counts[10]['new']==counts[200]['new'] and cohorts[10]==cohorts[200]
-    assert counts[200]['old']['statements']-counts[10]['old']['statements']==2280
-    assert counts[200]['old']['selects']-counts[10]['old']['selects']==2280
+                cohorts[limit]=len(helper);per_fence[limit]=list(fence_work)
+    # The new planner's work is flat in the page size: every fence runs the same statements for
+    # 10 rows as for 200. The frozen old planner grows by its known slope. How many fences a
+    # request runs is the host's business (one per 64 KiB frame released), not a number pinned
+    # here, so the request's total is not compared.
+    assert per_fence[10] and per_fence[200] and len(set(per_fence[10]+per_fence[200]))==1,per_fence
+    # At least its 12 reads per row; its total also carries each extra frame's fence.
+    assert counts[200]['old']['statements']-counts[10]['old']['statements']>=2280
+    assert counts[200]['old']['selects']-counts[10]['old']['selects']>=2280
     assert counts[10]['new']['statements']<counts[10]['old']['statements']
     assert raw_snapshot(hosted.root,hosted.company_id)==before
     invalid=hosted.call('payment.selection.query',{'cursor':'invalid'},company=hosted.company_id)
