@@ -33,7 +33,9 @@ def admit(s, ctx=None, binding=None, *, sources=(), draft=None, selection=None, 
         view.memberships=[row for row in view.memberships if (row['scope_type'],row['scope_id']) in applicable]
         scope,role=access.company_role(view,s.company_row['id'],s.company_row['organization_id'])
         if role is None:raise BookflowError('E_COMPANY_NOT_FOUND')
-        if not access.role_satisfies(role,scope,'standard' if write else 'member',False):raise BookflowError('E_PERMISSION')
+        if not access.role_satisfies(role,scope,'standard' if write else 'member',False):
+            raise BookflowError('E_PERMISSION',details={'capability':'ledger.post' if write else 'ledger.read',
+                                                        'required_role':'standard' if write else 'member'})
     if ctx and ctx.on_behalf_of!=binding.on_behalf_of:raise BookflowError('E_UNAUTHENTICATED')
     history._authorize_binding_graph(s,binding,(),write=write)
     targets=set(sources);drafts=set([draft] if draft else []);selections=set([selection] if selection else [])

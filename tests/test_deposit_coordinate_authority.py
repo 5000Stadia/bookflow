@@ -9,6 +9,11 @@ from tests.test_deposit_coordinate_persistence import n2,prepare,sale,driver
 from tests.test_deposit_dependency_binding import bound_people,observe,_storage,_credential
 from tests.test_row8_journal import database_path
 
+# A refusal names the requirement that refused (capability, threshold, rule) and
+# never an identity, a role or a record (R84; blueprint 4.3b).
+REFUSAL={'capability','required_role','reason'}
+
+
 
 def test_cross_actor_recovery_cursor_binding_and_original_command_gate(root,client,sale,driver,n2,monkeypatch,bound_people):
     inp,*_=n2;people=bound_people
@@ -42,7 +47,7 @@ def test_cross_actor_recovery_cursor_binding_and_original_command_gate(root,clie
         binding=OSBinding.from_session(s)
         for key in (inp.operation_key,'C-absent-key'):
             with pytest.raises(BookflowError) as error:persistence.recover(s,ctx,inp.model_copy(update={'operation_key':key}),binding)
-            assert error.value.code=='E_PERMISSION' and error.value.details=={}
+            assert error.value.code=='E_PERMISSION' and set(error.value.details)<=REFUSAL
         assert pages.items(s,inp.operation_key,'memberships',PageInput(),binding).total_count==4
     observe(people['one'],monkeypatch,readonly,people['company'])
     assert _storage(root,database_path(client))==baseline
@@ -70,7 +75,7 @@ def test_actual_fixed_principal_recovery_rejects_without_storage_effect(root,cli
         for submitted in (inp,inp.model_copy(update={'operation_key':'C-never-saved'})):
             with pytest.raises(BookflowError) as error:persistence.recover(s,ctx,submitted,credential)
             assert error.value.code==('E_PERMISSION' if case=='principal_loss' else 'E_UNAUTHENTICATED')
-            if case=='principal_loss':assert error.value.details=={}
+            if case=='principal_loss':assert set(error.value.details)<=REFUSAL
     observe(people['bot'],monkeypatch,denied,people['company'])
     assert _storage(root,database_path(client))==baseline
 
