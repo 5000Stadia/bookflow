@@ -35,6 +35,41 @@ from bookflow.storage.engine import open_database
 # demo every figure below and every date-pinned test was written against.
 DEMO_AS_OF = tomllib.loads(files('bookflow.demo').joinpath('seed.toml').read_text(encoding='utf-8'))['calendar']['written_as_of']
 
+# The in-place edits R83 made to seed text that earlier appends had frozen, and nothing else. A
+# demo moved into the past accepts an estimate after its expiry, so the acceptance acknowledges
+# it; month names that a moved story would contradict became neutral. The exact-prefix witnesses
+# compare the old bytes with these edits applied, so any other change to old text still fails.
+R83_SEED_EDITS = (
+    (b'''reason = "Record the customer's acceptance of alternative B"
+input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "decision_note"''',
+     b'''reason = "Record the customer's acceptance of alternative B"
+# The customer accepted within the estimate's validity, but the acceptance is entered on the
+# reset day, when a demo moved into the past shows the estimate as expired.
+input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "acknowledge_expired" = true, "decision_note"'''),
+    (b'"PO-2026-11"', b'"PO-1105"'),
+    (b'Year-end count: two valves damaged on site', b'Stock count: two valves damaged on site'),
+    (b'# December service-kit restock', b'# Service-kit restock'),
+    (b'"December Service Kit"', b'"Service Call Kit"'),
+    (b'Service kits for December calls', b'Service kits for service calls'),
+    (b'December kits: half kit plus delivery expense', b'Service kits: half kit plus delivery expense'),
+    (b'December kits: two bought on the company card', b'Service kits: two bought on the company card'),
+    (b'Order ten December service kits; delivery may be partial', b'Order ten service kits; delivery may be partial'),
+    (b'"KIT-DEC-4"', b'"KIT-4"'),
+)
+
+
+def as_edited_by_r83(old, resource):
+    """Frozen bytes of a demo resource as they read after R83's deliberate in-place edits.
+
+    Only seed.toml was edited; reference.toml carries parallel text and was not touched.
+    """
+    if resource != 'seed.toml':
+        return old
+    for before, after in R83_SEED_EDITS:
+        old = old.replace(before, after)
+    return old
+
+
 # The tables that say money moved. `transactions` is here for its identity and status; the
 # amounts live below it. A claim about "posting nothing" has to look at all five, because a
 # document with no legs still occupies a number and a balance-only check would miss it.
