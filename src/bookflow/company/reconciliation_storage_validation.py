@@ -401,10 +401,15 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             v=versions[m['version_id']]
             grouped[canonical(v['movement_snapshot'])].add(m.get('classification',m.get('action')))
         require(all(len(v)==1 for v in grouped.values()),'split_movement')
-        selected={m['version_id'] for m in values}
+        # A movement is whole when every key it is made of is represented, as
+        # `reconciliation_preparation.whole_selection` decides it. Comparing version ids would
+        # also demand a key's superseded versions: a void that keeps its revision (a voided sales
+        # receipt) shares the movement of the active version it replaced, and a certificate,
+        # whose members are the heads, holds only the void.
+        selected={versions[m['version_id']]['key_id'] for m in values}
         for m in values:
             v=versions[m['version_id']]
-            whole={e['id'] for e in versions.values() if e['active'] and e['movement_snapshot']==v['movement_snapshot']}
+            whole={e['key_id'] for e in versions.values() if e['active'] and e['movement_snapshot']==v['movement_snapshot']}
             require(whole<=selected,'incomplete_movement')
         return values
     # A capture is proven against the live graph where it is written and validated against the

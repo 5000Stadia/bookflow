@@ -9,7 +9,7 @@ def project(s,certificate_id, *, authority_transactions):
     members=[v for v in s.rows['certificate_members'] if v['certificate_id']==certificate_id]
     selected=[s.versions[v['version_id']] for v in members if v['classification']=='selected']
     historical=totals(cert['beginning_balance'],cert['ending_balance'],selected)
-    require(historical.difference==0 and historical.selected_sum==cert['selected_sum'],'E_RECONCILIATION_SOURCE_INVALID')
+    require(historical.difference==0 and historical.selected_sum==cert['selected_sum'],'E_RECONCILIATION_SOURCE_INVALID',{'check':'certificate_totals'})
     account_population(s,cert['account_id'],cert['statement_date'])
     def mapped(keys):
         return [v for k,v in s.current.items() if k in keys and v['active'] and v['account_id']==cert['account_id'] and v['effective_date']<=cert['statement_date']]
@@ -17,7 +17,7 @@ def project(s,certificate_id, *, authority_transactions):
     covered={v['key_id'] for v in s.rows['opening_members'] if v['opening_id']==cert['opening_id'] and v['classification']=='covered'}
     cursor=cert;seen=set()
     while cursor is not None:
-        require(cursor['id'] not in seen,'E_RECONCILIATION_SOURCE_INVALID');seen.add(cursor['id'])
+        require(cursor['id'] not in seen,'E_RECONCILIATION_SOURCE_INVALID',{'check':'certificate_chain'});seen.add(cursor['id'])
         covered.update(v['key_id'] for v in s.rows['certificate_members'] if v['certificate_id']==cursor['id'] and v['classification']=='selected')
         cursor=certificates.get(cursor['previous_certificate_id']) if cursor['previous_certificate_id'] else None
     reconstruction=bounded(sum(statement_amount(v) for v in mapped(covered)))

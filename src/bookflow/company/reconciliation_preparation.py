@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 from bookflow.company import reconciliation_adapters as adapters
 from bookflow.company.reconciliation_proof import prove
-from bookflow.company.reconciliation_storage_validation import validate, canonical, digest
+from bookflow.company.reconciliation_storage_validation import validate, canonical, digest, InvalidStorage
 from bookflow.company import reconciliation_commands_models as m
 
 # Private domain reasons travel the existing typed pipeline without registering
@@ -36,8 +36,14 @@ def adapter_errors():
     try:yield
     except adapters.Unsupported as exc:
         raise ReconciliationError('E_RECONCILIATION_UNSUPPORTED') from exc
-    except (adapters.Corrupt,KeyError,ValueError,TypeError,IndexError,StopIteration) as exc:
-        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID') from exc
+    except InvalidStorage as exc:
+        # A storage rule name is fixed text that names no record, so it is safe to hand back;
+        # an adapter's own message is not, so those say only which kind of check refused.
+        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID',{'check':str(exc)}) from exc
+    except adapters.Corrupt as exc:
+        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID',{'check':'source_corrupt'}) from exc
+    except (KeyError,ValueError,TypeError,IndexError,StopIteration) as exc:
+        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID',{'check':'source_unreadable'}) from exc
 
 
 def require(condition,code,details=None):
@@ -128,8 +134,13 @@ def account_population(s,account,cutoff):
         history,current=adapters.enumerate_graph(s.source)
         total,gl=prove(s.source,history,current,account,cutoff)
         values=tuple(v for v in s.current.values() if v['account_id']==account and v['active'])
-        require(sum(v['signed_debit'] for v in values if v['effective_date']<=cutoff)==total,'E_RECONCILIATION_SOURCE_INVALID')
+        stored=sum(v['signed_debit'] for v in values if v['effective_date']<=cutoff)
+        require(stored==total,'E_RECONCILIATION_SOURCE_INVALID',lambda:effects_mismatch(stored,total,cutoff))
         return values,(-gl if a['type']=='credit_card' else gl)
+
+def effects_mismatch(effects,ledger,cutoff):
+    """What a caller is told when an account's stored effects and its general ledger disagree."""
+    return {'check':'effects_total','as_of':cutoff,'effects_total':effects,'ledger_total':ledger}
 
 def statement_amount(v):return -v['signed_debit'] if v['account_type']=='credit_card' else v['signed_debit']
 

@@ -33,9 +33,9 @@ def _candidates(books, draft):
             return rows
 
 
-def _statement(books, statement_date, ending_balance, opening_draft=None):
+def _statement(books, statement_date, ending_balance, opening_draft=None, account=None):
     extra = dict(opening_draft_id=opening_draft) if opening_draft else {}
-    started = _call(books, 'reconcile start', dict(operation_key=new_id(), account=books['card'],
+    started = _call(books, 'reconcile start', dict(operation_key=new_id(), account=account or books['card'],
                                                     statement_date=statement_date, ending_balance=ending_balance, **extra))
     draft = started['draft']['id']
     rows = _candidates(books, draft)

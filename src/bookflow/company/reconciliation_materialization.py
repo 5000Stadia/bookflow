@@ -112,7 +112,7 @@ def assert_materialized(db):
     """
     from bookflow.company.reconciliation_preparation import ReconciliationError
     if pending_documents(db, limit=1):
-        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID')
+        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID',{'check':'effects_pending'})
 
 
 def _representable(source, identifiers):

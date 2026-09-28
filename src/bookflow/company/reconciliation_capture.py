@@ -11,7 +11,7 @@ calling it, the way a posting write cannot reach the database without passing th
 enqueues it: what makes something a proven capture is that it went through the prover.
 """
 from bookflow.company import reconciliation_adapters as adapters
-from bookflow.company.reconciliation_preparation import account_population, require
+from bookflow.company.reconciliation_preparation import account_population, effects_mismatch, require
 from bookflow.company.reconciliation_proof import prove
 from bookflow.company.reconciliation_storage_validation import population_fingerprint
 
@@ -41,7 +41,7 @@ def population(snapshot, account_id, cutoff, *, opening):
     account_population(snapshot, account_id, cutoff)
     history, current = adapters.enumerate_graph(snapshot.source)
     total, gl = prove(snapshot.source, history, current, account_id, cutoff)
-    require(total == gl, 'E_RECONCILIATION_SOURCE_INVALID')
+    require(total == gl, 'E_RECONCILIATION_SOURCE_INVALID', lambda: effects_mismatch(total, gl, cutoff))
     values = members(snapshot, account_id, cutoff, opening=opening)
     return dict(format=1, account_id=account_id,
                 currency=snapshot.source.accounts[account_id]['currency'], cutoff=cutoff,
