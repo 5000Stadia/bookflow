@@ -472,7 +472,7 @@ MATRIX['inventory adjust'] = {
 MATRIX['inventory void'] = {
     'E_RECORD_NOT_FOUND': 'no inventory adjustment with that id or number',
     'E_VERSION_CONFLICT': 'stale expected_version',
-    'E_VALIDATION': 'the reversal would leave value with no quantity, or a return standing against a sale whose cost is still provisional',
+    'E_VALIDATION': 'the reversal would leave value with no quantity behind it',
     'E_VALUE_RANGE': 'a reversed or corrected value outside signed 64-bit storage',
     'E_REASON_REQUIRED': 'void without a reason',
     'E_PERIOD_CLOSED': 'the adjustment date or any correction date falls in a closed period',

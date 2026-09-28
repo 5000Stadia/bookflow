@@ -129,6 +129,21 @@ def test_a_sale_ahead_of_its_stock_is_provisional_and_trued_up_at_the_receipt():
     assert (state.quantity_microunits, state.value_minor_units) == (9 * MICRO, 9000)
 
 
+def test_a_return_cancels_unfilled_units_first_and_shares_the_rest():
+    """1 in at 400; 3 out: 400 for the one on hand and 2 short at the 400 average, 800 --
+    the issue cost 1200 and leaves -2 / -800. All 3 come back: the 2 unfilled units cancel at
+    their provisional 800 and the third takes the whole of what is left, 1200 - 800 = 400.
+    The item ends at 1 / 400, where the purchase left it, owing no true-up."""
+    state = replay([
+        row("A", "receipt", 1 * MICRO, 400, "2026-01-01", 1),
+        row("M", "issue", -3 * MICRO, -1200, "2026-01-02", 2),
+        dict(row("R", "receipt", 3 * MICRO, 1200, "2026-01-03", 3), returns_movement_id="M"),
+    ])
+    assert state.targets["M"] == -1200 and state.targets["R"] == 1200
+    assert (state.quantity_microunits, state.value_minor_units) == (1 * MICRO, 400)
+    assert state.true_ups == {} and state.corrections == ()
+
+
 def test_stock_on_hand_may_not_be_written_down_to_nothing():
     with pytest.raises(StockRefusal) as caught:
         replay([

@@ -268,7 +268,7 @@ def refuse_stock(refusal, item, *, quantity_field='quantity_change', value_field
         details['effective_date'] = refusal.movement['effective_date']
     problem = details.pop('problem')
     when = details.get('effective_date', 'an affected date')
-    if refusal.reason in ('negative_stock', 'provisional_return'):
+    if refusal.reason == 'negative_stock':
         return BookflowError('E_VALIDATION', message=(
             f'This change cannot stand for "{item["full_name"]}" on {when}: {problem}.'),
             details={'fields': [{'field': quantity_field, 'problem': problem}], **details})
