@@ -151,6 +151,38 @@ financial records remain unchanged. The reference annual trial balance is
 8,048,600 cents; income is 6,457,000 and net assets 7,457,000. These are active
 examples for continuation, not a reason to cancel every new record.
 
+## Early-payment discounts
+
+Terms with a discount (for example "2% 10 Net 30") make an invoice or bill discountable
+through its discount date. `payment invoices` rows carry `discount_date` and
+`suggested_discount_minor_units` for the context date; `bill query` rows carry
+`discount_date` and `early_discount_minor_units` (what the terms still offer, date-free).
+
+- The suggested discount is the terms percentage of the document total, sales tax
+  included, rounded half-up to the cent, less any discount already taken on that
+  document, and at most what is still open. It is zero after the discount date.
+- A discount is taken only when named: `payment receive` `discounts` (one row per
+  invoice that the receipt's applications also pay) or a `bill pay` row's `discount`.
+  A discount named after the discount date, or on a document whose terms offer none,
+  is taken and the write returns a warning.
+- The document is settled by the cash plus the discount. A customer discount posts
+  debit discount account, credit Accounts Receivable, on the receipt; a vendor discount
+  posts debit Accounts Payable, credit discount account, on the bill payment. The receipt
+  or check total stays the cash.
+- The discount account is `discount_account` on the command, else the company
+  `customer_discount_account_id` / `vendor_discount_account_id`, else the active account
+  named "Discounts Given" / "Discounts Taken", else that account is created as an income
+  account in the same write.
+- `payment unapply` / `bill payment unapply` of a discounted settlement leaves the
+  discount with the payment as unapplied credit (customer) or unapplied debit (vendor).
+  A void or deletion reverses the discount posting with the rest of the payment. A
+  receipt correction restates the discount unchanged.
+- Cash basis treats the discount as payment: the document's income or expense is
+  recognized in full at the payment date, and the discount account carries the discount.
+- Settlement reads name the discount: `invoice settlement` applications carry
+  `discount_minor_units`; bill settlement `sources` list `early_discount` beside
+  `bill_payment` and `vendor_credit`.
+
 ## Recover an interrupted or stale shared selection
 
 Recovery keeps the original selection identity. Open **Shared payment selections → Pending recovery** to continue an uploading or ready-for-review attempt. The browser saves the complete attempted edits locally before sharing them. Until the server has received the whole attempt and you confirm its complete comparison, every interface blocks ordinary editing and recording of that selection. Closing a tab does not release this block.

@@ -82,6 +82,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].application.created_by` | string | yes | no | — | — |
 | `items[].application.created_via` | string | yes | no | — | — |
 | `items[].application.audit_event_id` | string | yes | no | — | — |
+| `items[].application.discount_minor_units` | integer | no | no | 0 | — |
 | `items[].allocation` | object \| null | no | yes | null | — |
 | `items[].allocation.id` | string | yes | no | — | — |
 | `items[].allocation.application_id` | string | yes | no | — | — |
@@ -278,6 +279,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `record.created_by` | string | yes | no | — | — |
 | `record.created_via` | string | yes | no | — | — |
 | `record.audit_event_id` | string | yes | no | — | — |
+| `record.discount_minor_units` | integer | no | no | 0 | — |
 | `original_application_id` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
 | `reverse_application_id` | string \| null | yes | yes | — | — |
@@ -302,6 +304,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_payment.components[].applied_minor_units` | integer | yes | no | — | — |
 | `current_payment.components[].available_minor_units` | integer | yes | no | — | — |
 | `current_payment.component_count` | integer | yes | no | — | — |
+| `current_payment.discount_minor_units` | integer | no | no | 0 | — |
 | `current_invoice` | object | yes | no | — | — |
 | `current_invoice.invoice_id` | string | yes | no | — | — |
 | `current_invoice.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
@@ -400,6 +403,7 @@ Example JSON output:
     "created_via": "cli",
     "credit_source_key_id": null,
     "currency": "USD",
+    "discount_minor_units": 0,
     "effective_date": "2026-01-01",
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "kind": "apply",
