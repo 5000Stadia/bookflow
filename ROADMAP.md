@@ -52,6 +52,11 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R72 R14 the blind-agent tax trial with its interview, fixes and retest; the 2000-span forecast recovery checked in the browser — design/specs/24-sales-tax-policy.md
 - [ ] R77 concurrent requests intermittently fail with AdmissionCancelled "publication admission changed" reported as E_INTERNAL (absorbs R28, the same bug): a typed retryable error or retry, never E_INTERNAL; the remaining failing browser tests with it — notes/NOW.md
 - [~] R29 revoked streams: a revoked stream closes with no further data (the contract, witnessed in c116267); left: disconnect cleanup faster than the 15 s keep-alive — notes/NOW.md
+- [ ] R84 the agent can record bank deposits: `deposit sources` and `deposit post` refuse a standard agent with a bare E_PERMISSION while the catalog asks only ordinary access — notes/blind-trials-20260927.md
+- [ ] R79 invoices and other sales use the company's normal sales tax item when none is named, as the browser does; `use_defaults` resolves it, and the error says when no default exists (the trials' agents guessed a different tax item) — notes/blind-trials-20260927.md
+- [ ] R85 recording a customer payment warns when the same customer and check reference are already on file — notes/blind-trials-20260927.md
+- [ ] R86 help and errors an agent can act on first time: a worked example in each command's help, errors that name the reason and the valid fields (permission refusals, the reconcile opening step, plain money errors, reason needed even for previews), and findable oldest-first application, sales-tax owed, open invoices and payment methods — notes/blind-trials-20260927.md
+- [ ] R83 the demo sells stock today: demo documents dated after today move into the past so demo items are on hand — notes/blind-trials-20260927.md
 - [ ] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report); interview it on where it hesitated or guessed, fix what is material, retest once — notes/mcp-blind-acceptance-runbook.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 - [ ] R81 release v1.5: docs current, the demo resets cleanly, tag v1.5 — README.md
@@ -98,6 +103,4 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R54 Hosted disposable demo sessions — notes/demo-session-preflight.md
 - [ ] R74 permission checks on activated roots cost about 3x (demo reset 104 s vs 33 s): reuse the hub permission snapshot across transactions only behind a fresh in-transaction version check — design/permission-resolution.md
 - [ ] R78 agent administration reads like the rest of the product: a New agent button on the Agents panel, agents listed before they have a membership, the finder reaching installation commands (users, tokens, agents), the one-time token secret shown plainly with a copy button, names and dates instead of raw ids and codes on agent and token pages and errors, principal as a picker, and change history saying "Office assistant for k, via agent" — notes/manual-agent-walkthrough-20260927.md
-- [ ] R79 decide from the blind trials whether agent writes default what the browser prefills (today's date, the company's sales tax item, the only company) — notes/manual-agent-walkthrough-20260927.md
 - [ ] R82 negative amounts in parentheses as a company setting — notes/mobile-audit-response-20260927.md
-- [ ] R83 re-date the demo documents dated after today — notes/stale-tests-20260927.md
