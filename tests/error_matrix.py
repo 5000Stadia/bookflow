@@ -403,6 +403,19 @@ MATRIX['report vendor-balance-detail'] = {
     'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
 }
+MATRIX['report open-purchase-orders'] = {
+    'E_QUERY_STALE': 'an order, a receipt against one or vendor display facts changed between pages',
+    'E_VALUE_RANGE': 'public order amount or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
+MATRIX['report purchases-by-vendor'] = {
+    'E_QUERY_STALE': 'posting, stock movement or vendor display facts changed between pages',
+    'E_VALUE_RANGE': 'public purchase amount or report total exceeds signed 64-bit range',
+}
+MATRIX['report purchases-by-item'] = {
+    'E_QUERY_STALE': 'posting, stock movement or item display facts changed between pages',
+    'E_VALUE_RANGE': 'public purchase amount, average cost or report total exceeds signed 64-bit range',
+}
 MATRIX['report ap-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',

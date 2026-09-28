@@ -155,6 +155,105 @@ def test_a_balance_detail_filter_that_names_nothing_is_refused(client):
     assert refused.value.code == "E_RECORD_NOT_FOUND"
 
 
+
+# --- purchases ---------------------------------------------------------------------------
+#
+# Every item the demo buys is a stock item, so every purchase is a receipt of stock:
+#
+#   Brass Shutoff Valve   DEMO-BUY-BILL-1 (Central Supply) 24 @ 10.95          262.80
+#   Service Call Kit      check DEMO-KIT-CHECK (Regional Parts) 0.5 @ 12.34      6.17
+#                         card charge (Regional Parts) 2 @ 10.00                20.00
+#                         item receipt (Central Supply) 6 @ 10.00               60.00
+#                         DEMO-KIT-BILL confirms 4 of them at 11.00: a price
+#                           correction to the receipt, no new stock              4.00
+#                                                          8.5 units            90.17
+#   Received Shipping Kit item receipt (Central Supply) 3 @ 8.00 + 12.00 ship   36.00
+#
+# The check's 4.83 delivery expense and every expense-account bill line name no item and
+# are not purchases; the count adjustment and the free kit given away are not purchases.
+YEAR = {"date_from": "2026-01-01", "date_to": DEMO_AS_OF}
+PURCHASES_BY_ITEM = [
+    # label, quantity microunits, amount, average cost
+    ("Brass Shutoff Valve", 24_000_000, 26280, 1095),
+    ("Received Shipping Kit", 3_000_000, 3600, 1200),
+    ("Service Call Kit", 8_500_000, 9017, 1061),   # 90.17 / 8.5 = 10.608...
+]
+PURCHASES_BY_VENDOR = [("Central Supply", 26280 + 6000 + 400 + 3600), ("Regional Parts", 617 + 2000)]
+
+
+def test_purchases_by_item_and_by_vendor_are_the_demos_stock_purchases(client):
+    by_item = _run(client, "report purchases-by-item", YEAR)
+    assert [(row["display_item_label"], row["quantity_microunits"], _minor(row["amount"]),
+             _minor(row["average_cost"])) for row in by_item["rows"]] == PURCHASES_BY_ITEM
+    assert _minor(by_item["totals"]["amount"]) == 38897
+    by_vendor = _run(client, "report purchases-by-vendor", YEAR)
+    assert [(row["display_vendor_label"], _minor(row["amount"])) for row in by_vendor["rows"]] == PURCHASES_BY_VENDOR
+    assert by_vendor["totals"] == by_item["totals"]
+    assert [row["percent_of_total"] for row in by_vendor["rows"]] == ["93.271975", "6.728025"]
+    # Before the valves arrived nothing had been bought.
+    early = _run(client, "report purchases-by-item", {"date_from": "2026-01-01", "date_to": "2026-11-11"})
+    assert early["rows"] == [] and _minor(early["totals"]["amount"]) == 0
+
+
+def test_a_nonstock_item_is_bought_at_its_posted_cost_and_a_void_takes_it_back(client):
+    from bookflow.core import registry
+
+    def run(command, body):
+        writes = registry.get(command).is_write
+        return client.run(command, body, company=COMPANY, reason="Purchases scenario" if writes else None)
+    fees = run("account show", {"account": "Professional Fees"})["id"]
+    bank = run("account show", {"account": "Checking"})["id"]
+    supply = run("vendor create", {"name": "Scenario Supply"})["id"]
+    hardware = run("vendor create", {"name": "Scenario Hardware"})["id"]
+    gasket = run("item create", {"name": "Scenario Gasket", "type": "non_inventory_part",
+                                 "sales_enabled": False, "purchase_enabled": True,
+                                 "purchase_description": "Gasket pack", "cost": "3.00",
+                                 "expense_account_id": fees})["id"]
+    # 10 gaskets at 3.00 and 5.00 of freight on an expense line, which is no item.
+    run("bill post", {"vendor": supply, "date": "2027-02-03", "number": "SCN-1",
+                      "expenses": [{"account": fees, "amount": "5.00"}],
+                      "items": [{"item": gasket, "quantity": "10"}]})
+    # 2 at 3.50 by check: the payee is on the bank line, not on the item line.
+    run("check post", {"account": bank, "date": "2027-02-04", "amount": "7.00",
+                       "pay_to": {"name_type": "vendor", "name_id": hardware},
+                       "items": [{"item": gasket, "quantity": "2", "unit_cost": "3.50"}]})
+    # 4 more, then voided: worth nothing, quantity and cost both taken back.
+    voided = run("bill post", {"vendor": supply, "date": "2027-02-05", "number": "SCN-2",
+                               "items": [{"item": gasket, "quantity": "4"}]})
+    run("bill void", {"bill": voided["id"], "expected_version": voided["version"]})
+    february = {"date_from": "2027-02-01", "date_to": "2027-02-28"}
+    by_item = _run(client, "report purchases-by-item", february)
+    assert [(row["display_item_label"], row["item_type"], row["quantity"], _minor(row["amount"]),
+             _minor(row["average_cost"])) for row in by_item["rows"]] == [
+        ("Scenario Gasket", "non_inventory_part", "12", 3700, 308)]   # 37.00 / 12 = 3.083...
+    by_vendor = _run(client, "report purchases-by-vendor", february)
+    assert [(row["display_vendor_label"], _minor(row["amount"])) for row in by_vendor["rows"]] == [
+        ("Scenario Hardware", 700), ("Scenario Supply", 3000)]
+
+
+# --- open purchase orders -----------------------------------------------------------------
+#
+#   PO-1105      ordered 24 valves + 38.00 of fittings, billed whole: nothing to receive
+#   DEMO-KIT-PO  10 kits @ 10.00 = 100.00; 6 received                open  40.00
+#   1            5 shipping kits @ 8.00 = 40.00; 3 received           open  16.00
+OPEN_ORDERS = [("DEMO-KIT-PO", "partly_received", 10000, 6000, 4000),
+               ("1", "partly_received", 4000, 2400, 1600)]
+
+
+def test_open_purchase_orders_are_what_is_still_to_arrive(client):
+    result = _run(client, "report open-purchase-orders", {"date_to": DEMO_AS_OF})
+    assert [(row["number"], row["status"], _minor(row["amount"]), _minor(row["received"]),
+             _minor(row["open_balance"])) for row in result["rows"]] == OPEN_ORDERS
+    assert {key: _minor(value) for key, value in result["totals"].items()} == {
+        "amount": 14000, "received": 8400, "open_balance": 5600}
+    assert {row["display_vendor_label"] for row in result["rows"]} == {"Central Supply"}
+    # Orders dated after the date are left out: the shipping-kit order is dated 2026-12-10.
+    earlier = _run(client, "report open-purchase-orders", {"date_to": "2026-12-09"})
+    assert [row["number"] for row in earlier["rows"]] == ["DEMO-KIT-PO"]
+    other = _run(client, "report open-purchase-orders", {"date_to": DEMO_AS_OF, "vendor": "Regional Parts"})
+    assert other["rows"] == [] and _minor(other["totals"]["open_balance"]) == 0
+
+
 # --- the report pages -------------------------------------------------------------------
 #
 # Each page opens already run on the filters its link carries, shows the report's own
@@ -164,6 +263,9 @@ PAGES = {
     "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "138.39"),
     "vendor-balance-summary": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "vendor-balance-detail": ({"f:as_of": DEMO_AS_OF}, "78.10"),
+    "open-purchase-orders": ({"f:date_to": DEMO_AS_OF}, "56.00"),
+    "purchases-by-vendor": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "388.97"),
+    "purchases-by-item": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "388.97"),
 }
 
 

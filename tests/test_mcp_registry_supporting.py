@@ -28,7 +28,8 @@ FAMILIES = {
                 'report expenses-by-vendor',
                 'report profit-and-loss-by-job', 'report profit-and-loss-by-class', 'report collections', 'report unbilled-costs',
                 'report customer-balance-summary', 'report customer-balance-detail',
-                'report vendor-balance-summary', 'report vendor-balance-detail'),
+                'report vendor-balance-summary', 'report vendor-balance-detail',
+                'report open-purchase-orders', 'report purchases-by-vendor', 'report purchases-by-item'),
 }
 
 

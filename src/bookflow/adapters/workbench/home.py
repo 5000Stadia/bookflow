@@ -329,6 +329,8 @@ PANELS: tuple[Panel, ...] = (
                      "report ap-aging", "report unpaid-bills",
                      "report customer-balance-summary", "report customer-balance-detail",
                      "report vendor-balance-summary", "report vendor-balance-detail",
+                     "report open-purchase-orders", "report purchases-by-vendor",
+                     "report purchases-by-item",
                      "report inventory-valuation", "report stock-status",
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
@@ -501,6 +503,9 @@ SECTIONS: tuple[Section, ...] = (
             _report("Expenses by vendor", "expenses-by-vendor"),
             _report("Vendor balance summary", "vendor-balance-summary"),
             _report("Vendor balance detail", "vendor-balance-detail"),
+            _report("Open purchase orders", "open-purchase-orders"),
+            _report("Purchases by vendor summary", "purchases-by-vendor"),
+            _report("Purchases by item summary", "purchases-by-item"),
         ),
     ),
     Section(

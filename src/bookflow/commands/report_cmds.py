@@ -42,6 +42,11 @@ from bookflow.company.unbilled_costs import (
 from bookflow.company.collection_reports import (
     CollectionsInput, CollectionsOutput, collections,
 )
+from bookflow.company.purchase_reports import (
+    OpenPurchaseOrdersInput, OpenPurchaseOrdersOutput, PurchasesByItemInput, PurchasesByItemOutput,
+    PurchasesByVendorInput, PurchasesByVendorOutput, open_purchase_orders, purchases_by_item,
+    purchases_by_vendor,
+)
 from bookflow.company.balance_reports import (
     CustomerBalanceDetailInput, CustomerBalanceDetailOutput, CustomerBalanceSummaryInput,
     CustomerBalanceSummaryOutput, VendorBalanceDetailInput, VendorBalanceDetailOutput,
@@ -260,3 +265,27 @@ def plan_vendor_balance_summary(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
 def plan_vendor_balance_detail(inp, ctx, s):
     return Plan(preview=vendor_balance_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report open-purchase-orders", scope="company", required_role="member", capability="reports",
+    description="Purchase orders with something still to receive: every open or partly received order dated on or before date_to, oldest first, with what was ordered, the ordered amount of what has arrived and the open balance of what has not. An item line's received share is the quantity its item receipts have taken against it, valued at the line's own ordered amount in proportion and rounded half to even at the cent; a line with no quantity stays open for its whole amount until the order is billed. A closed, voided or billed order has nothing to receive and is omitted. An order is not a posting, so the orders and their receipts are read as they stand now; date_to bounds which orders by their own date. vendor narrows it to one vendor. Totals cover every order and rows are paged.",
+    input_model=OpenPurchaseOrdersInput, output_model=OpenPurchaseOrdersOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_open_purchase_orders(inp, ctx, s):
+    return Plan(preview=open_purchase_orders(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report purchases-by-vendor", scope="company", required_role="member", capability="reports",
+    description="Items bought from each vendor between date_from and date_to, at the cost each purchase posted, with each vendor's share of the period as a percentage. An item purchase is what a bill, check, credit card charge or item receipt posted for an item: for a stock item, a receipt of stock against Accounts Payable, a bank account or a card, the purchase-price corrections that amend it and the reversals a void or a correction writes; for any other item, the cost it posted to an account other than Accounts Payable. A bill for goods already received moves the receipt's payable and posts no stock, so received goods are counted once, at the receipt. A purchase entered on an expense account names no item and is on report expenses-by-vendor instead; a customer return, an inventory adjustment and a sale are not purchases. A purchase belongs to the vendor its posting line names, or to the one vendor its posting names where the line names none; one naming no vendor is the row called No name. Rows worth nothing are omitted; totals cover every vendor and rows are paged.",
+    input_model=PurchasesByVendorInput, output_model=PurchasesByVendorOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_purchases_by_vendor(inp, ctx, s):
+    return Plan(preview=purchases_by_vendor(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report purchases-by-item", scope="company", required_role="member", capability="reports",
+    description="The same item purchases grouped by item: each item's quantity bought in its base unit, the cost it posted, the average cost that quantity came to, and its share of the period as a percentage. A stock item's quantity and cost are its purchase movements on the inventory ledger, so a purchase-price correction changes its cost and not its quantity, and a void takes both back off; any other item's are the quantity on the purchase line and the cost its posting line was attributed. Average cost is cost divided by quantity rounded half to even at the cent for reading, and is omitted where no quantity was bought. Totals are the report purchases-by-vendor total for the same dates; rows worth nothing are omitted and rows are paged.",
+    input_model=PurchasesByItemInput, output_model=PurchasesByItemOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_purchases_by_item(inp, ctx, s):
+    return Plan(preview=purchases_by_item(inp, s, principal_id=ctx.on_behalf_of))

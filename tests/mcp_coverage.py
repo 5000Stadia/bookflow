@@ -396,9 +396,12 @@ report income-tax-summary
 report inventory-valuation
 report missing-checks
 report open-invoices
+report open-purchase-orders
 report profit-and-loss
 report profit-and-loss-by-class
 report profit-and-loss-by-job
+report purchases-by-item
+report purchases-by-vendor
 report sales-by-customer
 report sales-by-item
 report sales-by-rep
