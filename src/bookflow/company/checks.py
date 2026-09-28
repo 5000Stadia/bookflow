@@ -401,7 +401,7 @@ def prepare(s, ctx, inp, noun, operation):
     if operation != 'void' and fresh.data['changed']:
         summary = summary.model_copy(update={'items': item_outputs})
     return Plan(_output(fresh.preview, _finish(summary, fresh.data.get('check_instrument'))),
-                {'input': inp, 'noun': noun, 'operation': operation})
+                {'input': inp, 'noun': noun, 'operation': operation, 'prospective': fresh})
 
 
 def apply(plan, ctx, s):

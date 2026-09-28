@@ -192,6 +192,7 @@ EXAMPLES.update({
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
     "report transaction-detail": Example('bookflow report transaction-detail --date-from 2026-01-01 --date-to 2026-12-31 --accounts \'["Checking"]\' --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "accounts": ["Checking"]}),
+    "report reconciliation-discrepancy": Example('bookflow report reconciliation-discrepancy --account Checking --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"account": "Checking", "as_of": "2026-12-31"}),
     "report missing-checks": Example('bookflow report missing-checks --as-of 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "account": "Checking"}),
     "report statement": Example('bookflow report statement --date-from 2026-01-01 --date-to 2026-12-31 --customer "Adams Plumbing" --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "customer": "Adams Plumbing"}),
     "report ar-aging": Example('bookflow report ar-aging --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
@@ -398,9 +399,10 @@ for _noun, _selector in (("estimate", "estimate"), ("work-order", "work_order"),
         {_selector: ID, 'expected_version': 2, 'conversion_key': 'paid-work-2026-09', 'date': '2026-09-04', 'deposit_to': 'Checking', 'payment_method': 'Cash', 'amount_received': '10.81'})
 
 # Row22 receipt preparation and immutable settlement commands.
-_PAYMENT_RECEIVE = dict(customer='Riverside Apartments', date='2026-06-01', amount='150.00', payment_method='Check', reference='1042',
+_PAYMENT_RECEIVE = dict(customer='Riverside Apartments', date='2026-06-01', amount='147.00', payment_method='Check', reference='1042',
                         operation_key='example-receipt-1',
-                        applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='150.00')]))
+                        applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='147.00')]),
+                        discounts=[dict(invoice=ID, amount='3.00')])
 _PAYMENT_EXAMPLES = {
     'payment receive': _PAYMENT_RECEIVE,
     'payment apply': dict(payment=ID, expected_version=1, date='2026-06-01', operation_key='example-apply-1', applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='50.00')])),
@@ -601,11 +603,12 @@ EXAMPLES.update({
     "bill pay": Example(
         'bookflow bill pay --date 2026-04-15 --funding-account "Checking" --method "Check"'
         ' --check-number 1041 --memo "April payables"'
-        ' --bills \'[{"bill":"BILL-104"},{"bill":"BILL-108","amount":"250.00"}]\''
+        ' --bills \'[{"bill":"BILL-104","amount":"607.60","discount":"12.40"},{"bill":"BILL-108","amount":"250.00"}]\''
         ' --company "Demo Plumbing Co" --reason "Pay the April bills" --json',
         {"date": "2026-04-15", "funding_account": "Checking", "method": "Check",
          "check_number": "1041", "memo": "April payables",
-         "bills": [{"bill": "BILL-104"}, {"bill": "BILL-108", "amount": "250.00"}]}),
+         "bills": [{"bill": "BILL-104", "amount": "607.60", "discount": "12.40"},
+                   {"bill": "BILL-108", "amount": "250.00"}]}),
     "bill payment show": Example(
         f'bookflow bill payment show {ID} --company "Demo Plumbing Co" --json', {"payment": ID}),
     "bill payment query": Example(

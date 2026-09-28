@@ -661,6 +661,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
         if dry_run:
             out["dry_run"] = True
             out = _with_stock_warnings(out, plan)
+            out = _with_reconciliation_warnings(out, cmd, plan, ctx, s)
         if cmd.kind == "advisory":
             applied = _apply(cmd, plan, ctx, s)
             out = applied.output.model_dump(mode="json")
@@ -687,6 +688,24 @@ def _with_stock_warnings(out: dict[str, Any], plan: Any) -> dict[str, Any]:
         return out
     current = list(out.get("warnings") or [])
     out["warnings"] = current + [line for line in dict.fromkeys(extra) if line not in current]
+    return out
+
+
+def _with_reconciliation_warnings(out: dict[str, Any], cmd: Command, plan: Any, ctx: Context,
+                                  s: Session) -> dict[str, Any]:
+    """A preview of a correction or void says what saving it does to a finished reconciliation.
+
+    The saved result gets the same lines from ``_apply``, read off the movements the write
+    actually moved; ``company/reconciliation_changes.py`` owns both.
+    """
+    if not cmd.is_write or "warnings" not in out or s.company is None or "company" not in cmd.writes:
+        return out
+    from bookflow.company import reconciliation_changes
+    extra = reconciliation_changes.preview(s, ctx, cmd.name, plan)
+    if not extra:
+        return out
+    current = list(out.get("warnings") or [])
+    out["warnings"] = current + [line for line in extra if line not in current]
     return out
 
 
@@ -749,7 +768,15 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             # `posting_batches`, so a writer added tomorrow is covered without being listed
             # here: what makes something a posting write is that it inserts a posting batch.
             if co_tx:
-                materialization.drain_in_command(s.company, commits=s.commits, owner="dispatch.apply")
+                # Which statement movements this command moved, and from what: a movement a
+                # finished reconciliation cleared makes it stop tying, and the result says so.
+                moved: dict[str, str | None] = {}
+                materialization.drain_in_command(s.company, commits=s.commits, owner="dispatch.apply",
+                                                 observed=moved)
+                if moved:
+                    from bookflow.company import reconciliation_changes
+                    applied.output = reconciliation_changes.with_warnings(
+                        applied.output, reconciliation_changes.saved(s, moved))
             if applied.finalized:
                 if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
                     raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")

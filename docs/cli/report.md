@@ -3991,6 +3991,171 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report reconciliation-discrepancy`
+
+What changed in one bank or credit card account's finished reconciliations after they were finished, as the anchor's reconciliation discrepancy report shows it. Correcting or voiding a reconciled transaction is allowed and warns; this is where the difference it left can be seen and fixed. One reconciliation row for the opening balance the account adopted and for each finished statement dated on or before as_of, oldest first: reconciled is the statement's ending balance (the adopted opening balance), current is its cleared balance as the transactions it cleared stand now, and difference is current minus reconciled, zero while it still ties. Under each, one change row per transaction it cleared whose figure on it has changed: reconciled is what it was cleared at, current what it counts for now -- zero once voided, moved to another account or re-dated after the statement -- and difference the effect of the change; type_of_change is amount, date, account or voided. A later statement carries an earlier one's difference through its beginning balance, so it shows the same difference with no change rows of its own. Money is in the statement's sign: a bank balance, or what is owed on a card. Totals count the reconciliations, those out of balance and the changed transactions; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.reconciliation-discrepancy` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report reconciliation-discrepancy --account Checking --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report reconciliation-discrepancy", "input": {"account": "Checking", "as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name; includes inactive accounts.; minimum length 1; maximum length 1000 |
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive statement date, YYYY-MM-DD; reconciliations of statements dated after it are left out.; minimum length 10; maximum length 10 |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.reconciliation-discrepancy`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `account_id` | string | yes | no | — | — |
+| `display_account_label` | string | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.reconciliations` | integer | yes | no | — | — |
+| `totals.out_of_balance` | integer | yes | no | — | Reconciliations whose cleared balance no longer equals their statement. |
+| `totals.changes` | integer | yes | no | — | Reconciled transactions changed since they were reconciled. |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["reconciliation", "change"] | yes | no | — | — |
+| `rows[].reconciliation` | literal["statement", "opening"] | yes | no | — | — |
+| `rows[].reconciliation_id` | string | yes | no | — | — |
+| `rows[].statement_date` | string | yes | no | — | — |
+| `rows[].transaction_id` | string \| null | yes | yes | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].date` | string \| null | yes | yes | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].type_of_change` | literal["amount", "date", "account", "voided"] \| null | yes | yes | — | — |
+| `rows[].reconciled` | object | yes | no | — | — |
+| `rows[].reconciled.amount` | string | yes | no | — | — |
+| `rows[].reconciled.currency` | string | yes | no | — | — |
+| `rows[].reconciled.minor_units` | integer | yes | no | — | — |
+| `rows[].current` | object | yes | no | — | — |
+| `rows[].current.amount` | string | yes | no | — | — |
+| `rows[].current.currency` | string | yes | no | — | — |
+| `rows[].current.minor_units` | integer | yes | no | — | — |
+| `rows[].difference` | object | yes | no | — | — |
+| `rows[].difference.amount` | string | yes | no | — | — |
+| `rows[].difference.currency` | string | yes | no | — | — |
+| `rows[].difference.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "count": 0,
+  "display_account_label": "value",
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "changes": 1,
+    "out_of_balance": 1,
+    "reconciliations": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report sales-by-customer`
 
 Uses the company cash/accrual report preference unless basis is supplied. Income between date_from and date_to grouped by the customer or job each sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to, with what that customer's share of the period came to as a percentage. A job's income is its own and is never rolled into its parent's figure; every row names its parent so the two can be added deliberately. Every income effect is counted whatever document posted it, including an income journal entry, and income posted against no customer -- or against a name from another list -- is the one row called No name rather than something dropped. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer filter, because these rows already are the customer cut and one would only hide rows a reader can see anyway. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing on the period are omitted because they are worth nothing, not because a status was filtered; totals cover every customer the filter admits and rows are paged.

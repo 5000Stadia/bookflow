@@ -448,6 +448,12 @@ MATRIX['report missing-checks'] = {
     'E_RECORD_NOT_FOUND': 'account filter does not resolve',
     'E_VALIDATION': 'account filter names an account that is not a bank account',
 }
+MATRIX['report reconciliation-discrepancy'] = {
+    'E_QUERY_STALE': 'company audit changed between discrepancy pages',
+    'E_VALUE_RANGE': 'a reconciled or current balance exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'account does not resolve',
+    'E_VALIDATION': 'account names an account that is neither a bank nor a credit card account',
+}
 MATRIX['report inventory-valuation'] = {
     'E_QUERY_STALE': 'a movement, posting or item display fact changed between valuation pages',
     'E_VALUE_RANGE': 'an item asset value or the valuation total exceeds signed 64-bit range',

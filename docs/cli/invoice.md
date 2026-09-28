@@ -1114,6 +1114,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].amount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].effective_date` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].suggested_discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -1165,6 +1174,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `settlement.effect.document_changes[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `settlement.effect.payment_changes` | array[object] | yes | no | — | — |
 | `settlement.effect.payment_changes[].payment_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.payment_changes[].version` | integer | yes | no | — | — |
@@ -1186,6 +1196,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].components[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].components[].available_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
+| `settlement.effect.payment_changes[].discount_minor_units` | integer | no | no | 0 | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
 | `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
@@ -1231,6 +1242,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -1916,6 +1932,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].created_by` | string | yes | no | — | — |
 | `applications[].created_via` | string | yes | no | — | — |
 | `applications[].audit_event_id` | string | yes | no | — | — |
+| `applications[].discount_minor_units` | integer | no | no | 0 | — |
 | `application_count` | integer | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
 | `facts_fingerprint` | string | yes | no | — | — |
@@ -3487,6 +3504,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].amount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].effective_date` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].suggested_discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -3538,6 +3564,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `settlement.effect.document_changes[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `settlement.effect.payment_changes` | array[object] | yes | no | — | — |
 | `settlement.effect.payment_changes[].payment_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.payment_changes[].version` | integer | yes | no | — | — |
@@ -3559,6 +3586,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].components[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].components[].available_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
+| `settlement.effect.payment_changes[].discount_minor_units` | integer | no | no | 0 | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
 | `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
@@ -3604,6 +3632,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -4680,6 +4713,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].amount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].effective_date` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].suggested_discount.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
+| `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -4731,6 +4773,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `settlement.effect.document_changes[].discount_minor_units` | integer | no | no | 0 | Present in PaymentCurrentOutput. |
 | `settlement.effect.payment_changes` | array[object] | yes | no | — | — |
 | `settlement.effect.payment_changes[].payment_id` | string \| null | yes | yes | — | — |
 | `settlement.effect.payment_changes[].version` | integer | yes | no | — | — |
@@ -4752,6 +4795,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.payment_changes[].components[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].components[].available_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.payment_changes[].component_count` | integer | yes | no | — | — |
+| `settlement.effect.payment_changes[].discount_minor_units` | integer | no | no | 0 | — |
 | `settlement.current` | object | yes | no | — | — |
 | `settlement.current.invoice_id` | string | yes | no | — | — |
 | `settlement.current.document_type` | literal["invoice", "statement_charge"] \| null | no | yes | null | Which receivable this settlement belongs to: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
@@ -4797,6 +4841,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |

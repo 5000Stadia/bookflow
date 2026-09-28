@@ -81,7 +81,9 @@ def validate(plan, s, ctx):
         require(new['version'] == old['version'] + 1, 'invoice concurrency increment')
         require(new['current_revision_id'] == old['current_revision_id'] and new['status'] == old['status'], 'settlement changed commercial revision')
         require(all(new[key] == value for key, value in old.items() if key not in ('version', 'updated_at', 'updated_by', 'updated_via')), 'settlement changed invoice facts')
+    discounts = data.get('discounts') or []
     if data['operation'] == 'apply':
+        require(not discounts and data.get('account_mutation') is None, 'apply took a discount')
         require(all(not pending[name] for name in ('transaction_revisions', 'document_lines', 'document_line_identities',
             'payment_profiles', 'payment_components', 'payment_component_keys', 'posting_batches', 'posting_lines', 'posting_line_sources')), 'apply wrote financial facts')
         funding = query.payment_facts(s, header['id'], write=True)
@@ -100,28 +102,59 @@ def validate(plan, s, ctx):
         facts = query.invoice_facts(s, row['paid_transaction_id'], write=True)
         expected[facts['profile']['customer_id']] += row['amount_minor_units']
         require(keys[row['source_component_key_id']]['party_id'] == facts['profile']['customer_id'], 'cross-party application')
-    residual = amount - sum(expected.values())
+    # Each discount is part of exactly one application of this receipt, smaller than it, on the
+    # same invoice and component; the components then carry the cash plus the discounts.
+    apps_by_id = {row['id']: row for row in applications}
+    discounted = defaultdict(int)
+    require(len({row['application_id'] for row in discounts}) == len(discounts), 'two discounts on one edge')
+    for row in discounts:
+        app = apps_by_id.get(row['application_id'])
+        require(app is not None and app['paid_transaction_id'] == row['invoice_id']
+                and app['source_component_key_id'] == row['component_key_id']
+                and type(row['amount_minor_units']) is int and 0 < row['amount_minor_units'] <= app['amount_minor_units']
+                and row['transaction_id'] == header['id'] and row['currency'] == data['context']['currency']
+                and row['audit_event_id'] == data['event'] and row['created_by'] == s.actor.id,
+                'discount is not part of its own application')
+        discounted[keys[row['component_key_id']]['party_id']] += row['amount_minor_units']
+    discount_total = sum(discounted.values())
+    residual = amount + discount_total - sum(expected.values())
     require(residual >= 0, 'cash exceeded')
     expected[data['context']['customer_id']] += residual
     expected = {party: units for party, units in expected.items() if units}
     actual = {keys[key]['party_id']: row['amount_minor_units'] for key, row in capacities.items()}
     require(actual == expected and len(actual) == len(keys), 'cash source ownership not independently derived')
     legs, sources = pending['posting_lines'], pending['posting_line_sources']
-    require(sum(row['debit_minor_units'] for row in legs) == sum(row['credit_minor_units'] for row in legs) == amount, 'unbalanced cash receipt')
-    require(len([row for row in legs if row['debit_minor_units'] > 0]) == 1, 'receipt needs one cash debit')
+    require(sum(row['debit_minor_units'] for row in legs) == sum(row['credit_minor_units'] for row in legs) == amount + discount_total, 'unbalanced cash receipt')
     profile = pending['payment_profiles'][0]
+    cash_legs = [row for row in legs if row['debit_minor_units'] > 0 and row['account_id'] == profile['deposit_account_id']]
+    require(len(cash_legs) == 1 and cash_legs[0]['debit_minor_units'] == amount, 'receipt needs one cash debit')
+    discount_accounts = {row['discount_account_id'] for row in discounts}
+    require(len(discount_accounts) <= 1, 'one discount account per receipt')
     for leg in legs:
         require((leg['debit_minor_units'] > 0) != (leg['credit_minor_units'] > 0), 'zero or two-sided leg')
         own = [source for source in sources if source['posting_line_id'] == leg['id']]
         require(sum(row['amount_minor_units'] for row in own) == leg['debit_minor_units'] + leg['credit_minor_units'], 'posting attribution sum')
-        if leg['debit_minor_units']:
-            require(leg['account_id'] == profile['deposit_account_id'], 'cash destination differs')
+        if leg['debit_minor_units'] and leg is not cash_legs[0]:
+            require(leg['account_id'] in discount_accounts and leg['name_type'] == 'customer'
+                    and leg['debit_minor_units'] == discounted.get(leg['name_id']), 'discount debit differs')
+        elif leg['debit_minor_units']:
+            continue
         else:
             require(len(own) == 1 and leg['account_id'] == profile['ar_account_id'], 'AR component leg differs')
             component = next(row for row in capacities.values() if row['id'] == own[0]['payment_component_id'])
             require(leg['name_type'] == 'customer' and leg['name_id'] == keys[component['component_key_id']]['party_id'], 'AR posting party differs')
+    debit_ids = {row['id'] for row in legs if row['debit_minor_units']}
     for component in capacities.values():
         require(type(component['amount_minor_units']) is int and component['amount_minor_units'] > 0, 'zero component')
         own = [row for row in sources if row['payment_component_id'] == component['id']]
-        require(len(own) == 2 and all(row['amount_minor_units'] == component['amount_minor_units'] and row['tax_component_id'] is None for row in own), 'component must attribute both cash and AR exactly')
+        party = keys[component['component_key_id']]['party_id']
+        debit = [row for row in own if row['posting_line_id'] in debit_ids]
+        credit = [row for row in own if row['posting_line_id'] not in debit_ids]
+        cash = [row for row in debit if row['posting_line_id'] == cash_legs[0]['id']]
+        paid_in = component['amount_minor_units'] - discounted.get(party, 0)
+        require(len(credit) == 1 and credit[0]['amount_minor_units'] == component['amount_minor_units']
+                and paid_in >= 0 and [row['amount_minor_units'] for row in cash] == ([paid_in] if paid_in else [])
+                and len(debit) == (1 if paid_in else 0) + (1 if discounted.get(party) else 0)
+                and sum(row['amount_minor_units'] for row in debit) == component['amount_minor_units']
+                and all(row['tax_component_id'] is None for row in own), 'component must attribute cash, discount and AR exactly')
     custom.validate(s.company, data['custom_plan'], header['id'], data['custom_plan'].snapshot, record_type='payment')

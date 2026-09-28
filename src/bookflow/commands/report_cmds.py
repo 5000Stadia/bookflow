@@ -54,6 +54,9 @@ from bookflow.company.transaction_list_reports import (
 from bookflow.company.vendor_1099_reports import (
     Vendor1099SummaryInput, Vendor1099SummaryOutput, vendor_1099_summary,
 )
+from bookflow.company.reconciliation_discrepancy_reports import (
+    ReconciliationDiscrepancyInput, ReconciliationDiscrepancyOutput, reconciliation_discrepancy,
+)
 from bookflow.company.balance_reports import (
     CustomerBalanceDetailInput, CustomerBalanceDetailOutput, CustomerBalanceSummaryInput,
     CustomerBalanceSummaryOutput, VendorBalanceDetailInput, VendorBalanceDetailOutput,
@@ -320,3 +323,11 @@ def plan_transaction_list_by_date(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_vendor_1099_summary(inp, ctx, s):
     return Plan(preview=vendor_1099_summary(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report reconciliation-discrepancy", scope="company", required_role="member", capability="reports",
+    description="What changed in one bank or credit card account's finished reconciliations after they were finished, as the anchor's reconciliation discrepancy report shows it. Correcting or voiding a reconciled transaction is allowed and warns; this is where the difference it left can be seen and fixed. One reconciliation row for the opening balance the account adopted and for each finished statement dated on or before as_of, oldest first: reconciled is the statement's ending balance (the adopted opening balance), current is its cleared balance as the transactions it cleared stand now, and difference is current minus reconciled, zero while it still ties. Under each, one change row per transaction it cleared whose figure on it has changed: reconciled is what it was cleared at, current what it counts for now -- zero once voided, moved to another account or re-dated after the statement -- and difference the effect of the change; type_of_change is amount, date, account or voided. A later statement carries an earlier one's difference through its beginning balance, so it shows the same difference with no change rows of its own. Money is in the statement's sign: a bank balance, or what is owed on a card. Totals count the reconciliations, those out of balance and the changed transactions; rows are paged.",
+    input_model=ReconciliationDiscrepancyInput, output_model=ReconciliationDiscrepancyOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND", "E_VALIDATION"])
+def plan_reconciliation_discrepancy(inp, ctx, s):
+    return Plan(preview=reconciliation_discrepancy(inp, s, principal_id=ctx.on_behalf_of))

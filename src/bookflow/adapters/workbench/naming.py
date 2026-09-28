@@ -38,6 +38,7 @@ REPORTS = {
     'general-ledger': 'General ledger',
     'transaction-detail': 'Transaction detail by account',
     'missing-checks': 'Missing checks',
+    'reconciliation-discrepancy': 'Reconciliation discrepancy',
     'profit-and-loss': 'Profit and loss',
     'profit-and-loss-by-job': 'Profit and loss by job',
     'profit-and-loss-by-class': 'Profit and loss by class',

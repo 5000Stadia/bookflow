@@ -3514,6 +3514,51 @@ the live graph; referenced historical openings remain validated against their
 immutable stored populations. `tests/test_reconciliation_public_successors.py`
 covers sequential statements, retry, stale-version nonmutation and an empty card.
 
+### Correcting a reconciled transaction (R146)
+
+Correcting or voiding a transaction a finished reconciliation cleared is allowed, as the anchor
+allows it, and says so; nothing is refused and no posting rule changed. Deletion and refund
+correction keep their `E_RECONCILIATION_DEPENDENCY` refusals. `company/reconciliation_changes.py`
+owns the whole of it and is reached from exactly two places in `core/dispatch.py`, so every
+update and void of every document type is covered without being listed:
+
+- **Saved.** `_apply` passes an `observed` dict to the post-apply
+  `reconciliation_materialization.drain_in_command`; `materialize` records, for every key whose
+  head it moves, the head it had before. `reconciliation_changes.saved` keeps the keys a live
+  claim (`reconciliation_current_members` → `reconciliation_claims`) holds and compares old and
+  new head per claiming reconciliation. The lines go into `applied.output.warnings` before the
+  idempotency record is written, so a replay says them too.
+- **Preview.** `run_in_session` calls `_with_reconciliation_warnings` on a dry run.
+  `reconciliation_changes.preview` finds the documents the plan changes (`data['header']`/
+  `data['before']`, a deposit `Prepared`'s `input_json`, or the journal plan a check, card
+  charge, transfer or register entry now carries as `data['prospective']`) and returns nothing
+  unless a live claim holds one of their movements. A `... void` takes every held movement to
+  nothing; any other write is projected with `reconciliation_adapters.prepare_prospective` on
+  the exact plan the save would write. A plan it cannot project still warns, without a figure.
+
+The arithmetic is one function, `amount(version, account, cutoff)`: a version counts toward a
+reconciliation when it is live, on the reconciled account and dated on or before the statement
+date (the opening date for an opening), in the statement's sign (`-signed_debit` on a card).
+A reconciliation's cleared balance now is that sum over the movements it counted as cleared
+(`opening_covered`, `prior_cleared`, `selected` members; `covered` for an opening) at their
+current heads. A warning is written per reconciliation whose sum the write moves, naming the
+account, the statement date, the new cleared balance and the statement's ending balance; a
+write that moves nothing reconciled (memo, payee, number, a date still within the statement)
+says nothing, which is the anchor's behaviour. A draft's ticks are not claims, so a transaction
+on an unfinished reconciliation is untouched by this and keeps the draft's own staleness rules.
+
+`report reconciliation-discrepancy` (`company/reconciliation_discrepancy_reports.py`) is the
+anchor's Reconciliation Discrepancy report on the same functions: per account, the opening and
+each active certificate dated on or before `as_of` with reconciled (ending) balance, cleared
+balance now and difference, and under each the transactions its claims hold whose figure on it
+changed, typed `amount`, `date`, `account` or `voided`. It is an everyday report (admitted by
+`permission_everyday_reports_catalog`, laid out by `adapters/workbench/everyday.py`) and is an
+`AUDITED_REPORTS` member, since a correction is audited. The workbench shows a preview's
+`warnings` above the result on every generated form (`[data-preview-warnings]` in `form.html`)
+and a save's in the saved notice. `tests/test_reconciliation_change_warnings.py` holds the
+hand-computed cases, `..._transports.py` the four-surface parity and `..._browser.py` the
+Chrome witness.
+
 ### Private reconciliation successor models and preparation
 
 The private `reconciliation_commands_models` module describes strict inputs,
