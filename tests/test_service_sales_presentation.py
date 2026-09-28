@@ -30,21 +30,13 @@ def test_owned_shipping_address_lookup_and_history_paging(hosted):
     other = hosted.ok('customer.create', dict(name='No shipping address customer'), company=cid)
     assert browser.get(path, params={'q': 'Dock', 'f:customer': other['id']}).text == ''
     invoice = hosted.ok('invoice.show', {'invoice': 'DEMO-SALE-INV-ACTIVE'}, company=cid)
-    # A sale shows its revisions on its own record page; /history redirects there and keeps
-    # the page size and cursor it was asked for.
-    redirected = browser.get(f'/c/{cid}/invoice/{invoice["id"]}/history?limit=1', follow_redirects=False)
-    assert redirected.status_code == 303 and 'history=1' in redirected.headers['location']
-    assert 'limit=1' in redirected.headers['location']
-    def section(page):
-        start = page.text.index('aria-label="Sale history"')
-        return page.text[start:page.text.index('</section>', start)]
-    history = browser.get(f'/c/{cid}/invoice/{invoice["id"]}/history?limit=1', follow_redirects=True)
-    assert history.status_code == 200 and 'Sale history' in history.text
-    assert 'revision_number=1"' in section(history) and 'revision_number=2"' not in section(history)
-    next_url = html.unescape(re.search(r'rel="next" href="([^"]+)"', section(history))[1])
-    following = browser.get(next_url, follow_redirects=True)
-    assert following.status_code == 200 and 'revision_number=2"' in section(following)
-    assert 'Next revisions' not in section(following)
+    history = browser.get(f'/c/{cid}/invoice/{invoice["id"]}/history?limit=1')
+    assert history.status_code == 200 and 'Revision history' in history.text
+    assert f'?revision_number=1' in history.text and f'?revision_number=2' not in history.text
+    next_url = html.unescape(re.search(r'href="([^"]+)" rel="next"', history.text)[1])
+    following = browser.get(next_url)
+    assert following.status_code == 200 and '?revision_number=2' in following.text
+    assert 'Next revisions' not in following.text
 
 
 def render(record, preview=False):

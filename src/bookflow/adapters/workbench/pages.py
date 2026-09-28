@@ -1809,6 +1809,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                         'limit': int(request.query_params.get('limit', '50'))}
                     if request.query_params.get('cursor'):
                         raw_history['cursor'] = request.query_params['cursor']
+                    # A deleted document's History link asks for its retained history.
+                    if request.query_params.get('include_deleted') and 'include_deleted' in cmd.input_model.model_fields:
+                        raw_history['include_deleted'] = True
                     result = run(request, cmd.name, raw_history, company_id)
                 except ValueError:
                     return page_error(request, BookflowError('E_VALIDATION', details={'fields': [{'field': 'limit', 'problem': 'must be an integer'}]}))

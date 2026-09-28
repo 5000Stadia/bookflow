@@ -529,6 +529,11 @@ def test_a_deleted_invoice_leaves_the_ordinary_lists_and_is_still_readable_as_hi
     assert history.status_code == 200, f'the retained invoice would not open: {history.text[:500]}'
     assert 'SMOKE-DEL-1' in history.text and reason in history.text, (
         'the retained invoice does not present itself as deleted history with its reason')
+    # Its History link opens the sale's own revision history, retained deletion included.
+    revisions = company.pages.get(f'{url}/{invoice["id"]}/history?include_deleted=1')
+    assert revisions.status_code == 200, f'the deleted invoice\'s history would not open: {revisions.text[:500]}'
+    assert 'Revision history for SMOKE-DEL-1' in revisions.text, (
+        'the deleted invoice\'s History link does not open its revision history')
 
 
 # ============================================ 6. refuse something dangerous, change nothing
