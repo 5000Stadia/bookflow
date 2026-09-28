@@ -57,8 +57,10 @@ def test_reference_picker_checking_register(reference_site, tmp_path, width, hei
         }})()""")
         browser.wait_for("[...document.querySelectorAll('main a')].some(a=>a.textContent==='Reference Plumbing Co')")
         browser.evaluate("[...document.querySelectorAll('main a')].find(a=>a.textContent==='Reference Plumbing Co').click()")
-        browser.wait_for("document.querySelector('h1')?.textContent==='Reference Plumbing Co'")
-        browser.evaluate("[...document.querySelectorAll('main a')].find(a=>a.getAttribute('href').endsWith('/account')).click()")
+        # The company home is headed Overview, with the company named above it.
+        browser.wait_for("document.querySelector('h1')?.textContent==='Overview' && document.querySelector('.page-eyebrow')?.textContent==='Reference Plumbing Co'")
+        # The home no longer links the chart in its body; open the company's account list.
+        browser.navigate(browser.evaluate("location.origin+location.pathname.replace(/\\/$/,'')+'/account'"))
         browser.wait_for("[...document.querySelectorAll('tr')].some(r=>r.textContent.includes('Checking'))")
         # The account list stopped carrying a register link of its own when it became
         # the master browser, so this walks where a person now walks: open the account,

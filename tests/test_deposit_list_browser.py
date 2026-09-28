@@ -530,12 +530,13 @@ def test_saved_deposit_list_return_link_and_error_states(register_browser):
         assert (origin, path, query) == (env.site.base_url, listing, ''), hostile
 
     # A filter the query refuses, with no continuation involved, says so and keeps the form.
-    b.navigate(base + '/deposit?status=deleted')
+    # ('deleted' became a listable status when deposits gained deletion; 'bounced' is none.)
+    b.navigate(base + '/deposit?status=bounced')
     b.wait_for('!!document.querySelector(".deposit-unavailable")', timeout=30)
     refused = b.evaluate('document.querySelector(".deposit-unavailable").innerText')
     assert 'Deposits could not be loaded' in refused and 'E_VALIDATION' in refused
     assert b.evaluate('!!document.querySelector("#deposit-filters")')
-    assert status(listing + '?status=deleted') == 400
+    assert status(listing + '?status=bounced') == 400
 
     # A mistyped bank name is a filter mistake, not a denial, and it must not
     # escape the closed-failure path and replace the page with a refusal document.
