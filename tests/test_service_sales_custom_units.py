@@ -29,7 +29,10 @@ def test_sales_snapshot_scope_values_clear_and_history(conn, scope, kind, value)
     cleared = custom.prepare(conn, owner, cf.CustomFieldValuePatch({field['id']: None}), plan.snapshot, creating=False, record_type=scope)
     custom.apply(conn, cleared)
     assert cleared.snapshot == {}
-    assert undo._active_dependents(conn, 'custom_field', field['id'])
+    # Clearing the value is what releases the definition for undo, as for a list record
+    # (undo._active_dependents); history is protected instead by the definition's kind
+    # being immutable once any value was ever written.
+    assert not undo._active_dependents(conn, 'custom_field', field['id'])
     with pytest.raises(BookflowError, match='E_RECORD_IN_USE'):
         cf.update_definition(conn, field['id'], {'kind': 'date'}, actor_id=new_id(), interface='python')
     restored = custom.prepare(conn, owner, cf.CustomFieldValuePatch({field['id']: value}), {}, creating=False, record_type=scope)

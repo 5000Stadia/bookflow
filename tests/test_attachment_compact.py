@@ -286,7 +286,9 @@ def test_gate_precedes_candidates_and_reopens(client, catalog, monkeypatch):
 
 
 def test_transfer_resource_never_acquires_gate():
-    s = SimpleNamespace(transfer=object())
+    from bookflow.core.commit_hooks import CommitHooks
+    # A collection runs inside its own commit operation; the transfer lease still refuses first.
+    s = SimpleNamespace(transfer=object(), commits=CommitHooks(), hub=None, company=None)
     for call in (lambda: gc.recover_pending(s, None), lambda: gc.collect(s, None, 200, "hash")):
         with pytest.raises(BookflowError) as exc:
             call()

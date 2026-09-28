@@ -221,7 +221,8 @@ def test_an_as_of_date_before_the_first_possible_due_date_does_not_underflow(cli
 def test_pages_join_up_and_a_continuation_stales_on_a_company_write(books):
     client, _ = books
     whole = client.run("report ar-aging", {"as_of": AS_OF, "limit": 200}, company=COMPANY)
-    assert whole["metadata"]["report_version"] == "2"
+    from bookflow.company.ledger_reports import REPORT_VERSION
+    assert whole["metadata"]["report_version"] == REPORT_VERSION
     walked, cursor = [], None
     while True:
         page = client.run("report ar-aging", {"as_of": AS_OF, "limit": 1,

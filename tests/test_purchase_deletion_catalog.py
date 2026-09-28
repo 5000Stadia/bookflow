@@ -1,11 +1,18 @@
 """Literal activated purchase delta and full executable parity, without a count pin."""
 from bookflow.core import registry
 from bookflow.core.deletion_families import FAMILIES, TOMBSTONE_TABLE, capability
-from bookflow.hub import permission_catalog as c, permission_journal_deletion_catalog as build, permission_job_time_catalog as previous
+from bookflow.hub import permission_catalog as c, permission_journal_deletion_catalog as journal, permission_job_time_catalog as previous
+from bookflow.hub.permission_runtime import current_catalog
+
+# The journal-deletion delta, whose own additions over the job-time delta are frozen history.
+build = journal
 from tests.test_permission_catalog import R, owner
 
 
 def test_complete_purchase_delete_catalog_and_finite_family_availability():
+    # The executable parity is a fact about the catalog in force (the tip), whichever delta
+    # that is; the journal delta's own additions are a frozen historical fact about it.
+    build=current_catalog()
     registry.load_all()
     descriptors=[];actions={}
     for cmd in registry.all_commands(include_standalone=True):
@@ -23,8 +30,8 @@ def test_complete_purchase_delete_catalog_and_finite_family_availability():
     for name,(requirements,owners) in actions.items():
         assert set(actual[name].requirements)==requirements,name
         assert set(actual[name].remaining_graph_owners)==owners,name
-    assert {x.name for x in build.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'journal delete'}
-    assert build.CATALOG.defaults==previous.CATALOG.defaults
+    assert {x.name for x in journal.CATALOG.commands}-{x.name for x in previous.CATALOG.commands}=={'journal delete'}
+    assert journal.CATALOG.defaults==previous.CATALOG.defaults
     assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES==frozenset(map(capability,FAMILIES))
     contracts={x.key:x for x in build.CATALOG.company_actions if x.key.startswith('contract:')}
     for family in FAMILIES:
@@ -55,8 +62,15 @@ def test_current_conditional_resource_inventory_and_purchase_examples():
                 actual.setdefault(owner,set()).add((str(path.relative_to(root)),node.lineno))
     # The inventory is a fact about the whole source tree, so it is compared against the
     # catalog in force rather than against one named delta: every later delta inherits it.
+    # The frozen descriptor records call sites with the line numbers of the day it was
+    # accepted, and a stored descriptor never changes; editing code above a call moves its
+    # line. What must hold is the inventory itself: the same owners, each with the same
+    # number of conditional checks in the same file.
     from bookflow.hub import permission_runtime
-    assert {x.owner:set(x.call_sites) for x in permission_runtime.current_catalog().CATALOG.conditional_sources}==actual
+    def inventory(sites):
+        return {owner: sorted(path for path, _ in found) for owner, found in sites.items()}
+    frozen={x.owner:set(x.call_sites) for x in permission_runtime.current_catalog().CATALOG.conditional_sources}
+    assert inventory(frozen)==inventory(actual)
     registry.load_all()
     for noun in ('check','card-charge','invoice','sales-receipt','payment','bill','credit-memo','deposit'):
         cmd=registry.get(noun+' delete')

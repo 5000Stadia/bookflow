@@ -107,6 +107,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
     #
+    # 2797 -> 2801 since df02af0, measured per command on both trees:
+    #    +1  invoice query gained the `settlement` filter.
+    #    +2  register query gained `direction` (a choice of two).
+    #    +1  report reconciliation-discrepancy is new (R146).
+    #
     # 2694 -> 2766 since 82e3a13, and every one of the 72 is accounted for by a command that
     # landed. Re-measure it the same way when it moves again -- per-command node counts on both
     # trees, differenced -- because a census bumped without that arithmetic hides new shape.
@@ -124,7 +129,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # bill post/update, +4 from membership grant/revoke, +2 from customer-refund show's
     # revision_number and company attach's administrator.
     # +1: customer-refund history adds its refund selector; limit/cursor are paging controls.
-    assert sum(len(group["paths"]) for group in mapped)==2797
+    assert sum(len(group["paths"]) for group in mapped)==2801
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

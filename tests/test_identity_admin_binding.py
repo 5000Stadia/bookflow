@@ -47,12 +47,19 @@ def test_offline_real_process_preview_and_full_preservation(prepared):
 
 def test_offline_real_process_apply_and_full_rollback(prepared):
     root,uid,cid=prepared;before=storage(root)
+    # The demo's agents act for this person; lowering the person to readonly suspends each
+    # of them, and that suspension is part of the same audited change.
+    with open_database(root/'hub.db',writable=False) as db:
+        bound={row[0] for row in db.raw.execute(
+            'SELECT agent_user_id FROM agent_principals WHERE principal_user_id=? AND revoked_at IS NULL',(uid,))}
     with producer.offline_operation(root,request_id=REQUEST,purpose='apply') as operation:
         result=operation.apply(intent(uid,cid),audit=AUDIT)
         assert result.visible.changed and not result.visible.prospective
         assert result.private.audit.event.actor_id==uid
-        assert {x.record_type for x in result.private.audit.entries}=={'membership','permission_state'}
-        assert len(result.private.audit.entries)==2
+        entries=result.private.audit.entries
+        assert {x.record_type for x in entries}=={'membership','permission_state'}|({'agent_authority'} if bound else set())
+        assert {x.record_id for x in entries if x.record_type=='agent_authority'}==bound
+        assert len(entries)==2+len(bound)
         member=next(x for x in result.private.final.root.memberships if x.id==result.visible.target_id)
         assert (member.user_id,member.scope_type,member.scope_id,member.role,member.version)==(uid,'company',cid,'readonly',2)
         assert member.grants=='[]' and member.denies=='[]' and member.granted_by==uid

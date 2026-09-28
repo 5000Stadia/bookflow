@@ -155,8 +155,15 @@ def test_actual_stdio_eof_after_commit_and_real_host_restart_cannot_reexecute(ho
             second=Wire(url,hosted,tmp_path,protocol);stack.callback(second.close)
             second.call(2,{'input_ref':reference,'action':'execute'})
             observed,envelope=document(second.reply(2))
-            assert envelope['_meta']['bookflow_transport']['response_kind']=='recovery_observation'
-            assert observed['outcome']=='unknown' and observed['operation_ref']==reference
+            # Either the host still holds the committed result and returns it verified (bounded
+            # cached intent retrieval), or it can only report the outcome as unknown. Neither
+            # executes the write again; the audit count below is the proof.
+            kind=envelope['_meta']['bookflow_transport']['response_kind']
+            assert kind in {'recovery_observation','verified_command_completion'}
+            if kind=='recovery_observation':
+                assert observed['outcome']=='unknown' and observed['operation_ref']==reference
+            else:
+                assert observed['company_id']==hosted.company_id and 'fax' in observed['changed_fields']
             second.eof()
         assert len(events(hosted))==1
     finally:
@@ -248,7 +255,9 @@ def test_actual_mcp_cancellation_while_writer_queued_keeps_zero_or_one_effect(ho
             if envelope['_meta']['bookflow_transport']['response_kind']=='recovery_observation':
                 assert observed['operation_ref']==reference and observed['outcome']=='unknown'
             else:
-                assert len(effects)==1 and observed['info']['fax']=='Cancelled queued intent'
+                # The committed change receipt, not a second execution.
+                assert len(effects)==1 and 'fax' in observed['changed_fields']
+                assert observed['company_id']==hosted.company_id
         assert events(hosted)==effects
         wire.eof()
         assert hosted.secret not in ''.join(wire.stderr)

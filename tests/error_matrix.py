@@ -1582,3 +1582,78 @@ MATRIX["reconcile preview"] = {
     **_RECONCILE_READ_ERRORS,
     "E_VERSION_CONFLICT": _RECONCILE_ERRORS["E_VERSION_CONFLICT"],
 }
+
+# Delete of a sale, a journal entry, a check or a card charge: its own explicit grant and owner,
+# refusing for what still stands on the document -- a reconciliation, a deposit claim, a
+# settlement, a credit return -- and for the retained history it will not delete twice.
+_TRANSACTION_DELETE_ERRORS = {
+    "E_RECORD_NOT_FOUND": "unknown document, or one already deleted and not asked for by include_deleted",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_VALIDATION": "a reason longer than 140 characters, or the document is already deleted",
+    "E_PERIOD_CLOSED": "the document's own posting dates are on or before the closing date",
+    "E_RECONCILIATION_DEPENDENCY": "a finished reconciliation still holds an effect of this document",
+    "E_DEPOSIT_DEPENDENCY": "a deposit claims this document; cancel source and deposit in one coordinated write",
+    "E_IDEMPOTENCY_MISMATCH": "same operation_key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+for _noun in ("invoice", "sales-receipt"):
+    MATRIX[f"{_noun} delete"] = {
+        **_TRANSACTION_DELETE_ERRORS,
+        "E_HAS_APPLICATIONS": "a live payment or credit application settles this sale; unapply it first",
+        "E_SOURCE_CORRECTION_CONFLICT": "a live credit return claims this sale; void the return first",
+    }
+MATRIX["journal delete"] = {
+    **_TRANSACTION_DELETE_ERRORS,
+    "E_VALIDATION": "a reason longer than 140 characters, an entry already deleted, or an entry a "
+                    "check, card charge, transfer or inventory document owns (named, with its command)",
+    "E_HAS_APPLICATIONS": "a live settlement claims this entry; release its applications first",
+}
+for _noun in ("check", "card-charge"):
+    MATRIX[f"{_noun} delete"] = dict(_TRANSACTION_DELETE_ERRORS)
+
+# An item receipt is the goods half of a purchase; its refusals are the bill's, less the payable.
+MATRIX["item-receipt post"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor, item, account, class, job or purchase order",
+    "E_INACTIVE_REFERENCE": "deactivated vendor, item, account, class or job",
+    "E_VALIDATION": "a line that is not a stock item, a negative quantity or cost, or an ineligible account",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "receipt date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit number already used by another item receipt",
+    "E_WORK_DEPENDENCY": "a purchase-order line changed since it was displayed, or is already fully received",
+    "E_VERSION_CONFLICT": "stale expected_version of the purchase order the receipt draws on",
+    "E_REASON_REQUIRED": "declared for every item-receipt write; the reason is required to void one",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["item-receipt update"] = dict(MATRIX["item-receipt post"], **{
+    "E_RECORD_NOT_FOUND": "unknown receipt, vendor, item, account, class, job or purchase order",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_PERIOD_CLOSED": "original or new receipt date on or before the closing date",
+    "E_WORK_DEPENDENCY": "a linked bill must release the receipt before its physical facts change",
+})
+_RECEIPT_WRITE_ONLY = "declared for every item-receipt write; a void composes no lines, so it cannot arise here"
+MATRIX["item-receipt void"] = dict(MATRIX["item-receipt update"], **{
+    "E_RECORD_NOT_FOUND": "unknown receipt",
+    "E_REASON_REQUIRED": "no --reason",
+    "E_WORK_DEPENDENCY": "a linked bill still claims the receipt",
+    "E_DUPLICATE_NUMBER": _RECEIPT_WRITE_ONLY,
+    "E_AMOUNT_PRECISION": _RECEIPT_WRITE_ONLY,
+    "E_INACTIVE_REFERENCE": _RECEIPT_WRITE_ONLY,
+})
+MATRIX["item-receipt show"] = {"E_RECORD_NOT_FOUND": "unknown receipt or revision number",
+                               "E_QUERY_STALE": "company audit changed while the receipt was read"}
+MATRIX["item-receipt query"] = {"E_RECORD_NOT_FOUND": "unknown vendor filter",
+                                "E_QUERY_STALE": "company audit changed between receipt pages"}
+MATRIX["item-receipt history"] = {"E_RECORD_NOT_FOUND": "unknown receipt",
+                                  "E_QUERY_STALE": "company audit changed between history pages"}
+MATRIX["customer-refund history"] = {"E_RECORD_NOT_FOUND": "unknown refund",
+                                     "E_QUERY_STALE": "company audit changed between history pages"}
+
+# Membership and activation writes carry the version the administrator saw.
+MATRIX["membership grant"]["E_VERSION_CONFLICT"] = "expected_version behind the membership's current version"
+MATRIX["membership revoke"]["E_VERSION_CONFLICT"] = "expected_version behind the membership's current version"
+MATRIX.setdefault("permission activate", {})["E_VERSION_CONFLICT"] = "expected_generation or catalog digest no longer current"

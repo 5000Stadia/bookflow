@@ -3,7 +3,11 @@ from pathlib import Path
 import sqlite3
 import pytest
 from bookflow.core.errors import BookflowError
-from bookflow.hub import permission_journal_deletion_catalog as current, permission_setup_catalog as previous
+from bookflow.hub import permission_setup_catalog as previous
+from bookflow.hub.permission_runtime import current_catalog
+
+# The tip descriptor is the one an activation stores, whichever delta it is.
+current = current_catalog()
 from tests.test_bill_item_lines import books
 from tests.test_purchase_deletion import location
 from tests.payment_raw_evidence import database
@@ -13,6 +17,11 @@ def test_existing_setup_requires_explicit_delete_catalog_transition(books,monkey
     client=books['client'];company=books['company']
     post=books['run']('check post',dict(account=books['bank'],date='2017-01-01',amount='1',
         expenses=[dict(account=books['freight'],amount='1')]),reason='Existing purchase')
+    # An install upgraded from before activation existed, which then activated an older
+    # catalog: a new install starts at the tip, so the older state is built from legacy.
+    from pathlib import Path as _Path
+    from tests.conftest import make_legacy
+    make_legacy(_Path(client.data_root))
     with monkeypatch.context() as historical:
         # Exact accepted phase2 descriptor through its existing public activation owner.
         historical.setattr(current,'CATALOG',previous.CATALOG)

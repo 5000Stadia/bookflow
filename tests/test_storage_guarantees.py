@@ -53,6 +53,9 @@ def test_reader_count_is_released_even_when_close_raises(hosted, monkeypatch):
         raise OSError("injected close failure")
 
     monkeypatch.setattr(dispatch, "_close", fail_after_close)
+    # The host's command execution holds its own reference to the closer.
+    from bookflow.adapters.http import execution
+    monkeypatch.setattr(execution, "_close", fail_after_close)
     response = hosted.call("company.list")
     assert response.json()["code"] == "E_IO"
     assert hosted.handle.host._readers_attached == 0

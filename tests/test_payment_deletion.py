@@ -191,9 +191,16 @@ def test_co51_declaration_is_exact_and_storage_is_immutable(books):
 
 
 def test_payment_delete_needs_its_own_explicit_catalog_transition(books, monkeypatch):
-    from bookflow.hub import permission_journal_deletion_catalog as current, permission_sales_deletion_catalog as previous
+    from bookflow.hub import permission_sales_deletion_catalog as previous
+    from bookflow.hub.permission_runtime import current_catalog
+    current = current_catalog()  # the tip an activation stores, whichever delta it is
     post = receive(books)
     client = books['client']
+    # An install upgraded from before activation existed, which then activated an older
+    # catalog: a new install starts at the tip, so the older state is built from legacy.
+    from pathlib import Path as _Path
+    from tests.conftest import make_legacy
+    make_legacy(_Path(client.data_root))
     with monkeypatch.context() as historical:
         historical.setattr(current, 'CATALOG', previous.CATALOG)
         historical.setattr(current, 'MANIFEST', previous.MANIFEST)

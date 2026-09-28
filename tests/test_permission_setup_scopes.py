@@ -80,8 +80,14 @@ def test_pending_trash_recovery_and_demo_cascade_use_registry_policy_owner(root,
         assert db.execute('SELECT count(*) FROM memberships WHERE scope_id IN (?,?)',
             (original['company_id'],original['organization_id'])).fetchone()==(0,)
         actor=Config.load(root/'config.toml').user_table(os_login())['user_id']
-        assert db.execute("SELECT user_id,role,grants,denies FROM memberships WHERE scope_type='company' AND scope_id=?",
-            (replacement['company_id'],)).fetchall()==[(actor,'owner',None,None)]
+        rows=db.execute("SELECT m.user_id,m.role,m.grants,m.denies,u.kind FROM memberships m JOIN users u ON u.id=m.user_id "
+            "WHERE m.scope_type='company' AND m.scope_id=? AND m.revoked_at IS NULL",(replacement['company_id'],)).fetchall()
+        # The creator is the new company's owner with no explicit grants (stored empty); the
+        # only other member is the demo's own assistant agent, enrolled by the seed.
+        empty=(None,'[]')
+        assert [(u,r) for u,r,g,d,k in rows if u==actor]==[(actor,'owner')]
+        assert all(g in empty and d in empty for _,_,g,d,_ in rows)
+        assert {(k,r) for u,r,g,d,k in rows if u!=actor}<={('agent','standard')}
     assert client.company.show(company=replacement['company_id'])['company_id']==replacement['company_id']
 
     assert any(x['name']=='Scoped creator seed witness' for x in client.account.list(company=replacement['company_id'])['items'])

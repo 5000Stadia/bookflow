@@ -228,7 +228,8 @@ def test_added_line_uses_selected_header_price_level_version(client, sale, kind)
 @pytest.mark.parametrize('change', [
     {'quantity': 1.5}, {'quantity': True}, {'quantity': '0'}, {'quantity': '-1'}, {'quantity': '1e3'},
     {'quantity': '0.0000001'}, {'unit_price': 10}, {'unit_price': True}, {'unit_price': 1.5},
-    {'unit_price': '1.001'}, {'unit_price': '1.00 EUR'}, {'unit_price': '-1'}, {'unit_price': '0'},
+    # A zero unit price is a valid free line since zero-value items (tests/test_zero_value_items).
+    {'unit_price': '1.001'}, {'unit_price': '1.00 EUR'}, {'unit_price': '-1'},
     {'unit_price': {'minor_units': 100, 'currency': 'USD', 'amount': '1.01'}},
     {'quantity': '2', 'unit_price': {'minor_units': 9223372036854775807, 'currency': 'USD'}},
 ])
