@@ -28,6 +28,8 @@ PERIOD_REPORTS = (
 AS_OF_REPORTS = (
     'ap-aging', 'ar-aging', 'collections', 'inventory-valuation', 'missing-checks',
     'open-invoices', 'stock-status', 'unbilled-costs', 'unpaid-bills',
+    'customer-balance-summary', 'customer-balance-detail', 'vendor-balance-summary',
+    'vendor-balance-detail',
 )
 REPORTS = {
     **{'report ' + name: ('date_from', 'date_to') for name in PERIOD_REPORTS},

@@ -385,6 +385,24 @@ MATRIX['report open-invoices'] = {
     'E_VALUE_RANGE': 'public invoice amount or open-invoice total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
 }
+MATRIX['report customer-balance-summary'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public customer balance or report total exceeds signed 64-bit range',
+}
+MATRIX['report customer-balance-detail'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between detail pages',
+    'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+}
+MATRIX['report vendor-balance-summary'] = {
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public vendor balance or report total exceeds signed 64-bit range',
+}
+MATRIX['report vendor-balance-detail'] = {
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between detail pages',
+    'E_VALUE_RANGE': 'public amount, running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
 MATRIX['report ap-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',

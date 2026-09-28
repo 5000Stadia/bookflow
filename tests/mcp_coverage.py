@@ -388,6 +388,8 @@ report ar-aging
 report balance-sheet
 report cash-flows
 report collections
+report customer-balance-detail
+report customer-balance-summary
 report expenses-by-vendor
 report general-ledger
 report income-tax-summary
@@ -406,6 +408,8 @@ report transaction-detail
 report trial-balance
 report unbilled-costs
 report unpaid-bills
+report vendor-balance-detail
+report vendor-balance-summary
 sales-receipt history
 sales-receipt post
 sales-receipt query

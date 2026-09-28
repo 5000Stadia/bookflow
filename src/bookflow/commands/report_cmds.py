@@ -42,6 +42,12 @@ from bookflow.company.unbilled_costs import (
 from bookflow.company.collection_reports import (
     CollectionsInput, CollectionsOutput, collections,
 )
+from bookflow.company.balance_reports import (
+    CustomerBalanceDetailInput, CustomerBalanceDetailOutput, CustomerBalanceSummaryInput,
+    CustomerBalanceSummaryOutput, VendorBalanceDetailInput, VendorBalanceDetailOutput,
+    VendorBalanceSummaryInput, VendorBalanceSummaryOutput, customer_balance_detail,
+    customer_balance_summary, vendor_balance_detail, vendor_balance_summary,
+)
 
 
 @command("report ap-aging", scope="company", required_role="member", capability="reports",
@@ -222,3 +228,35 @@ def plan_unbilled_costs(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_collections(inp, ctx, s):
     return Plan(preview=collections(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report customer-balance-summary", scope="company", required_role="member", capability="reports",
+    description="What each customer or job owes as of as_of: one row per customer or job with its accrual receivable balance, in hierarchy-name order so a job reads under its customer. A job's balance is its own and is never added into its parent's. The balance is the Total column report ar-aging shows for the same customer on the same date, so an unapplied payment or credit reduces it and a customer owed money shows a negative balance. Customers with a zero balance are omitted, so the total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover every customer and rows are paged.",
+    input_model=CustomerBalanceSummaryInput, output_model=CustomerBalanceSummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_customer_balance_summary(inp, ctx, s):
+    return Plan(preview=customer_balance_summary(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report customer-balance-detail", scope="company", required_role="member", capability="reports",
+    description="Every accrual receivable effect that makes up each customer's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each customer or job. One row is one document's effect on one customer on one date -- an invoice, statement charge, payment, sales receipt, credit memo, refund or receivable journal entry -- read exactly as report statement reads it from the beginning of the books: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a receipt to the same customer's invoice moves nothing and has no row. A parent's receipt that settles a job's invoice moves that balance from the parent to the job, and each side is an applied_credit row. Customers whose balance is zero are omitted unless customer names one. A customer's total row is its report customer-balance-summary row, and the report total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole customer before a page is cut.",
+    input_model=CustomerBalanceDetailInput, output_model=CustomerBalanceDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_customer_balance_detail(inp, ctx, s):
+    return Plan(preview=customer_balance_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report vendor-balance-summary", scope="company", required_role="member", capability="reports",
+    description="What is owed to each vendor as of as_of: one row per vendor with its accrual payable balance, in name order. The balance is the Total column report ap-aging shows for the same vendor on the same date, so an unapplied bill payment or vendor credit reduces it and a vendor who owes the company shows a negative balance. Vendors with a zero balance are omitted, so the total is Accounts Payable on the accrual balance sheet for the same date. Totals cover every vendor and rows are paged.",
+    input_model=VendorBalanceSummaryInput, output_model=VendorBalanceSummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_vendor_balance_summary(inp, ctx, s):
+    return Plan(preview=vendor_balance_summary(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report vendor-balance-detail", scope="company", required_role="member", capability="reports",
+    description="Every accrual payable effect that makes up each vendor's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each vendor. One row is one document's effect on one vendor's payable on one date -- a bill, bill payment, vendor credit, item receipt, receipt price correction or payable journal entry -- signed so that what is owed to the vendor is positive: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a payment or credit to a bill moves nothing the vendor is owed and has no row. Vendors whose balance is zero are omitted unless vendor names one. A vendor's total row is its report vendor-balance-summary row, and the report total is Accounts Payable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole vendor before a page is cut.",
+    input_model=VendorBalanceDetailInput, output_model=VendorBalanceDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_vendor_balance_detail(inp, ctx, s):
+    return Plan(preview=vendor_balance_detail(inp, s, principal_id=ctx.on_behalf_of))

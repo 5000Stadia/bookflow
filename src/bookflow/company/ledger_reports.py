@@ -60,10 +60,12 @@ FINANCIAL_REPORTS = frozenset({
 # Settlement and billing history post nothing, so these also carry the audit sequence.
 RECEIVABLE_REPORTS = frozenset({
     "ar-aging", "open-invoices", "statement", "collections", "unbilled-costs",
+    "customer-balance-summary", "customer-balance-detail",
 })
 # Payables rows are vendors, which are a flat list. The sales tax liability's rows are
 # agencies, which are vendors, so it labels and orders its rows exactly as the other two.
-PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability"})
+PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability",
+                             "vendor-balance-summary", "vendor-balance-detail"})
 
 # Which list a reference-valued report filter names, by the input field that names it. A
 # filter declared here is one a report resolves to stable IDs on its first page and carries
