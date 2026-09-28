@@ -7,6 +7,7 @@ retain their reader pins; an idle hub-only snapshot never pins company folders.
 from contextlib import contextmanager
 from contextvars import ContextVar
 from threading import current_thread
+import time
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.publication_admission import AdmissionCancelled
@@ -14,10 +15,26 @@ from bookflow.storage.engine import open_database
 
 _current = ContextVar('bookflow_permission_read_package', default=None)
 
+# An execution snapshot that races a commit is retaken on a fresh generation.
+# Nothing has run on it yet, so the retry is invisible; the bound turns a commit
+# that does not settle into a typed, retryable answer instead of a hang.
+SNAPSHOT_WAIT_SECONDS = 5.0
+SNAPSHOT_ATTEMPTS = 8
+
+
+def authority_busy():
+    """Typed, retryable: authority kept changing before this request could read it."""
+    return BookflowError('E_DB_BUSY', message='Permissions or records were changing while this '
+                         'request started; nothing was read or changed. Retry the request.',
+                         details={'operation': 'authority_change'})
+
 
 class _Package:
-    def __init__(self, host):
+    def __init__(self, host, *, publication=False):
         self.host = host
+        # A publication phase keeps AdmissionCancelled: its release loop owns
+        # the asynchronous, disconnect-aware wait for admission to reopen.
+        self.publication = publication
         self.thread = current_thread()
         self.root = host.data_root
         self.db = self.manager = self.generation = None
@@ -51,23 +68,51 @@ class _Package:
             except AdmissionCancelled:
                 self.discard()
         if self.db is None:
-            self.host.permission_snapshot_started()
-            manager = open_database(self.root / 'hub.db', False)
-            entered = False
-            try:
-                generation = self.host.publication_admission.begin_validation()
-                db = manager.__enter__()
-                entered = True
-                self.host.publication_admission.check_generation(generation)
-            except BaseException:
-                try:
-                    if entered:
-                        manager.__exit__(None, None, None)
-                finally:
-                    self.host.permission_snapshot_done()
-                raise
-            self.db, self.manager, self.generation = db, manager, generation
+            if self.publication:
+                self._snapshot()
+            else:
+                self._execution_snapshot()
         return self.db
+
+    def _execution_snapshot(self):
+        """Retake a snapshot that raced a commit; never surface the race untyped.
+
+        A conservative commit (any write, a session issue, a company open) closes
+        admission and starts a new generation. A snapshot opened across it is
+        discarded before any command reads it, so taking a fresh one is the same
+        request, not a repeat of one.
+        """
+        admission = self.host.publication_admission
+        deadline = time.monotonic() + SNAPSHOT_WAIT_SECONDS
+        for _attempt in range(SNAPSHOT_ATTEMPTS):
+            try:
+                self._snapshot()
+                return
+            except AdmissionCancelled:
+                if getattr(self.host, "_stopping", False):
+                    raise BookflowError("E_DB_BUSY", message="The host is stopping.") from None
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not admission.wait_open_blocking(remaining):
+                    break
+        raise authority_busy()
+
+    def _snapshot(self):
+        self.host.permission_snapshot_started()
+        manager = open_database(self.root / 'hub.db', False)
+        entered = False
+        try:
+            generation = self.host.publication_admission.begin_validation()
+            db = manager.__enter__()
+            entered = True
+            self.host.publication_admission.check_generation(generation)
+        except BaseException:
+            try:
+                if entered:
+                    manager.__exit__(None, None, None)
+            finally:
+                self.host.permission_snapshot_done()
+            raise
+        self.db, self.manager, self.generation = db, manager, generation
 
 
 @contextmanager
@@ -77,7 +122,7 @@ def read_package(host, *, fresh=False):
     if not fresh and parent is not None and parent.owned(host):
         yield parent
         return
-    package = _Package(host)
+    package = _Package(host, publication=fresh)
     token = _current.set(package)
     try:
         yield package

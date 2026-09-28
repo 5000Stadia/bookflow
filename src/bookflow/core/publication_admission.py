@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import asyncio
 import time
 import socket
-from threading import Lock
+from threading import Event, Lock
 from asyncio.selector_events import _SelectorSocketTransport
 from asyncio import get_running_loop
 
@@ -66,6 +66,8 @@ class Admission:
         self._barrier = None
         self._wait_loop = None
         self._reopened = None
+        self._open = Event()
+        self._open.set()
 
     def begin_validation(self):
         with self._mutex:
@@ -160,6 +162,7 @@ class Admission:
                 raise RuntimeError('commit barrier already closed')
             self._barrier = CommitBarrier(self)
             self._epoch = object()  # O(1), no response/task enumeration or wait
+            self._open.clear()
             return self._barrier
 
     def finish_commit(self, barrier, *, committed):
@@ -177,6 +180,7 @@ class Admission:
             if barrier is not self._barrier or type(barrier) is not CommitBarrier:
                 raise ValueError('foreign or completed barrier')
             self._barrier = None
+            self._open.set()
             loop, event = self._wait_loop, self._reopened
         # Constant writer work. Event.set wakes tasks on their loop, outside the
         # mutex and without the writer enumerating or waiting for responses.
@@ -188,6 +192,15 @@ class Admission:
                 # has no waiter to notify; never change a durable commit outcome.
                 if not loop.is_closed():
                     raise
+
+    def wait_open_blocking(self, timeout):
+        """Block a worker thread until no commit barrier is closed, or the timeout.
+
+        For a request that has not yet taken its snapshot: the caller holds no
+        reader, snapshot, frame or mutex while it waits, so a writer never waits
+        for it. Returns whether admission was open when the wait ended.
+        """
+        return self._open.wait(max(0.0, timeout))
 
     async def wait_open(self, response, cancelled):
         """No reader, writer resource or worker-pool slot is held by this wait."""

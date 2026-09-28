@@ -181,7 +181,7 @@ class Client:
                         # results await their final authority certificate. Retry
                         # only these named observations under the same deadline.
                         # Framed business rejections return above, never raise here.
-                        if exc.code != 'E_DB_BUSY' or exc.details.get('operation') not in {'filesystem_change', 'publication_pending'}:
+                        if exc.code != 'E_DB_BUSY' or exc.details.get('operation') not in {'filesystem_change', 'publication_pending', 'authority_change'}:
                             raise
                     await anyio.sleep(delay)
                     delay = min(delay * 2, RECOVERY_MAX_DELAY)
