@@ -150,8 +150,13 @@ def test_every_durable_action_survives_expiry_and_actor_change_without_raw_mutat
 
 
 @pytest.mark.parametrize('opponent',['apply','abort','replace'])
-def test_competing_terminal_actions_publish_at_most_one_whole_revision(client,sale,root,opponent):
+def test_competing_terminal_actions_publish_at_most_one_whole_revision(client,sale,root,opponent,monkeypatch):
     import bookflow
+    if opponent=='apply':
+        # An identical apply waits for the root lock like any writer, then replays. The suite's
+        # 0.2 s lock wait (conftest) is shorter than one activated apply holds the lock, so this
+        # race runs with the wait an install actually uses.
+        monkeypatch.delenv('BOOKFLOW_LOCK_TIMEOUT')
     draft,first,_=setup(client,sale)
     edits=[dict(invoice_id=first['id'],observed_invoice_version=1,action='remove')]
     begin=declaration(draft,edits);identifier,comparison=seal_compare(client,begin,edits)
@@ -167,7 +172,8 @@ def test_competing_terminal_actions_publish_at_most_one_whole_revision(client,sa
     for result in results:
         if 'error' in result:assert result['error'] in {'E_RECOVERY_FINALIZED','E_VERSION_CONFLICT','E_DB_BUSY'}
     if opponent=='apply':
-        assert len(successes)==2 and successes[0]['original_receipt']==successes[1]['original_receipt']
+        assert len(successes)==2, results
+        assert successes[0]['original_receipt']==successes[1]['original_receipt']
         assert sum(not r['idempotent_replay'] for r in successes)==1
     else:assert len(successes)==1
     current=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
