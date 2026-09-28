@@ -166,7 +166,9 @@ class SalesProfile(CommercialProfile):
         )
         result = {key: values[key] for key in order if key in values}
         if self.schema_version == 2:
-            result.update(sales_tax_calculation=values['sales_tax_calculation'], tax_policy_origin=values['tax_policy_origin'])
+            # A caller's include/exclude may leave either captured field out of `values`.
+            result.update({key: values[key] for key in ('sales_tax_calculation', 'tax_policy_origin')
+                           if key in values})
         return result
 
 
