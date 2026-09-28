@@ -90,8 +90,21 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def call_host(sock_path: str, envelope: dict[str, Any], timeout: float = 30.0) -> dict[str, Any] | None:
-    """Send one envelope, receive one JSON reply; None when no host answers."""
+#: While a forwarded command runs, the host sends an empty frame (a zero length header)
+#: at least this often, so a long operation -- a large backup or restore, a demo reset --
+#: is waited for for as long as it takes, and a host that stops answering is still noticed.
+HEARTBEAT_SECONDS = 5.0
+#: The longest silence the caller accepts: heartbeats, then up to 30 s while the host's
+#: finished reply waits for publication admission (adapters/http/local.py).
+SILENCE_SECONDS = 60.0
+
+
+def call_host(sock_path: str, envelope: dict[str, Any], timeout: float = SILENCE_SECONDS) -> dict[str, Any] | None:
+    """Send one envelope, receive one JSON reply; None when no host answers.
+
+    ``timeout`` bounds each silence, not the whole call: empty heartbeat frames before
+    the reply keep a long-running command's caller waiting.
+    """
     if sys.platform == "win32":  # pragma: no cover - named pipes arrive with the Windows port
         return None
     attempted = False
@@ -102,13 +115,15 @@ def call_host(sock_path: str, envelope: dict[str, Any], timeout: float = 30.0) -
             payload = json.dumps(envelope, default=str).encode("utf-8")
             attempted = True
             sk.sendall(len(payload).to_bytes(4, "big") + payload)
-            head = b""
-            while len(head) < 4:
-                chunk = sk.recv(4 - len(head))
-                if not chunk:
-                    raise BookflowError("E_IO", details={"stage": "local response", "outcome": "unknown"})
-                head += chunk
-            size = int.from_bytes(head, "big")
+            size = 0
+            while size == 0:  # a zero-length frame is the host saying it is still working
+                head = b""
+                while len(head) < 4:
+                    chunk = sk.recv(4 - len(head))
+                    if not chunk:
+                        raise BookflowError("E_IO", details={"stage": "local response", "outcome": "unknown"})
+                    head += chunk
+                size = int.from_bytes(head, "big")
             body = b""
             while len(body) < size:
                 chunk = sk.recv(min(65536, size - len(body)))
