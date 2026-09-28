@@ -515,6 +515,6 @@ def _movements(s, data):
     for item_id in {row['item_id'] for row in movements}:
         stored = inventory.movements(s, item_id=item_id)
         state = replay(stored + [row for row in movements if row['item_id'] == item_id])
-        _require(not any(correction.target_movement['id'] in own_ids
+        _require(not any(correction.target_movement['id'] in own_ids and correction.filled_by is None
                          for correction in state.corrections),
                  'a stock movement is posted at a cost the ledger does not agree with')

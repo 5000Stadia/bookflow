@@ -32,10 +32,9 @@ def certify(b):
         expected_facts_fingerprint=preview['expected_facts_fingerprint'],dependency_guard=preview['dependency_guard']),reason='Certify statement')
 
 
-@pytest.mark.parametrize('blocker',['negative-stock','closed-receipt','closed-prefix-after-sale','reconciled'])
+@pytest.mark.parametrize('blocker',['closed-receipt','closed-prefix-after-sale','reconciled'])
 def test_dependency_refusal_leaves_complete_storage_unchanged(books,blocker):
     item=_inventory_part(books);post=purchase(books,item)
-    if blocker=='negative-stock':sale(books,item)
     if blocker=='closed-prefix-after-sale':
         purchase(books,item,'10');sale(books,item)
     if blocker.startswith('closed'):
@@ -48,6 +47,19 @@ def test_dependency_refusal_leaves_complete_storage_unchanged(books,blocker):
         books['run']('check delete',dict(check=post['id'],expected_version=post['version']),reason='Delete dependent receipt')
     assert refused.value.code==('E_RECONCILIATION_DEPENDENCY' if blocker=='reconciled' else 'E_PERIOD_CLOSED' if blocker.startswith('closed') else 'E_VALIDATION')
     assert database(path)==before
+
+
+def test_deleting_the_purchase_of_sold_stock_leaves_the_sale_provisional_and_says_so(books):
+    """Stock may go below zero (R137). 2 bought at 8.00, 1 sold on 1 February at 800; deleting
+    the purchase leaves that sale 1 below zero at the 1.80 purchase cost on the item record, so
+    it is re-costed at its own date by 180 - 800 = -620 of cost and the deletion warns."""
+    item=_inventory_part(books);post=purchase(books,item);sale(books,item)
+    enable(books,'check',deny_post=False,grants=['transaction.check.delete','transaction.card_charge.delete'])
+    deleted=books['run']('check delete',dict(check=post['id'],expected_version=post['version'],
+        operation_key='negative-delete'),reason='Delete sold receipt')
+    assert [line.split(';')[0] for line in deleted['warnings'] if line.startswith('Takes ')]==[
+        'Takes Copper Elbow to -1 on 2017-02-01']
+    assert _net(books)[books['cogs']]==180
 
 
 def test_delete_recosts_original_sale_date_and_fences_stale_and_deleted_edits(books):

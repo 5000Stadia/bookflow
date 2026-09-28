@@ -115,7 +115,11 @@ class InventoryShowInput(_Input):
 
 
 class InventoryCorrectionOutput(BaseModel):
-    """One dated value delta this change posted against an earlier issue."""
+    """One dated value delta this change posted against an earlier issue.
+
+    A backdating correction is dated at the issue it corrects; a true-up of a provisional cost
+    is dated at the receipt named in ``filled_by_movement_id``.
+    """
 
     model_config = ConfigDict(strict=True, extra='forbid')
 
@@ -123,6 +127,9 @@ class InventoryCorrectionOutput(BaseModel):
     item_name: str
     effective_date: str
     corrects_movement_id: str
+    filled_by_movement_id: str | None = Field(
+        default=None, description='On a provisional-cost true-up, the receipt movement whose '
+                                  'arrival settled the cost; null on a backdating correction.')
     delta: JournalMoneyOutput
     transaction_id: str
     number: str

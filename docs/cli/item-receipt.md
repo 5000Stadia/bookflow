@@ -1435,7 +1435,7 @@ Example JSON output:
 
 ## `item-receipt void`
 
-Void a receipt with a reason, reversing its exact stock and accounting and releasing its own physical order claims. Linked bills and insufficient historical stock refuse the whole change.
+Void a receipt with a reason, reversing its exact stock and accounting and releasing its own physical order claims. Linked bills refuse the whole change; a sale the void leaves below zero is re-costed provisionally at its own date and named in warnings.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

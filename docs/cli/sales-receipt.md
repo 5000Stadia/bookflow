@@ -390,7 +390,7 @@ Example JSON output:
 
 ## `sales-receipt post`
 
-Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice. sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys.
+Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice. A stocked line that takes its item below zero on its date is saved, and warnings says so: the units below zero are costed provisionally at the average cost, else the purchase cost on the item record, else zero, and the receipt that later brings the item back up posts a true-up to cost of goods sold dated at that receipt and linked to this sale. sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2528,7 +2528,7 @@ Example JSON output:
 
 ## `sales-receipt update`
 
-Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification. sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys. A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.
+Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification. A stocked line that takes its item below zero on its date is saved, and warnings says so: the units below zero are costed provisionally at the average cost, else the purchase cost on the item record, else zero, and the receipt that later brings the item back up posts a true-up to cost of goods sold dated at that receipt and linked to this sale. sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys. A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
