@@ -129,6 +129,22 @@ def candidates(s, inp):
     return context, result
 
 
+def _discount_terms(s, items, context):
+    """Each row's discount date and what the terms suggest for a receipt on the context date."""
+    from bookflow.company import early_discounts as early
+    from bookflow.company.payments import discounts_by_invoice
+    profiles = {row['revision_id']: row['profile_snapshot'] for row in s.company.conn.execute(
+        sa.select(c.sales_profiles.c.revision_id, c.sales_profiles.c.profile_snapshot).where(
+            c.sales_profiles.c.revision_id.in_([item['revision_id'] for item in items]))).mappings()}
+    taken = discounts_by_invoice(s, [item['invoice_id'] for item in items])
+    for item in items:
+        terms = early.invoice_terms(profiles[item['revision_id']])
+        item['discount_date'] = terms.discount_date if terms.percent_millionths else None
+        item['suggested_discount_minor_units'] = early.suggested(
+            terms, item['gross_minor_units'], context['date'], taken=taken[item['invoice_id']],
+            due=item['due_minor_units'])
+
+
 def invoices(s, inp):
     context, statement, capacities, funding = _candidate_query(s, inp)
     # Legal commercial/settlement changes always advance the invoice header.
@@ -147,6 +163,7 @@ def invoices(s, inp):
         names = [column[0] for column in cursor.description]
         out['items'] = [dict(zip(names, row), available_source_minor_units=capacities[row[2]] if context['payment_id'] else None)
             for row in cursor.fetchall()]
+        _discount_terms(s, out['items'], context)
     else:
         out['items'] = []
     return dict(out, **balances)

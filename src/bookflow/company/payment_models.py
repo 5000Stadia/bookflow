@@ -136,12 +136,28 @@ class SelectionQueryInput(Page):
     state: Literal['open', 'consumed', 'recovering'] | None = None
 
 
+class InvoiceDiscount(StrictModel):
+    """An early-payment discount taken on one invoice this receipt also applies cash to."""
+    invoice: Selector
+    amount: Amount
+
+
 class PaymentReceiveInput(StrictModel):
     customer: Selector
     date: _Date
     amount: Amount
     operation_key: OperationKey
     applications: Applications = Field(default_factory=InlineApplications)
+    discounts: list[InvoiceDiscount] = Field(default_factory=list, max_length=200, description=(
+        'Early-payment discounts, one per invoice, each on an invoice the applications also pay. '
+        'The invoice is settled by the cash applied plus the discount; the discount is debited '
+        'to the discount account. Never taken unless listed: `payment invoices` shows each '
+        'invoice\'s discount date and suggested discount. Example: a 1,000.00 invoice on '
+        '2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", '
+        '...} and discounts [{"invoice": "1043", "amount": "20.00"}].'))
+    discount_account: Selector | None = Field(default=None, description=(
+        'Account debited for the discounts; defaults to the company customer discount account, '
+        'else "Discounts Given", which is created as an income account if the chart lacks it.'))
     payment_method: Selector | None = None
     ar_account: Selector | None = None
     deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')
@@ -151,6 +167,13 @@ class PaymentReceiveInput(StrictModel):
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     expected_custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
     expected_facts_fingerprint: Fingerprint | None = None
+
+    @model_validator(mode='after')
+    def one_discount_per_invoice(self):
+        invoices = [row.invoice for row in self.discounts]
+        if len(set(invoices)) != len(invoices):
+            raise ValueError('name each discounted invoice once')
+        return self
 
 
 class PaymentApplyInput(StrictModel):
