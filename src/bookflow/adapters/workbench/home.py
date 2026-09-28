@@ -319,7 +319,9 @@ PANELS: tuple[Panel, ...] = (
                         "open invoices, A/P aging, unpaid bills, trial balance, profit and "
                         "loss, balance sheet, statement of cash flows, income tax summary, "
                         "general ledger, transaction detail by account, missing checks, "
-                        "inventory valuation and stock status.",
+                        "inventory valuation and stock status, customer and vendor "
+                        "balances, open purchase orders, purchases by vendor and item, "
+                        "deposit detail, the transaction list by date and the 1099 summary.",
                 action=Action(
                     "Choose a report to run",
                     READ,
@@ -327,6 +329,12 @@ PANELS: tuple[Panel, ...] = (
                      "report expenses-by-vendor",
                      "report statement", "report ar-aging", "report open-invoices",
                      "report ap-aging", "report unpaid-bills",
+                     "report customer-balance-summary", "report customer-balance-detail",
+                     "report vendor-balance-summary", "report vendor-balance-detail",
+                     "report open-purchase-orders", "report purchases-by-vendor",
+                     "report purchases-by-item",
+                     "report deposit-detail", "report transaction-list-by-date",
+                     "report vendor-1099-summary",
                      "report inventory-valuation", "report stock-status",
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
@@ -465,6 +473,8 @@ SECTIONS: tuple[Section, ...] = (
             _report("Customer statement", "statement"),
             _report("A/R aging summary", "ar-aging"),
             _report("Open invoices", "open-invoices"),
+            _report("Customer balance summary", "customer-balance-summary"),
+            _report("Customer balance detail", "customer-balance-detail"),
         ),
     ),
     Section(
@@ -495,6 +505,12 @@ SECTIONS: tuple[Section, ...] = (
             _report("A/P aging summary", "ap-aging"),
             _report("Unpaid bills", "unpaid-bills"),
             _report("Expenses by vendor", "expenses-by-vendor"),
+            _report("Vendor balance summary", "vendor-balance-summary"),
+            _report("Vendor balance detail", "vendor-balance-detail"),
+            _report("Open purchase orders", "open-purchase-orders"),
+            _report("Purchases by vendor summary", "purchases-by-vendor"),
+            _report("Purchases by item summary", "purchases-by-item"),
+            _report("1099 summary", "vendor-1099-summary"),
         ),
     ),
     Section(
@@ -547,6 +563,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
             _report("Missing checks", "missing-checks"),
+            _report("Deposit detail", "deposit-detail"),
         ),
     ),
     Section(
@@ -566,6 +583,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             _report("Trial balance", "trial-balance"),
             _report("General ledger", "general-ledger"),
+            _report("Transaction list by date", "transaction-list-by-date"),
             _report("Profit and loss", "profit-and-loss"),
             _report("Balance sheet", "balance-sheet"),
         ),

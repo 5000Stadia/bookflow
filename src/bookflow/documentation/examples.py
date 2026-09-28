@@ -208,6 +208,16 @@ EXAMPLES.update({
     "report expenses-by-vendor": Example('bookflow report expenses-by-vendor --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report inventory-valuation": Example('bookflow report inventory-valuation --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
     "report stock-status": Example('bookflow report stock-status --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report customer-balance-summary": Example('bookflow report customer-balance-summary --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report customer-balance-detail": Example('bookflow report customer-balance-detail --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report vendor-balance-summary": Example('bookflow report vendor-balance-summary --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report open-purchase-orders": Example('bookflow report open-purchase-orders --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "report purchases-by-vendor": Example('bookflow report purchases-by-vendor --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report purchases-by-item": Example('bookflow report purchases-by-item --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report deposit-detail": Example('bookflow report deposit-detail --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report transaction-list-by-date": Example('bookflow report transaction-list-by-date --date-from 2026-12-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-12-01", "date_to": "2026-12-31"}),
+    "report vendor-1099-summary": Example('bookflow report vendor-1099-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report vendor-balance-detail": Example('bookflow report vendor-balance-detail --as-of 2026-12-31 --vendor "Central Supply" --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "vendor": "Central Supply"}),
 })
 
 

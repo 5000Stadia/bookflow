@@ -60,10 +60,20 @@ FINANCIAL_REPORTS = frozenset({
 # Settlement and billing history post nothing, so these also carry the audit sequence.
 RECEIVABLE_REPORTS = frozenset({
     "ar-aging", "open-invoices", "statement", "collections", "unbilled-costs",
+    "customer-balance-summary", "customer-balance-detail",
 })
 # Payables rows are vendors, which are a flat list. The sales tax liability's rows are
 # agencies, which are vendors, so it labels and orders its rows exactly as the other two.
-PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability"})
+PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability",
+                             "vendor-balance-summary", "vendor-balance-detail"})
+# Reports whose rows are named by documents and list records -- orders, vendors, items,
+# deposits -- rather than by accounts. Any audited change restarts them, because every
+# write that could move one of their cells (a receipt against an order, a renamed vendor,
+# a corrected deposit) is written under an audit event, posting or not.
+AUDITED_REPORTS = frozenset({
+    "open-purchase-orders", "purchases-by-vendor", "purchases-by-item", "deposit-detail",
+    "transaction-list-by-date", "vendor-1099-summary",
+})
 
 # Which list a reference-valued report filter names, by the input field that names it. A
 # filter declared here is one a report resolves to stable IDs on its first page and carries
@@ -569,6 +579,8 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, fil
             "SELECT count(*), max(id) FROM inventory_movements WHERE effective_date<=:date_to",
             {"date_to": inp.date_to}).fetchone()),
             raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
+    elif report in AUDITED_REPORTS:
+        extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     elif payable:
         # A payable row moves with settlement history, which posts nothing,
         # so the posting effect alone cannot see an apply or an unapply. The
