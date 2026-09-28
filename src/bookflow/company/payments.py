@@ -140,6 +140,17 @@ def _applications(s, inp, context_, *, amount=None):
             raise
         entries = [(item['invoice_id'], item['expected_version'], item['amount_minor_units']) for item in items]
         selected = dict(header=selected, revision=revision, items=items)
+    elif inp.applications.mode == 'suggested':
+        # The same choice `payment suggest` shows, made in this write's own read of the invoices.
+        from bookflow.company.payment_models import PaymentSuggestInput
+        from bookflow.company.payment_preparation import choose
+        ask = PaymentSuggestInput(mode='new_receipt', customer=inp.customer, ar_account=inp.ar_account,
+                                  date=inp.date, amount=inp.amount, strategy=inp.applications.strategy)
+        rendered = choose(s, ask)[3]
+        if len(rendered) > 200:
+            raise _invalid('applications', f'the suggestion covers {len(rendered)} invoices, more than the 200 one '
+                           'receipt applies; receive the payment in parts or use a saved selection')
+        entries = [(row['invoice_id'], row['expected_version'], row['amount_minor_units']) for row in rendered]
     else:
         entries = [(item.invoice, item.expected_version, money(item.amount, context_['currency'], 'applications.amount').minor_units)
                    for item in inp.applications.items]

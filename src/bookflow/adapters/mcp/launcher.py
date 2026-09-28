@@ -57,6 +57,33 @@ async def serve(inp, origin, secret, inputs, outputs):
                 tools.append(types.Tool(name=name, description=description, input_schema=schema))
             return types.ListToolsResult(tools=tools)
 
+        async def within_budget(document, arguments):
+            """MCP alone carries a size budget: an oversized result arrives compact and says so."""
+            from .budget import BUDGET, fit, size
+            try:
+                if not isinstance(document, dict) or size(document) <= BUDGET:
+                    return document
+            except (TypeError, ValueError):
+                return document
+            show = None
+            try:
+                from .envelopes import RunArguments
+                record = document.get("id")
+                if isinstance(arguments, RunArguments) and isinstance(record, str) and " " in arguments.command \
+                        and not arguments.command.endswith(" show"):
+                    name = arguments.command.rsplit(" ", 1)[0] + " show"
+                    found = await client.post("/adapters/mcp/bookflow_help", json={"arguments": {"command": name, "view": "input_schema"}})
+                    if found.status_code == 200:
+                        required = found.json()["input_schema"].get("required") or []
+                        if len(required) == 1:
+                            call = {"command": name, "input": {required[0]: record}}
+                            if arguments.company:
+                                call["company"] = arguments.company
+                            show = json.dumps(call)
+            except Exception:
+                show = None  # the hint is a convenience; the compact result stands without it
+            return fit(document, show=show)
+
         async def call_tool(_ctx, params):
             submitted = False
             delivery = None
@@ -130,6 +157,8 @@ async def serve(inp, origin, secret, inputs, outputs):
                 document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
             except Exception:
                 document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
+            if params.name == "bookflow_run":
+                document = await within_budget(document, arguments if submitted else None)
             try:
                 rendered = json.dumps(document, ensure_ascii=False, allow_nan=False)
                 content = [types.TextContent(text=rendered)]

@@ -170,6 +170,14 @@ def invoices(s, inp):
 
 
 def suggest(s, inp):
+    context, rows, strategy, rendered, remaining, amount = choose(s, inp)
+    lineage = lineage_facts(s, [context['customer_id'], *(row.customer_id for row in rows)])
+    return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered, lineage]),
+        amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[])
+
+
+def choose(s, inp):
+    """The rows `payment suggest` proposes, unpaged; `payment receive` mode "suggested" applies them."""
     context, rows = candidates(s, inp)
     amount = money(inp.amount, context['currency'], 'amount').minor_units
     if amount <= 0:
@@ -196,9 +204,7 @@ def suggest(s, inp):
                     capacity[party] -= units
             if not remaining:
                 break
-    lineage = lineage_facts(s, [context['customer_id'], *(row.customer_id for row in rows)])
-    return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered, lineage]),
-        amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[])
+    return context, rows, strategy, rendered, remaining, amount
 
 
 def calculate(s, inp):

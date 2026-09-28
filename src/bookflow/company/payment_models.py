@@ -49,7 +49,17 @@ class SelectionReference(StrictModel):
     expected_version: _Version
 
 
+class SuggestedApplications(StrictModel):
+    """Apply the cash as `payment suggest` would, chosen inside the write itself (preview with dry_run)."""
+    mode: Literal['suggested']
+    strategy: Literal['exact_then_oldest', 'company'] = Field('exact_then_oldest', description=(
+        'The `payment suggest` strategy: "exact_then_oldest" takes an open invoice matching the amount '
+        'exactly, otherwise the oldest open invoices first until the money runs out; "company" follows the '
+        'company automatic-application preference (nothing is applied when it is off).'))
+
+
 Applications = Annotated[InlineApplications | SelectionReference, Field(discriminator='mode')]
+ReceiveApplications = Annotated[InlineApplications | SelectionReference | SuggestedApplications, Field(discriminator='mode')]
 CalculationApplications = Annotated[InlineCalculation | SelectionReference, Field(discriminator='mode')]
 
 
@@ -155,7 +165,11 @@ class PaymentReceiveInput(StrictModel):
     date: _Date
     amount: Amount
     operation_key: OperationKey
-    applications: Applications = Field(default_factory=InlineApplications)
+    applications: ReceiveApplications = Field(default_factory=InlineApplications, description=(
+        'Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); '
+        'mode "suggested" applies it as `payment suggest` would with the same strategy (default '
+        '"exact_then_oldest"), so there is nothing to copy; mode "selection" uses a saved selection. '
+        'Preview any of them with dry_run.'))
     discounts: list[InvoiceDiscount] = Field(default_factory=list, max_length=200, description=(
         'Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it '
         '(if any) plus the discount; an invoice given no cash here needs its expected_version, and '
