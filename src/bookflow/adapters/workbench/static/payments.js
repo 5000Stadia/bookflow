@@ -235,8 +235,8 @@
       });});
       const entry=el('span');entry.append(input,el('small',chosen?' '+chosen.amount_origin:' Not selected'));
       /* The early-payment discount is entered, never assumed. `payment invoices` reports what
-         the terms suggest for this receipt date; Take copies it into the field, and it is sent
-         only for a selected invoice, beside the cash applied to it. */
+         the terms suggest for this receipt date; Take copies it into the field. It is sent with
+         the receipt whether or not the invoice is also selected for cash. */
       const off=el('input');off.type='text';off.inputMode='decimal';off.className='payment-discount';off.dataset.mathCurrency=config.currency;
       off.value=discounts.get(row.invoice_id)||'';off.setAttribute('aria-label','Discount for '+kind+' '+row.number);
       off.disabled=mode!=='receive';
@@ -319,7 +319,11 @@
     const input={operation_key:key};
     if(mode==='receive') Object.assign(input,{customer:customer.id,date:$('date').value,amount:$('amount').value,applications:selectionRef()},customInput());
     if(mode==='receive') {
-      const taken=[...discounts.entries()].filter(([invoice,value])=>selected.has(invoice)&&value).map(([invoice,amount])=>({invoice,amount}));
+      // A discount may stand on an invoice given no cash in this receipt (the anchor allows it);
+      // the invoice's version then travels with it, as an application's does.
+      const versions=new Map(candidates.map(row=>[row.invoice_id,row.expected_version]));
+      const taken=[...discounts.entries()].filter(([,value])=>value).map(([invoice,amount])=>({invoice,amount,
+        ...(versions.has(invoice)?{expected_version:versions.get(invoice)}:{})}));
       if(taken.length) input.discounts=taken;
     }
     else Object.assign(input,{payment:payment.id,expected_version:payment.version});

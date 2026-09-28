@@ -137,9 +137,14 @@ class SelectionQueryInput(Page):
 
 
 class InvoiceDiscount(StrictModel):
-    """An early-payment discount taken on one invoice this receipt also applies cash to."""
+    """An early-payment discount taken on one invoice, with or without cash applied to it.
+
+    ``expected_version`` is required when the receipt applies no cash to the invoice -- the
+    discount alone then changes it -- and is checked whenever it is given.
+    """
     invoice: Selector
     amount: Amount
+    expected_version: _Version | None = None
 
 
 class PaymentReceiveInput(StrictModel):
@@ -149,8 +154,9 @@ class PaymentReceiveInput(StrictModel):
     operation_key: OperationKey
     applications: Applications = Field(default_factory=InlineApplications)
     discounts: list[InvoiceDiscount] = Field(default_factory=list, max_length=200, description=(
-        'Early-payment discounts, one per invoice, each on an invoice the applications also pay. '
-        'The invoice is settled by the cash applied plus the discount; the discount is debited '
+        'Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it '
+        '(if any) plus the discount; an invoice given no cash here needs its expected_version, and '
+        'the receipt as a whole still records cash received. The discount is debited '
         'to the discount account. Never taken unless listed: `payment invoices` shows each '
         'invoice\'s discount date and suggested discount. Example: a 1,000.00 invoice on '
         '2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", '

@@ -264,7 +264,8 @@
 
   function redrawTotals() {
     const rows = entered(), groups = groupsOf(rows);
-    const bad = rows.filter(entry => entry.minor === null || entry.minor <= 0n);
+    // A row may pay nothing when it takes a discount: the anchor settles that bill by its discount.
+    const bad = rows.filter(entry => entry.minor === null || entry.minor < 0n || (entry.minor === 0n && !(entry.discount > 0n)));
     let total = 0n, discounted = 0n;
     for (const entry of rows) if (entry.minor !== null) total += entry.minor;
     for (const entry of rows) if (entry.discount !== null) discounted += entry.discount;
@@ -316,14 +317,16 @@
     if (!$('funding').value) return 'Choose the account the money comes out of.';
     if (!$('method').value) return 'Choose the payment method.';
     if (!rows.length) return 'Select at least one bill to pay.';
-    if (rows.some(entry => entry.minor === null || entry.minor <= 0n))
-      return `Enter an amount greater than zero for every selected bill, in ${config.currency}.`;
+    if (rows.some(entry => entry.minor === null || entry.minor < 0n || (entry.minor === 0n && !(entry.discount > 0n))))
+      return `Enter an amount greater than zero for every selected bill, or zero with a discount, in ${config.currency}.`;
     if (rows.some(entry => entry.discount === null || entry.discount < 0n))
       return `Enter a discount of zero or more for every selected bill, in ${config.currency}.`;
     for (const entry of rows) {
       if (entry.minor + entry.discount > BigInt(entry.row.settlement_current.open_minor_units))
         return `Bill ${entry.row.number} has only ${money(BigInt(entry.row.settlement_current.open_minor_units))} open; the payment and the discount together cannot exceed it. A vendor credit is a separate document.`;
     }
+    const unpaid = groups.find(group => group.total === 0n);
+    if (unpaid) return `The payment to ${unpaid.vendor} would pay no money. A discount is taken beside money paid to the same vendor.`;
     if ($('check').value.trim() && !$('check-label').hidden && groups.length > 1)
       return `A check number names one check, and this selection writes ${groups.length} payments. Clear the check number, or pay one vendor at a time.`;
     return '';

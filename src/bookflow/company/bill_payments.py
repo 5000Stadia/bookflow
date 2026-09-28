@@ -242,6 +242,10 @@ def _selected(s, rows, date, currency, *, capacity=None, discounts=False):
                 raise _invalid(field + '.discount', 'must not be negative')
         if row.amount is None:
             amount = open_amount - discount if remaining is None else min(open_amount - discount, remaining)
+        elif discount and _zero(row.amount):
+            # Paying no money on this bill and taking only its discount is said with an explicit
+            # zero; an omitted amount still means "the rest of what is open".
+            amount = 0
         else:
             amount = parse_domestic_amount(row.amount, currency, field + '.amount').minor_units
         if amount <= 0 and remaining is not None and remaining <= 0 and row.amount is None:
@@ -249,10 +253,11 @@ def _selected(s, rows, date, currency, *, capacity=None, discounts=False):
                                               f'reached; bill {header["number"]} has '
                                               f'{Money(open_amount, currency).to_dict()["amount"]} '
                                               f'{currency} open')
-        if amount <= 0:
+        if amount < 0 or (amount == 0 and not discount):
             # A row worth nothing settles nothing, whichever source is being spent, so it is a
-            # mistake rather than a zero settlement; refusing it is also what keeps a whole
-            # selection from posting a payment written for zero.
+            # mistake rather than a zero settlement. A row paying no money but taking a discount
+            # settles the discount (the anchor's Pay Bills allows it); what keeps a whole payment
+            # from being written for zero is the per-payee check in ``prepare_pay``.
             raise _invalid(field + '.amount', f'must be more than zero; bill {header["number"]} has '
                                               f'{Money(open_amount, currency).to_dict()["amount"]} {currency} open')
         if amount + discount > open_amount:
@@ -274,6 +279,17 @@ def _selected(s, rows, date, currency, *, capacity=None, discounts=False):
         chosen.append(dict(header=header, revision=revision, obligation=obligation, amount=amount,
                            discount=discount, terms=terms, suggested=suggested))
     return chosen
+
+
+def _zero(value):
+    """Whether an entered amount is exactly zero, in either accepted shape."""
+    from decimal import Decimal, InvalidOperation
+    if isinstance(value, str):
+        try:
+            return Decimal(value.strip()) == 0
+        except InvalidOperation:
+            return False
+    return getattr(value, 'minor_units', None) == 0
 
 
 def _groups(chosen):
@@ -714,7 +730,9 @@ def _document(s, ctx, inp, at, event, group, rows, number, resolved, cheque):
     for envelope, row in zip(pending['document_lines'], rows):
         settled = row['amount'] + row['discount']
         payable_source = attribute(payable, envelope, settled)
-        attribute(funding, envelope, row['amount'])
+        if row['amount']:
+            # A bill settled here by its discount alone draws nothing from the funding account.
+            attribute(funding, envelope, row['amount'])
         component = dict(**audited(), transaction_id=header['id'], revision_id=revision['id'],
                          key_id=source_key['id'], document_line_id=envelope['id'], ordinal=1,
                          posting_source_id=payable_source['id'], amount_minor_units=settled,
@@ -763,6 +781,11 @@ def prepare_pay(s, ctx, inp):
     chosen = _selected(s, inp.bills, inp.date, currency, discounts=True)
     journals.open_dates(s, [inp.date])
     groups = _groups(chosen)
+    for _, rows in groups:
+        if not sum(row['amount'] for row in rows):
+            first = rows[0]['header']
+            raise _invalid('bills', f'the payment for bill {first["number"]} would pay no money; a '
+                                    'discount is taken beside money paid to the same vendor in this payment')
     numbers, sequence = _numbers(s, len(groups), inp.number)
     cheques = _cheques(s, resolved, len(groups))
     at, event = clock.now_iso(), new_id()

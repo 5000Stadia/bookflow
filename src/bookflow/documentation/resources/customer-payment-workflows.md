@@ -162,7 +162,12 @@ through its discount date. `payment invoices` rows carry `discount_date` and
   included, rounded half-up to the cent, less any discount already taken on that
   document, and at most what is still open. It is zero after the discount date.
 - A discount is taken only when named: `payment receive` `discounts` (one row per
-  invoice that the receipt's applications also pay) or a `bill pay` row's `discount`.
+  invoice) or a `bill pay` row's `discount`.
+- A document may take its discount with no cash beside it: a `discounts` row for an
+  invoice the applications do not pay (it then needs the invoice's `expected_version`),
+  or a `bill pay` row with `"amount": "0.00"` and a `discount`. The payment itself still
+  records cash: a receipt's `amount` is positive, and each vendor's bill payment pays
+  that vendor some money. The edge is then all discount.
   A discount named after the discount date, or on a document whose terms offer none,
   is taken and the write returns a warning.
 - The document is settled by the cash plus the discount. A customer discount posts

@@ -115,9 +115,9 @@ def prepare_effect(s, ctx, inp, provenance):
     for row in discounts:
         discounted[row['component_key_id']] = discounted.get(row['component_key_id'], 0) + row['amount_minor_units']
     payer_discount = discounted.get(payer_key, 0)
-    if payer_capacity < payer_spent or payer_capacity < 0 or (payer_discount and payer_capacity - payer_discount <= 0):
+    if payer_capacity < payer_spent or payer_capacity < 0 or payer_capacity < payer_discount:
         raise BookflowError('E_APPLIED_EXCEEDS_TOTAL', details={'party_id': saved['payer_id'],
-            'minimum_minor_units': max(payer_spent, payer_discount + 1 if payer_discount else 0)})
+            'minimum_minor_units': max(payer_spent, payer_discount)})
     at, event, operation_id = provenance.at, provenance.event_id, provenance.operation_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     pending = {table: [] for table, _, _ in payments.TABLE_KINDS}
@@ -190,7 +190,8 @@ def prepare_effect(s, ctx, inp, provenance):
             pending['payment_components'].append(component)
             new_components[key_id] = component
             ar = leg(profile.ar_account, capacity, False, captured['party'], len(new_components) + 1)
-            shares = [(cash, capacity - discounted.get(key_id, 0)), (ar, capacity)]
+            shares = [(cash, capacity - discounted.get(key_id, 0))] if capacity > discounted.get(key_id, 0) else []
+            shares.append((ar, capacity))
             if discounted.get(key_id):
                 shares.append((discount_legs[key_id], discounted[key_id]))
             for posting, units in shares:
@@ -344,10 +345,11 @@ def validate(plan, s, ctx):
                 part = discounted.get(component['component_key_id'], 0)
                 by_leg = {row['posting_line_id']: row['amount_minor_units'] for row in sources}
                 credit = [row for row in legs if row['credit_minor_units'] and row['id'] in by_leg]
-                require(len(sources) == (3 if part else 2) and len(by_leg) == len(sources) and all(
+                paid_in = component['amount_minor_units'] - part
+                require(len(sources) == 1 + (1 if paid_in else 0) + (1 if part else 0) and len(by_leg) == len(sources) and all(
                     row['revision_id'] == revision['id'] and row['document_line_id'] == component['document_line_id'] and
                     row['currency'] == revision['currency'] for row in sources))
-                require(by_leg.get(debits[0]['id']) == component['amount_minor_units'] - part
+                require(by_leg.get(debits[0]['id'], 0) == paid_in
                         and len(credit) == 1 and by_leg[credit[0]['id']] == component['amount_minor_units'])
     for table, rows in pending.items():
         for row in rows:

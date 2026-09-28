@@ -47,6 +47,7 @@ The same example as complete `bookflow_run` arguments:
 | `request.input.applications.expected_version` | `--request-input-applications-expected-version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum 1 |
 | `request.input.discounts[].invoice` | inside `--request-input-discounts` JSON array | string | no | no | — | Present in ReceivePreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.discounts[].amount` | inside `--request-input-discounts` JSON array | string \| object | no | no | — | Present in ReceivePreviewRequest. |
+| `request.input.discounts[].expected_version` | inside `--request-input-discounts` JSON array | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
 | `request.input.discount_account` | `--request-input-discount-account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
 | `request.input.payment_method` | `--request-input-payment-method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `request.input.ar_account` | `--request-input-ar-account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |

@@ -38,7 +38,7 @@ The same example as complete `bookflow_run` arguments:
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `bills[].bill` | inside `--bills` JSON array | string | yes | no | — | minimum length 1 |
 | `bills[].amount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | — |
-| `bills[].discount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | Early-payment discount taken on this bill in addition to amount; the bill is settled by amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is {"bill": "4410", "amount": "980.00", "discount": "20.00"}. |
+| `bills[].discount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | Early-payment discount taken on this bill in addition to amount; the bill is settled by amount plus discount. Example: a 1,000.00 bill on 2% 10 Net 30 paid in time is {"bill": "4410", "amount": "980.00", "discount": "20.00"}. A discount alone is {"bill": "4411", "amount": "0.00", "discount": "6.00"} beside money paid on another bill. |
 | `bills[].expected_version` | inside `--bills` JSON array | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
 
