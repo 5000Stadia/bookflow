@@ -21,12 +21,19 @@ scenarios. It is `sum(max(net_per_account, 0))`, so two scenarios whose per-scen
 then derive the total from the combined position; never add scenario totals together.
 """
 from collections import defaultdict
+from importlib.resources import files
 from pathlib import Path
+import tomllib
 
 import sqlalchemy as sa
 
 from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
+
+# The day the demo seed is written as of. `demo reset` moves every seed date back by whole months
+# to the reset day (R83); reset as of this day, the demo is exactly as written, which is the
+# demo every figure below and every date-pinned test was written against.
+DEMO_AS_OF = tomllib.loads(files('bookflow.demo').joinpath('seed.toml').read_text(encoding='utf-8'))['calendar']['written_as_of']
 
 # The tables that say money moved. `transactions` is here for its identity and status; the
 # amounts live below it. A claim about "posting nothing" has to look at all five, because a
@@ -141,7 +148,7 @@ def posting_documents(client, company):
 #
 # `balances` is every account the trial balance prints, compared as a whole mapping. Three
 # accounts used to be named here and the total stood in for everything else, so a seed addition
-# could only ever report "the total moved": the December restock below moved four accounts, none
+# could only ever report "the total moved": the service-kit restock below moved four accounts, none
 # of which were named, and reading that failure took a full per-document reconciliation where a
 # dict diff would have named the account and the amount.
 DEMO_POSITION = {
@@ -186,7 +193,7 @@ DEMO_ARCS = {
     'DEMO-FEE': 'a bank fee',
     'DEMO-JPY': 'a foreign-tagged entry posting in home currency',
     'DEMO-COUNT': 'the inventory count adjustment',
-    'DEMO-KIT-': 'December service-kit restock: free sample, and the bill that confirms a cost',
+    'DEMO-KIT-': 'service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
@@ -197,17 +204,17 @@ DEMO_ARCS = {
     # noticing. They are matched exactly now.
     #
     # A document lands here whenever a seed omits `number` *or* names something that is not the
-    # ledger document's number: `check post` takes the cheque number, so the December cheque
+    # ledger document's number: `check post` takes the cheque number, so the service-kit cheque
     # numbered DEMO-KIT-CHECK is journal-family `4`, and an item receipt's own number likewise
-    # never reaches the ledger. That is why the December restock shows up mostly as bare
+    # never reaches the ledger. That is why the service-kit restock shows up mostly as bare
     # numbers, and why only its sales receipt and its bill carry `DEMO-KIT-`.
     '1': 'a deposit, a shipping vendor bill, and the first unnamed journal-family document',
     '2': 'unnamed journal-family document from the buying month',
     '3': 'unnamed journal-family document from the buying month',
-    '4': 'December kits paid by cheque: half a kit to stock plus a delivery expense',
-    '5': 'December kits bought on the company card',
-    '6': 'December kits received against their order, before the vendor bill',
-    '7': 'the purchase-price correction the December kit bill makes to the received cost',
+    '4': 'service kits paid by cheque: half a kit to stock plus a delivery expense',
+    '5': 'service kits bought on the company card',
+    '6': 'service kits received against their order, before the vendor bill',
+    '7': 'the purchase-price correction the service-kit bill makes to the received cost',
     '8': 'shipping-kit receipt: three units and their allocated shipping',
 }
 
