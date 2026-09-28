@@ -249,6 +249,11 @@ def preview(s,ctx,fresh):
     composed=compose(s,ctx,fresh)
     data=composed['bundle']['data']
     mapping=dict(data['mapping'])
+    # A row carried from a saved draft is recorded against its draft row, as
+    # `draft-row-<draft row id>`, which is longer than any output ID may be. The
+    # preview numbers those rows in document order, like every other new identity.
+    drafted=[identity for identity,token in mapping.items() if token.startswith('draft-row-')]
+    mapping.update({identity:f'draft-row-{index}' for index,identity in enumerate(drafted,1)})
     mapping.setdefault(data['event'],'new-event')
     mapping.setdefault(data['operation_id'],'new-operation')
     counters={}

@@ -672,6 +672,9 @@ def authorize_publication_selections(s, occurrences):
     from itertools import islice
     from bookflow.core.errors import BookflowError
     occurrences = iter(occurrences)
+    # As in authorize_publication_transactions: one check reads one snapshot, so each
+    # distinct requirement is asked once, in the order its first occurrence needs it.
+    met = set()
     while batch := list(islice(occurrences, _BATCH_SIZE)):
         facts = _PublicationSelectionCohort(s.company, list(dict.fromkeys(i for i, _ in batch)))
         for identifier, write in batch:
@@ -681,5 +684,7 @@ def authorize_publication_selections(s, occurrences):
                 raise BookflowError('E_IO', details={'stage': 'publication', 'outcome': 'unknown',
                                                     'reason': 'invalid_authority_evidence'}) from None
             for resource, role in required:
-                require_resource(s, resource, role)
+                if (resource, role) not in met:
+                    require_resource(s, resource, role)
+                    met.add((resource, role))
         del facts

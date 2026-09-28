@@ -175,3 +175,30 @@ def test_70_removed_work_source_beyond_200_retains_whole_history_authority(world
         assert ('customer-work','member') in seen
         assert tuple(s.company.raw.iterdump())==before
         assert removed.summary.source_count==402
+
+
+def test_80_post_403_source_draft_and_page_every_member(world,driver,run):
+    """A deposit of more than two pages of sources posts whole and reads back page by page.
+
+    This replaces the retired retained-world financial suites, which needed prebuilt /tmp roots.
+    """
+    client=world['client']
+    bank=client.account.create(name='G3 403 bank',type='bank',company=COMPANY)['id']
+    draft=world['accepted_all'].draft
+    ready=run('update',dict(draft=draft.id,expected_version=draft.version,header=dict(deposit_to=bank)))
+    assert ready.summary.source_count==403 and ready.summary.bank_total==40300 and not ready.posting_issues
+    posted=client.run('deposit post',dict(operation_key='g3-403-post',document=dict(mode='draft',draft=ready.id,expected_version=ready.version)),company=COMPANY)
+    assert posted['deposit']['bank_total']['minor_units']==40300 and len(posted['deposit']['banked_receipt_ids'])==403
+    deposit=posted['deposit']['id']
+    with driver.session() as s:
+        members=s.company.raw.execute('SELECT source_transaction_id,amount_minor_units FROM deposit_memberships WHERE transaction_id=? AND kind=?',(deposit,'claim')).fetchall()
+        assert dict(members)=={r['source']:100 for r in world['sources']}
+        assert s.company.raw.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE transaction_id=? AND account_id=?',(deposit,bank)).fetchone()==(40300,)
+    seen,sizes,cursor=[],[],None
+    while True:
+        page=client.run('deposit items',dict(deposit=deposit,kind='sources',page=dict(limit=200,**({'cursor':cursor} if cursor else {}))),company=COMPANY)
+        sizes.append(len(page['items']));seen.extend(page['items'])
+        cursor=page.get('next_cursor')
+        if not cursor:break
+    assert sizes==[200,200,3]
+    assert len({json.dumps(row,sort_keys=True) for row in seen})==403
