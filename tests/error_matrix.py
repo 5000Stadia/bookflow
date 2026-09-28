@@ -296,6 +296,23 @@ for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('trans
     MATRIX[_noun + ' query'] = dict(_MONEY_OUT_READ_ERRORS)
     MATRIX[_noun + ' history'] = dict(_MONEY_OUT_READ_ERRORS)
 
+# Deleting a check or card charge cancels its stock and accounting at their original dates, so
+# it refuses where that cancellation would reach something it cannot detach.
+for _noun, _face in (('check', 'check'), ('card-charge', 'card charge')):
+    MATRIX[_noun + ' delete'] = {
+        'E_RECORD_NOT_FOUND': 'no ' + _face + ' carries that id or number',
+        'E_VERSION_CONFLICT': 'stale expected_version',
+        'E_VALIDATION': 'the ' + _face + ' is already deleted, a settlement source depends on it, '
+                        'or its statement effects cannot be safely cancelled',
+        'E_REASON_REQUIRED': 'no reason, or an agent write carries no directive',
+        'E_PERIOD_CLOSED': 'an affected accounting date is on or before the closing date',
+        'E_RECONCILIATION_DEPENDENCY': 'a reconciliation still holds an effect of this ' + _face,
+        'E_DEPOSIT_DEPENDENCY': 'a deposit still claims this ' + _face,
+        'E_IDEMPOTENCY_MISMATCH': 'same operation_key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+
 # A cheque is addressed by the number on its face, which belongs to one bank account, so that
 # number can name a cheque on each of two accounts. Every command that takes the selector says
 # so rather than resolving one of them.
@@ -1533,3 +1550,54 @@ MATRIX["reconcile preview"] = {
     **_RECONCILE_READ_ERRORS,
     "E_VERSION_CONFLICT": _RECONCILE_ERRORS["E_VERSION_CONFLICT"],
 }
+
+# Rows for commands added after this matrix was last completed.
+MATRIX['membership grant']['E_VERSION_CONFLICT'] = 'stale --expected-version on the permission policy'
+MATRIX['membership revoke']['E_VERSION_CONFLICT'] = 'stale --expected-version on the permission policy'
+MATRIX['permission activate'] = {
+    'E_VERSION_CONFLICT': 'expected_generation or expected_catalog_sha256 no longer names the reviewed policy',
+}
+MATRIX['customer-refund history'] = {
+    'E_RECORD_NOT_FOUND': 'unknown refund',
+    'E_QUERY_STALE': 'company audit changed between history pages',
+}
+_ITEM_RECEIPT_WRITE = {
+    'E_RECORD_NOT_FOUND': 'unknown vendor, item, account, purchase order or receipt',
+    'E_INACTIVE_REFERENCE': 'an inactive vendor, item or account',
+    'E_PERIOD_CLOSED': 'the receipt date, or the date it would change from, is in a closed period',
+    'E_DUPLICATE_NUMBER': 'the number is already used in the item-receipt number series',
+    'E_VALUE_RANGE': 'a quantity, cost or total past the exact-integer bound',
+    'E_AMOUNT_PRECISION': 'an amount finer than the currency allows',
+    'E_VERSION_CONFLICT': 'stale expected_version or purchase_order_version',
+    'E_WORK_DEPENDENCY': 'a linked bill, or stock already consumed from this receipt, prevents the change',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+for _verb in ('post', 'update', 'void'):
+    MATRIX['item-receipt ' + _verb] = dict(_ITEM_RECEIPT_WRITE)
+MATRIX['item-receipt show'] = {'E_RECORD_NOT_FOUND': 'unknown receipt or revision number',
+                               'E_QUERY_STALE': 'company audit changed while the receipt was read'}
+MATRIX['item-receipt query'] = {'E_RECORD_NOT_FOUND': 'unknown vendor or item filter',
+                                'E_QUERY_STALE': 'company audit changed between receipt pages'}
+MATRIX['item-receipt history'] = {'E_RECORD_NOT_FOUND': 'unknown receipt',
+                                  'E_QUERY_STALE': 'company audit changed between history pages'}
+# The sale and journal deletions share the purchase deletions' owner and refusals, plus the
+# settlements a sale can carry and a credit memo line claimed from it.
+for _name, _face in (('invoice delete', 'invoice'), ('sales-receipt delete', 'sales receipt'),
+                     ('journal delete', 'journal entry')):
+    MATRIX[_name] = {
+        'E_RECORD_NOT_FOUND': 'no ' + _face + ' carries that id or number',
+        'E_VERSION_CONFLICT': 'stale expected_version',
+        'E_VALIDATION': 'the ' + _face + ' is already deleted, or its effects cannot be safely cancelled',
+        'E_REASON_REQUIRED': 'no reason, or an agent write carries no directive',
+        'E_PERIOD_CLOSED': 'an affected accounting date is on or before the closing date',
+        'E_RECONCILIATION_DEPENDENCY': 'a reconciliation still holds an effect of this ' + _face,
+        'E_DEPOSIT_DEPENDENCY': 'a deposit still claims this ' + _face,
+        'E_HAS_APPLICATIONS': 'an active settlement applies to this ' + _face + '; unapply it first',
+        'E_IDEMPOTENCY_MISMATCH': 'same operation_key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+for _name in ('invoice delete', 'sales-receipt delete'):
+    MATRIX[_name]['E_SOURCE_CORRECTION_CONFLICT'] = 'a credit memo line claimed from this sale prevents its cancellation'
