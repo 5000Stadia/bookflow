@@ -197,5 +197,38 @@ def test_actual_mcp_bulk_receipt_arrives_within_budget_with_its_warning(hosted, 
                 assert not shown.is_error and json.loads(shown.content[0].text)["id"] == result["id"]
                 wrong = await session.call_tool("bookflow_run", {"command": "payment query", "input": {}, "limit": 5})
                 assert wrong.is_error and "put the command's business arguments" in wrong.content[0].text
+                # R72 #3: full help arrives within the budget over the real launcher, and a section reads alone.
+                helped = await session.call_tool("bookflow_help", {"command": "invoice post", "view": "full"})
+                assert not helped.is_error and len(helped.content[0].text) <= BUDGET
+                outline = json.loads(helped.content[0].text)
+                assert outline["result_compacted"]["reason"] == "size_budget"
+                part = await session.call_tool("bookflow_help", {"command": "invoice post", "section": "Errors"})
+                assert not part.is_error and json.loads(part.content[0].text)["section"] == "Errors"
 
     anyio.run(witness)
+
+
+def test_full_help_arrives_within_the_budget_usage_and_example_first_with_every_section_reachable():
+    """R72 #3: `bookflow_help invoice post view:full` was 202,778 characters and the client cut it."""
+    from bookflow.adapters.mcp.budget import BUDGET, fit_help, size
+    from bookflow.adapters.mcp.catalog import command_help
+    whole = command_help('invoice post', 'full')
+    assert size(whole) > BUDGET
+    compact = fit_help(whole)
+    assert size(compact) <= BUDGET
+    assert list(compact)[:4] == ['name', 'description', 'view', 'example']
+    assert compact['example'] == whole['example'] and compact['input_schema'] == whole['input_schema']
+    note = compact['result_compacted']
+    assert set(note['outlined']) >= {'documentation', 'output_schema'} and 'section=' in note['full_result']
+    # Each outlined part names its sections, and each one reads alone within the budget.
+    assert 'Output' in compact['documentation']['sections']
+    definition = compact['output_schema']['sections'][0]
+    part = fit_help(command_help('invoice post', section=definition))
+    assert part['content'] == whole['output_schema']['$defs'][definition] and size(part) <= BUDGET
+    output = fit_help(command_help('invoice post', section='Output'))
+    assert size(output) <= BUDGET and output['result_compacted']['reason'] == 'size_budget'
+    with pytest.raises(BookflowError) as unknown:
+        command_help('invoice post', section='No such part')
+    assert unknown.value.code == 'E_VALIDATION' and definition in unknown.value.details['allowed']
+    # A view that fits is unchanged.
+    assert fit_help(command_help('reconcile finish', 'usage')) == command_help('reconcile finish', 'usage')

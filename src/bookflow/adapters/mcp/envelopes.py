@@ -31,6 +31,7 @@ class ListArguments(Envelope):
 class HelpArguments(Envelope):
     command: str = Field(min_length=1)
     view: Literal["usage", "input_schema", "output_schema", "full"] = "usage"
+    section: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class Files(Envelope):
@@ -106,7 +107,7 @@ class RecoveryArguments(Envelope):
 RUN = TypeAdapter(RunArguments | RecoveryArguments)
 TOOLS = {
     "bookflow_list_commands": (ListArguments, "Discover registered Bookflow commands and their scope. Start with a command prefix such as payment or invoice and omit limit for the default 20. Continue with next_cursor as cursor and the same prefix. Broad pages up to the supported limit 200 can exceed client display space; prefer targeted discovery and paging. A prefix that names no command is searched as words and everyday synonyms (credit card, cc, charge, tax); such a page says match: keywords."),
-    "bookflow_help": (HelpArguments, "Read concise usage and complete input constraints by default. Select view=output_schema for complete output fields, input_schema for inputs, or full for both schemas and the entire command reference. All views include context and errors."),
+    "bookflow_help": (HelpArguments, "Read concise usage and complete input constraints by default. Select view=output_schema for complete output fields, input_schema for inputs, or full for both schemas and the entire command reference. All views include context and errors. A view too large for one result arrives compacted, usage and example first; name a schema definition or reference heading from its result_compacted as section to read that part alone."),
     "bookflow_run": (RUN, "Run a discovered Bookflow command. Files use transport.input_file/output_file on the calling machine; the adapter handles all bytes. Recover an existing intent by its reference without resubmitting it."),
 }
 

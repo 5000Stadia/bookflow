@@ -48,7 +48,46 @@ def _commands():
     return registry.all_commands(include_standalone=True)
 
 
-def command_help(name, view="usage"):
+def doc_sections(text):
+    """A command reference's `###` sections by heading, in order."""
+    found, heading, lines = {}, None, []
+    for line in text.splitlines():
+        if line.startswith("### "):
+            if heading is not None:
+                found[heading] = "\n".join(lines).strip()
+            heading, lines = line[4:].strip(), []
+        elif heading is not None:
+            lines.append(line)
+    if heading is not None:
+        found[heading] = "\n".join(lines).strip()
+    return found
+
+
+def help_section(name, section):
+    """One part of a command's help: a schema definition by name, or a reference section by heading.
+
+    A help view too large for the agent's client arrives compacted (budget.fit_help) and lists
+    these names, so every part of it stays reachable one piece at a time.
+    """
+    whole = command_help(name, "full")
+    parts = {}
+    for key in ("input_schema", "output_schema"):
+        schema = whole[key]
+        parts[key] = {k: v for k, v in schema.items() if k != "$defs"}
+        for ref, definition in schema.get("$defs", {}).items():
+            parts.setdefault(ref, definition)
+    for heading, text in doc_sections(whole["documentation"]).items():
+        parts.setdefault(heading, text)
+    if section not in parts:
+        raise BookflowError("E_VALIDATION", message="No help section has that name.",
+                            details={"field": "section", "allowed": sorted(parts)})
+    return {"name": whole["name"], "section": section, "content": parts[section],
+            "bridge_version": BRIDGE_VERSION}
+
+
+def command_help(name, view="usage", section=None):
+    if section is not None:
+        return help_section(name, section)
     _commands()
     cmd = registry.get(name)
     if cmd is None:

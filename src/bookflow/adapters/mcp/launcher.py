@@ -159,6 +159,9 @@ async def serve(inp, origin, secret, inputs, outputs):
                 document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
             if params.name == "bookflow_run":
                 document = await within_budget(document, arguments if submitted else None)
+            elif params.name == "bookflow_help" and not is_error:
+                from .budget import fit_help
+                document = fit_help(document)
             try:
                 rendered = json.dumps(document, ensure_ascii=False, allow_nan=False)
                 content = [types.TextContent(text=rendered)]

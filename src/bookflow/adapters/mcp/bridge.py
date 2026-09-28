@@ -54,7 +54,7 @@ def mount_mcp(app, host, credential, make_context):
                 await run_in_threadpool(authenticate, request)
                 return response(result)
             if isinstance(arguments, HelpArguments):
-                result = await run_in_threadpool(command_help, arguments.command, arguments.view)
+                result = await run_in_threadpool(command_help, arguments.command, arguments.view, arguments.section)
                 await run_in_threadpool(authenticate, request)
                 return response(result)
             raise BookflowError("E_USAGE", message="Bridge v2 command execution uses the installed launcher's admitted intent transport.")

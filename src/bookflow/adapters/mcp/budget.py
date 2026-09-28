@@ -96,3 +96,79 @@ def fit(document, *, show=None, budget=BUDGET):
         omitted.append({"field": "*", "reason": "every other field left out to fit"})
         result = {**keep, "result_compacted": note}
     return result
+
+
+# Help leads with what a caller acts on; schemas and the reference follow and compact first.
+HELP_FIRST = ("name", "description", "view", "example", "cli_example", "context_usage", "documentation")
+HELP_KEEP = frozenset(FIRST) | {"name", "description", "view", "example", "cli_example", "bridge_version"}
+
+
+def _schema_outline(schema):
+    """A schema's shape without its definitions: each property's type or definition name."""
+    def kind(value):
+        if "$ref" in value:
+            return value["$ref"].rsplit("/", 1)[-1]
+        if "anyOf" in value:
+            return " | ".join(kind(v) for v in value["anyOf"])
+        if value.get("type") == "array" and isinstance(value.get("items"), dict):
+            return "array of " + kind(value["items"])
+        return str(value.get("type", "any"))
+    return {"required": schema.get("required", []),
+            "properties": {k: kind(v) for k, v in schema.get("properties", {}).items() if isinstance(v, dict)},
+            "sections": sorted(schema.get("$defs", {}))}
+
+
+def _outline(key, value):
+    if isinstance(value, dict) and ("properties" in value or "$defs" in value):
+        return _schema_outline(value)
+    if key == "documentation" and isinstance(value, str):
+        from .catalog import doc_sections
+        return {"sections": list(doc_sections(value))}
+    return None
+
+
+def fit_help(document, *, budget=BUDGET):
+    """`bookflow_help` within the budget: usage and example first, the rest outlined by section.
+
+    A full view reached 202,778 characters for `invoice post` (R72), past what the client takes.
+    Each large part in turn, largest first, becomes an outline naming its sections, and every
+    section can be read alone with bookflow_help section=<name>.
+    """
+    if not isinstance(document, dict) or size(document) <= budget:
+        return document
+    full = size(document)
+    if isinstance(document.get("content"), str):
+        # One reference section: its text is kept up to the budget, cut at a line.
+        room = budget - NOTE_ROOM - size({k: v for k, v in document.items() if k != "content"})
+        text = document["content"]
+        while size(text) > room:
+            text = text[:max(0, min(len(text) - 1, text.rfind("\n", 0, int(len(text) * 0.9))))]
+        return {**document, "content": text, "result_compacted": {
+            "reason": "size_budget", "full_characters": full, "budget_characters": budget,
+            "kept_characters": len(text), "full_result": "The Input and Output headings describe input_schema "
+            "and output_schema; read those schemas and their definitions as sections, one at a time."}}
+    result = {key: document[key] for key in (*FIRST, *HELP_FIRST) if key in document}
+    result.update((key, value) for key, value in document.items() if key not in result)
+    target = budget - NOTE_ROOM
+    outlined, dropped = [], []
+    for cost, key in sorted(((size(v), k) for k, v in result.items() if k not in HELP_KEEP), reverse=True):
+        if size(result) <= target:
+            break
+        outline = _outline(key, result[key])
+        if outline is not None and size(outline) < cost:
+            result[key] = outline
+            outlined.append(key)
+    for cost, key in sorted(((size(v), k) for k, v in result.items() if k not in HELP_KEEP), reverse=True):
+        if size(result) <= target:
+            break
+        del result[key]
+        dropped.append(key)
+    name = document.get("name", "<command>")
+    result["result_compacted"] = {
+        "reason": "size_budget", "full_characters": full, "budget_characters": budget,
+        "outlined": outlined, "omitted": dropped,
+        "full_result": f"Each outlined part lists its sections. Read one with bookflow_help command={name!r} "
+                       f"section=<name> (a schema definition such as a name under sections, input_schema or "
+                       f"output_schema for the top level, or a reference heading such as 'Output'). "
+                       f"view=usage is the concise guide."}
+    return result
