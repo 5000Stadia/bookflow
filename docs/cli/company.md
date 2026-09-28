@@ -919,14 +919,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow company restore "/home/pat/Backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json`
+`bookflow company restore "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "company restore", "input": {"archive": "/home/pat/Backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": true, "name": "Demo Plumbing (restored)"}, "dry_run": true, "reason": "Preview the requested change"}
+{"command": "company restore", "input": {"archive": "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": true, "name": "Demo Plumbing (restored)"}, "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
