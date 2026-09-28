@@ -120,6 +120,143 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `company backup`
+
+Write a verified, portable backup of the selected company: one .bookflow-backup archive holding its database (a consistent copy), its attachment files and a manifest of fingerprints, saved in the company folder's backups/. The archive is reopened and checked before success is reported. Copy it anywhere; `company restore` opens it.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | admin |
+| Capability | company |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/company.backup` |
+| External binary body | none |
+
+### CLI
+
+`bookflow company backup --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "company backup", "input": {}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| — | — | — | — | — | — | This command has no input fields. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/company.backup`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `backup_id` | string | yes | no | — | Stable id of this backup, recorded in its manifest and the company audit trail |
+| `company_id` | string | yes | no | — | — |
+| `display_name` | string | yes | no | — | — |
+| `file_name` | string | yes | no | — | Archive file name, in the company folder's backups/ on the machine running Bookflow |
+| `path` | string \| null | no | yes | null | Full path of the archive on that machine; shown to installation administrators only |
+| `size_bytes` | integer \| null | no | yes | null | Archive size; null on a dry run |
+| `sha256` | string \| null | no | yes | null | SHA-256 of the whole archive file; null on a dry run |
+| `schema_revision` | string | yes | no | — | Company schema revision the backup holds |
+| `created_at` | string \| null | no | yes | null | When the backup was taken (UTC); null on a dry run |
+| `attachment_count` | integer | yes | no | — | Attachment files the backup holds |
+| `files` | array[object] | no | no | [] | Every member with its fingerprint, as the manifest lists them; empty on a dry run |
+| `files[].name` | string | yes | no | — | Member path inside the archive: company.db or attachments/<xx>/<sha256> |
+| `files[].sha256` | string | yes | no | — | SHA-256 of the member's bytes |
+| `files[].size_bytes` | integer | yes | no | — | — |
+| `missing_attachments` | array[string] | no | no | [] | SHA-256 of referenced attachment files that were absent or damaged on disk and are not in the backup |
+
+Example JSON output:
+
+```json
+{
+  "attachment_count": 1,
+  "backup_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "created_at": null,
+  "display_name": "value",
+  "dry_run": false,
+  "file_name": "value",
+  "files": [],
+  "missing_attachments": [],
+  "path": null,
+  "schema_revision": "current",
+  "sha256": null,
+  "size_bytes": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_BACKUP_INVALID` | The file is not an intact Bookflow company backup. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `company compact`
 
 Collect at most 200 unlinked attachment bodies and continue bounded orphan discovery.
@@ -758,6 +895,142 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RENAME_INCOMPLETE` | The name changed but the folder was not moved; rerun rename --move. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `company restore`
+
+Restore a .bookflow-backup archive as a new company in an organization, verified before it is registered, with the restoring user as its owner. Restore never replaces a company: when the backed-up company is registered here, it refuses unless --as-copy gives the restored company a new id. A backup from an older Bookflow is migrated on restore; one from a newer Bookflow is refused.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | write |
+| Required role | hub_admin |
+| Capability | company |
+| Feature | — |
+| HTTP | `POST /commands/company.restore` |
+| External binary body | none |
+
+### CLI
+
+`bookflow company restore "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "company restore", "input": {"archive": "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": true, "name": "Demo Plumbing (restored)"}, "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `archive` | `ARCHIVE` | string | yes | no | — | Full path of the .bookflow-backup file on the machine running Bookflow (the command line accepts a relative path); minimum length 1; maximum length 4096 |
+| `organization` | `--organization` | string \| null | no | yes | null | Organization id or name to restore into; defaults when exactly one is visible |
+| `name` | `--name` | string \| null | no | yes | null | Display name for the restored company; defaults to the name in the backup, with " (restored)" added for a copy |
+| `as_copy` | `--as-copy` | boolean | no | no | false | Give the restored company a new id, so it can sit beside the company it was backed up from; required when that company is registered here |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+
+### HTTP
+
+Route: `POST /commands/company.restore`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `company_id` | string | yes | no | — | — |
+| `source_company_id` | string | yes | no | — | Company id recorded in the backup; differs from company_id for a copy |
+| `organization_id` | string | yes | no | — | — |
+| `display_name` | string | yes | no | — | — |
+| `path` | string \| null | no | yes | null | The restored company's folder; shown to installation administrators only |
+| `as_copy` | boolean | yes | no | — | — |
+| `backup_id` | string \| null | no | yes | null | The backup's id, from its manifest |
+| `backup_created_at` | string | yes | no | — | — |
+| `backup_created_by` | string \| null | no | yes | null | Display name of whoever took the backup, from its manifest |
+| `backup_schema_revision` | string | yes | no | — | Company schema revision the backup holds |
+| `schema_revision` | string | yes | no | — | Schema revision the restored company is at; newer than the backup's when it was migrated |
+| `migrated` | boolean | yes | no | — | True when the backup was from an older Bookflow and its database was migrated on restore |
+| `attachment_count` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "as_copy": false,
+  "attachment_count": 1,
+  "backup_created_at": "2026-01-01T00:00:00Z",
+  "backup_created_by": null,
+  "backup_id": null,
+  "backup_schema_revision": "value",
+  "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "display_name": "value",
+  "dry_run": false,
+  "migrated": false,
+  "organization_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "path": null,
+  "schema_revision": "current",
+  "source_company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_ALREADY_ATTACHED` | That company id is already registered. |
+| `E_BACKUP_INVALID` | The file is not an intact Bookflow company backup. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NAME_TAKEN` | That display name is already used. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_ORGANIZATION_REQUIRED` | More than one organization is visible; name one with --organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

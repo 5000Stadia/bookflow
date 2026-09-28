@@ -304,6 +304,13 @@ def _build_command(cmd: registry.Command):
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
                 _set_path(raw, path, _input_value(ann, v, path))
+        # A file named on this machine's command line is read where Bookflow runs, which can be
+        # a host with another working directory: the adapter sends it as a full path.
+        for name, field in cmd.input_model.model_fields.items():
+            extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
+            if extra.get("x-bookflow-local-path") and isinstance(raw.get(name), str) and raw[name]:
+                import os.path
+                raw[name] = os.path.abspath(os.path.expanduser(raw[name]))
         from bookflow.adapters.typed_defaults import decode_definition_default
         decode_definition_default(cmd, raw)
         if clears:

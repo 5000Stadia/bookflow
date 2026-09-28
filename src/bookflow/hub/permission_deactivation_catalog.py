@@ -10,10 +10,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_everyday_reports_catalog as previous, permission_catalog as c
+from . import permission_backup_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '169d26f3e835d0a027d7fc98686d942506d96653'
+SOURCE_COMMIT = '5ce7f18db0ad181cc31e52b938af6d8998a70f21'
 ADMIN_ONLY = 'human installation administrator on an activated installation'
 ADDED_COMMANDS = tuple(
     c.CommandDescriptor(name, 'hub', 'user', 'hub_admin', (), True, None, False, False, ADMIN_ONLY, None, None, None)

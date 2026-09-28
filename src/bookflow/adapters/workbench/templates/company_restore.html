@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Restore a backup{% endblock %}{% block body %}<section id="company-restore">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/company">Company</a> / Restore a backup</nav>
+<h1>Restore a backup</h1>
+<section class="workspace-card" aria-label="Restore a backup">
+<p>Restoring opens a <code>.bookflow-backup</code> file as a new company. Bookflow checks every file in the backup before the company is added, and a damaged backup is refused with nothing added. You become the restored company's owner.</p>
+<p>Restoring never replaces a company. If the company in the backup is already here, choose <em>Restore as a copy</em>: the copy gets its own company id and a name of your choosing, and the original is left as it is. A backup from an older Bookflow is brought up to date as it is restored; one from a newer Bookflow is refused until Bookflow is upgraded.</p>
+{% if result %}<div role="status" class="notice" data-restore-result>
+<p><strong>Restored {{ result.display_name }}.</strong> <a href="/c/{{ result.company_id }}/" data-restored-company>Open {{ result.display_name }}</a></p>
+<dl>
+<dt>Backup taken</dt><dd>{{ result.backup_created_at }}{% if result.backup_created_by %} by {{ result.backup_created_by }}{% endif %}</dd>
+<dt>Company id</dt><dd>{{ result.company_id }}{% if result.as_copy %} (a copy of {{ result.source_company_id }}){% endif %}</dd>
+<dt>Attached files</dt><dd>{{ result.attachment_count }}</dd>
+{% if result.migrated %}<dt>Brought up to date</dt><dd>from schema {{ result.backup_schema_revision }} to {{ result.schema_revision }}</dd>{% endif %}
+</dl></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
+{% if hub_admin %}
+<form method="post" enctype="multipart/form-data" action="/c/{{ company_id }}/company/restore" hx-post="/c/{{ company_id }}/company/restore" hx-encoding="multipart/form-data" hx-target="#company-restore" hx-select="#company-restore" hx-swap="outerHTML">
+<label for="restore-backup">Backup file</label><input id="restore-backup" type="file" name="backup" accept=".bookflow-backup" required>
+<label for="restore-organization">Organization</label><select id="restore-organization" name="organization">{% for org in organizations %}<option value="{{ org.organization_id }}"{% if values.get('organization') == org.organization_id or (not values.get('organization') and company.organization_id == org.organization_id) %} selected{% endif %}>{{ org.display_name }}</option>{% endfor %}</select>
+<label for="restore-name">Name for the restored company</label><input id="restore-name" name="name" maxlength="200" value="{{ values.get('name', '') }}" placeholder="The name in the backup">
+<label style="display:block;padding:1rem 0"><input type="checkbox" name="as_copy" value="yes"{% if values.get('as_copy') == 'yes' %} checked{% endif %}> Restore as a copy, with a new company id, beside the company it was backed up from</label>
+<div class="actions"><button type="submit" data-restore-submit>Restore</button><a href="/c/{{ company_id }}/_group/company">Cancel</a></div>
+</form>
+{% else %}<p>Only an installation administrator can restore a backup, because it adds a company to this installation.</p>{% endif %}
+</section>
+</section>{% endblock %}

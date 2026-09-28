@@ -87,7 +87,9 @@ class InlineDocument(StrictModel):
 
     @model_validator(mode='after')
     def complete_rows(self):
-        if len(self.sources)+len(self.additional)>200:raise ValueError('inline rows exceed200')
+        if len(self.sources)+len(self.additional)>200:
+            raise ValueError(f'a deposit holds at most 200 rows (sources plus additional lines) and this one has '
+                             f'{len(self.sources)+len(self.additional)}; record the rest in a second deposit')
         if len({s.source for s in self.sources})!=len(self.sources):raise ValueError('duplicate source')
         ids=[r.line_id for r in self.additional if r.line_id is not None]
         if len(set(ids))!=len(ids):raise ValueError('duplicate line')

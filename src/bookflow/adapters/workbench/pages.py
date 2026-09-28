@@ -536,7 +536,7 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     if company_id and cmd.name == "rate set" and output.get("id"):
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update", "check post",
-                                   "card-charge post", "transfer post") and output.get("id"):
+                                   "card-charge post", "card-credit post", "transfer post") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
     if company_id and cmd.name in ('reconcile opening start', 'reconcile start', 'reconcile mark') \
             and output.get('draft'):
@@ -716,6 +716,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # `apply` as a command name on a credit memo and answer `unknown command credit-memo apply`.
     Credits.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                   role_allows=_role_allows)
+    # Mounted ahead of the generic `<noun>/<verb>` routes: `company restore` is a hub command
+    # reached from the company's own menu, and its upload is not a generic form.
+    from bookflow.adapters.workbench import backups as Backups
+    Backups.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -1285,7 +1289,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         definition = meta.get("definition")
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
                    list(Work.TIME_COLUMNS) if noun == 'time-activity' else
-                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
+                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge", "card-credit") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
                    ["number", "date", "customer_name", "total", "open_balance", "status"] if noun == 'invoice' else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun == 'sales-receipt' else
@@ -2115,6 +2119,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     "link_version_field": link_version_field,
                     "include_fields": include_fields,
                 }
+        # A new sale whose tax field is left empty takes the customer's or the company's sales
+        # tax item (R79). Say which before it is saved: what the last preview applied, else the
+        # company default read from its record.
+        tax_leaf = next((leaf for leaf in described if leaf.get("path") == "sales_tax_item"
+                         and leaf.get("reference") and not leaf["reference"].get("current")), None)
+        if tax_leaf is not None and verb in ("post", "create") and company_id is not None:
+            profile = (result.get("revision") or {}).get("profile") if isinstance(result, dict) else None
+            applied = profile.get("sales_tax_item") if isinstance(profile, dict) else None
+            if isinstance(applied, dict) and applied.get("label"):
+                tax_leaf["reference"]["default_label"] = f"Left empty, this sale uses {applied['label']}."
+            elif default_tax := ((authorized_company or {}).get("info") or {}).get("default_sales_tax_item_id"):
+                try:
+                    row = run(request, "item show", {"item": default_tax}, company_id)
+                except BookflowError as err:
+                    if err.code not in ("E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE"):
+                        return page_error(request, err)
+                else:
+                    tax_leaf["reference"]["default_label"] = (
+                        f"Left empty, this sale uses the company default, "
+                        f"{_reference_label('item', row, authorized_company or {})}, "
+                        "unless the customer has its own.")
         runtime_fields = []
         reference_values: dict[str, dict[str, Any]] = {}
         reference_cache: dict[tuple[str, str], dict[str, Any]] = {}

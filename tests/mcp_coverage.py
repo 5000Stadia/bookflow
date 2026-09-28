@@ -153,6 +153,12 @@ card-charge query
 card-charge show
 card-charge update
 card-charge void
+card-credit history
+card-credit post
+card-credit query
+card-credit show
+card-credit update
+card-credit void
 chart apply
 chart list
 chart show
@@ -170,11 +176,13 @@ class query
 class show
 class update
 company attach
+company backup
 company compact
 company detach
 company list
 company new
 company rename
+company restore
 company show
 company update
 company use
@@ -570,6 +578,8 @@ def execution_map():
     from tests.test_mcp_registry_identity import COMMANDS as IDENTITY_COMMANDS
     from tests.test_mcp_registry_agent import COMMANDS as AGENT_COMMANDS
     from tests.test_money_out_documents import COMMANDS as MONEY_OUT_COMMANDS
+    from tests.test_card_credit_surfaces import COMMANDS as CARD_CREDIT_COMMANDS
+    from tests.test_company_backup import COMMANDS as BACKUP_COMMANDS
     from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
     from tests.test_bill_payment import COMMANDS as BILL_PAYMENT_COMMANDS
     from tests.test_credit_memo import COMMANDS as CREDIT_MEMO_COMMANDS
@@ -616,6 +626,8 @@ def execution_map():
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_mcp_registry_agent.py::test_agent_administration_full_documents_on_four_actual_surfaces' if cmd.name in AGENT_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
+                   'tests/test_card_credit_surfaces.py::test_the_same_card_credit_through_python_cli_http_and_mcp' if cmd.name in CARD_CREDIT_COMMANDS else
+                   'tests/test_company_backup.py::test_the_same_backup_and_restore_through_python_cli_http_and_mcp' if cmd.name in BACKUP_COMMANDS else
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else
                    'tests/test_vendor_credit.py::test_the_same_vendor_credit_through_python_cli_http_and_mcp' if cmd.name in VENDOR_CREDIT_COMMANDS else

@@ -581,6 +581,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `original.prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `original.prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `original.summary` | object \| null | no | yes | null | Present in PaymentWriteOutput. |
+| `original.summary.text` | string | no | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. Present in PaymentWriteOutput. |
+| `original.summary.documents` | array[object] | no | no | — | The documents this write settled, at most 50. Present in PaymentWriteOutput. |
+| `original.summary.documents[].document_id` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].document_type` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].number` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied` | object | no | no | — | Money from this payment applied to the document. Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].applied.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].discount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due` | object | no | no | — | What the document still owes after this payment. Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].still_due.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.documents[].paid_in_full` | boolean | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.document_count` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.paid_in_full_count` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.still_due` | object | no | no | — | Total still owed on the documents this write settled. Present in PaymentWriteOutput. |
+| `original.summary.still_due.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.still_due.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.still_due.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. Present in PaymentWriteOutput. |
+| `original.summary.credit.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.credit.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.credit.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. Present in PaymentWriteOutput. |
+| `original.summary.discount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.discount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.discount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
 | `original.effect.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |

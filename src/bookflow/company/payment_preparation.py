@@ -238,6 +238,14 @@ def calculate(s, inp):
         origin = 'entered' if amount is not None else 'selection_total' if context['automatically_calculate'] else 'unresolved'
     if inp.amount_mode != 'company' and not (origin == 'entered' and amount is not None and inp.amount_mode == 'selection_total'):
         origin = inp.amount_mode
+    # Row 22 §5: with automatic calculation off, a fresh (inline) calculation has nothing to derive the
+    # received amount from, so it asks for the amount; `entered` always needs one. A saved selection's
+    # own unresolved header stays a readable draft state.
+    if origin == 'entered' and amount is None or (
+            origin == 'unresolved' and inp.amount_mode == 'company' and inp.applications.mode == 'inline'):
+        raise _invalid('amount', 'required: enter the amount received, or use amount_mode selection_total to '
+                                 'total the selected invoices (automatic payment calculation is off for this company)'
+                       if origin == 'unresolved' else 'required: enter the amount received for amount_mode entered')
     try:
         result = calc.calculate(amount, origin, selection._rows(items),
             calculate_unresolved=context['automatically_calculate'] or inp.amount_mode == 'selection_total',

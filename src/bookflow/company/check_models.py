@@ -17,7 +17,7 @@ Items and expenses share the entered amount. Purchased item facts remain capture
 immutable journal lines; tracked items receive stock through the inventory owner.
 """
 from bookflow.company.sales_models import SalesMoneyInput
-from typing import Annotated, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self
 
 from pydantic import Field, model_serializer, model_validator
 
@@ -35,10 +35,15 @@ from bookflow.company.journal_outputs import (
 # What funds each document, and which way that account moves when money goes out. A bank
 # account is debit-normal so paying decreases it; a card is credit-normal so charging
 # increases what is owed. Both credit the funding account and debit the expenses.
-FUNDING_TYPE = {'check': 'bank', 'card-charge': 'credit_card'}
+FUNDING_TYPE = {'check': 'bank', 'card-charge': 'credit_card', 'card-credit': 'credit_card'}
 DIRECTION = {'bank': 'decrease', 'credit_card': 'increase'}
+# Which way each document moves its funding account, and so which side the funding line takes.
+# A card credit is a card charge in the other direction: what is owed on the card goes down,
+# the funding line is a debit, and the expense lines are credited.
+MOVEMENT = {'check': 'decrease', 'card-charge': 'increase', 'card-credit': 'decrease'}
+FUNDING_SIDE = {'check': 'credit', 'card-charge': 'credit', 'card-credit': 'debit'}
 
-DOCUMENT_KIND = {'check': 'check', 'card-charge': 'card_charge'}
+DOCUMENT_KIND = {'check': 'check', 'card-charge': 'card_charge', 'card-credit': 'card_credit'}
 
 
 class CheckParty(_Input):
@@ -122,7 +127,58 @@ class CardChargePostInput(_MoneyOutPost):
     """A card charge carries no check number; the card statement carries the reference."""
 
 
-class _MoneyOutCorrection(_Input):
+class _CardCreditFace(_Input):
+    """A refund onto a company card: the card, who gave it, and the expense lines it reduces.
+
+    No items grid: a card credit returns money, not stock. A returned stocked part is entered
+    against the account it was bought to, and its quantity is taken off with `inventory adjust`.
+    """
+
+    account: _Selector
+    pay_to: CheckParty | None = None
+    date: _Date
+    amount: str | SalesMoneyInput
+    memo: str | None = Field(default=None, max_length=2000)
+    class_id: _Selector | None = None
+    expenses: Expenses = Field(default_factory=list)
+    custom_field_kinds: CustomFieldKindExpectations = Field(
+        default_factory=lambda: CustomFieldKindExpectations({}))
+    custom_fields: CustomFieldValuePatch = Field(
+        default_factory=lambda: CustomFieldValuePatch({}))
+
+
+class CardCreditPostInput(_CardCreditFace):
+    """A card credit carries no check number; the card statement carries the reference."""
+
+    @model_validator(mode='after')
+    def new_lines(self) -> Self:
+        if not self.expenses:
+            raise ValueError('at least one expense line is required')
+        if any(line.line_id is not None for line in self.expenses):
+            raise ValueError('a new expense line cannot claim an existing line identity')
+        return self
+
+
+class _CorrectionRules(_Input):
+    """A correction's two rules: a required fact cannot be cleared, and only what is supplied is sent."""
+
+    @model_validator(mode='after')
+    def required_values(self) -> Self:
+        for field in ('account', 'date', 'amount', 'expenses', 'items', 'number'):
+            if field in self.model_fields_set and getattr(self, field, None) is None:
+                raise ValueError(f'{field} cannot be cleared')
+        return self
+
+    @model_serializer(mode='wrap')
+    def only_supplied(self, handler):
+        values = handler(self)
+        for key in ('pay_to', 'memo', 'class_id'):
+            if key not in self.model_fields_set:
+                values.pop(key, None)
+        return values
+
+
+class _MoneyOutCorrection(_CorrectionRules):
     """Everything on the face of the document, each field optional and each one meaning it.
 
     A field left out keeps what was captured; a field supplied replaces it. ``expenses``
@@ -146,21 +202,6 @@ class _MoneyOutCorrection(_Input):
     custom_fields: CustomFieldValuePatch = Field(
         default_factory=lambda: CustomFieldValuePatch({}))
 
-    @model_validator(mode='after')
-    def required_values(self) -> Self:
-        for field in ('account', 'date', 'amount', 'expenses', 'items', 'number'):
-            if field in self.model_fields_set and getattr(self, field, None) is None:
-                raise ValueError(f'{field} cannot be cleared')
-        return self
-
-    @model_serializer(mode='wrap')
-    def only_supplied(self, handler):
-        values = handler(self)
-        for key in ('pay_to', 'memo', 'class_id'):
-            if key not in self.model_fields_set:
-                values.pop(key, None)
-        return values
-
 
 class CheckUpdateInput(_MoneyOutCorrection):
     check: _Selector
@@ -175,6 +216,26 @@ class CardChargeUpdateInput(_MoneyOutCorrection):
     card_charge: _Selector
 
 
+class CardCreditUpdateInput(_CorrectionRules):
+    """A correction of a card credit; the rules are a card charge's, without an items grid."""
+
+    card_credit: _Selector
+    expected_version: _Version | None = None
+    account: _Selector | None = None
+    pay_to: CheckParty | None = None
+    date: _Date | None = None
+    amount: str | SalesMoneyInput | None = None
+    memo: str | None = Field(default=None, max_length=2000)
+    class_id: _Selector | None = None
+    expenses: Expenses | None = None
+    custom_field_kinds: CustomFieldKindExpectations = Field(
+        default_factory=lambda: CustomFieldKindExpectations({}))
+    custom_fields: CustomFieldValuePatch = Field(
+        default_factory=lambda: CustomFieldValuePatch({}))
+    # Nothing to delete or return: a card credit carries no item grid.
+    items: ClassVar[None] = None
+
+
 class CheckVoidInput(_Input):
     check: _Selector
     expected_version: _Version | None = None
@@ -182,6 +243,11 @@ class CheckVoidInput(_Input):
 
 class CardChargeVoidInput(_Input):
     card_charge: _Selector
+    expected_version: _Version | None = None
+
+
+class CardCreditVoidInput(_Input):
+    card_credit: _Selector
     expected_version: _Version | None = None
 
 
@@ -195,6 +261,13 @@ class CardChargeShowInput(_Input):
     include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     card_charge: _Selector
     revision_number: _Version | None = None
+
+
+class CardCreditShowInput(_Input):
+    card_credit: _Selector
+    revision_number: _Version | None = None
+    # A card credit has no deletion of its own; `card-credit void` cancels one.
+    include_deleted: ClassVar[bool] = False
 
 
 class MoneyOutPageInput(_Input):
@@ -235,6 +308,12 @@ class CardChargeQueryInput(_MoneyOutQuery):
     """Which card charges to page. Every filter is ANDed; omit them all to page the lot."""
 
 
+class CardCreditQueryInput(_MoneyOutQuery):
+    """Which card credits to page. Every filter is ANDed; omit them all to page the lot."""
+
+    include_deleted: ClassVar[bool] = False
+
+
 class CheckHistoryInput(MoneyOutPageInput):
     include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     check: _Selector
@@ -243,6 +322,11 @@ class CheckHistoryInput(MoneyOutPageInput):
 class CardChargeHistoryInput(MoneyOutPageInput):
     include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     card_charge: _Selector
+
+
+class CardCreditHistoryInput(MoneyOutPageInput):
+    card_credit: _Selector
+    include_deleted: ClassVar[bool] = False
 
 
 class MoneyOutItemOutput(_Input):
@@ -263,7 +347,7 @@ class MoneyOutSummary(_Input):
     charge has none -- the card statement carries the reference -- so it is null there, always.
     """
 
-    kind: Literal['check', 'card_charge']
+    kind: Literal['check', 'card_charge', 'card_credit']
     account_id: str
     funding_details: dict | None = Field(default=None, exclude_if=lambda value: value is None)
     funding: Literal['bank', 'credit_card']

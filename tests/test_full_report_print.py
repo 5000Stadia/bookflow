@@ -122,7 +122,11 @@ def test_print_and_return_links_preserve_typed_filters(verb):
 @pytest.mark.parametrize('verb', Export.reports())
 def test_all_registered_report_presenters_have_complete_views(print_site, browser, verb):
     cmd = registry.get('report ' + verb)
-    raw = {name: ('2026-09-01' if name == 'date_from' else '2026-09-30')
+    # Every required filter gets a real value of its own kind: the period's dates, and the
+    # fixture's bank for a report that is about one account (reconciliation discrepancy).
+    # Filling `account` with a date asked for an account that does not exist.
+    real = {'date_from': '2026-09-01', 'account': print_site.bank}
+    raw = {name: real.get(name, '2026-09-30')
            for name, field in cmd.input_model.model_fields.items() if field.is_required()}
     response = browser.get(Print.print_url(print_site.company, verb, raw))
     assert response.status_code == 200, response.text

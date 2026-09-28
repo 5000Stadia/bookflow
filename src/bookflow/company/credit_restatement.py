@@ -4,7 +4,7 @@ from collections import defaultdict
 from bookflow.company import schema as c, credits, journals, document_effects as effects
 from bookflow.company.payment_cancellation import live_allocations
 from bookflow.company.payment_authority import authorize
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, require_reason
 from bookflow.core.registry import Touched
 
 
@@ -23,8 +23,7 @@ def compatible(s, ctx, previous, resolved):
     uses = previous['applications'] + previous['consumptions']
     if not uses:
         return
-    if not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140:
-        raise BookflowError('E_REASON_REQUIRED')
+    require_reason(ctx.reason)
     key, profile = previous['key'], resolved['profile']
     if (profile.customer.id, profile.control_account.id, resolved['currency']) != (
             key['party_id'], key['ar_account_id'], key['currency']):

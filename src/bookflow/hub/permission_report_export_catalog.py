@@ -13,7 +13,7 @@ import json
 from . import permission_deactivation_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '169d26f3e835d0a027d7fc98686d942506d96653'
+SOURCE_COMMIT = '5ce7f18db0ad181cc31e52b938af6d8998a70f21'
 ADDED_COMMANDS = (
     c.CommandDescriptor('report export', 'company', 'reports', 'member', (), True, None, False, False, None, None, None, None),
 )
