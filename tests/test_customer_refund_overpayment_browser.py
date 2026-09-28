@@ -73,7 +73,8 @@ def test_the_payment_list_offers_the_overpayment_back_and_the_refund_takes_it(
     row = _row(b, payment['id'])
     assert b.evaluate(f'!!{row}'), 'the receipt is not on the payment list'
     number = _cell(b, row, 'Payment')
-    assert _cell(b, row, 'Unapplied credit') == OVERAGE, _cell(b, row, 'Unapplied credit')
+    # The list shows money as a person reads it, in the home currency's symbol.
+    assert _cell(b, row, 'Unapplied credit') == '$' + OVERAGE, _cell(b, row, 'Unapplied credit')
     assert b.evaluate(f'!!{row}.querySelector("[data-refund-overpayment]")'), \
         'the overpaid row offers no way to send the money back'
     _contained(b, width)
@@ -113,5 +114,5 @@ def test_the_payment_list_offers_the_overpayment_back_and_the_refund_takes_it(
     row = _row(b, payment['id'])
     assert b.evaluate(f'!{row}.querySelector("[data-refund-overpayment]")'), \
         'a refunded overpayment is still being offered'
-    assert _cell(b, row, 'Unapplied credit') == '0.00', _cell(b, row, 'Unapplied credit')
+    assert _cell(b, row, 'Unapplied credit') == '$0.00', _cell(b, row, 'Unapplied credit')
     _contained(b, width)

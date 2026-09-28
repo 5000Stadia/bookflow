@@ -96,7 +96,10 @@ def test_saved_work_chain_phone_values_links_and_rules(register_browser, tmp_pat
             if noun == 'work-order':
                 assert _cells(b, row + ' [data-label="Completed"]') == [line['completed_quantity']]
         totals = b.evaluate('document.querySelector(".document-totals").innerText')
-        assert totals == f'Net {revision["net"]["amount"]} · Tax {revision["tax"]["amount"]} · Total {revision["total"]["amount"]} {revision["currency"]}'
+        # Totals read as money a person reads: the home currency's symbol, digits grouped.
+        from bookflow.adapters.workbench.display import money
+        shown = {key: money(revision[key]['amount'], revision['currency'], revision['currency']) for key in ('net', 'tax', 'total')}
+        assert totals == f'Net {shown["net"]} · Tax {shown["tax"]} · Total {shown["total"]}'
         assert 'Price mode' not in b.evaluate('document.querySelector(".document-lines").innerText')
         rules = 'document.querySelector(".work-document details:last-of-type")'
         assert not b.evaluate(rules + '.open')
@@ -132,13 +135,13 @@ def test_saved_journal_phone_exact_money_and_history(register_browser, tmp_path,
     assert _cells(b, table + ' tbody [data-label="Name"]') == ['Journal customer with retained name', '']
     assert _cells(b, table + ' tbody [data-label="Class"]') == ['Journal service class', '']
     assert _cells(b, table + ' tbody [data-label="Account"]') == ['CDP bank', 'CDP supplies']
-    expected = '15.95' if foreign else '1234.56'
+    expected = '15.95' if foreign else '1,234.56'  # the page groups digits
     assert _cells(b, table + ' tbody [data-label="Debit"]') == [expected, '']
     assert _cells(b, table + ' tbody [data-label="Credit"]') == ['', expected]
     assert _cells(b, table + ' tfoot th') == ['Total (USD)', expected, expected]
     assert len(_cells(b, table + ' tbody [data-label="Original / rate"]')) == (2 if foreign else 0)
     if foreign:
-        assert _cells(b, table + ' tbody [data-label="Original / rate"]') == ['2345 JPY · 0.0068 USD per JPY · manual'] * 2
+        assert _cells(b, table + ' tbody [data-label="Original / rate"]') == ['¥2,345 JPY · 0.0068 USD per JPY · manual'] * 2
     history = '[aria-label="Accounting history"] .document-lines'
     assert _cells(b, history + ' [data-label="Effect"]') == ['Original']
     assert _cells(b, history + ' [data-label="Debits"]') == [expected]
