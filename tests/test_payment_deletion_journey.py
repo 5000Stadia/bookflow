@@ -190,7 +190,9 @@ def test_payment_delete_journey_in_real_chrome(register_browser, width, tmp_path
     assert not b.evaluate('!!' + action)
 
     rows = hub('membership.list', dict(company=site.company_id))['items']
-    mine = next(row for row in rows if row['scope_type'] == 'company' and row['scope_id'] == site.company_id)
+    # The demo also seeds an assistant's membership in this company; grant the signed-in person's.
+    mine = next(row for row in rows if row['scope_type'] == 'company' and row['scope_id'] == site.company_id
+                and row['username'] == site.login)
     hub('membership.grant', dict(user=mine['user_id'], company=site.company_id,
         expected_version=mine['version'], grants=[PAYMENT_DELETE], denies=['ledger.post']))
 
