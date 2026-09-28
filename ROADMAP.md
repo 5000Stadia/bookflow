@@ -95,7 +95,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R134 1099 vendor summary report (report only; filing stays in the future list) — notes/V1.5-scope-sort-draft.md
 - [ ] R135 card credits (a refund onto a credit card) and a plain "Credit Card" payment method — notes/V1.5-scope-sort-draft.md
 - [ ] R136 reconciling a credit card account against its statement works as a bank reconciliation does (verify; fix only if missing) — notes/V1.5-scope-sort-draft.md
-- [~] R137 selling stock not yet on hand goes through with a warning: costed provisionally at the average cost (else the item's purchase cost, else zero with a warning), trued up by an entry dated at the receipt that covers the shortfall and linked to each sale it corrects (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
+- [x] R137 selling stock not yet on hand goes through with a warning: costed provisionally at the average cost (else the item's purchase cost, else zero with a warning), trued up by an entry dated at the receipt that covers the shortfall and linked to each sale it corrects (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 - [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current (the README says demo dates follow the reset day), the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
 
