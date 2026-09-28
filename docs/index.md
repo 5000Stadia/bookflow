@@ -337,6 +337,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`hub/api_tokens`](schema/hub/api_tokens.md)
 - [`hub/audit_entries`](schema/hub/audit_entries.md)
 - [`hub/audit_events`](schema/hub/audit_events.md)
+- [`hub/authority_generation`](schema/hub/authority_generation.md)
 - [`hub/companies`](schema/hub/companies.md)
 - [`hub/features`](schema/hub/features.md)
 - [`hub/idempotency_keys`](schema/hub/idempotency_keys.md)

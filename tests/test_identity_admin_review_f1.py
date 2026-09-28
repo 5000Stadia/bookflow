@@ -111,7 +111,9 @@ def test_new_readonly_default_inserts_exact_rows_generation_and_audit(tmp_path):
         assert observed.catalog == expected_catalog and observed.role_defaults == desired
         after = snapshot(db.raw)
         assert after['ddl'] == before['ddl'] and after['columns'] == before['columns']
-        changed_tables = {'permission_state', 'role_capabilities', 'audit_events', 'audit_entries'}
+        # authority_generation: its triggers count the permission-input writes (R74).
+        changed_tables = {'permission_state', 'role_capabilities', 'audit_events', 'audit_entries',
+                          'authority_generation'}
         for table in before['tables'].keys() - changed_tables:
             assert after['tables'][table] == before['tables'][table]
         assert after['tables']['role_capabilities'][:-1] == before['tables']['role_capabilities']

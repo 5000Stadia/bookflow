@@ -3,9 +3,12 @@
 Visibility is governed by memberships, not installation administration. Record
 and conditional source owners still perform their complete target graph checks.
 """
+from collections import OrderedDict
 from dataclasses import asdict, replace
 import hashlib
 import json
+import sqlite3
+from threading import Lock
 
 from . import permission_catalog as c, permission_policy as a, permission_snapshot as s
 from .agent_authority import fail
@@ -268,18 +271,119 @@ def observe_current(tx) -> s.ObservedPair:
         _translate_snapshot(exc)
 
 
+# Cross-transaction reuse (R74). A complete observation is a pure function of the
+# permission input tables, the schema and this build's catalog code. Database triggers
+# (hub0014) redraw authority_generation.token in the same transaction as any write to
+# those tables, from any connection or process. So an observation built from a
+# transaction that read token T describes exactly the facts of every later transaction
+# that reads T again: the check is one SELECT on the caller's own transaction, made
+# fresh for every use, and nothing reused ever outlives a token change. Credential,
+# token expiry, binding and publication checks stay outside this cache.
+AUTHORITY_TABLES = ('users', 'organizations', 'companies', 'memberships', 'agent_principals',
+                    'agent_authority', 'role_capabilities', 'permission_state')
+AUTHORITY_TRIGGERS = {
+    f'authority_generation_{table}_{event.lower()}': (table,
+        f'CREATE TRIGGER authority_generation_{table}_{event.lower()} AFTER {event} ON {table} '
+        'BEGIN UPDATE authority_generation SET generation = generation + 1, '
+        'token = lower(hex(randomblob(16))) WHERE id = 1; END')
+    for table in AUTHORITY_TABLES for event in ('INSERT', 'UPDATE', 'DELETE')}
+_STAMP_SQL = ('SELECT g.token, g.generation, (SELECT schema_version FROM pragma_schema_version), '
+              "(SELECT group_concat(version_num, ',') FROM main.alembic_version) "
+              'FROM main.authority_generation AS g WHERE g.id = 1')
+_REUSE_LIMIT = 8
+_reuse = OrderedDict()  # key -> (observation, {decision key: ExecutionResult})
+_reuse_lock = Lock()
+
+
+def authority_stamp(tx):
+    """The authority generation as the caller's open transaction sees it; None when unprovable.
+
+    The schema version is part of it because DDL can drop a trigger; the alembic head
+    because the observation depends on it. Outside a transaction two statements can see
+    two different commits, so there is nothing to compare.
+    """
+    if getattr(tx, '_closed', True) or not tx.raw.in_transaction:
+        return None
+    try:
+        row = tx.raw.execute(_STAMP_SQL).fetchone()
+    except sqlite3.DatabaseError:
+        return None  # a hub before hub0014, or no longer readable: always observe fresh
+    if row is None or type(row[0]) is not str or len(row[0]) != 32 or type(row[2]) is not int:
+        return None
+    return tuple(row)
+
+
+def _triggers_intact(tx):
+    rows = tx.raw.execute("SELECT name,tbl_name,sql FROM main.sqlite_master WHERE type='trigger' "
+                          "AND name LIKE 'authority\\_generation\\_%' ESCAPE '\\'").fetchall()
+    return {name: (table, sql) for name, table, sql in rows} == AUTHORITY_TRIGGERS
+
+
+def forget_reused_observations():
+    """Drop every reused observation. Never required for correctness; tests and tools only."""
+    with _reuse_lock:
+        _reuse.clear()
+        _decisions.clear()
+
+
+# Decisions are a pure function of an observation and their arguments, so each reused
+# observation carries its own; they live and die with it and are reached only through
+# an observation the caller's transaction has just proved current.
+_decisions = {}  # id(observation) -> (observation, {key: ExecutionResult})
+
+
+def _decision_memo(observed):
+    with _reuse_lock:
+        entry = _decisions.get(id(observed))
+        return entry[1] if entry is not None and entry[0] is observed else None
+
+
+def _reuse_key(tx, stamp):
+    # The build's own inputs are part of the key, so a replaced catalog, visibility or
+    # loader (tests monkeypatch them) can never be answered from an older build's facts.
+    return (str(tx.path), stamp, id(catalog_for_root), id(known_catalog), id(VISIBILITY),
+            id(observe_current), id(s.load_root), id(s.observe_pair))
+
+
+def _stamped_observation(tx):
+    stamp = authority_stamp(tx)
+    if stamp is None:
+        return observe_current(tx)
+    key = _reuse_key(tx, stamp)
+    with _reuse_lock:
+        observed = _reuse.get(key)
+        if observed is not None:
+            _reuse.move_to_end(key)
+            return observed
+    observed = observe_current(tx)
+    # Store only what this same transaction proved: the token is unchanged across the
+    # read (no own write intervened) and every trigger that keeps it honest is present.
+    if authority_stamp(tx) == stamp and _triggers_intact(tx):
+        with _reuse_lock:
+            _reuse[key] = observed
+            _reuse.move_to_end(key)
+            _decisions[id(observed)] = (observed, {})
+            while len(_reuse) > _REUSE_LIMIT:
+                _, dropped = _reuse.popitem(last=False)
+                if _decisions.get(id(dropped), (None,))[0] is dropped and not any(
+                        x is dropped for x in _reuse.values()):
+                    del _decisions[id(dropped)]
+    return observed
+
+
 def _operation_observation(tx):
     """Reuse facts only while the exact tracked database snapshot is unchanged.
 
     Administrative callers keep using observe_current for independent evidence.
     Authentication and policy evaluation are deliberately outside this cache.
+    Across transactions, reuse is admitted only by _stamped_observation's fresh check.
     """
     key = tx.authority_snapshot_key()
     cached = getattr(tx, '_permission_observation', None)
     if key is not None and cached is not None and cached[0] == key:
         return cached[1]
     tx._permission_observation = None
-    observed = observe_current(tx)
+    observed = _stamped_observation(tx)
     if key is not None and tx.authority_snapshot_key() == key:
         tx._permission_observation = (key, observed)
     return observed
@@ -290,7 +394,9 @@ def require_company(tx, *, actor: str, principal: str | None, company: str,
     """Current actor/human intersection; not a credential or graph certificate.
 
     The binding producer authenticates immediately before calling this function.
-    No stored output of this function can authorize a later transaction.
+    No stored output of this function can authorize a later transaction: a policy
+    result is memoized only on an observation this transaction has just proved current
+    through its own authority token read, and is exactly what recomputing it would give.
     """
     observed = _operation_observation(tx)
     scope = c.ScopeKey('company', company)
@@ -299,11 +405,18 @@ def require_company(tx, *, actor: str, principal: str | None, company: str,
         fail('unavailable_target', 'scope')
     if principal is not None and principal not in comparison.subjects:
         fail('not_administrator', 'binding')
-    try:
-        result = a.execution(comparison, phase='old', actor=actor, bound_human=principal,
-                             scope=scope, requirement=requirement)
-    except c.PolicyInputError:
-        fail('invalid_input', 'requirement')
+    memo = _decision_memo(observed)
+    decision = (actor, principal, scope, requirement)
+    result = memo.get(decision) if memo is not None else None
+    if result is None:
+        try:
+            result = a.execution(comparison, phase='old', actor=actor, bound_human=principal,
+                                 scope=scope, requirement=requirement)
+        except c.PolicyInputError:
+            fail('invalid_input', 'requirement')
+        if memo is not None:
+            with _reuse_lock:
+                memo[decision] = result
     if not result.intersection_admitted:
         fail('unavailable_target', 'scope')
     return result

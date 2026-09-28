@@ -106,13 +106,14 @@ class LocalListener:
 
         wire_socket = None
         reply_guard = None
-        request_started = time.monotonic()
         with conn, TransferLease("", "", lambda lease: None) as lease:
+            leases = [lease]  # the reply phase of an ordinary call runs under its own lease
+
             def current_connection():
                 from bookflow.core.publication_admission import AdmissionCancelled
                 if self._stopping or bool(getattr(self.host, "_stopping", False)):
                     raise AdmissionCancelled("local host stopping")
-                lease.check_io()
+                leases[-1].check_io()
             binary = False
             try:
                 conn.settimeout(CONNECTION_TIMEOUT_SECONDS)
@@ -137,7 +138,8 @@ class LocalListener:
                     return
                 wire_socket = (AdmittedSocket(conn, self.host.publication_admission, current_connection)
                                    if self.host is not None else conn)
-                document = self.handler(login, envelope)
+                with _Heartbeat(conn if self.host is not None else None):
+                    document = self.handler(login, envelope)
                 reply_guard = document.check
                 reply = {"output": document}
             except BookflowError as e:
@@ -160,12 +162,69 @@ class LocalListener:
                     if self.host is None:
                         conn.sendall(len(payload).to_bytes(4, "big") + payload)
                     else:
-                        wire_socket.response.deadline = request_started + CONNECTION_TIMEOUT_SECONDS
-                        if reply_guard is not None:
-                            wire_socket.bind_guard(reply_guard)
-                        wire.write(wire_socket, len(payload).to_bytes(4, "big") + payload)
+                        # The reply's own bounds start when it is ready, not when the request
+                        # arrived: a command may run for as long as it needs (heartbeats keep
+                        # the caller waiting), and its finished reply then has 30 s to be
+                        # admitted and written.
+                        with TransferLease("", "", lambda lease: None) as reply_lease:
+                            leases.append(reply_lease)
+                            wire = _IO(300, 30, reply_lease.check_io, time.monotonic)
+                            wire_socket.response.deadline = time.monotonic() + CONNECTION_TIMEOUT_SECONDS
+                            if reply_guard is not None:
+                                wire_socket.bind_guard(reply_guard)
+                            wire.write(wire_socket, len(payload).to_bytes(4, "big") + payload)
             except (OSError, BookflowError):
                 pass
+
+
+class _Heartbeat:
+    """Empty frames on a forwarded call's own connection while its command runs.
+
+    A zero-length frame carries no data and precedes the reply, so it releases nothing;
+    it only tells the caller (core/forward.py) the host is still working. It stops, and
+    its thread is joined, before the reply is written, so frames never interleave. A
+    frame is sent whole or not at all; a peer that stops reading just misses beats.
+    """
+    FRAME = b"\x00\x00\x00\x00"
+
+    def __init__(self, conn, interval=None):
+        from bookflow.core.forward import HEARTBEAT_SECONDS
+        self.conn, self.interval = conn, HEARTBEAT_SECONDS if interval is None else interval
+        self.stopped = threading.Event()
+        self.thread = None
+
+    def __enter__(self):
+        if self.conn is not None:
+            self.thread = threading.Thread(target=self._run, name="bookflow-local-heartbeat", daemon=True)
+            self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stopped.set()
+        if self.thread is not None:
+            self.thread.join()
+
+    def _run(self):
+        import select
+        import time
+        while not self.stopped.wait(self.interval):
+            sent = 0
+            started = time.monotonic()
+            try:
+                while sent < len(self.FRAME):
+                    try:
+                        sent += self.conn.send(self.FRAME[sent:])
+                    except BlockingIOError:
+                        if sent == 0:
+                            break  # the peer is not reading; skip this beat
+                        if time.monotonic() - started > CONNECTION_TIMEOUT_SECONDS:
+                            # A frame begun and never finished would corrupt the reply's
+                            # framing: end the connection so the caller sees E_IO instead.
+                            self.conn.shutdown(socket.SHUT_RDWR)
+                            return
+                        select.select([], [self.conn], [], 1.0)
+            except OSError:
+                return  # the peer has gone; the reply write will find that out itself
 
 
 def validate_transfer_envelope(envelope, size=None):
