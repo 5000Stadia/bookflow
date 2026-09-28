@@ -34,7 +34,8 @@
 <section id="payment-selection"><h2 id="payment-selection-title">Invoices and statement charges to settle</h2><p id="payment-selection-status"></p>
 
 <div class="payment-actions"><button type="button" id="payment-auto">Auto Apply</button><button type="button" id="payment-calculate">Calculate selected amounts</button><button type="button" id="payment-clear">Clear draft selections</button><button type="button" id="payment-refresh-draft">Reload shared selection</button></div>
-<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / document</th><th>Original ({{ payment_workspace.currency }})</th><th>Current</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
+<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / document</th><th>Original ({{ payment_workspace.currency }})</th><th>Current</th><th>Applied</th><th>Due</th><th>Disc. date</th><th>Discount</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
+<details class="field-help"><summary>Early-payment discounts</summary><p>An invoice whose terms offer a discount shows its discount date and, for a receipt dated on or before it, the suggested discount. Nothing is discounted unless you enter it or press Take. The invoice is then settled by the payment plus the discount, and the discount is charged to the company's customer discount account (Discounts Given unless set in company preferences). Enter the cash the customer actually paid in Payment.</p></details>
 <button type="button" id="payment-more" hidden>Next page</button>
 <div id="payment-totals" aria-live="polite"></div>
 </section>
