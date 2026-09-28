@@ -102,8 +102,8 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R143 CLI lists print curated default columns (decision D13), not every column — notes/bug-sweep-20260928.md
 - [~] R144 time activities have browser pages like other documents — notes/bug-sweep-20260928.md
 - [ ] R145 report CSV export works over the CLI and MCP as in the browser — notes/bug-sweep-20260928.md
-- [ ] R146 editing or voiding a transaction after its reconciliation is finished is fenced (the anchor warns); accounting behaviour, gate first — notes/bug-sweep-20260928.md
-- [ ] R147 discount, subtotal and group items and percentage charges work on sales, as they can already be created; accounting behaviour, gate first — notes/bug-sweep-20260928.md
+- [ ] R146 editing or voiding a transaction after its reconciliation is finished is fenced (warn plainly as QuickBooks does; the reconciliation report shows the difference; approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
+- [ ] R147 discount, subtotal and group items and percentage charges work on sales as QuickBooks does: a subtotal sums the lines above, a percentage charge or discount applies to the line or subtotal above, a discount posts to its item's account and reduces taxable sales by its tax code, a group expands into its members (approved on gate g8b3cb3) — notes/bug-sweep-20260928.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 - [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current (the README says demo dates follow the reset day), the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
 
