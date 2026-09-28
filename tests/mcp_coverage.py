@@ -799,6 +799,8 @@ def variant_policies():
             'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],
             ['durable deposit drafts and their selection dialog are not registered yet, so only the inline branch has a form']),
         ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
+        ('oneOf', ('InlineApplications', 'SelectionReference', 'SuggestedApplications')): ([payment, 'tests/test_v15_trial_agent.py::test_actual_mcp_bulk_receipt_arrives_within_budget_with_its_warning'],
+            ['payment receive applications mode suggested (V1.5 trials) has an actual-MCP witness; its browser form branch has no dedicated case yet']),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
         ('anyOf', ('Adjustment', 'null')): ([

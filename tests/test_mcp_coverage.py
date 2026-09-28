@@ -105,7 +105,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==25
+    assert len(mapped)==len(variant_policies())==26
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -140,6 +140,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2878 -> 2881: sales-tax liability reads a period (R72 trial fix). Its optional as_of,
     # date_from and date_to each add one null branch: 2 -> 5 nodes on that command, measured per
     # command on both trees; the reconcile inputs are unchanged (only preview's output grew).
+    # 2881 unchanged (V1.5 trials): payment receive's applications gains a third branch,
+    # "suggested". The applications nodes of payment receive and of the prospective preview
+    # requests move from the two-way Inline/Selection group to a new three-way group (variant
+    # groups 25 -> 26) without adding a node; strategy is a literal, not a variant.
     assert sum(len(group["paths"]) for group in mapped)==2881
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
