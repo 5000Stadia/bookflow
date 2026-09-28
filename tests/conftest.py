@@ -23,11 +23,12 @@ BIN = Path(provenance.launcher())
 
 @pytest.fixture(scope="session")
 def _seeded_template(tmp_path_factory):
-    """One initialized, demo-seeded data root, built once and copied per test.
+    """One initialized, demo-seeded data root, built once per run and copied per test.
 
-    Rollout since row 5 runs the company migration chain, applies a chart, and installs the
-    profile seed manifests, which costs about 2.5 s. Copying the finished tree costs about 2 ms
-    and yields a byte-identical root, so every test still gets its own isolated data root.
+    `init` + `demo reset` runs the company migration chain, applies a chart and seeds the demo
+    story, which takes minutes under load. Copying the finished tree takes milliseconds and yields
+    a byte-identical root, so every test still gets its own isolated data root. Use
+    `copy_seeded_root` to take a copy; never write to the template itself.
     """
     src = tmp_path_factory.mktemp("seed") / "root"
     previous = os.environ.get("BOOKFLOW_DATA_ROOT")
@@ -36,12 +37,34 @@ def _seeded_template(tmp_path_factory):
         c = bookflow.connect(data_root=str(src))
         c.init()
         c.demo.reset(as_of=DEMO_AS_OF)
+        del c
     finally:
         if previous is None:
             os.environ.pop("BOOKFLOW_DATA_ROOT", None)
         else:
             os.environ["BOOKFLOW_DATA_ROOT"] = previous
+    _checkpoint_databases(src)
     return src
+
+
+def _checkpoint_databases(root: Path) -> None:
+    """Fold every database's write-ahead log into its main file, so a copy never depends on a
+    -wal file being copied at the same instant as its database. Nothing holds the root open here."""
+    import sqlite3
+    for path in root.rglob("*.db"):
+        with sqlite3.connect(path) as db:
+            busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        assert busy == 0, f"{path} is still open by another connection"
+        db.close()
+        wal = Path(f"{path}-wal")
+        assert not wal.exists() or wal.stat().st_size == 0, f"{wal} was not folded in"
+
+
+def copy_seeded_root(template: Path, target: Path) -> Path:
+    """A private copy of the session's demo root at `target`. Company and organization folders
+    are registered by paths relative to the data root, so the copy opens where it lands."""
+    shutil.copytree(template, target)
+    return target
 
 
 @pytest.fixture(autouse=True)
@@ -77,7 +100,7 @@ def root(request, tmp_path, monkeypatch, _seeded_template):
     r = tmp_path / "root"
     monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r))
     monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
-    shutil.copytree(_seeded_template, r)
+    copy_seeded_root(_seeded_template, r)
     if request.node.get_closest_marker("legacy_permissions"):
         make_legacy(r)
     return r

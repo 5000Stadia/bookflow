@@ -39,16 +39,16 @@ def copy_closed(source, target):
 
 
 @pytest.fixture(scope='module')
-def fragmented_root(tmp_path_factory):
+def fragmented_root(tmp_path_factory, _seeded_template):
     root = tmp_path_factory.mktemp('recovery-history') / 'books'
     cached = os.environ.get('BOOKFLOW_TEST_RECOVERY_ROOT')
     if cached:
         source = Path(cached).resolve()
         assert source.is_relative_to('/tmp') and source != root
         copy_closed(source, root)
+    else:
+        copy_closed(_seeded_template, root)
     client = Client(data_root=str(root))
-    if not cached:
-        client.init(); client.demo.reset()
     company = client.company.list()['items'][0]['company_id']
     call = lambda name, data: client.run(name, data, company=company, reason='Recovery browser history')
     if not cached:
