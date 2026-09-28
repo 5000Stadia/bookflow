@@ -16,6 +16,12 @@ from bookflow.core.ids import new_id
 from bookflow.storage.engine import open_database
 
 
+def _blind_warning(version, field):
+    from bookflow.company.list_service import blind_write_warning
+    from bookflow.core.versioning import UpdateMeta
+    return blind_write_warning(UpdateMeta(version=version + 1, changed_fields=[field], previous_version=version))
+
+
 def _chartless(client, name: str = "Account Test Books LLC") -> dict:
     return client.company.new(
         legal_name=name,
@@ -88,7 +94,7 @@ def test_account_complete_lifecycle_idempotency_outputs_and_audit(client):
     assert updated["version"] == 2
     assert updated["changed_fields"] == ["description"]
     assert updated["warnings"] == [
-        "Blind write: version 1 and fields description were not compared."
+        _blind_warning(1, "description")
     ]
     no_change = client.account.update(
         account=created["id"],
@@ -121,7 +127,7 @@ def test_account_complete_lifecycle_idempotency_outputs_and_audit(client):
     )
     assert activated["changed"] is True and activated["active"] is True
     assert activated["warnings"] == [
-        "Blind write: version 3 and fields active were not compared."
+        _blind_warning(3, "active")
     ]
 
     events = client.audit.list(command="account deactivate", company=company)

@@ -265,9 +265,10 @@ def plan_update(inp: CustomFieldUpdateInput, ctx: Context, s: Session) -> Plan:
     )
     warnings = []
     if after["version"] != before["version"] and inp.expected_version is None:
-        warnings.append(
-            f"Blind write: version {before['version']} and fields {', '.join(changed_fields)} were not compared."
-        )
+        from bookflow.company.list_service import blind_write_warning
+        from bookflow.core.versioning import UpdateMeta
+        warnings.append(blind_write_warning(UpdateMeta(version=after["version"], changed_fields=list(changed_fields),
+                                                       previous_version=before["version"])))
     preview = CustomFieldUpdateOutput(
         **_output(s, after),
         changed_fields=changed_fields,

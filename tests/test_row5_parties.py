@@ -17,6 +17,12 @@ import bookflow.commands.party_cmds  # noqa: F401, E402
 import bookflow.commands.item_cmds  # noqa: F401, E402
 
 
+def _blind_warning(version, field):
+    from bookflow.company.list_service import blind_write_warning
+    from bookflow.core.versioning import UpdateMeta
+    return blind_write_warning(UpdateMeta(version=version + 1, changed_fields=[field], previous_version=version))
+
+
 COMPANY = "Demo Plumbing Co"
 
 
@@ -333,7 +339,7 @@ def test_party_updates_support_blind_warnings_disjoint_merges_and_audit(client):
         company=COMPANY,
     )
     assert blind["warnings"] == [
-        "Blind write: version 3 and fields company_name were not compared."
+        _blind_warning(3, "company_name")
     ]
     events = client.audit.list(
         company=COMPANY,
