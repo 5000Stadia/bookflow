@@ -516,7 +516,7 @@ Example JSON output:
 
 ## `register query`
 
-Page one account's register between date_from and date_to (both required, YYYY-MM-DD) with normal-side running balances and a separate all-entries balance snapshot.
+Page one account's register from date_from to date_to (YYYY-MM-DD; omitted, the current fiscal year to today), oldest or newest first (direction), with normal-side running balances and a separate all-entries balance snapshot.
 
 | Contract | Value |
 |---|---|
@@ -544,12 +544,13 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_from` | `--date-from` | string \| null | no | yes | null | Inclusive first accounting date, YYYY-MM-DD; omit for the first day of the current fiscal year. |
+| `date_to` | `--date-to` | string \| null | no | yes | null | Inclusive last accounting date, YYYY-MM-DD; omit for today in the company's time zone. |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
-| `account` | `--account` | string | yes | no | — | minimum length 1; maximum length 1000 |
+| `account` | `--account` | string | yes | no | — | Account ID or canonical full name.; minimum length 1; maximum length 1000 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `direction` | `--direction` | literal["asc", "desc"] | no | no | "asc" | asc pages the oldest entry first, desc the most recent first; each row keeps the running balance after that entry either way. A cursor belongs to the direction that minted it. |
 
 ### Command and context options
 

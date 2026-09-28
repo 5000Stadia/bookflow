@@ -7,15 +7,33 @@ import json
 from typing import Literal
 
 import sqlalchemy as sa
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from bookflow.company import accounts, ledger_reports as reports, schema
 from bookflow.core.errors import BookflowError
 
 
 class RegisterQueryInput(reports.GeneralLedgerInput):
-    account: str = Field(min_length=1, max_length=1000)
+    account: str = Field(min_length=1, max_length=1000, description='Account ID or canonical full name.')
+    date_from: str | None = Field(default=None, min_length=10, max_length=10,
+        description='Inclusive first accounting date, YYYY-MM-DD; omit for the first day of the current fiscal year.')
+    date_to: str | None = Field(default=None, min_length=10, max_length=10,
+        description="Inclusive last accounting date, YYYY-MM-DD; omit for today in the company's time zone.")
+    direction: Literal['asc', 'desc'] = Field(default='asc',
+        description='asc pages the oldest entry first, desc the most recent first; each row keeps the running '
+                    'balance after that entry either way. A cursor belongs to the direction that minted it.')
     cursor: str | None = Field(default=None, max_length=8192)
+
+    @field_validator('date_from', 'date_to')
+    @classmethod
+    def _dates(cls, value):
+        return value if value is None else reports.iso_date(value)
+
+    @model_validator(mode='after')
+    def ordered(self):
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError('date_from must be on or before date_to')
+        return self
 
 
 class RegisterAccount(reports.StrictModel):
@@ -70,6 +88,10 @@ class RegisterQueryOutput(reports.Page):
 
 class _Cursor(reports.StrictModel):
     hidden_balance: int = 0
+    # A newest-first continuation: how many rows of the reversed period were already
+    # returned, under the audit watermark the first page read.
+    offset: int | None = None
+    watermark: int | None = None
     version: Literal[1] = 1
     account_id: str
     company_id: str
@@ -153,12 +175,45 @@ def _revision_summaries(db, revision_ids, selected_id, info):
     return summaries
 
 
+def default_period(s, info) -> tuple[str, str]:
+    """Today in the company's zone, and the first day of the fiscal year it falls in."""
+    from datetime import date
+    from bookflow.company.memorized_schedule import today as company_today
+    today = company_today(s.company_tz)
+    month = int(info.get('fiscal_year_start_month') or 1)
+    year = int(today[:4]) - (1 if int(today[5:7]) < month else 0)
+    return date(year, month, 1).isoformat(), today
+
+
+def _visible(db, result, currency, hidden_balance, tombstone_tables):
+    """One general-ledger page without deleted documents' rows, balances restated past them."""
+    deleted = set()
+    for table in (schema.metadata.tables[name] for name in tombstone_tables()):
+        if sa.inspect(db.conn).has_table(table.name):
+            deleted.update(db.conn.execute(sa.select(table.c.transaction_id).where(
+                table.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}))).scalars())
+    visible = []
+    for row in result.rows:
+        if row.transaction_id in deleted:
+            hidden_balance += row.debit.minor_units - row.credit.minor_units
+        else:
+            visible.append(row.model_copy(update={'signed_balance': reports.money(
+                row.signed_balance.minor_units - hidden_balance, currency)}))
+    return result.model_copy(update={'rows': visible}), hidden_balance
+
+
 def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutput:
     # The outer snapshot outlives both the report and all enrichment/current reads.
     with reports._snapshot(s.company):
         db = s.company
         previous = _decode(inp.cursor, db) if inp.cursor is not None else None
         company = str(s.company_row['id'])
+        if inp.date_from is None or inp.date_to is None:
+            first, today = default_period(s, dict(db.conn.execute(sa.select(schema.company_info)).mappings().one()))
+            inp = inp.model_copy(update={'date_from': inp.date_from or min(first, inp.date_to or first),
+                                         'date_to': inp.date_to or max(today, inp.date_from or today)})
+        # The resolved period is part of the continuation: a default that moved overnight
+        # restarts the query instead of splicing two periods together.
         query_hash = reports._hash(inp.model_dump(exclude={'cursor'}))
         permissions = reports._hash([reports.permission_fingerprint(s, principal_id), s.memberships])
         if previous and (previous.company_id, previous.query, previous.permissions) != (company, query_hash, permissions):
@@ -176,29 +231,44 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
             info.get('use_account_numbers'), info.get('show_lowest_subaccount_only')])
         if previous and previous.display != display:
             raise BookflowError('E_QUERY_STALE', details={'restart': 'Account display changed; restart without cursor.'})
-        report_input = reports.GeneralLedgerInput(account=account['id'], date_from=inp.date_from,
-            date_to=inp.date_to, basis=inp.basis, limit=inp.limit,
-            cursor=previous.report_cursor if previous else None)
-        hidden_balance = previous.hidden_balance if previous else 0
         from bookflow.core.deletion_families import tombstone_tables
-        while True:
-            result = reports.general_ledger(report_input, s, principal_id=principal_id)
-            deleted = set()
-            for table in (schema.metadata.tables[name] for name in tombstone_tables()):
-                if sa.inspect(db.conn).has_table(table.name):
-                    deleted.update(db.conn.execute(sa.select(table.c.transaction_id).where(
-                        table.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}))).scalars())
-            visible = []
-            for row in result.rows:
-                if row.transaction_id in deleted:
-                    hidden_balance += row.debit.minor_units - row.credit.minor_units
-                else:
-                    visible.append(row.model_copy(update={'signed_balance': reports.money(
-                        row.signed_balance.minor_units - hidden_balance, currency)}))
-            result = result.model_copy(update={'rows': visible})
-            if visible or not result.next_cursor:
-                break
-            report_input = report_input.model_copy(update={'cursor': result.next_cursor})
+        descending_offset = None
+        if inp.direction == 'desc':
+            # Newest first: read the whole period oldest first (running balances are defined
+            # that way), then hand back its reversed slice. The watermark keeps a continuation
+            # from splicing a period that changed between pages.
+            if previous and previous.offset is None:
+                raise _invalid()
+            report_input = reports.GeneralLedgerInput(account=account['id'], date_from=inp.date_from,
+                date_to=inp.date_to, basis=inp.basis, limit=200)
+            hidden_balance, collected = 0, []
+            while True:
+                page_result = reports.general_ledger(report_input, s, principal_id=principal_id)
+                page_result, hidden_balance = _visible(db, page_result, currency, hidden_balance, tombstone_tables)
+                collected.extend(page_result.rows)
+                if not page_result.next_cursor:
+                    break
+                report_input = report_input.model_copy(update={'cursor': page_result.next_cursor})
+            watermark = page_result.metadata.audit_watermark
+            if previous and previous.watermark != watermark:
+                raise BookflowError('E_QUERY_STALE', details={'restart': 'The register changed; restart without cursor.'})
+            start = previous.offset if previous else 0
+            collected.reverse()
+            descending_offset = start + inp.limit if start + inp.limit < len(collected) else None
+            result = page_result.model_copy(update={'rows': collected[start:start + inp.limit], 'next_cursor': None})
+        else:
+            if previous and previous.offset is not None:
+                raise _invalid()
+            report_input = reports.GeneralLedgerInput(account=account['id'], date_from=inp.date_from,
+                date_to=inp.date_to, basis=inp.basis, limit=inp.limit,
+                cursor=previous.report_cursor if previous else None)
+            hidden_balance = previous.hidden_balance if previous else 0
+            while True:
+                result = reports.general_ledger(report_input, s, principal_id=principal_id)
+                result, hidden_balance = _visible(db, result, currency, hidden_balance, tombstone_tables)
+                if result.rows or not result.next_cursor:
+                    break
+                report_input = report_input.model_copy(update={'cursor': result.next_cursor})
 
         revision_ids = {row.revision_id for row in result.rows if row.revision_id is not None}
         summaries = _revision_summaries(db, revision_ids, account['id'], info)
@@ -239,7 +309,11 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
             generation_time=reports.now_iso(),
             audit_watermark=db.raw.execute('SELECT coalesce(max(seq),0) FROM audit_events').fetchone()[0])
         next_cursor = None
-        if result.next_cursor:
+        if descending_offset is not None:
+            next_cursor = _encode(_Cursor(account_id=account['id'], company_id=company,
+                query=query_hash, permissions=permissions, display=display, report_cursor='',
+                offset=descending_offset, watermark=watermark), db)
+        elif result.next_cursor:
             next_cursor = _encode(_Cursor(account_id=account['id'], company_id=company,
                 query=query_hash, permissions=permissions, display=display, report_cursor=result.next_cursor, hidden_balance=hidden_balance), db)
         return RegisterQueryOutput(account=RegisterAccount(

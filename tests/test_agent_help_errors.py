@@ -44,7 +44,7 @@ def test_money_errors_name_the_accepted_shape_not_validator_internals(client):
 
 
 def test_missing_dates_say_what_to_pass(client):
-    error = _refusal(client, "register query", {"account": "Checking"})
+    error = _refusal(client, "report general-ledger", {"account": "Checking"})
     problems = {f["field"]: f["problem"] for f in error.details["fields"]}
     assert problems == {"date_from": 'required: a date like "2026-09-27" (YYYY-MM-DD)',
                         "date_to": 'required: a date like "2026-09-27" (YYYY-MM-DD)'}
@@ -120,7 +120,7 @@ def test_list_commands_first_lines_make_the_plumbers_questions_findable():
     assert rows["sales-tax liability"].startswith("How much sales tax is owed, by agency, as of a date")
     assert 'For open/unpaid invoices set settlement to "open"' in rows["invoice query"]
     assert rows["payment invoices"].startswith("Open (unpaid) invoices a customer can pay")
-    assert "date_from and date_to (both required" in rows["register query"]
+    assert "omitted, the current fiscal year to today" in rows["register query"]
     assert "`reconcile opening start` first" in rows["reconcile start"]
     assert rows["reconcile opening start"].startswith("First step for an account never reconciled")
     assert "`customer query options`" in rows["customer query"]
@@ -216,6 +216,31 @@ def test_hosted_refusals_carry_the_same_explanations(hosted, monkeypatch):
     assert body["message"].startswith("`payment invoices` was refused")
     invalid = hosted.call("customer.query", {"filters": {"name_contains": "Riverside"}}, company=hosted.company_id)
     assert invalid.status_code == 422 and invalid.json()["details"]["fields"][0]["accepted_fields"][0] == "query"
+
+
+def test_register_query_defaults_to_the_fiscal_year_and_pages_newest_first(client, monkeypatch):
+    from datetime import datetime, timezone
+    from bookflow.core import clock
+    monkeypatch.setattr(clock, "now", lambda: datetime(2026, 9, 27, 18, tzinfo=timezone.utc))
+    first = client.run("register query", {"account": "Checking", "limit": 7}, company=CO)
+    assert first["metadata"]["period"] == {"date_from": "2026-01-01", "date_to": "2026-09-27"}
+
+    def every(direction):
+        rows, cursor = [], None
+        while True:
+            page = client.run("register query", {"account": "Checking", "limit": 7, "direction": direction,
+                                                 **({"cursor": cursor} if cursor else {})}, company=CO)
+            rows += page["rows"]
+            cursor = page["next_cursor"]
+            if not cursor:
+                return rows, page
+    oldest, _ = every("asc")
+    newest, last = every("desc")
+    assert len(oldest) > 7 and newest == list(reversed(oldest))
+    assert last["totals"] == first["totals"]
+    newest_first = client.run("register query", {"account": "Checking", "limit": 7, "direction": "desc"}, company=CO)
+    error = _refusal(client, "register query", {"account": "Checking", "limit": 7, "cursor": newest_first["next_cursor"]})
+    assert error.code == "E_VALIDATION" and error.details["fields"][0]["field"] == "cursor"
 
 
 def test_invoice_query_filters_by_what_is_still_owed(client):
