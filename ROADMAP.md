@@ -79,7 +79,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R89 agents and users can be deactivated (the gap recorded when R68 shipped) — notes/V1.5-resort-draft.md
 - [x] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
 - [x] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
-- [ ] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
+- [~] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
 - [x] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
 - [x] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
 - [~] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
