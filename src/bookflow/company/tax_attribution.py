@@ -65,7 +65,8 @@ def prospective(db, document_id, line_ids, *, work=False):
 
 def calculate(lines, profile, currency, ordinals):
     inputs = [TaxLine(tax_ordinal=ordinal, net_minor_units=line['net_minor_units'],
-        rules=tuple(TaxRule.model_validate(tax['rule'].model_dump()) for tax in line['taxes']))
+        rules=tuple(TaxRule.model_validate(tax['rule'].model_dump()) for tax in line['taxes']),
+        taxable_minor_units=line['taxable_minor_units'] if line.get('taxable_minor_units', line['net_minor_units']) != line['net_minor_units'] else None)
         for line, ordinal in zip(lines, ordinals, strict=True)]
     result = calculate_tax(inputs, policy=tax_policy.effective(profile), currency=currency)
     return TaxAttribution(origin=tax_policy.origin(profile), calculation=result)
@@ -125,17 +126,18 @@ def validate_sales(s, header, revision, profile, pending, require):
     require(len(mapping) == len(envelopes) and
         {(r['document_line_id'], r['line_id'], r['tax_ordinal']) for r in mapping} == expected_mapping
         and all(r['revision_id'] == revision['id'] for r in mapping), 'tax line ownership or ordinal differs')
-    from bookflow.company.sales_facts import SalesLineProfile
+    from bookflow.company import sales_adjustments
     profiles = {row['document_line_id']: row for row in pending['sales_line_profiles']}
+    rows = [profiles[envelope['id']] for envelope in envelopes]
+    captured, _, bases = sales_adjustments.captured(profile, rows, require)
     inputs = []
-    for envelope in envelopes:
-        row = profiles[envelope['id']]
-        facts = SalesLineProfile.model_validate_json(row['item_snapshot'])
+    for row, facts, base in zip(rows, captured, bases, strict=True):
         taxable = profile.preferences.sales_tax_enabled and facts.tax_code is not None and facts.tax_code.taxable
         exempt = profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
-        rules = profile.tax_rules if taxable and not exempt else []
+        rules = profile.tax_rules if taxable and not exempt and sales_adjustments.kind(facts) in ('item', 'charge') else []
         require(rules is not None, 'missing applicable rules')
-        inputs.append(dict(net_minor_units=row['net_minor_units'], taxes=[dict(rule=rule) for rule in rules]))
+        inputs.append(dict(net_minor_units=row['net_minor_units'], taxable_minor_units=base,
+                           taxes=[dict(rule=rule) for rule in rules]))
     expected = calculate(inputs, profile, revision['currency'], ordinals)
     captured = read_snapshot(snapshots[0]['facts_snapshot'])
     require(captured == expected, 'exact tax buckets, cells or origin differ from authoritative facts')

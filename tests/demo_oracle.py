@@ -189,14 +189,16 @@ def posting_documents(client, company):
 DEMO_POSITION = {
     'balances': {
         'Checking': 657295,
-        'Accounts Receivable': 13839,
+        'Accounts Receivable': 61621,
         'Inventory Asset': 36184,
         'Accounts Payable': -7810,
-        'Sales Tax Payable': -4004,
+        'Sales Tax Payable': -7646,
         'Opening Balance Equity': -500000,
         # Early-payment discounts: +500.00 invoiced, 490.00 received plus a 10.00 discount;
         # a 300.00 bill paid with 294.00 plus a 6.00 discount, both through the example bank.
-        'Service Income': -265630,         # -215630 - 50000
+        # DEMO-LINE-KINDS (R147): 456.00 sold less the 15.60 discount = 441.40 income, 36.42
+        # tax, 477.82 still owed (it is unpaid, so it is in Accounts Receivable above).
+        'Service Income': -309770,         # -215630 - 50000 - 44140
         'Cost of Goods Sold': 523,
         'Professional Fees': 369823,       # 339823 + 30000
         'Business Credit Card': -20000,
@@ -205,10 +207,10 @@ DEMO_POSITION = {
         'Payment Example Bank': -262620,   # -282220 + 49000 - 29400
         'Payment Example Income': -18000,
     },
-    'trial_balance': 1078664,              # 1047664 + 30000 + 1000
+    'trial_balance': 1126446,              # 1047664 + 30000 + 1000 + 47782
     'journal_entries': 19,
-    'net_income': -87116,                  # -106716 + 50000 - 1000 - 30000 + 600
-    'total_equity': 412884,                # 393284 + 19600
+    'net_income': -42976,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140
+    'total_equity': 457024,                # 393284 + 19600 + 44140
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -236,6 +238,7 @@ DEMO_ARCS = {
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
     'DEMO-1099-': 'a 1099 subcontractor: a bill paid by check and a bill paid on the card',
     'DEMO-DISC-': 'early-payment discounts: a receipt and a bill payment each taking 2%',
+    'DEMO-LINE-KINDS': 'a subtotal, a percentage discount and a group item on one invoice',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`

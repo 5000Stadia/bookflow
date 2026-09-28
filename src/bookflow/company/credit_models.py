@@ -229,6 +229,19 @@ class CreditLineOutput(CreatedOutput):
     item_snapshot: SalesLineProfile
     tax_components: list[CreditTaxComponentOutput]
     claims: list[CreditClaimOutput] = Field(default_factory=list)
+    line_kind: Literal["item", "subtotal", "discount", "charge"] | None = Field(default=None, description=(
+        "Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced."))
+    amount: MoneyOutput | None = Field(default=None, description=(
+        "The amount the line shows when it differs from net: a subtotal's sum, a discount's negative "
+        "amount, or a line's amount before the discounts taken out of its net."))
+
+    @model_serializer(mode='wrap')
+    def legacy_line(self, handler):
+        values = handler(self)
+        for key in ('line_kind', 'amount'):
+            if getattr(self, key) is None:
+                values.pop(key, None)
+        return values
 
 
 class CreditRevisionSummaryOutput(CreatedOutput):

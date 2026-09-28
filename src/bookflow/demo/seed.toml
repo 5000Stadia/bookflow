@@ -2363,3 +2363,19 @@ command = "time-activity create"
 capture = "demo_time_warranty"
 reason = "Casey's timesheet for the warranty callback"
 input = { employee = "${employee.id}", customer = "${job_inherit.id}", date = "2026-12-11", duration = "0.75", item = "${service_item.id}", note = "Warranty callback: reseated a slipped coupling", billable = false, number = "DEMO-TIME-2" }
+
+# R147: one invoice that uses the line kinds a sales form carries besides sold items. Two
+# services and a part, a subtotal of them, the loyalty discount taking 5% off that subtotal
+# (shared over the three lines by their amounts, taxable, so tax is charged on what is left),
+# then the drain bundle, which expands into its member line when it is entered.
+[[commands]]
+command = "customer create"
+capture = "line_kinds_customer"
+reason = "A customer for the subtotal, discount and group example"
+input = { name = "Line Kinds Example Customer" }
+
+[[commands]]
+command = "invoice post"
+capture = "line_kinds_invoice"
+reason = "Keep an active example of a subtotal, a percentage discount and a group item on one sale"
+input = { date = "2026-12-10", number = "DEMO-LINE-KINDS", customer = "${line_kinds_customer.id}", lines = [{ item = "${service_item.id}", quantity = "2" }, { item = "${noninventory_item.id}", quantity = "4" }, { item = "${subtotal_item.id}" }, { item = "${discount_item.id}" }, { item = "${group_item.id}" }] }

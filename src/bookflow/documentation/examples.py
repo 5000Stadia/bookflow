@@ -353,7 +353,11 @@ for _noun in ('invoice', 'sales-receipt'):
     _selector = _noun.replace('-', '_')
     _receipt = _noun == 'sales-receipt'
     _payload = {'date': '2026-09-01', 'customer': 'Riverside Apartments',
-                'lines': [{'item': 'Mainline Clearing', 'quantity': '1', 'unit_price': '125.00'}]}
+                # A subtotal sums the lines above it; the discount below it takes its
+                # percentage off that subtotal.
+                'lines': [{'item': 'Mainline Clearing', 'quantity': '1', 'unit_price': '125.00'},
+                          {'item': 'Copper Coupling', 'quantity': '2'}, {'item': 'Work Order Subtotal'},
+                          {'item': 'Loyalty Discount', 'percent': '5'}]}
     if _receipt:
         _payload.update(deposit_to='Checking', payment_method='Check')
     import json as _json

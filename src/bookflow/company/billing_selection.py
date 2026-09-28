@@ -45,6 +45,12 @@ def rebill_spans(s, reference, root, facts, policy=None):
     return spans
 
 
+def derived(facts):
+    """A quoted subtotal or discount, which a sale carries along rather than bills."""
+    from bookflow.company.sales_adjustments import kind
+    return kind(facts.profile) in ('subtotal', 'discount')
+
+
 def select(s, inp, source, revision, lines, identities):
     from bookflow.company import tax_policy
     policy=tax_policy.effective(work.facts(revision).profile)
@@ -66,6 +72,12 @@ def select(s, inp, source, revision, lines, identities):
             continue
         root = identities[key]['root_document_id'], identities[key]['root_line_id']
         facts = work.line_facts(line)
+        if derived(facts):
+            # Billed with the lines it shows or reduces, never on its own.
+            if requested is not None:
+                dependency('a subtotal or discount line is billed with the lines it applies to; select those lines',
+                           source_line_id=key)
+            continue
         if not facts.billable:
             if requested is not None:
                 dependency('selected source line is not billable', source_line_id=key)

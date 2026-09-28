@@ -14,11 +14,17 @@ from bookflow.company.tax_attribution import TaxDetails
 
 class WorkLineOutput(CreatedOutput):
     tax_ordinal: int | None = None
+    line_kind: Literal["item", "subtotal", "discount", "charge"] | None = Field(default=None, description=(
+        "Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced."))
+    amount: MoneyOutput | None = Field(default=None, description=(
+        "The amount the line shows when it differs from net: a subtotal's sum, a discount's negative "
+        "amount, or a line's amount before the discounts taken out of its net."))
 
     @model_serializer(mode='wrap')
     def legacy_ordinal(self,handler):
         result=handler(self)
-        if self.tax_ordinal is None:result.pop('tax_ordinal',None)
+        for key in ('tax_ordinal','line_kind','amount'):
+            if getattr(self,key) is None:result.pop(key,None)
         return result
 
     document_id: str

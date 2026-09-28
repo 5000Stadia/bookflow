@@ -18,10 +18,13 @@ def test_manifest_matches_the_reachable_private_graph_exactly():
     models = manifest.reachable(manifest._roots())
     assert {manifest._name(model) for model in models} == set(manifest.FIELDS)
     # The complete closure, not just the two output roots.
-    assert len(models) == len(manifest.FIELDS) == 52
+    # 55, not 52: R147 added LineAdjustment, AdjustmentTarget and LineGroup to SalesLineProfile.
+    assert len(models) == len(manifest.FIELDS) == 55
     # 393, not 391: inventory added cogs_account and asset_account to SalesLineProfile and both
-    # are dispositioned private like every other field of that model.
-    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 393
+    # are dispositioned private like every other field of that model. 410, not 393: R147 added
+    # adjustment and group to SalesLineProfile and the 9 + 3 + 3 fields of its three new models,
+    # every one private like the rest of the sales line profile.
+    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 410
 
 
 def test_every_field_carries_exactly_one_known_disposition():

@@ -37,6 +37,7 @@ def _minor(money):
 # Every other customer's invoices are paid, credited or voided to nothing.
 CUSTOMER_BALANCES = [
     ("Commercial Example Customer", 12800),
+    ("Line Kinds Example Customer", 47782),
     ("Payment Example Customer:Job A", 2000),
     ("Payment Example Customer:Job B", -1000),
     ("Tax Rounding Example Customer", 33),
@@ -46,6 +47,8 @@ CUSTOMER_DETAIL = [
     # customer, kind, number, amount, running balance
     ("Commercial Example Customer", "activity", "DEMO-SALE-INV-ACTIVE", 12800, 12800),
     ("Commercial Example Customer", "total", None, 12800, 12800),
+    ("Line Kinds Example Customer", "activity", "DEMO-LINE-KINDS", 47782, 47782),
+    ("Line Kinds Example Customer", "total", None, 47782, 47782),
     ("Payment Example Customer:Job A", "activity", "DEMO-PAY-INV-A", 10000, 10000),
     ("Payment Example Customer:Job A", "activity", "DEMO-PAY-P1", -8000, 2000),
     ("Payment Example Customer:Job A", "total", None, 2000, 2000),
@@ -108,7 +111,7 @@ def test_customer_balance_detail_lists_every_effect_with_a_running_balance(clien
     shown = [(row["display_customer_label"], row["kind"], row["number"], _minor(row["amount"]),
               _minor(row["balance"])) for row in result["rows"]]
     assert shown == CUSTOMER_DETAIL
-    assert _minor(result["totals"]["balance"]) == 13839
+    assert _minor(result["totals"]["balance"]) == DEMO_POSITION["balances"]["Accounts Receivable"]
     # One customer, named: its own rows and nothing else.
     one = _run(client, "report customer-balance-detail",
                {"as_of": DEMO_AS_OF, "customer": "Payment Example Customer:Job B"})
@@ -374,8 +377,8 @@ def test_1099_summary_opens_on_the_last_calendar_year():
 # Each page opens already run on the filters its link carries, shows the report's own
 # headline figure, and offers the whole report as print and CSV.
 PAGES = {
-    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "138.39"),
-    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "138.39"),
+    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "616.21"),
+    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "616.21"),
     "vendor-balance-summary": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "vendor-balance-detail": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "open-purchase-orders": ({"f:date_to": DEMO_AS_OF}, "56.00"),

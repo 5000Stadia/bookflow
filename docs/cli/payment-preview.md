@@ -107,8 +107,9 @@ The same example as complete `bookflow_run` arguments:
 | `request.input.lines[].tax_code` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].price_level` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].price_basis_amount` | inside `--request-input-lines` JSON array | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].percent` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].refresh_defaults` | inside `--request-input-lines` JSON array | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
-| `request.input.lines[].use_defaults` | inside `--request-input-lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].use_defaults` | inside `--request-input-lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.invoice` | `--request-input-invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.settlement_versions[].payment` | inside `--request-input-settlement-versions` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.settlement_versions[].expected_version` | inside `--request-input-settlement-versions` JSON array | integer | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum 1 |
