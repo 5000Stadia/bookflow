@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from 'browse_value.html' import plain with context %}{% block title %}{{ heading }}{% endblock %}{% block body %}
+{% extends "base.html" %}{% from 'browse_value.html' import plain with context %}{% import 'list_card.html' as list_card %}{% block title %}{{ heading }}{% endblock %}{% block body %}
 {% set base = noun_base(company_id or None, noun) %}
 {% set work_on = work_filters is defined and work_filters is not none %}
 {% set sales_on = sales_filters is not none and noun in ('invoice', 'sales-receipt') %}
@@ -76,11 +76,8 @@
 {# On a phone each row is one card: its name and figure on one line, the columns the list
    declares as secondary on a muted line, empty fields left out, the whole card the target. #}
 {% if items %}<ul class="list-cards" aria-label="{{ heading }}">
-{% for it in items %}{% set href = hrefs[loop.index0] %}{% set name = it.get(layout.name) if layout.name else none %}<li class="list-card">
-<div class="list-card-main">{% if href %}<a class="list-card-link" href="{{ href }}">{{ name if name is not none else '' }}</a>{% else %}<span class="list-card-link">{{ name if name is not none else '' }}</span>{% endif %}{% if layout.amount and it.get(layout.amount) is mapping %}<span class="list-card-amount">{{ it.get(layout.amount) | money(home=home) }}</span>{% endif %}</div>
-{% set parts = [] %}{% for key in layout.secondary %}{% if key == 'status' %}{# the ordinary state is left unsaid on a card #}{% set text = ui_words(it.status) if it.status is string and it.status not in ('posted', 'active') else '' %}{% else %}{% set text = plain(it.get(key), key, key | label, 'date' if key in layout.dates else '', layout.prefix.get(key, ''), home) | trim %}{% endif %}{% if text %}{% set _ = parts.append(text) %}{% endif %}{% endfor %}
-{% if parts %}<p class="list-card-sub">{{ parts | join(' · ') }}</p>{% endif %}
-</li>{% endfor %}
+{% for it in items %}{% set parts = [] %}{% for key in layout.secondary %}{% if key == 'status' %}{# the ordinary state is left unsaid on a card #}{% set text = ui_words(it.status) if it.status is string and it.status not in ('posted', 'active') else '' %}{% else %}{% set text = plain(it.get(key), key, key | label, 'date' if key in layout.dates else '', layout.prefix.get(key, ''), home) | trim %}{% endif %}{% if text %}{% set _ = parts.append(text) %}{% endif %}{% endfor %}
+{{ list_card.card(hrefs[loop.index0], it.get(layout.name) if layout.name else none, it.get(layout.amount) | money(home=home) if layout.amount and it.get(layout.amount) is mapping else '', parts) }}{% endfor %}
 </ul>{% endif %}
 {% if not items %}<p>No matching records. Try a different search or include inactive records.</p>{% endif %}
 {% if paging.previous_url or paging.next_url %}<nav class="pagination" aria-label="Results pages">

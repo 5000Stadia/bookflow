@@ -8,6 +8,36 @@ document.addEventListener('click', event => {
   if (!link) return;
   if (event.ctrlKey || event.metaKey) window.open(link.href, '_blank', 'noopener'); else link.click();
 });
+/* The phone's Filters sheet: opened from the bar, closed by Close, the backdrop or Escape.
+   Returns the close, for a form that closes it itself as it applies. */
+function listSheet(form, sheet) {
+  let opener = null;
+  function openSheet(link) {
+    opener = link;
+    form.classList.add('sheet-open');
+    document.documentElement.classList.add('list-sheet-lock');
+    const focus = (link.dataset.sheetOpen && sheet.querySelector(link.dataset.sheetOpen)) || sheet.querySelector('input, select, summary, button');
+    focus?.focus();
+  }
+  function closeSheet() {
+    if (!form.classList.contains('sheet-open')) return;
+    form.classList.remove('sheet-open');
+    document.documentElement.classList.remove('list-sheet-lock');
+    opener?.focus();
+  }
+  form.addEventListener('click', event => {
+    const open = event.target.closest('[data-sheet-open]'), close = event.target.closest('[data-sheet-close]');
+    if (open) { event.preventDefault(); openSheet(open); }
+    else if (close) { event.preventDefault(); closeSheet(); }
+  });
+  form.addEventListener('keydown', event => { if (event.key === 'Escape' && form.classList.contains('sheet-open')) closeSheet(); });
+  return closeSheet;
+}
+/* A list whose filters are a plain search, submitted as they always were, keeps them in the same sheet. */
+document.querySelectorAll('form.list-form[data-list-sheet]').forEach(form => {
+  const sheet = form.querySelector('.list-sheet');
+  if (sheet && !form.dataset.sheet) { form.dataset.sheet = '1'; listSheet(form, sheet); }
+});
 /* Lists apply their controls as they change. Without JavaScript the same form is a plain GET
    submit and the URL carries the list state either way. Search applies as a person types;
    a discrete control applies on change; on a phone the Filters sheet applies once, on
@@ -19,7 +49,7 @@ document.addEventListener('click', event => {
   form.classList.add('is-live');
   const sheet = form.querySelector('.list-sheet');
   const phone = matchMedia('(max-width: 700px)');
-  let timer = 0, ticket = 0, opener = null;
+  let timer = 0, ticket = 0;
   const compact = () => form.classList.contains('list-form-compact');
   const deferred = el => phone.matches && !compact() && sheet?.contains(el);
   function target() {
@@ -75,25 +105,7 @@ document.addEventListener('click', event => {
   });
   // Enter in a field, or "Show results": listeners that sync hidden inputs run first.
   form.addEventListener('submit', event => { event.preventDefault(); closeSheet(); schedule(0); });
-  function openSheet(link) {
-    opener = link;
-    form.classList.add('sheet-open');
-    document.documentElement.classList.add('list-sheet-lock');
-    const focus = (link.dataset.sheetOpen && sheet.querySelector(link.dataset.sheetOpen)) || sheet.querySelector('input, select, summary, button');
-    focus?.focus();
-  }
-  function closeSheet() {
-    if (!form.classList.contains('sheet-open')) return;
-    form.classList.remove('sheet-open');
-    document.documentElement.classList.remove('list-sheet-lock');
-    opener?.focus();
-  }
-  form.addEventListener('click', event => {
-    const open = event.target.closest('[data-sheet-open]'), close = event.target.closest('[data-sheet-close]');
-    if (open) { event.preventDefault(); openSheet(open); }
-    else if (close) { event.preventDefault(); closeSheet(); }
-  });
-  form.addEventListener('keydown', event => { if (event.key === 'Escape' && form.classList.contains('sheet-open')) closeSheet(); });
+  const closeSheet = listSheet(form, sheet);
   // A sortable heading keeps every other control: it sets the sort and applies the form.
   document.addEventListener('click', event => {
     const link = event.target.closest('a[data-sort-link]');

@@ -4,6 +4,8 @@ Every expected figure below was computed by hand from the documents the fixture
 posts, and the aging is checked against the Accounts Receivable balance that the
 balance sheet and the trial balance independently report for the same date.
 """
+import re
+
 import pytest
 
 from bookflow.core.errors import BookflowError
@@ -288,7 +290,8 @@ def test_the_host_and_the_workbench_serve_the_aging(hosted):  # noqa: F811
         assert f'id="{table}"' in result.text and 'id="receivables-totals"' in result.text
         assert "Aging Alpha:North Job" in result.text, result.text[:2000]
         key = "total" if name == "ar-aging" else "balance"
-        assert f'<td class="num" data-total="{key}">{total}</td>' in result.text, result.text[:2000]
+        # The whole-report total cell carries the figure, whatever else labels it.
+        assert re.search(rf'<td class="num" data-total="{key}"[^>]*>{re.escape(total)}</td>', result.text), result.text[:2000]
     aging = api.post(f"/c/{cid}/report/ar-aging", data={"f:as_of": AS_OF, "f:limit": "200"}, headers=WB).text
     for heading in ("Current", "1-30", "31-60", "61-90", "Over 90"):
         assert f'<th scope="col" class="num">{heading}</th>' in aging

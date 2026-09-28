@@ -13,7 +13,7 @@ from time import perf_counter
 import pytest
 
 from bookflow.core.money import Money
-from bookflow.adapters.workbench.display import money
+from bookflow.adapters.workbench.display import amount, money
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import register_browser, _command  # noqa: F401
 
@@ -36,16 +36,12 @@ def _rendered_totals(browser):
 
 
 def _rendered_rows(browser):
-    """Exact per-row text, taking each amount's own text node rather than the whole cell.
-
-    The phone card shows a visually hidden column label inside the same cell, so
-    `innerText` would carry it, and a substring check would let `10.00 USD`
-    satisfy an assertion about `0.00 USD`.
-    """
+    """Exact per-row text of the desktop ledger, each amount's own text node rather than the whole cell,
+    so a substring check cannot let `10.00 USD` satisfy an assertion about `0.00 USD`."""
     return browser.evaluate("""[...document.querySelectorAll('#deposit-list-lines tbody tr')].map(tr => ({
       deposit: tr.dataset.deposit,
       number: tr.querySelector('.deposit-open').textContent.trim(),
-      status: tr.children[2].lastChild.textContent.trim(),
+      status: tr.querySelector('[data-status]').textContent.trim(),
       revision: tr.querySelector('[data-amount=revision]').lastChild.textContent.trim(),
       effective: tr.querySelector('[data-amount=effective]').lastChild.textContent.trim(),
       details: tr.querySelector('details').innerText}))""")
@@ -100,25 +96,35 @@ def _list_roles(browser):
 
 
 def _contained(browser, width):
-    """The established layout criterion: nothing scrolls sideways and no cell leaves the screen."""
+    """Nothing scrolls sideways. A wide screen reads the ledger table, every cell on screen; a
+    phone reads one card per deposit instead, each inside the viewport."""
     assert browser.evaluate('document.documentElement.scrollWidth===document.documentElement.clientWidth')
-    assert browser.evaluate('[document.querySelector("#deposit-list-lines"),document.querySelector(".deposit-list-wrap")]'
+    if width == 390:
+        assert browser.evaluate('!document.querySelector("#deposit-list-lines").offsetParent')
+        assert browser.evaluate("""[...document.querySelectorAll('.list-card')].every(card => {
+          const box = card.getBoundingClientRect();
+          return box.width > 0 && box.left >= -0.5 && box.right <= window.innerWidth + 0.5;})""")
+        assert browser.evaluate('document.querySelectorAll(".list-card").length') == browser.evaluate(
+            'document.querySelectorAll("#deposit-list-lines tbody tr").length')
+        return
+    assert browser.evaluate('[document.querySelector("#deposit-list-lines"),document.querySelector("#deposit-list-lines").closest(".table-wrap")]'
                             '.every(e=>e.scrollWidth===e.clientWidth)')
-    # The header row is visually hidden on a phone (kept for screen readers), so only rows a person sees count.
-    escaped = browser.evaluate("""[...document.querySelectorAll('#deposit-list-lines tbody td, #deposit-list-lines tbody th, #deposit-list-lines tfoot td, #deposit-list-lines tfoot th')]
+    escaped = browser.evaluate("""[...document.querySelectorAll('#deposit-list-lines tbody td, #deposit-list-lines tbody th')]
       .flatMap(cell => [...cell.getClientRects()])
       .filter(box => box.left < -0.5 || box.right > window.innerWidth + 0.5).length""")
     assert escaped == 0, f'{escaped} cells left the {width}px viewport'
-    assert browser.evaluate('getComputedStyle(document.querySelector("#deposit-list-lines tbody tr")).display') == (
-        'grid' if width == 390 else 'table-row')
+    assert browser.evaluate('getComputedStyle(document.querySelector("#deposit-list-lines tbody tr")).display') == 'table-row'
 
 
-def _amounts_painted(browser):
-    """Amounts are looked at, not read out of the DOM: a real box, visible, opaque."""
-    return browser.evaluate("""[...document.querySelectorAll('[data-amount], .deposit-list-totals dd')].every(e => {
+def _amounts_painted(browser, width):
+    """Amounts are looked at, not read out of the DOM: a real box, visible, opaque. A phone shows
+    each deposit's figure on its card; a wide screen shows both figures in the ledger."""
+    figures = '.list-card-amount' if width == 390 else '[data-amount]'
+    return browser.evaluate(f"""(() => {{const shown = [...document.querySelectorAll('{figures}, .deposit-list-totals dd')];
+      return shown.length > 8 && shown.every(e => {{
       const box = e.getBoundingClientRect(), style = getComputedStyle(e);
       return box.width > 0 && box.height > 0 && style.visibility === 'visible'
-             && Number(style.opacity) > 0 && style.display !== 'none';})""")
+             && Number(style.opacity) > 0 && style.display !== 'none';}});}})()""")
 
 
 @pytest.mark.timeout(900)
@@ -308,26 +314,31 @@ def test_saved_deposit_list_totals_paging_filters_and_journey(register_browser, 
     for row in rows:
         document = sources[row['number']]
         assert row['deposit'] == document['deposit_id']
-        assert row['revision'] == money(str(Money(**document['current']['revision_bank_total'])))
-        assert row['effective'] == money(str(Money(**document['current']['effective_bank_total'])))
+        # Every deposit is in the home currency, so the ledger heading names it and each figure is bare.
+        assert row['revision'] == amount(str(Money(**document['current']['revision_bank_total'])))
+        assert row['effective'] == amount(str(Money(**document['current']['effective_bank_total'])))
         assert row['status'].lower().startswith(document['current']['status'])
         for key in ('source_total', 'cash_back', 'negative_additional_total'):
             assert money(str(Money(**document['totals'][key]))) in row['details'], (row['number'], key)
         assert f"{document['counts']['sources']} receipts" in row['details']
     by_number = {row['number']: row for row in rows}
     assert by_number['SIG-005']['status'].lower().startswith('voided')
-    assert (by_number['SIG-005']['revision'], by_number['SIG-005']['effective']) == ('$300.00', '$0.00')
-    assert (by_number['SIG-004']['revision'], by_number['SIG-004']['effective']) == ('$0.00', '$0.00')
-    assert (by_number['SIG-006']['revision'], by_number['SIG-007']['revision']) == ('$12.34', '$12.34')
+    assert (by_number['SIG-005']['revision'], by_number['SIG-005']['effective']) == ('300.00', '0.00')
+    assert (by_number['SIG-004']['revision'], by_number['SIG-004']['effective']) == ('0.00', '0.00')
+    assert (by_number['SIG-006']['revision'], by_number['SIG-007']['revision']) == ('12.34', '12.34')
+    assert b.evaluate('[...document.querySelectorAll("#deposit-list-lines th.num")].every(th => th.textContent.includes("(USD)"))')
     assert '$60.00' in by_number['SIG-008']['details'] and '1 receipts' in by_number['SIG-008']['details']
 
     # ------------------------------------------------- 6. layout and scoped roles
     for width in (1280, 390):
         b.viewport(width, 900)
         _contained(b, width)
-        assert PROSE.strip() in b.evaluate('document.querySelector("#deposit-list-lines").innerText')
-        assert _amounts_painted(b)
-        assert _list_roles(b) == dict(table=1, row=9, columnheader=5, cell=40), width
+        # The full memo stays readable: in its ledger cell on a wide screen, on its card on a phone.
+        where = '.list-cards' if width == 390 else '#deposit-list-lines'
+        assert PROSE.strip() in b.evaluate(f'document.querySelector("{where}").innerText')
+        assert _amounts_painted(b, width)
+        if width != 390:
+            assert _list_roles(b) == dict(table=1, row=9, columnheader=7, cell=56), width
         (tmp_path / f'deposit-list-{width}.png').write_bytes(base64.b64decode(
             b.call('Page.captureScreenshot', dict(format='png', captureBeyondViewport=True))['data']))
     b.call('Emulation.setEmulatedMedia', dict(media='print'))
