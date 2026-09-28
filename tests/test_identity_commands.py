@@ -701,11 +701,11 @@ def test_both_listings_are_on_every_surface(office):
     for prefix, expected in (("user", "user list"), ("membership", "membership list")):
         page = catalog.list_commands(prefix=prefix, limit=50)
         assert expected in {row["name"] for row in page["commands"]}
-    for name, filters in (("user list", {"company", "organization", "kind", "include_inactive"}),
-                          ("membership list", {"user", "company", "organization", "include_inactive"})):
+    for name, filters in (("user list", {"company", "organization", "kind", "include_inactive", "limit", "cursor"}),
+                          ("membership list", {"user", "company", "organization", "include_inactive", "limit", "cursor"})):
         described = catalog.command_help(name, view="full")
         assert set(described["input_schema"]["properties"]) == filters, name
-        assert described["output_schema"]["properties"].keys() >= {"items", "count"}, name
+        assert described["output_schema"]["properties"].keys() >= {"items", "count", "has_more", "next_cursor"}, name
 
 
 def test_the_workbench_renders_both_listings(office):
@@ -717,7 +717,7 @@ def test_the_workbench_renders_both_listings(office):
 
     members = office.installer.get("/hub/membership")
     assert members.status_code == 200
-    assert "Demo Plumbing Co" in members.text and "standard" in members.text
+    assert "Demo Plumbing Co" in members.text and "Standard" in members.text
     assert 'href="/hub/membership/grant"' in members.text
 
     # Every link either of these pages renders still lands on a usable page.

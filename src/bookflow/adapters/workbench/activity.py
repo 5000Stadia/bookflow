@@ -105,4 +105,25 @@ def through(interface: Any) -> str:
     return INTERFACES.get(str(interface or ""), Naming.words(interface or ""))
 
 
-FILTERS = {"activity": sentence, "actor": who, "through": through}
+def attribution(event: Mapping[str, Any]) -> str:
+    """Who, for whom and through what: "Office assistant, for k, via agent".
+
+    Only an agent acts for someone else, so a write made on someone's behalf came through an
+    agent; one an agent made over anything but MCP also says which interface it used.
+    """
+    actor = str(event.get("actor_name") or event.get("actor_id") or "")
+    for_whom = event.get("on_behalf_of_name") or event.get("on_behalf_of")
+    interface = str(event.get("interface") or "")
+    parts = [actor]
+    if for_whom and for_whom != actor:
+        parts.append(f"for {for_whom}")
+    if event.get("actor_kind") == "agent" or for_whom:
+        parts.append("via agent" if interface in ("mcp", "") else f"via agent over {through(interface)}")
+    elif interface == "gui" or event.get("client_name") == "bookflow-workbench":
+        parts.append("in the browser")
+    elif interface in ("cli", "python", "mcp") or interface == "http" and event.get("client_name"):
+        parts.append(f"via {through(interface)}")
+    return ", ".join(part for part in parts if part)
+
+
+FILTERS = {"activity": sentence, "actor": who, "through": through, "attribution": attribution}
