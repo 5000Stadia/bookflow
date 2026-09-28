@@ -669,7 +669,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     inventory_effects.check(s, stock, pending['posting_lines'])
     view_profile = pending['sales_profiles'][0] if pending['sales_profiles'] else profile_row(s, revision)
     output = SalesWriteOutput(**summary(header, revision, view_profile), revision=revision_output(s, revision, pending),
-        facts_fingerprint=fingerprint, warnings=warnings, changed_fields=changed_fields)
+        facts_fingerprint=fingerprint, warnings=warnings + [line for line in stock.warnings if line not in warnings],
+        changed_fields=changed_fields)
     plan = Plan(output, dict(input=inp, operation=operation, document_type=document_type, changed=True, header=header,
         before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan, billing_source=billing_source,
         stock=stock,

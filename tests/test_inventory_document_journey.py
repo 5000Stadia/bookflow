@@ -80,18 +80,23 @@ def test_purchase_refusals_preserve_documents_movements_and_postings(books):
                     for table in ('transactions', 'transaction_revisions', 'document_lines',
                                   'inventory_movements', 'posting_batches', 'posting_lines')}
 
-    before = snapshot()
-    with pytest.raises(BookflowError) as negative:
-        run('bill void', dict(bill=purchase['id'], expected_version=purchase['version']),
-            reason='Attempt to remove already sold stock')
-    assert negative.value.code == 'E_VALIDATION'
-    assert 'negative' in str(negative.value).lower()
-    assert snapshot() == before
+    # Voiding the purchase of stock already sold leaves the 10 February sale below zero (R137):
+    # it is saved, says so, and re-costs that sale at its own date from 4 x 10.00 = 4000 to the
+    # 4 x 1.80 = 720 purchase cost on the item record -- a +3280 correction on 10 February.
+    voided = run('bill void', dict(bill=purchase['id'], expected_version=purchase['version']),
+                 reason='Remove already sold stock')
+    assert [line.split(';')[0] for line in voided['warnings'] if line.startswith('Takes ')] == [
+        'Takes Copper Elbow to -4 on 2017-02-10']
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT effective_date, value_minor_units FROM inventory_movements "
+                          "WHERE kind = 'recost'").fetchall() == [('2017-02-10', 3280)]
 
+    second = run('bill post', dict(vendor=books['vendor'], date='2017-01-05',
+                 items=[dict(item=item, quantity='10', unit_cost='10.00')]), reason='Receive stock')
     run('company update', {'closing_date': '2017-02-28'}, reason='Close February')
     before = snapshot()
     with pytest.raises(BookflowError) as closed:
-        run('bill update', dict(bill=purchase['id'], expected_version=purchase['version'],
+        run('bill update', dict(bill=second['id'], expected_version=second['version'],
             items=[dict(item=item, quantity='10', unit_cost='30.00')]), reason='Change closed purchase')
     assert closed.value.code == 'E_PERIOD_CLOSED'
     assert closed.value.details['closing_date'] == '2017-02-28'

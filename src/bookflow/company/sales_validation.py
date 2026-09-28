@@ -101,7 +101,10 @@ def _stock(s, data, indexed, require):
     for item_id in {row['item_id'] for row in movements}:
         stored = inventory.movements(s, item_id=item_id)
         state = replay(stored + [row for row in movements if row['item_id'] == item_id])
-        require(not any(correction.target_movement['id'] in own for correction in state.corrections),
+        # A true-up is owed at a later receipt's date, not at the sale's, and the change writes
+        # it as its own correction; only the sale's own-date cost must already agree.
+        require(not any(correction.target_movement['id'] in own and correction.filled_by is None
+                        for correction in state.corrections),
                 'a stock issue is posted at a cost the weighted average does not agree with')
 
 

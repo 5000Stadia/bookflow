@@ -416,7 +416,7 @@ MATRIX['report stock-status'] = {
 MATRIX['inventory adjust'] = {
     'E_RECORD_NOT_FOUND': 'unknown item, adjustment account or class',
     'E_INACTIVE_REFERENCE': 'inactive item, account or class',
-    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, negative stock on an affected date, stock left worth nothing, or a movement worth nothing at the current average',
+    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, stock left worth nothing, or a movement worth nothing at the current average',
     'E_VALUE_RANGE': 'quantity or value outside signed 64-bit storage',
     'E_AMOUNT_PRECISION': 'value_change with more decimal places than the currency allows',
     'E_UNBALANCED_ENTRY': 'the generated posting does not balance',
@@ -429,7 +429,7 @@ MATRIX['inventory adjust'] = {
 MATRIX['inventory void'] = {
     'E_RECORD_NOT_FOUND': 'no inventory adjustment with that id or number',
     'E_VERSION_CONFLICT': 'stale expected_version',
-    'E_VALIDATION': 'the reversal would take the item below zero on an affected date',
+    'E_VALIDATION': 'the reversal would leave value with no quantity, or a return standing against a sale whose cost is still provisional',
     'E_VALUE_RANGE': 'a reversed or corrected value outside signed 64-bit storage',
     'E_REASON_REQUIRED': 'void without a reason',
     'E_PERIOD_CLOSED': 'the adjustment date or any correction date falls in a closed period',

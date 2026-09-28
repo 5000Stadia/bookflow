@@ -167,7 +167,8 @@ def prepare(s, ctx, inp):
         cancellation_batch_id=header['void_posting_batch_id'],
         released_source_claims=len(claims),
         source_invoice_ids=sorted({row['source_transaction_id'] for row in claims}))
-    return Plan(output, dict(input=inp, inner=inner, old=old, authority_transactions=identifiers))
+    return Plan(output, dict(input=inp, inner=inner, old=old, authority_transactions=identifiers,
+                             stock=inner.data.get('stock')))
 
 
 def persist_tombstone(s, row):
@@ -207,4 +208,7 @@ def apply(plan, ctx, s):
         [*touched, marker] if not inner.data['changed'] else [marker],
         actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=event)
     persist_tombstone(s, row)
-    return Applied(fresh.preview, [*touched, marker], 'Deleted customer credit memo', audited=True)
+    # A sale this deletion leaves below zero is named on the result, as on every stock write.
+    from bookflow.company import inventory_effects
+    output = inventory_effects.warn(fresh.preview, fresh.data.get('stock'))
+    return Applied(output, [*touched, marker], 'Deleted customer credit memo', audited=True)

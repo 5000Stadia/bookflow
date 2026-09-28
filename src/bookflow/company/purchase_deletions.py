@@ -153,4 +153,6 @@ def apply(plan, ctx, s):
         [*touched, marker] if not inner.data['changed'] else [marker],
         actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=event)
     persist_tombstone(s, row)
-    return Applied(fresh.preview, [*touched, marker], 'Deleted purchase', audited=True)
+    # A sale this deletion leaves below zero is named on the result, as on every stock write.
+    output = inventory_effects.warn(fresh.preview, d['stock']) if d['stock'] is not None else fresh.preview
+    return Applied(output, [*touched, marker], 'Deleted purchase', audited=True)
