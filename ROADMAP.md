@@ -71,7 +71,7 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R79 invoices and other sales use the company's normal sales tax item when none is named, as the browser does; `use_defaults` resolves it, and the error says when no default exists (the trials' agents guessed a different tax item) — notes/blind-trials-20260927.md
 - [x] R85 recording a customer payment warns when the same customer and check reference are already on file — notes/blind-trials-20260927.md
 - [~] R86 help and errors an agent can act on first time: a worked example in each command's help, errors that name the reason and the valid fields (permission refusals, the reconcile opening step, plain money errors, reason needed even for previews), and findable oldest-first application, sales-tax owed, open invoices and payment methods — notes/blind-trials-20260927.md
-- [~] R83 the demo sells stock today: demo documents dated after today move into the past so demo items are on hand — notes/blind-trials-20260927.md
+- [x] R83 the demo sells stock today: demo documents dated after today move into the past so demo items are on hand — notes/blind-trials-20260927.md
 - [x] R87 connecting an agent: the one-time token secret shown plainly with a Copy button, and a New agent button on the Agents panel (the person's yes on gate g9ed945) — notes/manual-agent-walkthrough-20260927.md
 - [~] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report). Passes when, with only its own help and MCP and no source reading, it completes every task in the week correctly on its first attempt and its interview turns up nothing material; after fixes, one retest decides it — notes/blind-trials-20260927.md
 - [ ] R74 permission checks on current-mode installs cost about 3x; the demo reset through MCP exceeds the client time limit: reuse the permission snapshot only behind a fresh in-transaction version check, and nothing the product does times out — design/permission-resolution.md
@@ -84,13 +84,20 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
 - [ ] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
 - [ ] R95 small form polish: the invoice form shows the default sales tax item before posting; "Clear Description" only when useful; register query dates and parameters consistent with other queries — notes/V1.5-resort-draft.md
-- [ ] R96 diagnose and fix the older failing tests (the 20 deposit authority tests that need the current permission rules, sales-tax-code list E_USAGE, delete admission, payment recheck, statement-charge surfaces, receivable report staleness, audit reachable when activated, history redirects, deleted-deposit page, routed-command delete forms): fix what is real, repair what is stale — notes/V1.5-resort-draft.md
+- [ ] R96 diagnose and fix the older failing tests (the service-sales and work-billing demo tests pinned to stale whole-company figures, the Reference Plumbing Co demo option still fixed to 2026 dates, the 20 deposit authority tests that need the current permission rules, sales-tax-code list E_USAGE, delete admission, payment recheck, statement-charge surfaces, receivable report staleness, audit reachable when activated, history redirects, deleted-deposit page, routed-command delete forms): fix what is real, repair what is stale — notes/V1.5-resort-draft.md
 - [ ] R97 payment calculate with auto-calculate off and no amount returns the field error row 22's spec describes — design/specs/22-customer-payments.md
 - [ ] R98 notes/status.sh reports commits behind and the command count correctly (tooling) — notes/status.sh
 - [~] R99 bug sweep, one pass: every known defect in the named sources (notes, trial reports, current test runs, existing Codex reviews, TODO/FIXME) that matters to someone using Bookflow (the plumber, their agent or the books), listed as its own item or folded into one. Purely internal or theoretical faults no user would meet are dropped or go to the future list, and working choices are not re-examined. Once the list is written the sweep is closed: no further hunting or new audits for V1.5; bugs met while doing V1.5 work are still fixed — notes/bug-sweep-20260928.md
 - [ ] R100 tests share one demo company per run: built once, each test gets its own copy, so setup takes seconds instead of minutes and the full suite is practical. One bounded tooling change, built after the current builders finish; nothing further on test methodology for V1.5 — notes/NOW.md
+- [ ] R131 everyday reports the anchor has: customer and vendor balance summary and detail, open purchase orders, purchases by vendor and by item, deposit detail, and a transaction list by date — notes/V1.5-scope-sort-draft.md
+- [ ] R132 early-payment discounts taken inside the terms window when receiving a customer payment or paying a bill, posted to a discount account (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
+- [ ] R133 back up and restore from the product: a verified, portable copy of the company, and restoring or attaching one — notes/V1.5-scope-sort-draft.md
+- [ ] R134 1099 vendor summary report (report only; filing stays in the future list) — notes/V1.5-scope-sort-draft.md
+- [ ] R135 card credits (a refund onto a credit card) and a plain "Credit Card" payment method — notes/V1.5-scope-sort-draft.md
+- [ ] R136 reconciling a credit card account against its statement works as a bank reconciliation does (verify; fix only if missing) — notes/V1.5-scope-sort-draft.md
+- [ ] R137 selling stock not yet on hand goes through with a warning: costed provisionally at the average cost (else the item's purchase cost, else zero with a warning), trued up by an entry dated at the receipt that covers the shortfall and linked to each sale it corrects (accounting change approved by the person) — notes/V1.5-scope-sort-draft.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
-- [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current, the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
+- [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current (the README says demo dates follow the reset day), the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
 
 ## M4 — After V1.5: concepts to develop
 
@@ -98,7 +105,6 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [ ] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [ ] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
-- [ ] R105 Negative stock by choice: a company setting to sell stock not yet received, with a warning and a later cost true-up, as the anchor allows.
 - [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
@@ -122,5 +128,6 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
-- [ ] R129 Faster permission checks: reuse the permission snapshot between transactions behind a fresh version check, removing the 3× cost on current-mode installs.
 - [ ] R130 Windows: a supported Windows build with an authenticated local hand-off.
+- [ ] R138 Find any transaction: search across every transaction type by name, number, amount or date range
+- [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
