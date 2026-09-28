@@ -26,7 +26,7 @@ import sqlalchemy as sa
 from bookflow.company import (
     accounts, check_numbers, journals, money_out, parties, registers, schema as c, check_items, inventory_effects)
 from bookflow.company.check_models import (
-    CheckParty, DIRECTION, DOCUMENT_KIND, ExpenseLine, FUNDING_TYPE, MoneyOutHistoryOutput,
+    CheckParty, DOCUMENT_KIND, ExpenseLine, FUNDING_SIDE, FUNDING_TYPE, MOVEMENT, MoneyOutHistoryOutput,
     MoneyOutOutput, MoneyOutPageOutput, MoneyOutRevisionSummaryOutput, MoneyOutSummary,
     MoneyOutSummaryOutput, MoneyOutWriteOutput,
 )
@@ -45,12 +45,13 @@ from bookflow.core.registry import Plan
 WORDS = {
     'check': ('check', 'a bank account', 'check amount'),
     'card-charge': ('credit card charge', 'a credit card account', 'charge amount'),
+    'card-credit': ('credit card credit', 'a credit card account', 'credit amount'),
 }
 
-NOUNS = ('check', 'card-charge')
+NOUNS = ('check', 'card-charge', 'card-credit')
 
 # The field each noun's own commands name the document with.
-SELECTOR = {'check': 'check', 'card-charge': 'card_charge'}
+SELECTOR = {'check': 'check', 'card-charge': 'card_charge', 'card-credit': 'card_credit'}
 
 
 def _funding(s, selector, noun):
@@ -90,8 +91,9 @@ def document(s, noun, header, lines, check_number=None):
     funding = check_items.funding(s, lines)
     expenses = [line for line in lines if line['kind'] == 'journal' and line['line_id'] != funding['line_id'] and line['line_id'] not in item_ids]
     snapshot = money_out.snapshot(funding)
-    if funding['side'] != 'credit':
-        raise money_out.unreadable(noun, header, 'money no longer leaves the account it is drawn on')
+    if funding['side'] != FUNDING_SIDE[noun]:
+        raise money_out.unreadable(noun, header, 'money no longer leaves the account it is drawn on'
+                                   if FUNDING_SIDE[noun] == 'credit' else 'money no longer returns to the card')
     if snapshot.get('type') != FUNDING_TYPE[noun]:
         _, requires, _ = WORDS[noun]
         raise money_out.unreadable(
@@ -131,7 +133,8 @@ def _facts(s, inp, noun, header):
         return dict(account=inp.account, pay_to=inp.pay_to, date=inp.date, amount=inp.amount,
                     memo=inp.memo, number=getattr(inp, 'number', None), class_id=inp.class_id,
                     expenses=list(inp.expenses), selected_line_id=None,
-                    items=check_items.resolve(s, inp.items, [], inp.class_id, registers._home(s)))
+                    items=check_items.resolve(s, getattr(inp, 'items', None) or [], [], inp.class_id,
+                                              registers._home(s)))
     revision = journals.revision(s, header)
     lines = money_out.lines(s, revision)
     document(s, noun, header, lines)
@@ -154,7 +157,7 @@ def _facts(s, inp, noun, header):
         number=getattr(inp, 'number', None),
         class_id=inp.class_id if given('class_id') else None,
         expenses=list(inp.expenses) if inp.expenses is not None else _saved_expenses([line for line in lines if line['kind'] == 'journal' and line['line_id'] != funding['line_id'] and line['line_id'] not in item_ids]),
-        items=check_items.resolve(s, inp.items, previous_items, inp.class_id, registers._home(s)),
+        items=check_items.resolve(s, getattr(inp, 'items', None), previous_items, inp.class_id, registers._home(s)),
         selected_line_id=funding['line_id'])
 
 
@@ -169,7 +172,9 @@ def _register(facts, s, noun, inp, header):
     expense_total = checked_sum(totals, 'expenses.total')
     item_total = checked_sum((line['amount_minor_units'] for line in facts['items']), 'items.total')
     if not facts['expenses'] and not facts['items']:
-        raise journals.invalid('items', 'at least one expense or item is required')
+        raise journals.invalid('expenses' if noun == 'card-credit' else 'items',
+                               'at least one expense line is required' if noun == 'card-credit'
+                               else 'at least one expense or item is required')
     if len(facts['expenses']) + len(facts['items']) > 199:
         raise journals.invalid('items', 'at most 199 allocations are allowed')
     if checked_sum((expense_total, item_total), 'allocations.total') != amount.minor_units:
@@ -189,7 +194,7 @@ def _register(facts, s, noun, inp, header):
         for line in facts['items']]
     values = dict(
         account=facts['account'], date=facts['date'], memo=facts['memo'], payee=_party(facts['pay_to']),
-        direction=DIRECTION[FUNDING_TYPE[noun]], amount=amount.to_dict()['amount'], allocations=allocations,
+        direction=MOVEMENT[noun], amount=amount.to_dict()['amount'], allocations=allocations,
         class_id=facts['class_id'], custom_fields=inp.custom_fields,
         custom_field_kinds=inp.custom_field_kinds)
     if header is None:
@@ -300,7 +305,7 @@ def _number_filter(noun, text):
 
 def _shaped(noun, funding):
     """The two conditions that make a listed row this document rather than another entry."""
-    return (funding.c.side == 'credit',
+    return (funding.c.side == FUNDING_SIDE[noun],
             sa.func.json_extract(funding.c.account_snapshot, '$.type') == FUNDING_TYPE[noun])
 
 
@@ -316,7 +321,7 @@ def page(s, ctx, inp, noun):
         .join(m, m.c.transaction_id == t.c.id)
         .outerjoin(funding, sa.and_(funding.c.revision_id == r.c.id, funding.c.position == 1))
         .outerjoin(profile, profile.c.revision_id == r.c.id))
-        .where(m.c.kind == money_out.KIND[noun], captured('side') == 'credit',
+        .where(m.c.kind == money_out.KIND[noun], captured('side') == FUNDING_SIDE[noun],
             sa.func.json_extract(captured('account_snapshot'), '$.type') == FUNDING_TYPE[noun]))
     if not inp.include_deleted and sa.inspect(s.company.conn).has_table('purchase_deletions'):
         query = query.where(~sa.exists(sa.select(c.purchase_deletions.c.transaction_id).where(c.purchase_deletions.c.transaction_id == t.c.id)))

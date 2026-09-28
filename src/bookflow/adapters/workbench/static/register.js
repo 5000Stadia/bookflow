@@ -422,7 +422,8 @@
       }
       tr.dataset.journal = row.transaction_id;
       const purchase = {check: {noun: 'check', label: 'Check'},
-        'card-charge': {noun: 'card-charge', label: 'Credit card charge'}}[row.purchase_noun];
+        'card-charge': {noun: 'card-charge', label: 'Credit card charge'},
+        'card-credit': {noun: 'card-credit', label: 'Credit card credit'}}[row.purchase_noun];
       const document = purchase || {
         journal_entry: {noun: 'journal', label: 'Journal'},
         invoice: {noun: 'invoice', label: 'Invoice'},

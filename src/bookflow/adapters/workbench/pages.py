@@ -533,7 +533,7 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     if company_id and cmd.name == "rate set" and output.get("id"):
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update", "check post",
-                                   "card-charge post", "transfer post") and output.get("id"):
+                                   "card-charge post", "card-credit post", "transfer post") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
     if company_id and cmd.name in ('reconcile opening start', 'reconcile start', 'reconcile mark') \
             and output.get('draft'):
@@ -1247,7 +1247,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             items = Credits.list_rows(noun, items)
         definition = meta.get("definition")
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
-                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
+                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge", "card-credit") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
                    ["number", "date", "customer_name", "total", "open_balance", "status"] if noun == 'invoice' else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun == 'sales-receipt' else

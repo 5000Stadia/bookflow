@@ -547,4 +547,4 @@ def test_the_stored_kinds_are_exactly_what_the_table_allows():
     from bookflow.company.money_out_schema import KINDS
 
     assert sorted(KIND.values()) == sorted(KINDS)
-    assert sorted(KIND) == ['card-charge', 'check', 'transfer']
+    assert sorted(KIND) == ['card-charge', 'card-credit', 'check', 'transfer']

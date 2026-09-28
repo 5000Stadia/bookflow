@@ -10,7 +10,7 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `transaction_id` | VARCHAR(26) | no | — | primary key 1 | ix_money_out_documents_kind | transactions.id | The posted journal entry this document was written as. |
 | `type` | VARCHAR(32) | no | — | — | — | transactions.type | Transaction type of the marked document; always journal_entry. |
-| `kind` | VARCHAR(16) | no | — | — | ix_money_out_documents_kind | — | Document a person entered: check, card_charge or transfer. |
+| `kind` | VARCHAR(16) | no | — | — | ix_money_out_documents_kind | — | Document a person entered: check, card_charge, card_credit or transfer. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this document marker was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that entered the document. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface the document was entered through. |

@@ -83,6 +83,11 @@
         "kind": "credit_card"
       },
       {
+        "seed_key": "payment.credit-card",
+        "name": "Credit Card",
+        "kind": "credit_card"
+      },
+      {
         "seed_key": "payment.debit-card",
         "name": "Debit Card",
         "kind": "debit_card"

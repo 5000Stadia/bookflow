@@ -111,6 +111,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.REFUND_HISTORY_POLICY_VERSION: '2cde0560b88c952260a309e5e2b22c242e0202a766ddfc6677b483ee1426c983',
     c.AGENT_ADMIN_POLICY_VERSION: 'c15675d00ce1b01aa628eaa2424ee0d8e402957c5eb669da5f9f0384d55add25',
     c.EVERYDAY_REPORTS_POLICY_VERSION: '4159308ce66339b8414fe62261e8510b460ce11be04ad5bf99c335cdf7836255',
+    c.CARD_CREDIT_POLICY_VERSION: 'b6a4609483758c7f1f4c876793aca985772510543741f6e7a0bd13130eb2b8c7',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -202,7 +203,7 @@ def known_catalog(version):
     from . import permission_credit_deletion_catalog, permission_deposit_deletion_catalog
     from . import permission_job_time_catalog
     from . import permission_journal_deletion_catalog, permission_refund_history_catalog
-    from . import permission_agent_catalog, permission_everyday_reports_catalog
+    from . import permission_agent_catalog, permission_everyday_reports_catalog, permission_card_credit_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -218,6 +219,7 @@ def known_catalog(version):
         c.REFUND_HISTORY_POLICY_VERSION: permission_refund_history_catalog,
         c.AGENT_ADMIN_POLICY_VERSION: permission_agent_catalog,
         c.EVERYDAY_REPORTS_POLICY_VERSION: permission_everyday_reports_catalog,
+        c.CARD_CREDIT_POLICY_VERSION: permission_card_credit_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -228,7 +230,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.EVERYDAY_REPORTS_POLICY_VERSION)
+    return known_catalog(c.CARD_CREDIT_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

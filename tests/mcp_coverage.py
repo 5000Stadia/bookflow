@@ -151,6 +151,12 @@ card-charge query
 card-charge show
 card-charge update
 card-charge void
+card-credit history
+card-credit post
+card-credit query
+card-credit show
+card-credit update
+card-credit void
 chart apply
 chart list
 chart show

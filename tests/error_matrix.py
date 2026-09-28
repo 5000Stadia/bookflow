@@ -237,7 +237,7 @@ MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('
 # The money-out documents are the register split under their own names, so they raise the
 # ledger's own codes; only the unbalanced one reads differently, because what it names is the
 # difference between the expense lines and the figure on the face of the document.
-for _noun in ('check', 'card-charge'):
+for _noun in ('check', 'card-charge', 'card-credit'):
     MATRIX[_noun + ' post'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
         'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER',
         'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_IDEMPOTENCY_MISMATCH',
@@ -275,7 +275,8 @@ MATRIX['check post']['E_DUPLICATE_NUMBER'] = (
     'the typed check number is already on another cheque drawn on the same bank account, '
     'including a voided one; 1001 and 01001 are one number')
 
-for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
+for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('card-credit', 'card-credit'),
+                     ('transfer', 'transfer')):
     MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
     MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
         'expected_version is stale: the document changed since it was read')

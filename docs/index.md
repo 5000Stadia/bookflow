@@ -25,6 +25,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`bill payment`](cli/bill-payment.md)
 - [`billing-group`](cli/billing-group.md)
 - [`card-charge`](cli/card-charge.md)
+- [`card-credit`](cli/card-credit.md)
 - [`chart`](cli/chart.md)
 - [`check`](cli/check.md)
 - [`class`](cli/class.md)

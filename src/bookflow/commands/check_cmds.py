@@ -10,7 +10,8 @@ from bookflow.core.registry import Plan, command
 from bookflow.company import checks
 from bookflow.company.check_models import (
     CardChargeHistoryInput, CardChargePostInput, CardChargeQueryInput, CardChargeShowInput,
-    CardChargeUpdateInput, CardChargeVoidInput, CheckHistoryInput, CheckPostInput,
+    CardChargeUpdateInput, CardChargeVoidInput, CardCreditHistoryInput, CardCreditPostInput,
+    CardCreditQueryInput, CardCreditShowInput, CardCreditUpdateInput, CardCreditVoidInput, CheckHistoryInput, CheckPostInput,
     CheckQueryInput, CheckShowInput, CheckUpdateInput, CheckVoidInput, MoneyOutHistoryOutput,
     MoneyOutOutput, MoneyOutPageOutput, MoneyOutWriteOutput,
 )
@@ -82,6 +83,29 @@ DESCRIPTIONS = {
         'history': ('Page a credit card charge’s immutable revisions in revision-number order, each'
                     ' with what its own footer showed and the batches it carries.'),
     },
+    'card-credit': {
+        'post': (
+            'Enter a credit card credit: a refund onto a company credit card, such as a returned part'
+            ' or a vendor’s credit to the card. What is owed on the card goes down by `amount` and the'
+            ' expense accounts named in `expenses` go down by their own line amounts; the lines must'
+            ' add up to `amount` exactly. `account` must be a credit card account and `pay_to` names'
+            ' who gave the credit, usually the vendor. A card credit carries no check number and no'
+            ' items grid: a returned stocked part is credited to the account it was bought to, and'
+            ' its quantity is taken off with `inventory adjust`. A card credit is reconciled on the'
+            ' card statement like a charge or a payment.'),
+        'update': ('Correct a credit card credit, including moving it to another card.'
+                   + _CORRECTION.replace(' The same replacement rule applies independently to `items`;'
+                                         ' an omitted grid retains its captured facts.', '')),
+        'void': ('Void a credit card credit with a required reason. Its accounting is reversed'
+                 ' exactly, at the credit’s own date, and its history stays readable.'),
+        'show': ('Show a credit card credit: its current or a selected earlier revision, the card it'
+                 ' was credited to, who gave it, the expense lines and the posting batches.'),
+        'query': ('Page credit card credits in accounting-date and stable-id order, oldest first or'
+                  ' newest first, with card-account, payee, date, status, number and text filters;'
+                  ' restart on company audit changes.'),
+        'history': ('Page a credit card credit’s immutable revisions in revision-number order, each'
+                    ' with what its own footer showed and the batches it carries.'),
+    },
 }
 
 _ENTRY_ERRORS = ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', 'E_VALUE_RANGE',
@@ -96,7 +120,7 @@ WRITE_ERRORS = {
 }
 
 # The selector each noun's commands name the document with.
-POSITIONAL = {'check': 'check', 'card-charge': 'card_charge'}
+POSITIONAL = {'check': 'check', 'card-charge': 'card_charge', 'card-credit': 'card_credit'}
 
 INPUTS = {
     'check': {'post': CheckPostInput, 'update': CheckUpdateInput, 'void': CheckVoidInput,
@@ -104,6 +128,9 @@ INPUTS = {
     'card-charge': {'post': CardChargePostInput, 'update': CardChargeUpdateInput,
                     'void': CardChargeVoidInput, 'show': CardChargeShowInput,
                     'query': CardChargeQueryInput, 'history': CardChargeHistoryInput},
+    'card-credit': {'post': CardCreditPostInput, 'update': CardCreditUpdateInput,
+                    'void': CardCreditVoidInput, 'show': CardCreditShowInput,
+                    'query': CardCreditQueryInput, 'history': CardCreditHistoryInput},
 }
 
 READ_OUTPUTS = {'show': MoneyOutOutput, 'query': MoneyOutPageOutput, 'history': MoneyOutHistoryOutput}
@@ -145,11 +172,13 @@ def _read(noun, verb):
 VERBS = ('post', 'show', 'update', 'void', 'query', 'history')
 
 CHECK_COMMANDS = [(_write if verb in ('post', 'update', 'void') else _read)(noun, verb)
-                  for noun in ('check', 'card-charge') for verb in VERBS]
+                  for noun in ('check', 'card-charge', 'card-credit') for verb in VERBS]
 
 check_post, check_show, check_update, check_void, check_query, check_history = CHECK_COMMANDS[:6]
 (card_charge_post, card_charge_show, card_charge_update, card_charge_void,
- card_charge_query, card_charge_history) = CHECK_COMMANDS[6:]
+ card_charge_query, card_charge_history) = CHECK_COMMANDS[6:12]
+(card_credit_post, card_credit_show, card_credit_update, card_credit_void,
+ card_credit_query, card_credit_history) = CHECK_COMMANDS[12:]
 
 
 def _delete(noun, model):

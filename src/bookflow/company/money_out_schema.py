@@ -48,8 +48,9 @@ and ``1001-A`` are real cheque numbers that sit between no two others.
 
 import sqlalchemy as sa
 
-# The three documents this marker distinguishes, in their stored spelling.
-KINDS = ('check', 'card_charge', 'transfer')
+# The documents this marker distinguishes, in their stored spelling. A card credit is a refund
+# onto a company card: a card charge in the other direction.
+KINDS = ('check', 'card_charge', 'card_credit', 'transfer')
 
 # The transaction type all three post as. A check is a journal entry and says so in
 # ``transactions.type``, which is why that column cannot tell one from a hand-typed entry and
@@ -78,13 +79,13 @@ def define_tables(metadata, column, table):
         C('transaction_id', sa.String(26), 'The posted journal entry this document was written as.',
           primary_key=True),
         C('type', sa.String(32), 'Transaction type of the marked document; always journal_entry.', nullable=False),
-        C('kind', sa.String(16), 'Document a person entered: check, card_charge or transfer.', nullable=False),
+        C('kind', sa.String(16), 'Document a person entered: check, card_charge, card_credit or transfer.', nullable=False),
         C('created_at', sa.String(32), 'UTC time this document marker was written.', nullable=False),
         C('created_by', sa.String(26), 'Company principal that entered the document.', nullable=False),
         C('created_via', sa.String(16), 'Interface the document was entered through.', nullable=False),
         C('audit_event_id', sa.String(26), 'Audit event that committed the document this marks.',
           sa.ForeignKey('audit_events.id'), nullable=False),
-        sa.CheckConstraint("kind IN ('check', 'card_charge', 'transfer')", name='ck_money_out_kind'),
+        sa.CheckConstraint("kind IN ('check', 'card_charge', 'card_credit', 'transfer')", name='ck_money_out_kind'),
         sa.CheckConstraint(f"type = '{DOCUMENT_TYPE}'", name='ck_money_out_type'),
         # One constraint says both things: the transaction exists, and it is the journal entry
         # these documents post as. A separate single-column reference would say half of it twice.
