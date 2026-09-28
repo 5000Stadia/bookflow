@@ -146,7 +146,7 @@ def test_shell_declares_mobile_viewport_and_scopes_horizontal_scroll_to_tables(h
     css = _browser(hosted).get("/static/style.css")
     assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in page.text
     assert 'class="table-wrap' in page.text
-    assert '<div class="table-wrap"><table>' in audit.text
+    assert '<div class="table-wrap"><table class="list-table audit-list">' in audit.text
     assert "@media (max-width:700px)" in css.text
     assert ".table-wrap{max-width:100%;overflow-x:auto}" in css.text
 

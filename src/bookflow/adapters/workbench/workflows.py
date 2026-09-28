@@ -36,14 +36,18 @@ def company_form_groups(leaves):
         close_estimates_after_billing='Make estimates inactive after final billing (only with progress billing off)',
         automatically_apply_payments='Suggest matching invoice, then oldest invoices for new payments',
         automatically_calculate_payments='Calculate selected invoice payments when no amount was entered',
-        use_undeposited_funds_for_payments='Default new payments to Undeposited Funds')
+        use_undeposited_funds_for_payments='Default new payments to Undeposited Funds',
+        negative_number_style='Show negative amounts as')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
+    display_preferences = {'negative_number_style'}
     for leaf in leaves:
         if leaf['path'] in labels:
             leaf['label'] = labels[leaf['path']]
-    return [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
+    groups = [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
         for title, fields in [('Customer work preferences', preferences), ('Customer payment preferences', payment_preferences),
-            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences)]]
+            ('Reports and lists', display_preferences),
+            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences)]]
+    return [group for group in groups if group['leaves'] or group['title'] != 'Reports and lists']
 
 
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -115,6 +115,17 @@ class WorkLinkOutput(CreatedOutput):
     destination_current_revision_id: str
 
 
+class TimeSummaryOutput(StrictModel):
+    """What a time entry records, read from its one line: who, how long, charged as what."""
+    employee_id: str | None = Field(description="The employee whose time this is.")
+    employee_name: str | None = Field(description="The employee's name as captured on the entry.")
+    duration: str = Field(description="Hours worked, as decimal hours (1.5 is an hour and a half).")
+    item_id: str = Field(description="The service item the time is charged as.")
+    item_name: str = Field(description="The service item's name as captured on the entry.")
+    billable: bool = Field(description="Whether the time can be carried onto an invoice.")
+    note: str | None = Field(description="What was done; the invoice line's description.")
+
+
 class WorkSummaryOutput(CommonOut):
     kind: Literal[WORK_KINDS]
     number: str
@@ -134,6 +145,7 @@ class WorkSummaryOutput(CommonOut):
     tax: MoneyOutput
     total: MoneyOutput
     expired: bool
+    time: TimeSummaryOutput | None = Field(None, description="For a time entry, who worked how long as what; null for every other kind.")
 
 
 class WorkOutput(WorkSummaryOutput):

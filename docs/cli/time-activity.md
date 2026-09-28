@@ -461,6 +461,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1066,6 +1074,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -2653,6 +2662,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
 | `items[].expired` | boolean | yes | no | — | — |
+| `items[].time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `items[].time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `items[].time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `items[].time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `items[].time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `items[].time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `items[].time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `items[].time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -4020,6 +4037,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -4614,6 +4639,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -4777,6 +4803,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -5382,6 +5416,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",
@@ -5543,6 +5578,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expired` | boolean | yes | no | — | — |
+| `time` | object \| null | no | yes | null | For a time entry, who worked how long as what; null for every other kind. |
+| `time.employee_id` | string \| null | yes | yes | — | The employee whose time this is. |
+| `time.employee_name` | string \| null | yes | yes | — | The employee's name as captured on the entry. |
+| `time.duration` | string | yes | no | — | Hours worked, as decimal hours (1.5 is an hour and a half). |
+| `time.item_id` | string | yes | no | — | The service item the time is charged as. |
+| `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
+| `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
+| `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -6148,6 +6191,7 @@ Example JSON output:
     "minor_units": 1
   },
   "tax_minor_units": 1,
+  "time": null,
   "title": "value",
   "total": {
     "amount": "value",

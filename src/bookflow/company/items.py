@@ -1450,6 +1450,18 @@ def _stock(db: Database, owner_ids: Sequence[str]) -> dict[str, tuple[int, int]]
     return {str(item_id): (int(quantity or 0), int(value or 0)) for item_id, quantity, value in rows}
 
 
+def quantity_on_hand_expression(owner: sa.Table | None = None) -> sa.ColumnElement:
+    """On-hand quantity in microunits per item row, as ``_stock`` sums it; zero when none moved."""
+    owner = schema.items if owner is None else owner
+    table = schema.metadata.tables.get("inventory_movements")
+    if table is None:  # pragma: no cover - the ledger is part of the shipped schema
+        return sa.literal(0)
+    moved = sa.select(sa.func.sum(table.c.quantity_microunits)).where(
+        table.c.item_id == owner.c.id,
+    ).correlate(owner).scalar_subquery()
+    return sa.case((owner.c.type.in_(tuple(STOCK_TYPES)), sa.func.coalesce(moved, 0)), else_=0)
+
+
 def _build_projection_cache(
     db: Database,
     owners: Sequence[Mapping[str, Any]],
@@ -1950,7 +1962,7 @@ def item_query_options(
         sort_expressions={
             "price": owner.c.price_minor_units,
             "cost": owner.c.cost_minor_units,
-            "quantity_on_hand": sa.literal(0),
+            "quantity_on_hand": quantity_on_hand_expression(owner),
             "preferred_vendor": preferred,
             "category": category,
         },

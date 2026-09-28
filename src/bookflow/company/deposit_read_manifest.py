@@ -302,6 +302,7 @@ FIELDS = {
         'use_undeposited_funds_for_payments': ('bool', False, False, 'dependency_field'),
         'customer_discount_account_id': ('str', True, False, 'dependency_field'),
         'vendor_discount_account_id': ('str', True, False, 'dependency_field'),
+        'negative_number_style': ('str', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),

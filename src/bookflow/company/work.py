@@ -17,7 +17,7 @@ from bookflow.company.work_tax_facts import read_facts, read_line
 from bookflow.company import work_models
 from bookflow.company.work_models import WorkLineInput
 from bookflow.company.work_outputs import (
-    WorkOutput, WorkWriteOutput, WorkSummaryOutput, WorkRevisionOutput,
+    WorkOutput, WorkWriteOutput, WorkSummaryOutput, TimeSummaryOutput, WorkRevisionOutput,
     WorkRevisionSummary, WorkLineOutput, WorkLinkOutput, WorkPageOutput, WorkHistoryOutput,
 )
 from bookflow.company.sales_models import _invalid, money
@@ -95,12 +95,28 @@ def _amounts(rev):
             (('net', 'net_minor_units'), ('tax', 'tax_minor_units'), ('total', 'gross_minor_units'))}
 
 
-def summary(header, rev):
+def summary(header, rev, s=None, pending=None):
+    """A document's list row; a time entry's also says who worked how long as what (needs `s`)."""
     f = facts(rev)
     return WorkSummaryOutput(**header, **{k: rev[k] for k in ('date', 'title', 'customer_id',
         'currency', 'net_minor_units', 'tax_minor_units', 'gross_minor_units')},
         customer_name=f.profile.customer.label, **_amounts(rev),
-        expired=bool(f.expires_on and f.expires_on < clock.now().date().isoformat()))
+        expired=bool(f.expires_on and f.expires_on < clock.now().date().isoformat()),
+        time=_time_summary(s, f, rev, pending) if s is not None and header.get('kind') == 'time_activity' else None)
+
+
+def _time_summary(s, f, rev, pending=None):
+    from bookflow.core.exact import format_quantity_micro_units
+    supplied = (pending or {}).get('work_lines')
+    lines = saved_lines(s, rev) if supplied is None else [row for row in supplied if row['revision_id'] == rev['id']]
+    if len(lines) != 1:
+        return None
+    line = line_facts(lines[0])
+    employee = f.assignees[0] if f.assignees else None
+    return TimeSummaryOutput(employee_id=employee.id if employee else None,
+        employee_name=employee.label if employee else None,
+        duration=format_quantity_micro_units(line.quantity_microunits), item_id=line.item_id,
+        item_name=line.profile.item.label, billable=line.billable, note=line.description)
 
 
 def revision_output(s, rev, pending=None, *, summary_only=False):
@@ -191,7 +207,7 @@ def links(s, document_id, pending=None, headers=None, *, cursor=None, ctx=None):
 
 def output(s, header, rev, pending=None, headers=None, *, cursor=None, ctx=None):
     linked, more, following, watermark = links(s, header['id'], pending, headers, cursor=cursor, ctx=ctx)
-    return WorkOutput(**summary(header, rev).model_dump(), revision=revision_output(s, rev, pending),
+    return WorkOutput(**summary(header, rev, s, pending).model_dump(), revision=revision_output(s, rev, pending),
                       links=linked, links_has_more=more, next_links_cursor=following, links_audit_watermark=watermark)
 
 
@@ -251,7 +267,7 @@ def page(s, ctx, inp, kind, *, history=False):
     if history:
         return WorkHistoryOutput(**{key: h[key] for key in ('id', 'version', 'number', 'current_revision_id', 'status')},
             items=[revision_output(s, row, summary_only=True) for row in found], **shared)
-    return WorkPageOutput(items=[summary(h, revision(s, h)) for h in found], **shared)
+    return WorkPageOutput(items=[summary(h, revision(s, h), s) for h in found], **shared)
 
 
 def _semantic(rev, lines):
