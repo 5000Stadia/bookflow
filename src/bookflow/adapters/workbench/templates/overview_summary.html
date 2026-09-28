@@ -12,7 +12,7 @@
 {% if not a.overdue and not a.bills %}<p class="muted">Nothing overdue, and no bills due in the next 7 days.</p>{% endif %}
 </section>{% endif %}
 {% if o.activity is not none %}<section class="overview-card overview-activity" aria-labelledby="activity-title"><h2 id="activity-title">Recent activity</h2>
-{% if o.activity %}<ul class="overview-rows">{% for event in o.activity %}<li><a href="{{ event.href }}"><span class="overview-row-main"><span class="overview-row-name">{{ event.summary or event.command }}</span><span class="overview-row-meta">{{ event.on_behalf_of_name or event.actor_name }}{% if event.on_behalf_of_name %} (by {{ event.actor_name }}){% endif %}</span></span><time class="overview-when" datetime="{{ event.at }}">{{ event.at | ago }}</time></a></li>{% endfor %}</ul>
+{% if o.activity %}<ul class="overview-rows">{% for event in o.activity %}<li><a href="{{ event.href }}"><span class="overview-row-main"><span class="overview-row-name">{{ event | activity }}</span><span class="overview-row-meta">{{ event | actor }}</span></span><time class="overview-when" datetime="{{ event.at }}">{{ event.at | ago }}</time></a></li>{% endfor %}</ul>
 <p class="overview-more"><a href="/c/{{ company_id }}/audit">Open the audit trail</a></p>{% else %}<p class="muted">Nothing recorded yet.</p>{% endif %}
 </section>{% endif %}
 </div>

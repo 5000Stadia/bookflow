@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from bookflow.adapters.workbench import forms as F
+from bookflow.adapters.workbench import activity as Activity
 from bookflow.adapters.workbench import command_result as CommandResult
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
@@ -70,6 +71,8 @@ env.globals["ui_words"] = Naming.words
 env.filters["when"] = Naming.when
 # Money and dates as a person reads them; display only, never input or export.
 env.filters.update(Display.FILTERS)
+# What an audit event did and who did it, in plain words; the stored summary is unchanged.
+env.filters.update(Activity.FILTERS)
 # Whether a noun's show command is about one record or about the whole thing, so the
 # navigation grid sends each to the page that can actually open. Registered after the
 # function it calls; see `_record_selector`.
