@@ -62,7 +62,8 @@ def test_00_ordinary_source_batch(world,batch,driver):
         ids=[r['source'] for r in sources]
         total=s.company.raw.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=? AND transaction_id IN ('+','.join('?' for _ in ids)+')',(account,*ids)).fetchone()[0]
         assert total==expected*100
-        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships').fetchone()==(0,)
+        # None of this world's receipts is banked yet (the demo banks deposits of its own).
+        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships WHERE source_transaction_id IN ('+','.join('?' for _ in ids)+')',ids).fetchone()==(0,)
     (world['root'].parent/'producer-receipt.json').write_text(json.dumps(dict(sources=sources,uf_total=total,batch=batch,root=str(world['root'])),indent=2))
 
 
@@ -120,7 +121,8 @@ def test_60_reopen_full_pages_raw_and_storage_receipt(world,driver):
         assert drafts.show(s,m.DraftShow(draft=draft.id)).summary.source_count==403
         assert financial(s)==world['before']
         assert s.company.raw.execute('SELECT count(*) FROM deposit_draft_sources WHERE revision_id=?',(accepted.draft.revision_id,)).fetchone()==(403,)
-        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships').fetchone()==(0,)
+        ids=[r['source'] for r in world['sources']]
+        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships WHERE source_transaction_id IN ('+','.join('?' for _ in ids)+')',ids).fetchone()==(0,)
         assert s.company.raw.execute('PRAGMA main.foreign_key_check').fetchall()==[]
         page=drafts.items(s,m.DraftItems(draft=draft.id,limit=200));seen=[r['source']['transaction_id'] for r in page['items']]
         while page['next_cursor']:

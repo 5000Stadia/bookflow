@@ -53,7 +53,6 @@ def test_cross_actor_recovery_cursor_binding_and_original_command_gate(root,clie
     assert _storage(root,database_path(client))==baseline
 
 
-@pytest.mark.legacy_permissions  # its bound-people harness builds legacy sessions
 @pytest.mark.parametrize('case',['revoked','expired','principal_loss','context_mismatch'])
 def test_actual_fixed_principal_recovery_rejects_without_storage_effect(root,client,sale,driver,n2,monkeypatch,bound_people,case):
     inp,*_=n2;people=bound_people

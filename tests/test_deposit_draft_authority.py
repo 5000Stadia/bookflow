@@ -14,8 +14,6 @@ from tests.test_deposit_dependency_binding import observe,bound_people,_credenti
 REFUSAL={'capability','required_role','reason'}
 
 
-# A new root starts activated; these witnesses pin legacy company opening (hub-admin admission) through directly built bound sessions.
-pytestmark = pytest.mark.legacy_permissions
 
 
 def test_actual_bound_principal_and_revocation_precede_all_private_reads(root,client,cash,driver,run,bound_people,monkeypatch):
@@ -45,9 +43,20 @@ def test_actual_bound_principal_and_revocation_precede_all_private_reads(root,cl
             assert error.value.code in ('E_PERMISSION','E_UNAUTHENTICATED','E_COMPANY_NOT_FOUND')
             assert draft.id not in str(error.value.details) and cash['source'] not in str(error.value.details)
         assert tuple(s.company.raw.iterdump())==before
-    observe(people['bot'],monkeypatch,denied,people['company'])
+    _denied_at_admission_or_read(people,monkeypatch,denied,draft.id,cash['source'])
 
 
+def _denied_at_admission_or_read(people,monkeypatch,denied,*hidden):
+    """On an activated install the agent's session for a principal who lost the company is
+    itself refused, before any private read; either way nothing names what it hides."""
+    try:
+        observe(people['bot'],monkeypatch,denied,people['company'])
+    except BookflowError as refused:
+        assert refused.code in ('E_PERMISSION','E_UNAUTHENTICATED','E_COMPANY_NOT_FOUND')
+        assert all(value not in str(refused.details) for value in hidden)
+
+
+@pytest.mark.legacy_permissions  # pins legacy company opening (hub-admin admission)
 def test_hub_administrator_without_company_membership_cannot_enter_private_reader(root,client,run,monkeypatch):
     from tests.conftest import make_actor,as_user
     from bookflow.core import registry
@@ -106,6 +115,7 @@ def test_applicable_organization_and_company_roles_use_existing_highest_role(roo
             assert tuple(s.company.raw.iterdump())==before
 
 
+@pytest.mark.legacy_permissions  # pins legacy company opening (hub-admin admission)
 def test_unrelated_organization_does_not_admit_even_hub_admin(root,client,run,monkeypatch):
     from tests.conftest import make_actor,as_user
     draft=run('create',{})
