@@ -76,7 +76,8 @@ or deleting immutable ledger history; these guards do not calculate or write dat
         attachments/
           <first two hex of sha256>/<sha256>    content-addressed file bodies
         backups/
-          <YYYY-MM-DD-HHMMSS>.db copies of company.db taken with the SQLite backup API, before migrations and by `company backup`
+          <YYYY-MM-DD-HHMMSS>-from-<revision>.db  copies of company.db taken with the SQLite backup API before migrations
+          <Company Name> <YYYY-MM-DD-HHMMSS>.bookflow-backup  portable archives written by `company backup` (3.4)
         exports/                 files written by report `--csv` and by `company export`; safe to empty
   trash/
     <Organization Name>/<Company Name>-<YYYY-MM-DD-HHMMSS>/   company folders removed by `company delete`
@@ -118,6 +119,12 @@ Metadata replacement uses private unique sibling temporaries, synchronized file 
 ### 3.3 Schema versions
 
 Both databases carry Alembic's `alembic_version` table, which is authoritative. Opening a database whose revision is not in this version's migration chain returns `E_SCHEMA_UNKNOWN` with the revision in the details and a message saying to upgrade Bookflow; the database is not modified. A database behind the head is migrated on writable open.
+
+### 3.4 Company backups
+
+`company backup` (company scope; the `company` capability at `admin`) writes one archive, `<company folder>/backups/<Company Name> <YYYY-MM-DD-HHMMSS>.bookflow-backup`, a zip file holding exactly: `company.db`, a consistent copy taken with the SQLite backup API from a read-only connection while the command holds the company's write transaction, with the write-ahead log folded in and the journal mode set to `delete`; `attachments/<first two hex>/<sha256>` for every attachment body the copy still references (`collected_at` null), each hashed against its name before it is written; and `manifest.json` with `format` (`bookflow-company-backup`), `format_version` (1), `backup_id`, `company_id`, `display_name`, `legal_name`, `home_currency`, `schema_revision`, `bookflow_version`, `created_at`, `created_by` (user id, username, display name), `files` (name, sha256, size of every other member) and `missing_attachments` (referenced bodies absent or damaged on disk, reported as a warning). Before success is reported the archive is reread: every member's size and sha256 against the manifest, then the database's integrity check, foreign-key check, company id and schema revision. The output names the file, its size and sha256, and every member's fingerprint; `path` is shown to hub admins only. The command records a company audit event with one `company_backup` entry. The archive is not offered for download by the browser; it stays on the host with the company.
+
+`company restore <archive>` (hub admin; the archive is a path on the machine running Bookflow, which the CLI makes absolute and other interfaces must give absolute; the browser uploads the file to a private temporary folder and passes that path) makes a new company from an archive. Restore never replaces a company: when the archive's company id is registered on this data root it refuses with `E_ALREADY_ATTACHED` unless `--as-copy`, which gives the restored company a new id (written to `company_info.id`; audit rows keep the ids they were written with) and defaults its display name to `<name> (restored)`. `--organization` defaults when exactly one is visible; `--name` sets the display name. The manifest's revision is classified before anything is written: one this version does not know is refused with `E_SCHEMA_UNKNOWN` ("made by a newer version of Bookflow"). The apply reserves a folder in the organization's folder with a `creating` marker, extracts every member through the same verification (`E_BACKUP_INVALID` with `details.check` naming the failure), migrates a behind revision with `migrate_company` (its verified pre-migration backup lands in the new folder's `backups/`), writes the display-name copy and a company audit event `company restore` with one `company_backup` entry, synchronizes the folder, writes `ready`, and registers the company with the restoring user as owner in one hub event. Any failure before registration removes the folder it made; nothing is registered. A dry run performs the full verification without writing.
 
 ## 4. Identity
 
@@ -517,7 +524,7 @@ Packaged chart-template ids, chosen by `--chart`: `general`, `service`, `product
 
 ### 9.4 Other company commands
 
-`company list`, `company show`, `company update`, `company rename [--move]`, `company use <company>`, `company attach <path>`, `company detach <company>`, `company backup`, `company restore <backup>`, `company verify` (SQLite integrity check plus ledger invariants: every posting batch balances, corrections exactly reverse source effects, document totals and posting attribution reconcile, dated applications/allocations reconcile to source amounts and control-account balances, and every referenced record exists), `company compact`, `company delete <company> --confirm <id>`. Backups can be scheduled (13.3) with a retention count. `delete` moves the folder to `trash/` and removes the registry rows; `trash list` and `trash empty` manage the folder. `company show` includes `path` only for hub admins.
+`company list`, `company show`, `company update`, `company rename [--move]`, `company use <company>`, `company attach <path>`, `company detach <company>`, `company backup` and `company restore <archive>` (3.4), `company verify` (SQLite integrity check plus ledger invariants: every posting batch balances, corrections exactly reverse source effects, document totals and posting attribution reconcile, dated applications/allocations reconcile to source amounts and control-account balances, and every referenced record exists), `company compact`, `company delete <company> --confirm <id>`. Backups can be scheduled (13.3) with a retention count. `delete` moves the folder to `trash/` and removes the registry rows; `trash list` and `trash empty` manage the folder. `company show` includes `path` only for hub admins.
 
 ## 10. The general ledger
 

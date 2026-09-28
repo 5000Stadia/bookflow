@@ -22,6 +22,8 @@ EXAMPLES: dict[str, Example] = {
     "attachment unlink": Example(f'bookflow attachment unlink {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Remove association" --json', {"link": ID, "expected_version": 1}),
     "attachment list": Example(f'bookflow attachment list customer {ID} --company "Demo Plumbing Co" --limit 25 --json', {"record_type": "customer", "record_id": ID, "limit": 25}),
     "attachment get": Example(f'bookflow attachment get {ID} --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json', {"attachment": ID}),
+    "company backup": Example('bookflow company backup --company "Demo Plumbing Co" --json', {}),
+    "company restore": Example('bookflow company restore "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json', {"archive": "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": True, "name": "Demo Plumbing (restored)"}),
     "company compact": Example('bookflow company compact --company "Demo Plumbing Co" --limit 200 --dry-run --reason "Preview unlinked file collection" --json', {"limit": 200}),
     "audit list": Example('bookflow audit list --company "Demo Plumbing Co" --limit 5 --json', {"limit": 5}),
     "audit show": Example(f'bookflow audit show {ID} --company "Demo Plumbing Co" --json', {"event": ID}),

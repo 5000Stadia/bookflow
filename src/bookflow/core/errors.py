@@ -91,6 +91,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_INCOMPLETE_COMPANY": "The folder holds an unfinished company creation.",
     "E_ALREADY_ATTACHED": "That company id is already registered.",
     "E_ATTACH_INVALID": "The folder is not a valid company folder.",
+    "E_BACKUP_INVALID": "The file is not an intact Bookflow company backup.",
     "E_DEMO_RESET_INCOMPLETE": "The old demo could not be moved to trash; its folders remain unregistered.",
     "E_DEPOSIT_SOURCE_INVALID": "The captured receipt cash provenance is unsupported or inconsistent.",
     "E_DEPOSIT_SOURCE_INELIGIBLE": "The receipt is not eligible undeposited home-currency cash.",

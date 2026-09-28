@@ -5029,3 +5029,30 @@ journal, at the bill's effective date; reversals follow their original through
 `posting_line_sources.reversed_source_id`. A bill for received goods is therefore open on
 unpaid bills for what it billed, and only unbilled received value stays on the receipt. Totals
 are unchanged. The Overview's "You owe" is the `report ap-aging` total (Accounts payable).
+
+## Company backup and restore (R133)
+
+`company/backup_archive.py` owns the archive (blueprint 3.4): `create` snapshots `company.db`
+with the SQLite backup API from a read-only connection (the command holds the company write
+transaction, so the copy is the committed state), sets the copy's journal mode to `delete`,
+hashes each referenced attachment body against its name, writes the zip beside its final name
+as a `.partial`, rereads it with `verify`, and renames it into `backups/`. `verify(archive,
+dest=None)` is the only reader: manifest shape and format version, member set equal to the
+manifest (no other names; attachment names must be `attachments/xx/<sha256>`), every member's
+size and sha256 while streaming (zip CRC on the way), then `check_database` (integrity,
+foreign keys, one `company_info` row, id and revision equal to the manifest). With `dest` it
+writes the verified members there; without, only the database goes to an OS temporary folder.
+
+`commands/backup_cmds.py`: `company backup` (company scope, `company`/`admin`, audited with one
+`company_backup` entry) and `company restore` (hub scope, `hub_admin`, commit owner
+`hub.company_restore`, in `publication.MEMBERSHIP_EFFECTS` because it grants the restorer's owner
+membership). Restore's plan reads only the manifest on a real run (full `verify` on a dry run) to
+classify the revision and check id and name; its apply reserves the folder, extracts through
+`verify`, rewrites `company_info.id` for `--as-copy`, runs `migrate_company(..., row=None)`,
+writes the display-name copy and a `company restore` company event, writes the `ready` marker and
+registers; any exception before the hub commit removes the folder. The CLI makes any input field
+marked `json_schema_extra={"x-bookflow-local-path": True}` absolute before dispatch (only
+`archive` today). Permission delta `company-backup-v1` (`hub/permission_backup_catalog.py`) over
+`card-credit-v1`. Browser: `adapters/workbench/backups.py` mounts `/c/{id}/company/backup` and
+`/c/{id}/company/restore` (multipart upload to a private temporary folder, removed after the
+command) ahead of the generic routes; the Company section links both.

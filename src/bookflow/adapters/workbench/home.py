@@ -609,6 +609,8 @@ SECTIONS: tuple[Section, ...] = (
             Action("Audit trail", READ, ("audit list",), "/audit"),
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             Action("Rename the company", WRITE, ("company rename",), "/company/rename"),
+            Action("Back up the company", WRITE, ("company backup",), "/company/backup"),
+            Action("Restore a backup", WRITE, ("company restore",), "/company/restore"),
             Action("Settings and lists", READ, (), "/_group/settings"),
         ),
     ),
