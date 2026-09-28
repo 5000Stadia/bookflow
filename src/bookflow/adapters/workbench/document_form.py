@@ -681,7 +681,8 @@ def computed(record):
         return None
     revision = record['revision']
     lines = [{'line_id': line.get('line_id'), 'amount': _amount(line.get('net')),
-              'tax': _amount(line.get('tax'))} for line in revision.get('lines', [])]
+              'tax': _amount(line.get('tax')), 'description': line.get('description')}
+             for line in revision.get('lines', [])]
     subtotal = _amount(revision.get('subtotal')) or _amount(revision.get('net'))
     profile = revision.get('profile') if isinstance(revision.get('profile'), dict) else {}
     out = {'currency': revision.get('currency'), 'subtotal': subtotal,

@@ -2068,6 +2068,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     "link_version_field": link_version_field,
                     "include_fields": include_fields,
                 }
+        # A new sale whose tax field is left empty takes the customer's or the company's sales
+        # tax item (R79). Say which before it is saved: what the last preview applied, else the
+        # company default read from its record.
+        tax_leaf = next((leaf for leaf in described if leaf.get("path") == "sales_tax_item"
+                         and leaf.get("reference") and not leaf["reference"].get("current")), None)
+        if tax_leaf is not None and verb in ("post", "create") and company_id is not None:
+            profile = (result.get("revision") or {}).get("profile") if isinstance(result, dict) else None
+            applied = profile.get("sales_tax_item") if isinstance(profile, dict) else None
+            if isinstance(applied, dict) and applied.get("label"):
+                tax_leaf["reference"]["default_label"] = f"Left empty, this sale uses {applied['label']}."
+            elif default_tax := ((authorized_company or {}).get("info") or {}).get("default_sales_tax_item_id"):
+                try:
+                    row = run(request, "item show", {"item": default_tax}, company_id)
+                except BookflowError as err:
+                    if err.code not in ("E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE"):
+                        return page_error(request, err)
+                else:
+                    tax_leaf["reference"]["default_label"] = (
+                        f"Left empty, this sale uses the company default, "
+                        f"{_reference_label('item', row, authorized_company or {})}, "
+                        "unless the customer has its own.")
         runtime_fields = []
         reference_values: dict[str, dict[str, Any]] = {}
         reference_cache: dict[tuple[str, str], dict[str, Any]] = {}

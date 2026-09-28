@@ -656,6 +656,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                 if dry_run:
                     replay["dry_run"] = True
                 return redact_paths(replay, s.is_hub_admin)
+    inp = _dated_today(cmd, inp, s)
     with performance.span("command.plan", command=cmd.name):
         plan = cmd.plan(inp, ctx, s)
     if dry_run or not cmd.is_write:
@@ -675,6 +676,19 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
     if "warnings" in out:
         out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
     return redact_paths(out, s.is_hub_admin)
+
+
+#: Sales documents dated today in the company's timezone when `date` is omitted, as the browser
+#: form and the anchor do. Filled after the idempotency lookup, so a retry of the same request on
+#: a later day replays the original rather than posting a second document.
+TODAY_DATED = frozenset(("invoice post", "sales-receipt post", "credit-memo post", "statement-charge post"))
+
+
+def _dated_today(cmd: Command, inp: BaseModel, s: Session) -> BaseModel:
+    if cmd.name not in TODAY_DATED or getattr(inp, "date", "") is not None:
+        return inp
+    from bookflow.company.memorized_schedule import today
+    return inp.model_copy(update={"date": today(s.company_tz)})
 
 
 def _with_stock_warnings(out: dict[str, Any], plan: Any) -> dict[str, Any]:
