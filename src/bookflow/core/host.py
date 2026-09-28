@@ -446,7 +446,10 @@ class Host:
                 changed = seq != self._seq.get(name)
                 self._seq[name] = seq
             if changed:
-                self._wake_subscribers(name)
+                # Hub events carry authority changes (a revoked token, a lost
+                # membership) that every company stream must re-check now, not
+                # at its next keep-alive, so a hub change wakes them all.
+                self._wake_subscribers(None if name == "hub" else name)
 
     # ---------------------------------------------------------------- async stream notifications
     def subscribe(self, key: str, loop: Any, event: Any) -> tuple[str, int]:

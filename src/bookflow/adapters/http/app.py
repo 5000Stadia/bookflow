@@ -439,7 +439,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 if subscription is not None:
                     host.unsubscribe(subscription)
 
-        return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+        return _EventStream(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
     @app.get("/companies/{company_id}/events")
     async def events(company_id: str, request: Request):
@@ -463,6 +463,22 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     from bookflow.adapters.workbench.pages import mount_workbench
     mount_workbench(app, host, credential, make_context, run_command, secure_cookies)
     return app
+
+
+class _EventStream(StreamingResponse):
+    """Close the event generator the moment its response ends, however it ends.
+
+    A send that fails -- the peer went away, or the publication fence aborted a
+    revoked stream -- leaves the generator suspended at its ``yield``. Starlette
+    does not close it, so its subscription stayed registered until garbage
+    collection. Closing it here runs its cleanup at once.
+    """
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self.body_iterator.aclose()
 
 
 def _reader_hub(host):
