@@ -817,8 +817,10 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         changed_fields=changed_fields)
     plan = Plan(output, dict(input=inp, operation=operation, document_type=document_type, changed=True, header=header,
         before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan, billing_source=billing_source,
-        stock=stock, billed_sources=resolved.get('billed_sources') if resolved else None,
-        semantic=resolved['semantic'] if resolved else None))
+        stock=stock, semantic=resolved['semantic'] if resolved else None,
+        # Only a sale billed from quoted work says which of its lines were billed; the deposit
+        # coordinator reads every other sale plan against a closed set of keys.
+        **({'billed_sources': resolved['billed_sources']} if resolved and 'billed_sources' in resolved else {})))
     from bookflow.company.billing_edits import carry_allocations
     carry_allocations(plan, s)
     if 'billing_allocations' in plan.data and operation != 'void':
