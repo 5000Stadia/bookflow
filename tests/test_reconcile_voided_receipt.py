@@ -17,7 +17,7 @@ import pytest
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
-from tests.test_card_credits import books  # noqa: F401
+from tests.test_card_credits import books, charge  # noqa: F401
 from tests.test_card_reconciliation import _call, _statement
 
 
@@ -61,3 +61,22 @@ def test_a_source_invalid_refusal_says_which_check_failed():
         raise InvalidStorage('incomplete_movement')
     assert isinstance(caught.value, ReconciliationError)
     assert caught.value.details == {'check': 'incomplete_movement'}
+
+
+def test_a_statement_with_no_opening_names_the_first_movement_and_the_opening_to_start(books):
+    """R80 day 5 #8: the refusal told the agent to start an opening but not where the account begins."""
+    charge(books, amount='30.00', date='2026-06-10')
+    charge(books)                                              # 2026-06-02, the first movement
+    with pytest.raises(BookflowError) as refused:
+        _call(books, 'reconcile start', dict(operation_key=new_id(), account=books['card'],
+                                             statement_date='2026-06-30', ending_balance='150.00'))
+    error = refused.value
+    assert error.code == 'E_VALIDATION' and error.details['next_command'] == 'reconcile opening start'
+    assert error.details['first_movement_date'] == '2026-06-02'
+    assert error.details['next_input'] == dict(account=books['card'], opening_date='2026-06-01', entered_balance='0.00')
+    assert 'first movement is dated 2026-06-02' in error.message
+    # The suggested opening is accepted as given.
+    opened = _call(books, 'reconcile opening start', dict(
+        operation_key=new_id(), evidence=dict(format=1, statement_reference=None, entered_text='First reconciliation'),
+        references=[], **error.details['next_input']))
+    assert opened['draft']['header']['opening_date'] == '2026-06-01'

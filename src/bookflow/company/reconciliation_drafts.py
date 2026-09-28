@@ -21,6 +21,24 @@ NO_OPENING=('this account has no reconciliation opening yet; start one with `rec
             '(opening date and balance from the last statement you trust), then `reconcile start` for the next statement; '
             'to follow an opening draft that is not finished yet, pass its id as opening_draft_id')
 
+def first_movement(s,account):
+    """The date of the account's earliest live movement, or None when it has none."""
+    dates=[v['effective_date'] for v in s.current.values() if v['account_id']==account and v['active']]
+    return min(dates) if dates else None
+
+def no_opening(s,account):
+    """The refusal for a statement on an account with no opening, naming where a first one goes."""
+    import datetime
+    first=first_movement(s,account)
+    message=NO_OPENING
+    details={'next_command':'reconcile opening start'}
+    if first is not None:
+        before=(datetime.date.fromisoformat(first)-datetime.timedelta(days=1)).isoformat()
+        message+=(f'. This account\'s first movement is dated {first}; with no earlier statement, open it on '
+                  f'{before} (any date before {first}) with entered_balance 0.00 and tick every movement on the statement')
+        details.update(first_movement_date=first,next_input={'account':account,'opening_date':before,'entered_balance':'0.00'})
+    return BookflowError('E_VALIDATION',message=message,details={'fields':[{'field':'opening_id','problem':message}],**details})
+
 DEFAULT_PREFERENCES=Preferences(format=1,columns=['date','number','payee','amount','status'],sort='date',descending=False,hide_after_date=True,view='as_certified')
 
 def load(s,identity, *, authority_transactions):
@@ -53,7 +71,7 @@ def start(s,inp, *, identity,revision_id,opening_draft=None):
             # Neither named: the statement follows the account's adopted opening, and an account
             # that has none is told the first step rather than that an id is missing.
             if state is None or state['opening_id'] is None:
-                raise BookflowError('E_VALIDATION',message=NO_OPENING,details={'fields':[{'field':'opening_id','problem':NO_OPENING}],'next_command':'reconcile opening start'})
+                raise no_opening(s,inp.account)
         else:
             require(opening_draft is not None and opening_draft.id==inp.opening_draft_id and opening_draft.account_id==inp.account and opening_draft.kind=='opening' and opening_draft.state=='open','E_RECONCILIATION_DRAFT_STATE')
     header=Header(format=1,opening_date=cutoff if opening else None,statement_date=None if opening else cutoff,
