@@ -87,14 +87,18 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     _preview(b); _click(b, 'submit'); assert _saved(b, 'sales-receipt') == receipt
     state = run('work-order.billing', dict(work_order=order['id']))
     assert state['remaining_net_minor_units'] == 3001
-    b.navigate(base + '/sales-receipt/' + receipt + '/history')
+    # The old history address still works: it redirects to the receipt shown with its history.
+    b.call('Page.navigate', {'url': base + '/sales-receipt/' + receipt + '/history'})
+    b.wait_for('document.readyState === "complete" && location.search.includes("history=1")')
     b.wait_for('!!document.querySelector("[aria-label=\\"Sales history\\"]")')
     assert 'Sources for revision 1' in b.evaluate('document.body.innerText')
     history_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent.startsWith("Open captured source revision")).href')
     b.call('Page.navigate', {'url': history_link})
     b.wait_for('!!document.querySelector(".work-document")')
     assert 'revision_number=1' in b.evaluate('location.search')
-    b.navigate(base + '/sales-receipt/' + receipt + '/history')
+    # The old history address still works: it redirects to the receipt shown with its history.
+    b.call('Page.navigate', {'url': base + '/sales-receipt/' + receipt + '/history'})
+    b.wait_for('document.readyState === "complete" && location.search.includes("history=1")')
     b.wait_for('!!document.querySelector(".sales-document")')
     snapshots_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "Read internal snapshots for sales revision 1").href')
     b.navigate(snapshots_link)

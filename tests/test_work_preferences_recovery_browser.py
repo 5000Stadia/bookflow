@@ -50,7 +50,11 @@ def fragmented_root(tmp_path_factory):
     if not cached:
         client.init(); client.demo.reset()
     company = client.company.list()['items'][0]['company_id']
-    call = lambda name, data: client.run(name, data, company=company, reason='Recovery browser history')
+    from bookflow.core import registry
+    registry.load_all()
+    # A reason belongs to writes; the library refuses one on a read (E_USAGE).
+    call = lambda name, data: client.run(name, data, company=company,
+        **({'reason': 'Recovery browser history'} if registry.get(name).is_write else {}))
     if not cached:
         customer = call('customer create', dict(name='Recovery customer'))['id']
         income = call('account create', dict(name='Recovery income', type='income'))['id']

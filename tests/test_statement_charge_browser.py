@@ -125,7 +125,7 @@ def test_the_statement_charges_tile_opens_a_list_whose_rows_open_the_charge(char
     b.wait_for('!!document.querySelector("table")')
     assert b.evaluate('document.querySelector("h1").textContent').strip() == 'Statement charges'
     headers = b.evaluate('[...document.querySelectorAll("thead th")].map(e=>e.textContent.trim())')
-    assert headers[:6] == ['Number', 'Date', 'Customer', 'Memo', 'Total', 'Status'], headers
+    assert headers[:6] == ['Number', 'Date', 'Customer', 'Memo', 'Total (USD)', 'Status'], headers  # money columns name their currency
     row = b.evaluate('[...document.querySelectorAll("tbody tr")].map(e=>e.innerText)')
     assert any('LC-1' in text and 'Quarter hour' in text and '60.00' in text for text in row), row
     _contained(b, 1280)
@@ -133,7 +133,8 @@ def test_the_statement_charges_tile_opens_a_list_whose_rows_open_the_charge(char
     link = ('[...document.querySelectorAll("tbody a")].find(a => a.textContent.trim() === "LC-1")')
     assert b.evaluate(f'!!{link}'), 'the list row does not open the charge'
     b.evaluate(f'{link}.click()')
-    b.wait_for(f'location.pathname.endsWith({json.dumps("/" + charge["id"])})')
+    b.wait_for(f'location.pathname.endsWith({json.dumps("/" + charge["id"])}) '
+               '&& document.readyState === "complete" && !!document.body')
     assert CHARGE in b.evaluate('document.body.innerText')
 
 
@@ -198,6 +199,11 @@ def test_a_charge_is_paid_from_the_receive_payments_window(charge_browser):
     _contained(b, 1280)
 
     b.evaluate(f'{row}.querySelector("input[type=checkbox]").click()')
+    _settled(b)
+    # A new company leaves "automatically calculate payments" off, so the person enters the
+    # amount paid against the row, as they would in that setting.
+    b.evaluate(f"""(() => {{const x = {row}.querySelector('input[type=text]');
+        x.value = {json.dumps(CHARGE)}; x.dispatchEvent(new Event('change', {{bubbles: true}}));}})()""")
     _settled(b)
     assert CHARGE in b.evaluate("document.querySelector('#payment-totals').innerText")
     _press(b, 'preview')

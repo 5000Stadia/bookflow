@@ -99,13 +99,15 @@ def test_company_users_exposes_and_saves_sales_delete_permissions(books,office,l
         b.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':900,'deviceScaleFactor':1,'mobile':width==390})
         b.navigate(live+'/login')
         b.evaluate('document.querySelector("[name=username]").value='+json.dumps(office.login)+';document.querySelector("[name=password]").value='+json.dumps(INSTALLER_PASSWORD)+';document.querySelector("form[hx-post=\\"/login\\"]").requestSubmit()')
-        b.wait_for('!document.querySelector("input[name=password]") && document.body.innerText.includes("Log out")')
+        b.wait_for('!document.querySelector("input[name=password]") && !!document.querySelector("form[action=\'/logout\']")')
         b.navigate(f'{live}/c/{company}/users?user={person["user_id"]}')
         b.wait_for('!!document.querySelector("[name=sales_receipt_delete]")')
         assert not b.evaluate(form+'.elements.invoice_delete.checked || '+form+'.elements.sales_receipt_delete.checked')
         b.evaluate(form+'.elements.invoice_delete.checked=true;'+form+'.elements.sales_receipt_delete.checked=true;'+form+'.elements.allow_post.checked=false')
         b.evaluate(form+'.querySelector("button[value=preview]").click()')
-        b.wait_for('!!document.querySelector("[role=status]")')
+        # The page shell now carries its own status region (the finder's), so wait for this
+        # form's own preview result rather than any [role=status].
+        b.wait_for('document.querySelector("#company-permissions [role=status] h2")?.textContent==="Preview"')
         member=next(x for x in office.admin('membership.list',dict(company=company))['items'] if x['user_id']==person['user_id'])
         assert member['version']==1 and member['grants']==[]
         b.evaluate(form+'.querySelector("button[value=save]").click()')

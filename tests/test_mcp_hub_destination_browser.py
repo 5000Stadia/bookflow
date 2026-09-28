@@ -14,7 +14,7 @@ from tests.test_mcp_registry_rollout import state
 
 
 @pytest.mark.parametrize('width',[1280,390])
-@pytest.mark.timeout(180)
+@pytest.mark.timeout(900)  # a full demo reset alone takes one to two minutes
 @pytest.mark.skipif(not CHROME.exists(),reason='Chrome unavailable')
 def test_hub_organization_and_company_new_attach_destinations_with_complete_receipts(register_browser,width,tmp_path,monkeypatch):
     env,b=register_browser,register_browser.browser
@@ -34,10 +34,10 @@ def test_hub_organization_and_company_new_attach_destinations_with_complete_rece
         assert out['dry_run'] and state(root)==before
         _contained(b,width)
         return out
-    def saved(target):
+    def saved(target,timeout=15):
         _click(b,'submit')
         try:
-            b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
+            b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")',timeout=timeout)
         except AssertionError:
             (tmp_path/'save-timeout.json').write_text(json.dumps({
                 'page': b.evaluate('({url:location.href,text:document.body.innerText})'),
@@ -87,6 +87,9 @@ def test_hub_organization_and_company_new_attach_destinations_with_complete_rece
     assert (folder/'company.db').is_file()
     form(b,env.site.base_url+'/hub/company/attach')
     _fill(b,'f:path',str(folder))
+    # Under the current permission mode an attached company is enrolled with a named human
+    # administrator; this browser's own login administers it.
+    _fill(b,'f:administrator',env.site.login)
     prospective=preview()
     attached=saved(lambda out:'/c/'+out['company_id']+'/')
     assert attached['company_id']==cid
@@ -106,7 +109,7 @@ def test_hub_organization_and_company_new_attach_destinations_with_complete_rece
     form(b,env.site.base_url+'/hub/demo/reset')
     _fill(b,'f:include_reference','false')
     prospective=preview()
-    reset=saved(lambda out:'/c/'+out['company_id']+'/')
+    reset=saved(lambda out:'/c/'+out['company_id']+'/',timeout=600)
     assert Path(reset['path']).is_relative_to(root)
     assert (Path(reset['path'])/'company.db').is_file()
     if reset['trashed_path']:
