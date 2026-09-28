@@ -17,7 +17,8 @@ TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$")
 def normalize(obj):
     """Replace ULIDs and timestamps with placeholders after checking their shape."""
     if isinstance(obj, dict):
-        return {k: normalize(v) for k, v in obj.items()}
+        # How long ago something changed depends on when it is read, not on the interface.
+        return {k: "<age>" if k.startswith("seconds_since") else normalize(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [normalize(v) for v in obj]
     if isinstance(obj, str):
@@ -42,15 +43,18 @@ def sequence(run):
     return out
 
 
-def test_library_and_cli_agree(tmp_path, monkeypatch):
+def test_library_and_cli_agree(tmp_path, monkeypatch, _seeded_template):
     import bookflow
-    from tests.conftest import Cli
+    from tests.conftest import Cli, copy_seeded_root
     roots = []
     results = []
     for kind in ("lib", "cli"):
         r = tmp_path / kind
         monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r))
-        c = bookflow.connect(data_root=str(r)); c.init(); c.demo.reset()
+        # Two identical demo roots: the run's shared template, copied (an init and a demo
+        # reset each, done twice, was minutes of setup for a comparison of seven commands).
+        copy_seeded_root(_seeded_template, r)
+        c = bookflow.connect(data_root=str(r))
         roots.append(r)
         if kind == "lib":
             results.append(sequence(lambda name, inp, company=None: c.run(name, inp, company=company)))
