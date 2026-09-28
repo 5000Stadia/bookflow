@@ -226,6 +226,22 @@ def show(s, inp, document_type):
     return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement)
 
 
+def _settlement_condition(t, r, settlement):
+    """The page filter for settlement_current's status, derived exactly as payment_queries does:
+    due is the posted gross less every live application (an apply with no reversing inverse)."""
+    app, inverse = c.applications.alias('settlement_filter'), c.applications.alias('settlement_inverse')
+    applied = sa.func.coalesce(sa.select(sa.func.sum(app.c.amount_minor_units)).where(
+        app.c.paid_transaction_id == t.c.id, app.c.kind == 'apply',
+        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == app.c.id))
+    ).scalar_subquery(), 0)
+    due = r.c.total_minor_units - applied
+    posted = t.c.status == 'posted'
+    return {'open': sa.and_(posted, due != 0),
+            'unpaid': sa.and_(posted, due != 0, applied == 0),
+            'partial': sa.and_(posted, due != 0, applied != 0),
+            'paid': sa.and_(posted, due == 0)}[settlement]
+
+
 def page(s, ctx, inp, document_type, *, history=False):
     from bookflow.company.query import page_state, continuation
     class Contract:
@@ -264,6 +280,9 @@ def page(s, ctx, inp, document_type, *, history=False):
             query = query.where(t.c.status == inp.status)
         if inp.number:
             query = query.where(t.c.number.contains(inp.number, autoescape=True))
+        settlement = getattr(inp, 'settlement', None)
+        if settlement:
+            query = query.where(_settlement_condition(t, r, settlement))
         # Descending is the exact reverse of the stated order, so the row before a
         # given sale is the row after it here. The cursor carries the direction that
         # minted it: page_state rejects a continuation whose contract has changed.

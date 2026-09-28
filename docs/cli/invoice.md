@@ -1601,7 +1601,7 @@ Example JSON output:
 
 ## `invoice query`
 
-Page sales in accounting-date and stable-id order, oldest first or newest first, with exact customer, date, status and number filters; restart on company audit changes. status is posted or voided, not paid: for open/unpaid invoices of a customer with the amount due on each, use `payment invoices` (or `report open-invoices` for all customers).
+Page sales in accounting-date and stable-id order, oldest first or newest first, with exact customer, date, status and number filters; restart on company audit changes. For open/unpaid invoices set settlement to "open" (or unpaid, partial, paid); each row carries settlement_current with the amount due. status is only posted or voided.
 
 | Contract | Value |
 |---|---|
@@ -1615,14 +1615,14 @@ Page sales in accounting-date and stable-id order, oldest first or newest first,
 
 ### CLI
 
-`bookflow invoice query --customer "Riverside Apartments" --status posted --direction asc --limit 25 --company "Demo Plumbing Co" --json`
+`bookflow invoice query --customer "Riverside Apartments" --settlement open --direction asc --limit 25 --company "Demo Plumbing Co" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "invoice query", "input": {"customer": "Riverside Apartments", "status": "posted", "direction": "asc", "limit": 25}, "company": "Company ID or name"}
+{"command": "invoice query", "input": {"customer": "Riverside Apartments", "settlement": "open", "direction": "asc", "limit": 25}, "company": "Company ID or name"}
 ```
 
 ### Input
@@ -1638,6 +1638,7 @@ The same example as complete `bookflow_run` arguments:
 | `status` | `--status` | literal["posted", "voided"] \| null | no | yes | null | — |
 | `direction` | `--direction` | literal["asc", "desc"] | no | no | "asc" | Order of the accounting-date then stable-id page: asc pages the oldest sale first, desc the most recent first. A cursor belongs to the direction that minted it; changing direction rejects it, so restart without a cursor. |
 | `include_deleted` | `--include-deleted` | boolean | no | no | false | Include retained deleted sale facts |
+| `settlement` | `--settlement` | literal["open", "unpaid", "partial", "paid"] \| null | no | yes | null | Filter posted invoices by what is still due, the same derivation as settlement_current: open is anything still owed (unpaid or partial), unpaid has nothing applied, partial has some applied and some due, paid has nothing due. |
 
 ### Command and context options
 

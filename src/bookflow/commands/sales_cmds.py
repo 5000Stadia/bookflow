@@ -5,7 +5,7 @@ from bookflow.company.sales_models import (
     InvoicePostInput, InvoiceUpdateInput, InvoiceVoidInput, InvoiceShowInput,
     InvoiceHistoryInput, SalesReceiptPostInput, SalesReceiptUpdateInput,
     SalesReceiptVoidInput, SalesReceiptShowInput, SalesReceiptHistoryInput,
-    SalesQueryWithDeletedInput as SalesQueryInput,
+    SalesQueryWithDeletedInput as SalesQueryInput, InvoiceQueryInput,
 )
 from bookflow.company.sales_outputs import (
     SalesOutput, SalesWriteOutput, SalesPageOutput, SalesHistoryOutput,
@@ -67,7 +67,7 @@ def _read(document_type, verb, model, output_model):
             'show': 'Show a sale and its current or selected immutable revision, captured commercial and custom facts, ordered lines, tax components and separate posting batch totals.',
             'query': 'Page sales in accounting-date and stable-id order, oldest first or newest first, with exact customer, date, status and number filters; restart on company audit changes.',
             'history': 'Page immutable sale revisions in revision-number order with current header/version and correction and void batches; restart on company audit changes.',
-        }[verb] + (' status is posted or voided, not paid: for open/unpaid invoices of a customer with the amount due on each, use `payment invoices` (or `report open-invoices` for all customers).'
+        }[verb] + (' For open/unpaid invoices set settlement to "open" (or unpaid, partial, paid); each row carries settlement_current with the amount due. status is only posted or voided.'
                    if (document_type, verb) == ('invoice', 'query') else ''),
         input_model=model, output_model=output_model,
         required_role='member', capability='ledger.read',
@@ -85,7 +85,7 @@ invoice_post = _write('invoice', 'post', InvoicePostInput)
 invoice_update = _write('invoice', 'update', InvoiceUpdateInput)
 invoice_void = _write('invoice', 'void', InvoiceVoidInput)
 invoice_show = _read('invoice', 'show', InvoiceShowInput, SalesOutput)
-invoice_query = _read('invoice', 'query', SalesQueryInput, SalesPageOutput)
+invoice_query = _read('invoice', 'query', InvoiceQueryInput, SalesPageOutput)
 invoice_history = _read('invoice', 'history', InvoiceHistoryInput, SalesHistoryOutput)
 
 sales_receipt_post = _write('sales_receipt', 'post', SalesReceiptPostInput)

@@ -1035,7 +1035,7 @@ EXAMPLES['deposit delete'] = Example(
 EXAMPLES.update({
     "customer query": Example('bookflow customer query --query Riverside --limit 25 --company "Demo Plumbing Co" --json',
                               {"query": "Riverside", "limit": 25}),
-    "invoice query": Example('bookflow invoice query --customer "Riverside Apartments" --status posted --direction asc'
+    "invoice query": Example('bookflow invoice query --customer "Riverside Apartments" --settlement open --direction asc'
                              ' --limit 25 --company "Demo Plumbing Co" --json',
-                             {"customer": "Riverside Apartments", "status": "posted", "direction": "asc", "limit": 25}),
+                             {"customer": "Riverside Apartments", "settlement": "open", "direction": "asc", "limit": 25}),
 })

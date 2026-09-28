@@ -118,7 +118,7 @@ def test_list_commands_first_lines_make_the_plumbers_questions_findable():
     assert "oldest invoices first" in rows["payment suggest"] and "applications.items" in rows["payment suggest"]
     assert "exact_then_oldest" in rows["payment apply"]
     assert rows["sales-tax liability"].startswith("How much sales tax is owed, by agency, as of a date")
-    assert "open/unpaid invoices of a customer" in rows["invoice query"] and "payment invoices" in rows["invoice query"]
+    assert 'For open/unpaid invoices set settlement to "open"' in rows["invoice query"]
     assert rows["payment invoices"].startswith("Open (unpaid) invoices a customer can pay")
     assert "date_from and date_to (both required" in rows["register query"]
     assert "`reconcile opening start` first" in rows["reconcile start"]
@@ -216,3 +216,33 @@ def test_hosted_refusals_carry_the_same_explanations(hosted, monkeypatch):
     assert body["message"].startswith("`payment invoices` was refused")
     invalid = hosted.call("customer.query", {"filters": {"name_contains": "Riverside"}}, company=hosted.company_id)
     assert invalid.status_code == 422 and invalid.json()["details"]["fields"][0]["accepted_fields"][0] == "query"
+
+
+def test_invoice_query_filters_by_what_is_still_owed(client):
+    from collections import Counter
+
+    def statuses(**filters):
+        page = client.run("invoice query", {"limit": 200, **filters}, company=CO)
+        return Counter(row["settlement_current"]["status"] for row in page["items"]), page["items"]
+    everything, _ = statuses()
+    for settlement, expected in (("open", {"unpaid", "partial"}), ("unpaid", {"unpaid"}),
+                                 ("partial", {"partial"}), ("paid", {"paid"})):
+        found, _ = statuses(settlement=settlement)
+        assert set(found) <= expected and sum(found.values()) == sum(everything[k] for k in expected), settlement
+    # Paying an open invoice moves it to paid; taking the application back reopens it.
+    _, commercial = statuses(settlement="open", customer="Commercial Example Customer")
+    [invoice] = commercial
+    due = invoice["settlement_current"]["due_minor_units"]
+    paid = client.run("payment receive", {"customer": "Commercial Example Customer", "date": "2026-09-27",
+        "amount": {"minor_units": due, "currency": "USD"}, "operation_key": "r86-settle", "payment_method": "Check",
+        "applications": {"mode": "inline", "items": [{"invoice": invoice["id"],
+            "expected_version": invoice["settlement_current"]["version"],
+            "amount": {"minor_units": due, "currency": "USD"}}]}}, company=CO, reason="Record check")
+    assert [row["id"] for row in statuses(settlement="paid")[1]].count(invoice["id"]) == 1
+    assert invoice["id"] not in [row["id"] for row in statuses(settlement="open")[1]]
+    application = paid["effect"]["applications"][0]
+    current = client.run("invoice settlement", {"invoice": invoice["id"]}, company=CO)
+    client.run("payment unapply", {"payment": paid["id"], "expected_version": paid["version"],
+        "operation_key": "r86-unsettle", "applications": [{"application_id": application["application_id"],
+            "invoice_expected_version": current["version"]}]}, company=CO, reason="Wrong invoice")
+    assert invoice["id"] in [row["id"] for row in statuses(settlement="unpaid")[1]]
