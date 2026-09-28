@@ -22,10 +22,13 @@ _ADJUST = (
     'quantity you counted, what you paid for it, and an opening-balance or shrinkage account '
     'in `adjustment_account` to carry the other side. The inventory-asset account is the '
     "item's own and is never chosen here. "
-    'Every affected date is checked before anything is written: an adjustment that would take '
-    'the item below zero on any date is refused, and so is one that would change an entry or a '
-    'valuation inside a closed period -- the whole adjustment, naming the period, never a delta '
-    'moved to today. A backdated adjustment recosts every later issue of that item, each by its '
+    'Every affected date is checked before anything is written: one that would change an entry '
+    'or a valuation inside a closed period is refused -- the whole adjustment, naming the '
+    'period, never a delta moved to today. A decrease may take the item below zero; it is '
+    'saved with a line in warnings, the units below zero are costed provisionally at the '
+    'average cost, else the purchase cost on the item record, and a later quantity increase '
+    'fills that shortfall first and posts the difference as a true-up dated at the increase and '
+    'linked to the issue it corrects. A backdated adjustment recosts every later issue of that item, each by its '
     "own dated correction at that issue's date, so no earlier report moves for a reason it "
     'cannot show. Inventory asset on the balance sheet always equals the total on '
     '`report inventory-valuation` for the same date.'
@@ -36,8 +39,9 @@ _VOID = (
     "at the adjustment's own date, and its stock movements are reversed with it, so the "
     'quantity and the value go back together. Every later issue of that item is recosted by '
     'its own dated correction, and the corrections the voided adjustment had caused are backed '
-    'out the same way. A void that would take the item below zero on any date, or that would '
-    'touch a closed period, is refused whole.'
+    'out the same way. A void that would touch a closed period is refused whole; one that '
+    'leaves an earlier issue below zero is saved, re-costs that issue provisionally at its own '
+    'date and says so in warnings.'
 )
 
 _SHOW = (

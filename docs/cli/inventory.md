@@ -4,7 +4,7 @@
 
 ## `inventory adjust`
 
-Change what an inventory item holds and what it is worth, and post the matching entry. A positive `quantity_change` brings stock in and must say what it is worth in `value_change`; a negative one takes stock out and is worth what the weighted average says, so it supplies no value. `value_change` on its own writes the asset up, or down with `negative_value`, without moving quantity. This is how opening stock is set: the quantity you counted, what you paid for it, and an opening-balance or shrinkage account in `adjustment_account` to carry the other side. The inventory-asset account is the item's own and is never chosen here. Every affected date is checked before anything is written: an adjustment that would take the item below zero on any date is refused, and so is one that would change an entry or a valuation inside a closed period -- the whole adjustment, naming the period, never a delta moved to today. A backdated adjustment recosts every later issue of that item, each by its own dated correction at that issue's date, so no earlier report moves for a reason it cannot show. Inventory asset on the balance sheet always equals the total on `report inventory-valuation` for the same date.
+Change what an inventory item holds and what it is worth, and post the matching entry. A positive `quantity_change` brings stock in and must say what it is worth in `value_change`; a negative one takes stock out and is worth what the weighted average says, so it supplies no value. `value_change` on its own writes the asset up, or down with `negative_value`, without moving quantity. This is how opening stock is set: the quantity you counted, what you paid for it, and an opening-balance or shrinkage account in `adjustment_account` to carry the other side. The inventory-asset account is the item's own and is never chosen here. Every affected date is checked before anything is written: one that would change an entry or a valuation inside a closed period is refused -- the whole adjustment, naming the period, never a delta moved to today. A decrease may take the item below zero; it is saved with a line in warnings, the units below zero are costed provisionally at the average cost, else the purchase cost on the item record, and a later quantity increase fills that shortfall first and posts the difference as a true-up dated at the increase and linked to the issue it corrects. A backdated adjustment recosts every later issue of that item, each by its own dated correction at that issue's date, so no earlier report moves for a reason it cannot show. Inventory asset on the balance sheet always equals the total on `report inventory-valuation` for the same date.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -257,6 +257,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.corrections[].item_name` | string | yes | no | — | — |
 | `adjustment.corrections[].effective_date` | string | yes | no | — | — |
 | `adjustment.corrections[].corrects_movement_id` | string | yes | no | — | — |
+| `adjustment.corrections[].filled_by_movement_id` | string \| null | no | yes | null | On a provisional-cost true-up, the receipt movement whose arrival settled the cost; null on a backdating correction. |
 | `adjustment.corrections[].delta` | object | yes | no | — | — |
 | `adjustment.corrections[].delta.amount` | string | yes | no | — | — |
 | `adjustment.corrections[].delta.currency` | string | yes | no | — | — |
@@ -647,6 +648,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.corrections[].item_name` | string | yes | no | — | — |
 | `adjustment.corrections[].effective_date` | string | yes | no | — | — |
 | `adjustment.corrections[].corrects_movement_id` | string | yes | no | — | — |
+| `adjustment.corrections[].filled_by_movement_id` | string \| null | no | yes | null | On a provisional-cost true-up, the receipt movement whose arrival settled the cost; null on a backdating correction. |
 | `adjustment.corrections[].delta` | object | yes | no | — | — |
 | `adjustment.corrections[].delta.amount` | string | yes | no | — | — |
 | `adjustment.corrections[].delta.currency` | string | yes | no | — | — |
@@ -796,7 +798,7 @@ Example JSON output:
 
 ## `inventory void`
 
-Void an inventory adjustment with a required reason. Its accounting is reversed exactly, at the adjustment's own date, and its stock movements are reversed with it, so the quantity and the value go back together. Every later issue of that item is recosted by its own dated correction, and the corrections the voided adjustment had caused are backed out the same way. A void that would take the item below zero on any date, or that would touch a closed period, is refused whole.
+Void an inventory adjustment with a required reason. Its accounting is reversed exactly, at the adjustment's own date, and its stock movements are reversed with it, so the quantity and the value go back together. Every later issue of that item is recosted by its own dated correction, and the corrections the voided adjustment had caused are backed out the same way. A void that would touch a closed period is refused whole; one that leaves an earlier issue below zero is saved, re-costs that issue provisionally at its own date and says so in warnings.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1040,6 +1042,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.corrections[].item_name` | string | yes | no | — | — |
 | `adjustment.corrections[].effective_date` | string | yes | no | — | — |
 | `adjustment.corrections[].corrects_movement_id` | string | yes | no | — | — |
+| `adjustment.corrections[].filled_by_movement_id` | string \| null | no | yes | null | On a provisional-cost true-up, the receipt movement whose arrival settled the cost; null on a backdating correction. |
 | `adjustment.corrections[].delta` | object | yes | no | — | — |
 | `adjustment.corrections[].delta.amount` | string | yes | no | — | — |
 | `adjustment.corrections[].delta.currency` | string | yes | no | — | — |

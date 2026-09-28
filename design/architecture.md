@@ -4005,9 +4005,8 @@ strictly what it did before any of this, never worse.
 
 A correction retires the receipts the previous revision took and takes the new grid's at what it
 then says; a void reverses them exactly, one `reversal` movement per receipt bound to the leg
-that reverses the one the receipt hung off. Both are refused, naming the date, if the returned
-quantity is no longer on the shelf to take back out — the negative-stock check is on every
-chronological prefix, not on the balance as it stands today.
+that reverses the one the receipt hung off. Taking a returned quantity back out may leave the
+item below zero; that is the negative-stock rule below, not a refusal.
 
 **A credited line that *names* a stock item is still refused.** A standalone line carries an
 item, a quantity and a price, and a price is not a cost. Nothing in Bookflow derives what an
@@ -4841,3 +4840,54 @@ facts, retaining ordered checks and family-specific proofs. This does not cache 
 allow across frames or turn multiple company databases into one atomic snapshot.
 Copied async contexts cannot borrow or close another thread's handles. Exceptions
 and outer scope exit close the owned hub snapshot.
+
+
+## Negative stock: provisional cost and the receipt-dated true-up (R137)
+
+A sale, a sales receipt, an inventory adjustment, or a void or correction that takes stock back
+out may take an item below zero on its date. The write goes through and the result's
+`warnings` carries one line per issue it leaves short — its own, or an earlier one it newly
+leaves short: `Takes <item> to <qty> on <date>; its cost is provisional, <basis>, ...`.
+`inventory_effects.plan` collects them on `Change.warnings`; `inventory_effects.settle` puts them
+on every saved result, and `core/dispatch._with_stock_warnings` puts them on every dry-run
+preview from `plan.data['stock']`, so all four surfaces and the browser say the same thing
+before and after saving. `inventory.py` does the same for adjustments and their voids.
+
+**Arithmetic** lives in `inventory_costing.replay` alone. An issue larger than the stock on hand
+consumes all of it (zero residual) and costs the shortfall at a provisional rate: the running
+average `V/Q` when stock is on hand, otherwise the last average the item had while it held stock
+(or the unit cost of the receipt that last filled a shortfall to zero), otherwise the item's
+purchase cost captured on the issue row in `fallback_unit_cost_minor_units` (a cost of zero
+counts as none), otherwise zero. The item's value while below zero is minus the provisional
+cost still unsettled, which replay asserts. A receipt arriving while `Q < 0` fills open
+shortfalls oldest first; for each filled span it owes `endpoint_share(P, S, filled, filled+u) -
+endpoint_share(w, r, a, a+u)` — provisional released less actual — keyed `(issue, receipt)`.
+Both shares telescope, so an issue's settled cost is exactly the receipts that filled it and the
+remainder of the receipt carries the rest of its value: the average goes on from real receipts.
+
+**Posting.** A true-up is a `recost` movement with `corrects_movement_id` = the issue and
+`filled_by_movement_id` = the receipt, dated at the receipt, in its own `recost` journal
+document ("Provisional cost true-up"), using the issue's captured asset, COGS and class. The
+co0059 trigger `inventory_movements_true_up_link` holds it to the receipt's date and item and
+the issue's dimensions. Replay compares true-up targets with posted true-ups per key, so a retry
+writes nothing, a voided or corrected receipt backs its true-ups out at its own date, and a
+purchase backdated in front of a short sale makes the sale un-short: its own-date cost is
+corrected at the sale's date by the existing per-issue rule and the true-ups it no longer owes
+are backed out at their receipts' dates. The closing date applies to every date written, true-up
+dates included; a receipt in a closed period is refused as before.
+
+**Why the fallback is captured on the row.** Replay re-derives every target each time an item's
+history changes. Reading the purchase cost from the item master would let an item edit silently
+move the cost of an old sale (and, inside a closed period, refuse unrelated work). Issues
+written before co0059 have no captured fallback and are treated as having none; none of them was
+ever below zero when written.
+
+**Returns.** A credit memo returning an issue whose shortfall is not yet wholly filled is refused
+(`provisional_return`): the returned units have no settled cost to take a share of. After the
+fill, a return takes its endpoint share of the settled cost (own value plus that issue's
+true-ups), so the returns of one issue still telescope to what it cost.
+
+**Validators.** `sales_validation` and `credit_validation` require this document's own movements
+to owe no own-date correction; a true-up owed at a later receipt (a short sale entered ahead of
+a receipt already on file) is exempt, because the same change writes it.
+
