@@ -44,6 +44,7 @@ OWNERS = {
     "hub.org_rename": Impact.CONSERVATIVE,
     "hub.attach_projection": Impact.PROJECTION,
     "hub.company_new": Impact.CONSERVATIVE,
+    "hub.company_restore": Impact.CONSERVATIVE,
     "hub.demo_reset": Impact.CONSERVATIVE,
     "host.migrate_everything": Impact.CONSERVATIVE,
     "host.sweep": Impact.EXPIRED,

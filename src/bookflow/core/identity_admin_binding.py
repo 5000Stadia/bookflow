@@ -318,8 +318,10 @@ class BoundReader:
         identity = self.authenticate()
         if self._observation is None:
             from .permission_package import owns_observation
+            # Outside a package this is still a current read: reuse is admitted only by
+            # the authority token read on this reader's own transaction (R74).
             self._observation = (runtime._operation_observation(self._tx) if owns_observation(self._tx)
-                                 else runtime.observe_current(self._tx))
+                                 else runtime._stamped_observation(self._tx))
         self.authenticate()
         return AuthenticatedObservation(identity, self._observation, self)
 

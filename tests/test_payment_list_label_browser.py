@@ -64,20 +64,24 @@ def test_captured_list_browser(label_site, labels, client, tmp_path, width, heig
         for q,count in [('LABEL-000',1),('LABEL-',25)]:
             calls.clear()
             browser.navigate(base+'/c/'+company+'/payment?'+urlencode({'q':q,'payment_method':method}))
-            browser.wait_for(f'document.querySelectorAll(".payment-invoices tbody tr").length === {count}')
+            browser.wait_for(f'document.querySelectorAll("#payment-list tbody tr").length === {count}')
             assert calls == ['company show','payment query','payment-method list']
-            observed=browser.evaluate('Array.from(document.querySelectorAll(".payment-invoices tbody tr")).map(r=>[r.querySelector(\'[data-label="Customer"]\').textContent,r.querySelector(\'[data-label="Method"]\').textContent])')
+            observed=browser.evaluate('Array.from(document.querySelectorAll("#payment-list tbody tr")).map(r=>[r.querySelector(\'[data-label="Customer"]\').textContent,r.querySelector(\'[data-label="Method"]\').textContent])')
             assert observed == [expected_labels]*count
-            assert browser.evaluate('document.querySelectorAll(".payment-invoices payer, .payment-invoices cash").length') == 0
+            assert browser.evaluate('document.querySelectorAll("#payment-list payer, #payment-list cash").length') == 0
             assert browser.evaluate('document.documentElement.scrollWidth') <= width+1
+            # A phone reads one card per payment, each naming the captured customer and method.
+            if width == 390:
+                cards = browser.evaluate('[...document.querySelectorAll(".list-card")].map(c => c.innerText)')
+                assert len(cards) == count and all(all(label in card for label in expected_labels) for card in cards)
             receipts.append({'q':q,'count':count,'commands':list(calls),'labels':observed})
         (tmp_path/f'payment-labels-{width}.png').write_bytes(base64.b64decode(browser.call('Page.captureScreenshot',{'format':'png'})['data']))
-        browser.evaluate('document.querySelector(".payment-invoices tbody tr").scrollIntoView()')
+        browser.evaluate('document.querySelector("#payment-list tbody tr").scrollIntoView()')
         (tmp_path/f'payment-labels-row-{width}.png').write_bytes(base64.b64decode(browser.call('Page.captureScreenshot',{'format':'png'})['data']))
-        next_url=browser.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent==="Next page").href')
+        next_url=browser.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.rel==="next").href')
         browser.navigate(next_url)
-        assert browser.evaluate('document.querySelectorAll(".payment-invoices tbody tr").length') == 1
-        record=browser.evaluate('document.querySelector(".payment-invoices tbody a").href')
+        assert browser.evaluate('document.querySelectorAll("#payment-list tbody tr").length') == 1
+        record=browser.evaluate('document.querySelector("#payment-list tbody a").href')
         browser.navigate(record)
         browser.wait_for('!!document.querySelector("#payment-amount")')
         from bookflow.company import payment_preparation

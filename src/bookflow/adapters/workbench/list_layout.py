@@ -1,28 +1,29 @@
 """How a list page lays out its rows, and what its controls read as changed.
 
-Presentation only, and the workbench's own preference. Core list metadata keeps its defaults
-(it also drives the CLI tables); here a list opens on the few columns a bookkeeper reads first,
-and Customize list still adds any column. Nothing is computed: money and dates are shown as
-the command returned them, through the display filters.
+Presentation only. A list opens on the few columns a bookkeeper reads first -- the same
+declaration the CLI's list table uses -- and Customize list still adds any column. Nothing is
+computed: money and dates are shown as the command returned them, through the display filters.
 """
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
+from bookflow.adapters.list_columns import DEFAULT_COLUMNS
 from bookflow.adapters.workbench.list_paging import CARRIED
 from bookflow.core.money import Money
 
-# columns: what a browsing list opens with (a workbench default, not core metadata).
+# columns: what a browsing list opens with, from the declaration the CLI table shares
+# (adapters/list_columns.py).
 # amount: the figure at the right of a phone card.
 # secondary: the muted line under the card's name, in this order. A column a person adds
 # through Customize list joins it, so nothing chosen is hidden on a phone.
 LAYOUTS: dict[str, dict[str, Any]] = {
-    "customer": {"columns": ("full_name", "phone", "open_balance"), "amount": "open_balance", "secondary": ("phone",)},
-    "vendor": {"columns": ("name", "phone", "open_balance"), "amount": "open_balance", "secondary": ("phone",)},
-    "employee": {"columns": ("name", "phone", "email"), "secondary": ("phone", "email")},
-    "other-name": {"columns": ("name", "phone", "email"), "secondary": ("phone", "email")},
-    "item": {"columns": ("full_name", "type", "price", "quantity_on_hand"), "amount": "price", "secondary": ("type",)},
-    "account": {"columns": ("number", "full_name", "type", "balance"), "amount": "balance", "secondary": ("type",)},
+    "customer": {"columns": DEFAULT_COLUMNS["customer"], "amount": "open_balance", "secondary": ("phone",)},
+    "vendor": {"columns": DEFAULT_COLUMNS["vendor"], "amount": "open_balance", "secondary": ("phone",)},
+    "employee": {"columns": DEFAULT_COLUMNS["employee"], "secondary": ("phone", "email")},
+    "other-name": {"columns": DEFAULT_COLUMNS["other-name"], "secondary": ("phone", "email")},
+    "item": {"columns": DEFAULT_COLUMNS["item"], "amount": "price", "secondary": ("type",)},
+    "account": {"columns": DEFAULT_COLUMNS["account"], "amount": "balance", "secondary": ("type",)},
     "invoice": {"amount": "total", "secondary": ("customer_name", "date", "status")},
     "sales-receipt": {"amount": "total", "secondary": ("customer_name", "date", "status")},
     "bill": {"amount": "total", "secondary": ("vendor_name", "due_date", "status")},

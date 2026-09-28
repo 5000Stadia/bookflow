@@ -22,6 +22,8 @@ EXAMPLES: dict[str, Example] = {
     "attachment unlink": Example(f'bookflow attachment unlink {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Remove association" --json', {"link": ID, "expected_version": 1}),
     "attachment list": Example(f'bookflow attachment list customer {ID} --company "Demo Plumbing Co" --limit 25 --json', {"record_type": "customer", "record_id": ID, "limit": 25}),
     "attachment get": Example(f'bookflow attachment get {ID} --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json', {"attachment": ID}),
+    "company backup": Example('bookflow company backup --company "Demo Plumbing Co" --json', {}),
+    "company restore": Example('bookflow company restore "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json', {"archive": "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": True, "name": "Demo Plumbing (restored)"}),
     "company compact": Example('bookflow company compact --company "Demo Plumbing Co" --limit 200 --dry-run --reason "Preview unlinked file collection" --json', {"limit": 200}),
     "audit list": Example('bookflow audit list --company "Demo Plumbing Co" --limit 5 --json', {"limit": 5}),
     "audit show": Example(f'bookflow audit show {ID} --company "Demo Plumbing Co" --json', {"event": ID}),
@@ -83,6 +85,10 @@ EXAMPLES: dict[str, Example] = {
                               {"agent": "books-agent", "principal": "jordan"}),
     "agent authorize": Example("bookflow agent authorize books-agent --confirm-permitted-use --acknowledge-fresh-context --json",
                                {"agent": "books-agent", "confirm_permitted_use": True, "acknowledge_fresh_context": True}),
+    "agent deactivate": Example('bookflow agent deactivate books-agent --reason "retired" --json', {"agent": "books-agent"}),
+    "agent activate": Example("bookflow agent activate books-agent --json", {"agent": "books-agent"}),
+    "user deactivate": Example('bookflow user deactivate jordan --reason "left the company" --json', {"user": "jordan"}),
+    "user activate": Example("bookflow user activate jordan --json", {"user": "jordan"}),
 }
 
 
@@ -190,6 +196,8 @@ EXAMPLES.update({
     "report cash-flows": Example('bookflow report cash-flows --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report income-tax-summary": Example('bookflow report income-tax-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "report export": Example('bookflow report export profit-and-loss --filters \'{"date_from": "2026-01-01", "date_to": "2026-12-31"}\' --company "Demo Plumbing Co" --json',
+                             {"report": "profit-and-loss", "filters": {"date_from": "2026-01-01", "date_to": "2026-12-31"}}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
     "report transaction-detail": Example('bookflow report transaction-detail --date-from 2026-01-01 --date-to 2026-12-31 --accounts \'["Checking"]\' --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "accounts": ["Checking"]}),
     "report reconciliation-discrepancy": Example('bookflow report reconciliation-discrepancy --account Checking --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"account": "Checking", "as_of": "2026-12-31"}),
@@ -292,6 +300,33 @@ for _noun, _selector, _account in (('check', 'check', 'Checking'),
     EXAMPLES[_noun + ' history'] = Example(
         f'bookflow {_noun} history {ID} --include-deleted --limit 25 --company "Demo Plumbing Co" --json',
         {_selector: ID, 'limit': 25, 'include_deleted': True})
+
+# A card credit is a card charge in the other direction: a refund put back on the card.
+EXAMPLES.update({
+    'card-credit post': Example(
+        'bookflow card-credit post --account "Company Credit Card" --pay-to-name-type vendor --pay-to-name-id "Northside Supply" --date 2026-04-08 --amount 42.50 --memo "Returned the wrong valve" --expenses \'[{"account":"Office Supplies","amount":"42.50","memo":"Valve returned"}]\' --company "Demo Plumbing Co" --reason "Record the refund on the card" --json',
+        {"account": "Company Credit Card", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"},
+         "date": "2026-04-08", "amount": "42.50", "memo": "Returned the wrong valve",
+         "expenses": [{"account": "Office Supplies", "amount": "42.50", "memo": "Valve returned"}]}),
+    'card-credit show': Example(
+        f'bookflow card-credit show {ID} --company "Demo Plumbing Co" --json', {'card_credit': ID}),
+    'card-credit update': Example(
+        f'bookflow card-credit update {ID} --expected-version 1 --amount 45.00 '
+        f'--expenses \'[{{"account":"Office Supplies","amount":"45.00","memo":"Valve returned"}}]\' '
+        f'--company "Demo Plumbing Co" --reason "The refund was 45.00" --json',
+        {'card_credit': ID, 'expected_version': 1, 'amount': '45.00',
+         'expenses': [{'account': 'Office Supplies', 'amount': '45.00', 'memo': 'Valve returned'}]}),
+    'card-credit void': Example(
+        f'bookflow card-credit void {ID} --expected-version 2 --company "Demo Plumbing Co" '
+        f'--reason "Refund went to the other card" --json', {'card_credit': ID, 'expected_version': 2}),
+    'card-credit query': Example(
+        'bookflow card-credit query --account "Company Credit Card" --date-from 2026-01-01 --date-to 2026-12-31 '
+        '--limit 25 --company "Demo Plumbing Co" --json',
+        {'account': 'Company Credit Card', 'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25}),
+    'card-credit history': Example(
+        f'bookflow card-credit history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {'card_credit': ID, 'limit': 25}),
+})
 
 EXAMPLES.update({
     'transfer show': Example(f'bookflow transfer show {ID} --company "Demo Plumbing Co" --json',

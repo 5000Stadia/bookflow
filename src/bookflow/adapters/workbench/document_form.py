@@ -24,7 +24,7 @@ NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill', 'credit-memo', 'custome
 # They open in this same window and use this same grid; what differs is the account that funds
 # them, whether a check number applies, and the words on the form. They are deliberately not in
 # NOUNS -- those three have list pages and document arrows, and these do not yet.
-MONEY_OUT = ('check', 'card-charge')
+MONEY_OUT = ('check', 'card-charge', 'card-credit')
 
 # The transfer: money moved between two of the company's own accounts. It opens in this same
 # window and shares the header band, and it is the one document here with no line grid at
@@ -54,7 +54,8 @@ CREDITS = (CREDIT_MEMO, REFUND, VENDOR_CREDIT)
 NO_LIST = (*MONEY_OUT, TRANSFER)
 
 TITLES = {'invoice': 'Invoice', 'sales-receipt': 'Sales receipt', 'estimate': 'Estimate',
-          'check': 'Check', 'card-charge': 'Credit card charge', 'transfer': 'Transfer',
+          'check': 'Check', 'card-charge': 'Credit card charge', 'card-credit': 'Credit card credit',
+          'transfer': 'Transfer',
           'bill': 'Bill', 'credit-memo': 'Credit memo', 'customer-refund': 'Customer refund',
           'vendor-credit': 'Vendor credit'}
 
@@ -336,6 +337,9 @@ HELP = {
              'shared document series. The item and expense lines together must equal the entered amount.',
     'card-charge': 'A credit card charge records a purchase put on a company card. What is owed on the card '
                    'goes up until the card is paid. The item and expense lines together must equal the entered amount.',
+    'card-credit': 'A credit card credit records a refund onto a company card: a returned part, or a vendor '
+                   'crediting the card. What is owed on the card goes down, and each expense line is credited, '
+                   'so the expense it names goes down. The expense lines together must equal the entered amount.',
     'transfer': 'A transfer moves money between two accounts the company already owns. It is neither income '
                 'nor expense, so it changes no profit. Both accounts have to be balance-sheet accounts: a '
                 'bank, a credit card, another asset, a loan, or equity.',
@@ -377,6 +381,8 @@ NOUN_LABELS = {
               'number': 'Check No.'},
     'card-charge': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
                     'pay_to.name_id': 'Purchased From', 'amount': 'Amount of this charge'},
+    'card-credit': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
+                    'pay_to.name_id': 'Credit From', 'amount': 'Amount of this credit'},
     'transfer': {'from_account': 'Transfer Funds From', 'to_account': 'Transfer Funds To',
                  'amount': 'Transfer Amount'},
     'bill': {'vendor': 'Vendor', 'supplier_reference': 'Ref. No.', 'terms': 'Terms',
@@ -402,6 +408,10 @@ NOUN_DESCRIPTIONS = {
                     'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
                     'pay_to.name_id': 'Search by name, then choose the match.',
                     'amount': 'What was charged. The item and expense lines below together must equal it.'},
+    'card-credit': {'account': 'The credit card account the refund was put back on.',
+                    'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
+                    'pay_to.name_id': 'Who gave the credit, usually the vendor. Search by name, then choose the match.',
+                    'amount': 'What came back to the card. The expense lines below together must equal it.'},
     'transfer': {'from_account': 'The account the money comes out of. It is credited, so a bank '
                                  'balance falls and what is owed on a card rises.',
                  'to_account': 'The account the money goes into. It is debited, so a bank balance '
@@ -447,7 +457,8 @@ NOUN_DESCRIPTIONS = {
 }
 
 # What the money-out footer calls the figure on the face of the document.
-FACE_LABELS = {'check': 'Amount of this check', 'card-charge': 'Amount of this charge'}
+FACE_LABELS = {'check': 'Amount of this check', 'card-charge': 'Amount of this charge',
+               'card-credit': 'Amount of this credit'}
 
 # How a transfer's own footer names each end's figure. On a card or a loan the number that
 # moves is what you owe on it, and saying the account "goes down" when the debt does would
@@ -683,7 +694,8 @@ def computed(record):
     # The amount a line shows: a subtotal's sum, a discount's negative, a discounted line's
     # own amount. The server says it as ``amount`` wherever it differs from ``net``.
     lines = [{'line_id': line.get('line_id'), 'amount': _amount(line.get('amount') or line.get('net')),
-              'tax': _amount(line.get('tax'))} for line in revision.get('lines', [])]
+              'tax': _amount(line.get('tax')), 'description': line.get('description')}
+             for line in revision.get('lines', [])]
     subtotal = _amount(revision.get('subtotal')) or _amount(revision.get('net'))
     profile = revision.get('profile') if isinstance(revision.get('profile'), dict) else {}
     out = {'currency': revision.get('currency'), 'subtotal': subtotal,
@@ -892,8 +904,8 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
                  'due, shows here as you enter them.')
     elif money_out:
         totals, reconciliation, reconciled = money_out_totals(noun, result, error)
-        empty = ('What the expense and item lines add up to, and whether it agrees with the '
-                 'amount above, shows here as you enter them.')
+        empty = ('What the expense ' + ('lines add' if noun == 'card-credit' else 'and item lines add')
+                 + ' up to, and whether it agrees with the amount above, shows here as you enter them.')
     else:
         totals = sale_totals(figures, noun == 'invoice')
         reconciliation, reconciled = None, None

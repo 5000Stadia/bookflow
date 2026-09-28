@@ -159,6 +159,11 @@ def test_customer_discount_inside_the_window_settles_the_invoice(books):
     # The settlement history names the discount on the edge that carries it.
     history = settlement(books, sale)['applications']
     assert [(row['amount_minor_units'], row['discount_minor_units']) for row in history] == [(100000, 2000)]
+    # The payment list agrees with the receipt: nothing free, not minus the discount.
+    listed = books['run']('payment query', {})['items']
+    assert [(row['received_minor_units'], row['applied_minor_units'], row['unapplied_minor_units'])
+            for row in listed] == [(98000, 100000, 0)]
+    assert books['run']('payment query', {'has_available_credit': True})['items'] == []
 
 
 def test_the_suggestion_includes_sales_tax_and_a_dry_run_shows_it(books):
@@ -261,6 +266,8 @@ def test_unapply_leaves_the_discount_as_credit_and_void_reverses_it(books):
     shown = run('payment show', dict(payment=paid['id']))
     # The anchor's rule: the discount on an invoice no longer paid stays with the payment as credit.
     assert shown['current']['available_minor_units'] == 100000 and shown['current']['discount_minor_units'] == 2000
+    listed = run('payment query', {'has_available_credit': True})['items']
+    assert [row['unapplied_minor_units'] for row in listed] == [100000]
     assert settlement(books, sale)['due_minor_units'] == 100000
     # Invoice 1,000.00 open, credit 1,000.00 unapplied: the customer owes nothing net.
     assert reports(books)[2] == 0

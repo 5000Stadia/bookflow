@@ -10,6 +10,7 @@ from bookflow.commands.common import CommonOut
 from bookflow.company.sales_facts import Reference, Account
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.payment_models import PreviewRequest
+from bookflow.company.payment_summaries import PaymentSummary
 from bookflow.company.payment_deletion_models import PaymentDeletionInfo
 from bookflow.company.payment_models import InvoiceAmount
 
@@ -281,6 +282,10 @@ class PaymentWriteOutput(WriteOutput):
     current: PaymentCurrentOutput
     effect_counts: PaymentEffectCounts
     prospective_pages: list[ProspectivePageOutput] = Field(default_factory=list)
+    # The short account beside the detail: documents paid, what each still owes, the payer's
+    # credit and any discount (receive and apply). Absent on the other verbs and on results
+    # recorded before it existed.
+    summary: PaymentSummary | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PaymentEffectItemsOutput(StrictModel):

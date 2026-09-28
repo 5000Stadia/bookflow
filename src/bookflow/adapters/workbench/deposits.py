@@ -17,6 +17,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from fastapi import Request
 from fastapi.responses import RedirectResponse, Response
 
+from bookflow.adapters.workbench import list_layout
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core import registry
@@ -135,8 +136,12 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
         raw["page"] = dict(limit=LIST_LIMIT, **({"cursor": cursor} if cursor else {}))
         restart = _url(path, **filters)
         shared = dict(company_id=company_id, list_url=path, filters=filters, restart_url=restart,
+                      list_state=list_layout.state(request.query_params, {"sort": "date", "direction": "desc"},
+                                                   quiet=("q", "sort", "direction")),
                       total_labels=TOTAL_LABELS, company_url=f"/c/{quote(company_id, safe="")}/")
         try:
+            # The company's own home currency and negative style, for the list's figures.
+            run(request, "company show", {}, company_id)
             page = _decorate(run(request, "deposit query", raw, company_id))
         except BookflowError as exc:
             # A filter the reader can see and fix is named; only an unexplained

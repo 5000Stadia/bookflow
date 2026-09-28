@@ -21,6 +21,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
+from bookflow.company.payment_summaries import PaymentSummary
 from bookflow.commands.common import CommonOut
 from bookflow.company.bill_payment_facts import BillPaymentProfile
 from bookflow.company.journal_models import MoneyInput, _Date, _Input, _Number, _Selector, _Version
@@ -338,6 +339,8 @@ class BillPayOutput(WriteOutput):
     currency: str
     bill_count: int
     discount_minor_units: int = 0
+    # Which bills this paid, what each still owes and any discount taken, in one paragraph.
+    summary: PaymentSummary | None = Field(default=None, exclude_if=lambda v: v is None)
     discount: MoneyOutput | None = None
 
 

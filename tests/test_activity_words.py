@@ -27,3 +27,15 @@ def test_who_names_the_agent_and_whom_it_acted_for():
     assert who({"actor_name": "Office assistant", "on_behalf_of_name": "k"}) == "Office assistant for k"
     assert who({"actor_name": "k", "on_behalf_of_name": None}) == "k"
     assert through("mcp") == "MCP" and through("gui") == "Browser"
+
+
+def test_change_history_says_who_for_whom_and_through_what():
+    from bookflow.adapters.workbench.activity import attribution
+    agent = {"actor_name": "Office assistant", "actor_kind": "agent", "on_behalf_of_name": "k"}
+    assert attribution({**agent, "interface": "mcp"}) == "Office assistant, for k, via agent"
+    assert attribution({**agent, "interface": "http"}) == "Office assistant, for k, via agent over HTTP"
+    assert attribution({"actor_name": "k", "interface": "http", "client_name": "bookflow-workbench"}) == "k, in the browser"
+    assert attribution({"actor_name": "k", "interface": "cli"}) == "k, via CLI"
+    # An activity item carries no kind or client: on someone's behalf is an agent, bare HTTP says nothing more.
+    assert attribution({"actor_name": "Office assistant", "on_behalf_of_name": "k", "interface": "mcp"}) == "Office assistant, for k, via agent"
+    assert attribution({"actor_name": "k", "interface": "http"}) == "k"

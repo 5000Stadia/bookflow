@@ -34,6 +34,13 @@ def _command_options(cmd: Any) -> list[tuple[str, str]]:
         else "Print one JSON object."
     )
     options = [] if getattr(cmd, "protocol_stdout", False) else [("`--json`", json_meaning)]
+    from bookflow.documents.report_csv import CSV_HELP, is_report
+    if is_report(cmd):
+        options.append(("`--csv`", CSV_HELP + "."))
+    from bookflow.adapters.list_columns import COLUMNS_HELP, curated_columns
+    curated = curated_columns(cmd)
+    if curated is not None:
+        options.append(("`--columns LIST`", COLUMNS_HELP.format(default="`" + ",".join(curated) + "`") + "."))
     if cmd.transfer is not None:
         if cmd.transfer.direction == "input":
             options.append(("`PATH`", "Required input file on the calling machine. Original filename defaults to its basename; media type defaults to the guessed MIME type, or application/octet-stream. Explicit metadata options override these defaults."))

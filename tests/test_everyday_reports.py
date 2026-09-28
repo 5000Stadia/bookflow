@@ -73,16 +73,25 @@ CUSTOMER_DETAIL = [
 #                    receipt price correction (journal 7) 2026-12-05  +4.00
 #                    item receipt (journal 8) 2026-12-11, 3 kits
 #                      at 8.00 plus 12.00 shipping                    +36.00
-#                    DEMO-KIT-BILL and bill 1 bill received goods: they
-#                    move the receipts' payable onto themselves and
-#                    change nothing the vendor is owed.               =  78.10
+#                    DEMO-KIT-BILL 2026-12-06 bills 4 of journal 6's kits
+#                      (40.00) and journal 7's correction (4.00): that
+#                      payable moves off the receipt onto the bill     -40.00 -4.00 +44.00
+#                    bill 1 2026-12-12 bills 2 of journal 8's kits with
+#                      8.00 of its shipping                           -24.00 +24.00
+#                    Moving a payable onto the bill that took it over changes
+#                    nothing the vendor is owed.                        =  78.10
 VENDOR_DETAIL = [
     ("activity", "DEMO-BUY-BILL-1", 30080, 30080),
     ("activity", "DEMO-BUY-PAY-1", -30080, 0),
     ("activity", "DEMO-BUY-CREDIT-1", -2190, -2190),
     ("activity", "6", 6000, 3810),
     ("activity", "7", 400, 4210),
+    ("activity", "6", -4000, 210),
+    ("activity", "DEMO-KIT-BILL", 4400, 4610),
+    ("activity", "7", -400, 4210),
     ("activity", "8", 3600, 7810),
+    ("activity", "8", -2400, 5410),
+    ("activity", "1", 2400, 7810),
     ("total", None, 7810, 7810),
 ]
 

@@ -365,6 +365,8 @@
       : `${out.group_count} bill payments written`));
     area.append(el('p', `${exact.money(out.paid.amount, out.paid.currency)} paid across ${out.bill_count} bill${out.bill_count === 1 ? '' : 's'}`
       + (out.discount ? `, with ${exact.money(out.discount.amount, out.discount.currency)} of early-payment discounts.` : '.')));
+    // The command's own summary: which bills are paid in full and what each still owes.
+    if (out.summary) { const line = el('p', out.summary.text); line.dataset.paymentSummary = ''; area.append(line); }
     for (const warning of out.warnings || []) area.append(el('p', warning));
     for (const payment of out.payments) {
       const card = el('div');

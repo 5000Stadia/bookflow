@@ -17,6 +17,7 @@ HUB = {
     "hub audit tail": "visible_audit_records",
     "company new": "resolved_organization_and_own_lifecycle_certificate",
     "company attach": "hub_admin_and_own_lifecycle_certificate",
+    "company restore": "hub_admin_and_own_lifecycle_certificate",
     "company detach": "hub_admin_and_own_detach_certificate",
     "demo reset": "hub_admin_and_ordered_own_lifecycle_certificates",
     "organization new": "current_hub_admin", "organization rename": "current_hub_admin",
@@ -36,6 +37,10 @@ HUB = {
     "agent assign": "current_hub_admin_on_activated_root_and_resolved_agent_principal",
     "agent unassign": "current_hub_admin_on_activated_root_and_resolved_agent_principal",
     "agent authorize": "current_hub_admin_on_activated_root_and_resolved_agent",
+    "agent deactivate": "current_hub_admin_on_activated_root_and_resolved_agent",
+    "agent activate": "current_hub_admin_on_activated_root_and_resolved_agent",
+    "user deactivate": "current_hub_admin_on_activated_root_and_resolved_person",
+    "user activate": "current_hub_admin_on_activated_root_and_resolved_person",
 }
 
 

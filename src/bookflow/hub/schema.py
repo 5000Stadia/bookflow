@@ -245,3 +245,14 @@ permission_state = _table(
     sa.CheckConstraint("(mode='legacy' AND catalog_version IS NULL AND catalog_sha256 IS NULL AND catalog_json IS NULL) OR (mode='policy_v1' AND catalog_version IS NOT NULL AND catalog_sha256 IS NOT NULL AND length(catalog_sha256)=64 AND catalog_json IS NOT NULL)", name="ck_permission_state_catalog"),
     description="Private permission-storage state. Its presence does not activate policy evaluation.",
 )
+
+
+authority_generation = _table(
+    "authority_generation",
+    _column("id", sa.Integer, "Singleton key, always 1.", primary_key=True),
+    _column("generation", sa.Integer, "Count of writes to the permission input tables; database triggers advance it.", nullable=False),
+    _column("token", sa.String(32), "Random value redrawn by the same triggers on every such write; a permission read may reuse earlier facts only while it is unchanged.", nullable=False),
+    sa.CheckConstraint("id = 1", name="ck_authority_generation_singleton"),
+    sa.CheckConstraint("generation >= 1", name="ck_authority_generation_generation"),
+    description="Private authority generation. Triggers on users, organizations, companies, memberships, agent_principals, agent_authority, role_capabilities and permission_state advance it in the writing transaction.",
+)

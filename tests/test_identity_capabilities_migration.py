@@ -29,6 +29,10 @@ QUERY = "SELECT role,capability,required_role FROM main.role_capabilities ORDER 
 CUSTOM = ("owner", "custom-extension", "owner")
 
 
+def _without_generation(schema):
+    return [x for x in schema if 'authority_generation' not in x['name']]
+
+
 def _rows(conn):
     return tuple(conn.execute(QUERY))
 
@@ -44,7 +48,7 @@ def _previous_seed():
 
 
 def test_seed_is_exactly_the_registry_gap_and_nothing_else():
-    assert HEADS["hub"] == "hub0013" == HUB0013.revision and HUB0013.down_revision == "hub0012"
+    assert HUB0013.revision == "hub0013" and HUB0013.down_revision == "hub0012"
     assert "bookflow.core.registry" not in inspect.getsource(HUB0013)
     previous, projection = set(_previous_seed()), set(_registry_role_capability_projection())
     assert set(HUB0013.ROLE_CAPABILITY_SEED) == projection - previous
@@ -68,8 +72,9 @@ def test_populated_hub0012_upgrade_seeds_identity_rows_and_preserves_everything_
         before_rows, before_schema = _rows(db.raw), _normalized_schema(db.raw)
         assert before_rows == tuple(sorted((*_previous_seed(), CUSTOM)))
 
-        assert migrate_to_head(db, "hub", backups) == ("hub0012", "hub0013")
-        assert _normalized_schema(db.raw) == before_schema
+        assert migrate_to_head(db, "hub", backups) == ("hub0012", HEADS["hub"])
+        # hub0013 itself adds no schema; hub0014's authority generation is the only addition.
+        assert _without_generation(_normalized_schema(db.raw)) == before_schema
         # Every pre-existing row survives verbatim, including the locally added one.
         assert set(before_rows) <= set(_rows(db.raw))
         assert _rows(db.raw) == tuple(sorted((*before_rows, *HUB0013.ROLE_CAPABILITY_SEED)))
@@ -93,7 +98,7 @@ def test_repeated_upgrade_and_a_root_already_carrying_a_seed_row_both_succeed(tm
         with open_database(path, writable=True) as db:
             for row in preset:
                 db.raw.execute("INSERT INTO main.role_capabilities VALUES (?,?,?)", row)
-            assert migrate_to_head(db, "hub", None) == ("hub0012", "hub0013")
+            assert migrate_to_head(db, "hub", None) == ("hub0012", HEADS["hub"])
             once = _rows(db.raw)
             assert once == CURRENT_ROLE_CAPABILITY_SEED
 
@@ -104,7 +109,8 @@ def test_repeated_upgrade_and_a_root_already_carrying_a_seed_row_both_succeed(tm
             assert db.raw.execute("SELECT count(*) FROM main.role_capabilities").fetchone() == (len(once),)
 
             # And through the ordinary runner a second time, which must find nothing to do.
-            assert migrate_to_head(db, "hub", None) == ("hub0013", "hub0013")
+            command.stamp(_config("hub", db.conn), HEADS["hub"], purge=True)
+            assert migrate_to_head(db, "hub", None) == (HEADS["hub"], HEADS["hub"])
             assert _rows(db.raw) == once
 
 
@@ -118,17 +124,17 @@ def test_a_local_table_of_the_same_name_takes_neither_the_read_nor_the_insert(tm
             db.raw.execute("INSERT INTO temp.role_capabilities VALUES (?,?,?)", row)
         local = tuple(db.raw.execute("SELECT role,capability,required_role FROM temp.role_capabilities"))
 
-        assert migrate_to_head(db, "hub", None) == ("hub0012", "hub0013")
+        assert migrate_to_head(db, "hub", None) == ("hub0012", HEADS["hub"])
         assert _rows(db.raw) == CURRENT_ROLE_CAPABILITY_SEED
         assert tuple(db.raw.execute("SELECT role,capability,required_role FROM temp.role_capabilities")) == local
 
 
 def test_fresh_chain_matches_an_upgraded_root_and_downgrade_is_refused(tmp_path):
     fresh, upgraded = tmp_path / "fresh.db", tmp_path / "upgraded.db"
-    _make_revision(fresh, "hub", "hub0013", lambda _conn: None)
+    _make_revision(fresh, "hub", HEADS["hub"], lambda _conn: None)
     _make_revision(upgraded, "hub", "hub0012", lambda _conn: None)
     with open_database(upgraded, writable=True) as db:
-        assert migrate_to_head(db, "hub", None) == ("hub0012", "hub0013")
+        assert migrate_to_head(db, "hub", None) == ("hub0012", HEADS["hub"])
     with sqlite3.connect(fresh) as left, sqlite3.connect(upgraded) as right:
         assert _normalized_schema(left) == _normalized_schema(right)
         assert _rows(left) == _rows(right) == CURRENT_ROLE_CAPABILITY_SEED

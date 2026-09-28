@@ -323,6 +323,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `summary` | object \| null | no | yes | null | — |
+| `summary.text` | string | yes | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. |
+| `summary.documents` | array[object] | yes | no | — | The documents this write settled, at most 50. |
+| `summary.documents[].document_id` | string | yes | no | — | — |
+| `summary.documents[].document_type` | string | yes | no | — | — |
+| `summary.documents[].number` | string | yes | no | — | — |
+| `summary.documents[].applied` | object | yes | no | — | Money from this payment applied to the document. |
+| `summary.documents[].applied.amount` | string | yes | no | — | — |
+| `summary.documents[].applied.currency` | string | yes | no | — | — |
+| `summary.documents[].applied.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. |
+| `summary.documents[].discount.amount` | string | yes | no | — | — |
+| `summary.documents[].discount.currency` | string | yes | no | — | — |
+| `summary.documents[].discount.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].still_due` | object | yes | no | — | What the document still owes after this payment. |
+| `summary.documents[].still_due.amount` | string | yes | no | — | — |
+| `summary.documents[].still_due.currency` | string | yes | no | — | — |
+| `summary.documents[].still_due.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].paid_in_full` | boolean | yes | no | — | — |
+| `summary.document_count` | integer | yes | no | — | — |
+| `summary.paid_in_full_count` | integer | yes | no | — | — |
+| `summary.still_due` | object | yes | no | — | Total still owed on the documents this write settled. |
+| `summary.still_due.amount` | string | yes | no | — | — |
+| `summary.still_due.currency` | string | yes | no | — | — |
+| `summary.still_due.minor_units` | integer | yes | no | — | — |
+| `summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. |
+| `summary.credit.amount` | string | yes | no | — | — |
+| `summary.credit.currency` | string | yes | no | — | — |
+| `summary.credit.minor_units` | integer | yes | no | — | — |
+| `summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. |
+| `summary.discount.amount` | string | yes | no | — | — |
+| `summary.discount.currency` | string | yes | no | — | — |
+| `summary.discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -456,7 +489,7 @@ The same example as complete `bookflow_run` arguments:
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `payment` | `--payment` | string \| null | no | yes | null | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `amount_mode` | `--amount-mode` | literal["company", "entered", "selection_total"] | no | no | "company" | — |
+| `amount_mode` | `--amount-mode` | literal["company", "entered", "selection_total"] | no | no | "company" | company: use amount when given; without one, total the selected invoices when the company automatically calculates payments, otherwise amount is required. entered: amount is required. selection_total: total the selected invoices whatever the company preference. |
 | `amount` | `--amount` | string \| object \| null | no | yes | null | — |
 | `applications.mode` | `--applications-mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | — |
 | `applications.items[].invoice` | inside `--applications-items` JSON array | string | no | no | — | Present in InlineCalculation.; minimum length 1; maximum length 1004 |
@@ -1534,6 +1567,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `summary` | object \| null | no | yes | null | — |
+| `summary.text` | string | yes | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. |
+| `summary.documents` | array[object] | yes | no | — | The documents this write settled, at most 50. |
+| `summary.documents[].document_id` | string | yes | no | — | — |
+| `summary.documents[].document_type` | string | yes | no | — | — |
+| `summary.documents[].number` | string | yes | no | — | — |
+| `summary.documents[].applied` | object | yes | no | — | Money from this payment applied to the document. |
+| `summary.documents[].applied.amount` | string | yes | no | — | — |
+| `summary.documents[].applied.currency` | string | yes | no | — | — |
+| `summary.documents[].applied.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. |
+| `summary.documents[].discount.amount` | string | yes | no | — | — |
+| `summary.documents[].discount.currency` | string | yes | no | — | — |
+| `summary.documents[].discount.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].still_due` | object | yes | no | — | What the document still owes after this payment. |
+| `summary.documents[].still_due.amount` | string | yes | no | — | — |
+| `summary.documents[].still_due.currency` | string | yes | no | — | — |
+| `summary.documents[].still_due.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].paid_in_full` | boolean | yes | no | — | — |
+| `summary.document_count` | integer | yes | no | — | — |
+| `summary.paid_in_full_count` | integer | yes | no | — | — |
+| `summary.still_due` | object | yes | no | — | Total still owed on the documents this write settled. |
+| `summary.still_due.amount` | string | yes | no | — | — |
+| `summary.still_due.currency` | string | yes | no | — | — |
+| `summary.still_due.minor_units` | integer | yes | no | — | — |
+| `summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. |
+| `summary.credit.amount` | string | yes | no | — | — |
+| `summary.credit.currency` | string | yes | no | — | — |
+| `summary.credit.minor_units` | integer | yes | no | — | — |
+| `summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. |
+| `summary.discount.amount` | string | yes | no | — | — |
+| `summary.discount.currency` | string | yes | no | — | — |
+| `summary.discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -2575,6 +2641,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `summary` | object \| null | no | yes | null | — |
+| `summary.text` | string | yes | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. |
+| `summary.documents` | array[object] | yes | no | — | The documents this write settled, at most 50. |
+| `summary.documents[].document_id` | string | yes | no | — | — |
+| `summary.documents[].document_type` | string | yes | no | — | — |
+| `summary.documents[].number` | string | yes | no | — | — |
+| `summary.documents[].applied` | object | yes | no | — | Money from this payment applied to the document. |
+| `summary.documents[].applied.amount` | string | yes | no | — | — |
+| `summary.documents[].applied.currency` | string | yes | no | — | — |
+| `summary.documents[].applied.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. |
+| `summary.documents[].discount.amount` | string | yes | no | — | — |
+| `summary.documents[].discount.currency` | string | yes | no | — | — |
+| `summary.documents[].discount.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].still_due` | object | yes | no | — | What the document still owes after this payment. |
+| `summary.documents[].still_due.amount` | string | yes | no | — | — |
+| `summary.documents[].still_due.currency` | string | yes | no | — | — |
+| `summary.documents[].still_due.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].paid_in_full` | boolean | yes | no | — | — |
+| `summary.document_count` | integer | yes | no | — | — |
+| `summary.paid_in_full_count` | integer | yes | no | — | — |
+| `summary.still_due` | object | yes | no | — | Total still owed on the documents this write settled. |
+| `summary.still_due.amount` | string | yes | no | — | — |
+| `summary.still_due.currency` | string | yes | no | — | — |
+| `summary.still_due.minor_units` | integer | yes | no | — | — |
+| `summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. |
+| `summary.credit.amount` | string | yes | no | — | — |
+| `summary.credit.currency` | string | yes | no | — | — |
+| `summary.credit.minor_units` | integer | yes | no | — | — |
+| `summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. |
+| `summary.discount.amount` | string | yes | no | — | — |
+| `summary.discount.currency` | string | yes | no | — | — |
+| `summary.discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -2998,6 +3097,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `summary` | object \| null | no | yes | null | — |
+| `summary.text` | string | yes | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. |
+| `summary.documents` | array[object] | yes | no | — | The documents this write settled, at most 50. |
+| `summary.documents[].document_id` | string | yes | no | — | — |
+| `summary.documents[].document_type` | string | yes | no | — | — |
+| `summary.documents[].number` | string | yes | no | — | — |
+| `summary.documents[].applied` | object | yes | no | — | Money from this payment applied to the document. |
+| `summary.documents[].applied.amount` | string | yes | no | — | — |
+| `summary.documents[].applied.currency` | string | yes | no | — | — |
+| `summary.documents[].applied.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. |
+| `summary.documents[].discount.amount` | string | yes | no | — | — |
+| `summary.documents[].discount.currency` | string | yes | no | — | — |
+| `summary.documents[].discount.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].still_due` | object | yes | no | — | What the document still owes after this payment. |
+| `summary.documents[].still_due.amount` | string | yes | no | — | — |
+| `summary.documents[].still_due.currency` | string | yes | no | — | — |
+| `summary.documents[].still_due.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].paid_in_full` | boolean | yes | no | — | — |
+| `summary.document_count` | integer | yes | no | — | — |
+| `summary.paid_in_full_count` | integer | yes | no | — | — |
+| `summary.still_due` | object | yes | no | — | Total still owed on the documents this write settled. |
+| `summary.still_due.amount` | string | yes | no | — | — |
+| `summary.still_due.currency` | string | yes | no | — | — |
+| `summary.still_due.minor_units` | integer | yes | no | — | — |
+| `summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. |
+| `summary.credit.amount` | string | yes | no | — | — |
+| `summary.credit.currency` | string | yes | no | — | — |
+| `summary.credit.minor_units` | integer | yes | no | — | — |
+| `summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. |
+| `summary.discount.amount` | string | yes | no | — | — |
+| `summary.discount.currency` | string | yes | no | — | — |
+| `summary.discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -3409,6 +3541,39 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
 | `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
 | `prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `summary` | object \| null | no | yes | null | — |
+| `summary.text` | string | yes | no | — | One plain paragraph: documents paid, what each still owes, credit left, discounts. |
+| `summary.documents` | array[object] | yes | no | — | The documents this write settled, at most 50. |
+| `summary.documents[].document_id` | string | yes | no | — | — |
+| `summary.documents[].document_type` | string | yes | no | — | — |
+| `summary.documents[].number` | string | yes | no | — | — |
+| `summary.documents[].applied` | object | yes | no | — | Money from this payment applied to the document. |
+| `summary.documents[].applied.amount` | string | yes | no | — | — |
+| `summary.documents[].applied.currency` | string | yes | no | — | — |
+| `summary.documents[].applied.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].discount` | object \| null | no | yes | null | Early-payment discount taken on it, beside the money. |
+| `summary.documents[].discount.amount` | string | yes | no | — | — |
+| `summary.documents[].discount.currency` | string | yes | no | — | — |
+| `summary.documents[].discount.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].still_due` | object | yes | no | — | What the document still owes after this payment. |
+| `summary.documents[].still_due.amount` | string | yes | no | — | — |
+| `summary.documents[].still_due.currency` | string | yes | no | — | — |
+| `summary.documents[].still_due.minor_units` | integer | yes | no | — | — |
+| `summary.documents[].paid_in_full` | boolean | yes | no | — | — |
+| `summary.document_count` | integer | yes | no | — | — |
+| `summary.paid_in_full_count` | integer | yes | no | — | — |
+| `summary.still_due` | object | yes | no | — | Total still owed on the documents this write settled. |
+| `summary.still_due.amount` | string | yes | no | — | — |
+| `summary.still_due.currency` | string | yes | no | — | — |
+| `summary.still_due.minor_units` | integer | yes | no | — | — |
+| `summary.credit` | object \| null | no | yes | null | Money on this payment not applied to any document: the customer's credit, to apply later or refund. Absent for a bill payment. |
+| `summary.credit.amount` | string | yes | no | — | — |
+| `summary.credit.currency` | string | yes | no | — | — |
+| `summary.credit.minor_units` | integer | yes | no | — | — |
+| `summary.discount` | object \| null | no | yes | null | Early-payment discounts taken in total. |
+| `summary.discount.amount` | string | yes | no | — | — |
+| `summary.discount.currency` | string | yes | no | — | — |
+| `summary.discount.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 

@@ -42,6 +42,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -255,6 +256,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -471,6 +473,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -692,6 +695,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -927,6 +931,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1195,6 +1200,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1358,6 +1364,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1509,6 +1516,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1556,7 +1564,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].date` | string | yes | no | — | — |
 | `rows[].transaction_id` | string \| null | yes | yes | — | — |
 | `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
-| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | yes | yes | — | — |
 | `rows[].number` | string \| null | yes | yes | — | — |
 | `rows[].party_name` | string \| null | yes | yes | — | — |
 | `rows[].account_id` | string | yes | no | — | — |
@@ -1670,6 +1678,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1811,6 +1820,115 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report export`
+
+Export a whole report as CSV, every row across all pages, exactly as the workbench's download produces it. The CLI prints the CSV itself; --json returns it in `content`.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.export` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report export profit-and-loss --filters '{"date_from": "2026-01-01", "date_to": "2026-12-31"}' --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report export", "input": {"report": "profit-and-loss", "filters": {"date_from": "2026-01-01", "date_to": "2026-12-31"}}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `report` | `REPORT` | string | yes | no | — | The report to export, by its name: profit-and-loss, ar-aging, general-ledger, ... (`bookflow report --help` lists them); minimum length 1; maximum length 64 |
+| `filters` | `--filters` | object[string, any] | no | no | {} | The report's own inputs, exactly as `report <name>` takes them (a JSON object, e.g. {"date_from": "2026-01-01", "date_to": "2026-12-31"}); cursor and limit are ignored, because the file is the whole report |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.export`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `report` | string | yes | no | — | The report exported |
+| `title` | string | yes | no | — | The report's name as a person reads it |
+| `filename` | string | yes | no | — | A file name to save it under |
+| `media_type` | string | yes | no | — | text/csv; charset=utf-8 |
+| `rows` | integer | yes | no | — | Data rows in the file |
+| `truncated` | boolean | yes | no | — | True when the report was longer than the file carries; the preamble says so |
+| `content` | string | yes | no | — | The CSV text: a preamble (report, company, period, basis, currency, generation time, audit watermark, row count), a blank line, the header row, every row, then the whole-report totals. The workbench download is this text with a byte order mark |
+
+Example JSON output:
+
+```json
+{
+  "content": "value",
+  "filename": "value",
+  "media_type": "value",
+  "report": "value",
+  "rows": 1,
+  "title": "value",
+  "truncated": false
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report general-ledger`
 
 Inclusive accrual ledger with paged opening, posting and closing rows. Closing-row debit/credit are whole-period account activity; signed balances are debit minus credit. Page totals cover the whole filter.
@@ -1853,6 +1971,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -1930,7 +2049,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].batch_kind` | literal["original", "reversal", "replacement"] \| null | no | yes | null | — |
 | `rows[].transaction_id` | string \| null | no | yes | null | — |
 | `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | no | yes | null | — |
-| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
 | `rows[].transaction_number` | string \| null | no | yes | null | — |
 | `rows[].revision_id` | string \| null | no | yes | null | — |
 | `rows[].reverses_batch_id` | string \| null | no | yes | null | — |
@@ -2058,6 +2177,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -2233,6 +2353,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -2387,6 +2508,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -2451,7 +2573,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].before` | object \| null | no | yes | null | — |
 | `rows[].before.transaction_id` | string | yes | no | — | — |
 | `rows[].before.transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
-| `rows[].before.money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
+| `rows[].before.money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
 | `rows[].before.number` | string | yes | no | — | — |
 | `rows[].before.sequence_number` | integer | yes | no | — | — |
 | `rows[].before.date` | string | yes | no | — | — |
@@ -2465,7 +2587,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].after` | object \| null | no | yes | null | — |
 | `rows[].after.transaction_id` | string | yes | no | — | — |
 | `rows[].after.transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
-| `rows[].after.money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
+| `rows[].after.money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
 | `rows[].after.number` | string | yes | no | — | — |
 | `rows[].after.sequence_number` | integer | yes | no | — | — |
 | `rows[].after.date` | string | yes | no | — | — |
@@ -2479,7 +2601,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].checks` | array[object] | no | no | [] | — |
 | `rows[].checks[].transaction_id` | string | yes | no | — | — |
 | `rows[].checks[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
-| `rows[].checks[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
+| `rows[].checks[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
 | `rows[].checks[].number` | string | yes | no | — | — |
 | `rows[].checks[].sequence_number` | integer | yes | no | — | — |
 | `rows[].checks[].date` | string | yes | no | — | — |
@@ -2600,6 +2722,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -2784,6 +2907,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -2968,6 +3092,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -3188,6 +3313,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -3456,6 +3582,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -3722,6 +3849,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -3881,6 +4009,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4031,6 +4160,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4078,7 +4208,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].statement_date` | string | yes | no | — | — |
 | `rows[].transaction_id` | string \| null | yes | yes | — | — |
 | `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
-| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | yes | yes | — | — |
 | `rows[].number` | string \| null | yes | yes | — | — |
 | `rows[].date` | string \| null | yes | yes | — | — |
 | `rows[].memo` | string \| null | yes | yes | — | — |
@@ -4198,6 +4328,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4387,6 +4518,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4599,6 +4731,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4783,6 +4916,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -5031,6 +5165,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -5195,6 +5330,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -5255,7 +5391,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].display_account_label` | string | yes | no | — | — |
 | `rows[].date` | string \| null | no | yes | null | — |
 | `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | no | yes | null | — |
-| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | no | yes | null | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
 | `rows[].transaction_number` | string \| null | no | yes | null | — |
 | `rows[].party_name` | string \| null | no | yes | null | — |
 | `rows[].description` | string \| null | no | yes | null | — |
@@ -5400,6 +5536,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -5440,7 +5577,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].date` | string | yes | no | — | — |
 | `rows[].transaction_id` | string | yes | no | — | — |
 | `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
-| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | yes | yes | — | — |
 | `rows[].number` | string | yes | no | — | — |
 | `rows[].batch_id` | string | yes | no | — | — |
 | `rows[].batch_kind` | literal["original", "reversal", "replacement"] | yes | no | — | — |
@@ -5552,6 +5689,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -5728,6 +5866,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -5911,6 +6050,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -6094,6 +6234,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -6278,6 +6419,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -6326,7 +6468,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].date` | string \| null | yes | yes | — | — |
 | `rows[].transaction_id` | string \| null | yes | yes | — | — |
 | `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
-| `rows[].money_out_kind` | literal["check", "card_charge", "transfer"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | yes | yes | — | — |
 | `rows[].number` | string \| null | yes | yes | — | — |
 | `rows[].memo` | string \| null | yes | yes | — | — |
 | `rows[].due_date` | string \| null | yes | yes | — | — |
@@ -6439,6 +6581,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 

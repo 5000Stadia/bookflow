@@ -7,7 +7,7 @@ from bookflow.company import schema as c, journals, sales, document_effects as e
 from bookflow.company import payments, payment_queries as query, payment_operations as operations
 from bookflow.company.payment_outputs import PaymentWriteOutput, PaymentSourceOutput
 from bookflow.core import clock
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, require_reason
 from bookflow.core.ids import new_id
 from bookflow.core.money import Money
 from bookflow.core.registry import Plan
@@ -52,8 +52,7 @@ def _prepare_effect(s, ctx, inp, operation, provenance):
     old, revision = facts['header'], facts['revision']
     from bookflow.company.payment_dependencies import payment_version
     payment_version(s, old, inp.expected_version)
-    if not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140:
-        raise BookflowError('E_REASON_REQUIRED')
+    require_reason(ctx.reason)
     at, event, operation_id = provenance.at, provenance.event_id, provenance.operation_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     pending = {table: [] for table, _, _ in payments.TABLE_KINDS}

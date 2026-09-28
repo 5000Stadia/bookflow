@@ -199,7 +199,7 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities), hub0014 (authority generation: a token that triggers on the eight permission input tables redraw on every row write)
     company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening), co0012 (exact progress allocation proofs, fractional sales quantities and overlap guards), co0013 (company work preferences)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
@@ -242,12 +242,13 @@ src/bookflow/
   adapters/cli/render.py tables, field views, JSON, errors on stderr; complete nested money values render with exact currency scale in text tables and fields, including money columns first populated after the first row; JSON preserves the command payload; money columns follow business names/numbers before metadata; an empty visible-column selection does not restore hidden identifiers
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
-  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
+  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap, 30-second request-read timeout, an empty heartbeat frame every 5 s while a forwarded command runs, and a reply phase bounded from when the reply is ready (30 s to be admitted, its own 300 s lease)
   adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), credits.py (what the three credit documents show, which lists their pickers search, the two seeded openings, and the credit apply/unapply routes), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), routing.py (the one spelling of a noun inside a URL, and the resolution of a path segment back to it), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
+  documents/report_csv.py export(read, company_id, verb, filters) -> ReportCsv: any paged report, every page, as CSV (preamble, header, rows, whole-report totals); run by `report export`, which the workbench download, the CLI's `report <name> --csv`, HTTP and MCP all call
 ```
 
 `bookflow/documents/` produces the four customer-facing documents as PDF and is the only
@@ -256,7 +257,9 @@ carries, which facts are captured and which are current, and what is deliberatel
 `render` takes a `read` callable rather than a request, so the web routes in
 `adapters/workbench/document_print.py`, and any later command that attaches or sends a
 copy, produce identical bytes from the same description. Permission and company isolation
-stay in the commands `read` runs.
+stay in the commands `read` runs. A report's CSV follows the same rule: `report export` runs
+`documents/report_csv.py` over the report as the caller, and the workbench's `export.csv`
+route serves that command's text with a byte order mark, so every surface gets one file.
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
 
@@ -279,7 +282,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Schema migrations record a `migrate` entry by the system user with `on_behalf_of` the triggering actor, and rewrite the company marker and hub projection.
 - `Client.use_company` and `company=` on a call are step 1 of selection; `BOOKFLOW_COMPANY` is step 2; the saved default is step 3.
 - The host holds the data-root lock as `serve` for its whole run and acquires it before binding TCP; `host.json` is published only after both listeners are ready. Every write and advisory request runs on one writer thread with long-lived writable connections; reads own explicit read-only snapshots for their command lifetime and close them on success or failure. Reader accounting also covers credential reads. Shutdown closes admission for readers and queued writes, drains admitted work, and only releases the root lock after final cleanup. Pooled company handles are released before a company or organization folder move, trash/reset, detach, upgrade, or attach. Even a write that raises after a durable commit runs the checkpoint-and-notify pass; checkpoint failure cannot suppress the sequence read or subscriber wake. Credential liveness refreshes are deduplicated and queued without waiting for the writer. A discarded writer hub is reopened on the writer thread before its next operation.
-- `local_only` keeps `init`, `serve`, and `company use` off HTTP. On POSIX, the local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. The forwarded JSON envelope and command handler do not depend on Unix socket names or peer-credential APIs, leaving a seam for an owner-restricted Windows named-pipe transport. Accepted connections time out after 30 seconds and frames over 8 MiB are refused before their bodies are read. `serve` requires a human hub admin. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
+- `local_only` keeps `init`, `serve`, and `company use` off HTTP. On POSIX, the local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. The forwarded JSON envelope and command handler do not depend on Unix socket names or peer-credential APIs, leaving a seam for an owner-restricted Windows named-pipe transport. Reading an accepted connection's request times out after 30 seconds and frames over 8 MiB are refused before their bodies are read. While the command runs the host sends a zero-length frame every 5 seconds (`core/forward.py` HEARTBEAT_SECONDS); the caller skips these and waits for as long as they arrive, giving up only after 60 seconds of silence (SILENCE_SECONDS), so a long backup, restore or demo reset completes over the socket. A finished reply has 30 seconds to be admitted and written, counted from when it is ready. Binary transfers keep their own 300-second lease. `serve` requires a human hub admin. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
 - The event stream validates its cursor before sending a streaming response. Each worker call drains at most 100 events, closes its snapshot before yielding frames, and immediately redrains a full page. It reauthenticates between batches. Idle streams wait on `asyncio.Event` without a reader or worker. Canonical database ids and subscribe/redrain sequence comparison close the drain/wait race. Disconnect and shutdown unregister subscriptions.
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
@@ -486,15 +489,17 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 
 ## Known gaps carried to later rows
 
-- No command deactivates a user account or maps an OS login to one; `active` is enforced everywhere a
-  credential is resolved, and `user list` reports it and hides an inactive principal unless
-  `--include-inactive` asks for it, but only a direct write sets it, which is why tests still create
-  actors through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
-  `membership revoke`.
+- `user deactivate` and `user activate` (human installation administrators, activated installations only,
+  catalog `identity-deactivation-v1`) retire and restore a person: deactivation revokes their sessions
+  and tokens and suspends every agent acting for them in one audited change, and the last active human
+  installation administrator cannot be deactivated. `active` is enforced everywhere a credential is
+  resolved; `user list` and `membership list` hide an inactive principal unless `--include-inactive`
+  asks for it (`membership list` then reports `account_active`). No command maps an OS login to a user,
+  which is why tests still create actors through the repository layer (tests/conftest.py::make_actor).
 - `user list` and `membership list` return every row their audience admits; neither pages, as no
   hub-scope `* list` command does.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
-- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. No command deactivates an agent (the general gap above); `agent unassign` of its last principal plus `membership revoke` of its access is the current way to retire one. Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
+- Agents are administered with `agent create`, `agent assign`, `agent unassign`, `agent authorize`, `agent deactivate`, `agent activate`, `agent show` and `agent list`, human installation administrators only, on activated installations only (catalog `agent-administration-v1`). Agents migrated from before hub0009 stay suspended until `agent authorize`. `agent deactivate` retires one: it is suspended, every token it holds is revoked in the same audited change, and it leaves the default lists; `agent activate` brings it back still suspended, to be authorized again (catalog `identity-deactivation-v1`). Credential invariant tests still write authority rows directly to reach states no command produces; tests pinned to a never-activated root (`legacy_permissions`) still create agents directly, because the agent commands refuse there. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
 - `--follow` on `audit tail` is CLI-only and polls under the data-root lock every two seconds until the host exists.
 - The idle checkpoint is `RESTART`, which resets the WAL but never shrinks the file. A reader that pins a snapshot across a long burst leaves the file at its high-water mark until the shutdown `TRUNCATE`.
@@ -2076,6 +2081,10 @@ POSIX-only, with Linux tested and no macOS/WSL execution claim. `inspection.py`
 provides authorized bounded navigation of mapped, verified result files.
 
 A submitted run/execute HTTP read timeout starts one 30-second recovery budget.
+A status report that the operation is still active (preparing, ready, receiving,
+queued, started, delivering), and an E_DB_BUSY filesystem_change or publication_pending
+answer, renew that budget to 30 seconds from the report, up to BOOKFLOW_MCP_JSON_SECONDS
+(default 300) from the start of recovery; silence still ends it after 30 seconds.
 The client polls the same reference with 100 ms exponential backoff capped at 1 second;
 the budget includes all requests, waits and cached-result decoding. Only completed
 state with an available receipt permits cached execute retrieval. Only normal
@@ -5040,3 +5049,42 @@ every upgraded company's value, or `parentheses`), set through `company update` 
 (`adapters/workbench/display.py`) read it from the context variable `NEGATIVES`, which
 `pages.run` sets for the request when it reads `company show`; a page with no company keeps
 the minus sign. JSON on every interface, exports, print data and form inputs keep the minus.
+
+## Payables reports and received goods
+
+`company/payable_reports._EFFECTS` (read by `report ap-aging`, `report unpaid-bills`, `report
+vendor-balance-summary` and `report vendor-balance-detail`) attributes the Accounts Payable
+transfer a receipt-matched bill posts (debit AP for the claimed receipts, credit AP for the
+bill) to the documents it moved: `receipt_bill_claims.original_minor_units` to the receipt
+line's financial journal, and `billed - original` to the `receipt_bill_adjustments` movement's
+journal, at the bill's effective date; reversals follow their original through
+`posting_line_sources.reversed_source_id`. A bill for received goods is therefore open on
+unpaid bills for what it billed, and only unbilled received value stays on the receipt. Totals
+are unchanged. The Overview's "You owe" is the `report ap-aging` total (Accounts payable).
+
+## Company backup and restore (R133)
+
+`company/backup_archive.py` owns the archive (blueprint 3.4): `create` snapshots `company.db`
+with the SQLite backup API from a read-only connection (the command holds the company write
+transaction, so the copy is the committed state), sets the copy's journal mode to `delete`,
+hashes each referenced attachment body against its name, writes the zip beside its final name
+as a `.partial`, rereads it with `verify`, and renames it into `backups/`. `verify(archive,
+dest=None)` is the only reader: manifest shape and format version, member set equal to the
+manifest (no other names; attachment names must be `attachments/xx/<sha256>`), every member's
+size and sha256 while streaming (zip CRC on the way), then `check_database` (integrity,
+foreign keys, one `company_info` row, id and revision equal to the manifest). With `dest` it
+writes the verified members there; without, only the database goes to an OS temporary folder.
+
+`commands/backup_cmds.py`: `company backup` (company scope, `company`/`admin`, audited with one
+`company_backup` entry) and `company restore` (hub scope, `hub_admin`, commit owner
+`hub.company_restore`, in `publication.MEMBERSHIP_EFFECTS` because it grants the restorer's owner
+membership). Restore's plan reads only the manifest on a real run (full `verify` on a dry run) to
+classify the revision and check id and name; its apply reserves the folder, extracts through
+`verify`, rewrites `company_info.id` for `--as-copy`, runs `migrate_company(..., row=None)`,
+writes the display-name copy and a `company restore` company event, writes the `ready` marker and
+registers; any exception before the hub commit removes the folder. The CLI makes any input field
+marked `json_schema_extra={"x-bookflow-local-path": True}` absolute before dispatch (only
+`archive` today). Permission delta `company-backup-v1` (`hub/permission_backup_catalog.py`) over
+`card-credit-v1`. Browser: `adapters/workbench/backups.py` mounts `/c/{id}/company/backup` and
+`/c/{id}/company/restore` (multipart upload to a private temporary folder, removed after the
+command) ahead of the generic routes; the Company section links both.

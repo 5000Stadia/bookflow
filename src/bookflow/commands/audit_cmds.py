@@ -22,6 +22,7 @@ hub_audit = lazy("bookflow.hub.audit")
 users = lazy("bookflow.hub.users")
 cinfo = lazy("bookflow.company.info")
 directives = lazy("bookflow.company.directives")
+visibility = lazy("bookflow.company.audit_visibility")
 
 KINDS = Literal["human", "agent", "system"]
 VIAS = Literal["cli", "http", "mcp", "gui", "python", "system"]
@@ -177,7 +178,8 @@ def _apply_filters(q, events, s: Session, hub: bool, inp: AuditFilters, entries)
     return q
 
 
-def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], with_entries: bool, authority=None) -> AuditEventOut:
+def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], with_entries: bool, authority=None,
+               held: frozenset[str] | None = None) -> AuditEventOut:
     if not hub:
         from bookflow.company.payment_authority import authorize_event
         authorize_event(s, e['id'], authority)
@@ -203,12 +205,24 @@ def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], 
                     diff = {k: v for k, v in diff.items() if not (k == "path" or k.endswith("_path"))}
             out_entries.append(AuditEntryOut(id=r["id"], record_type=r["record_type"], record_id=r["record_id"], action=r["action"], version_before=r["version_before"], version_after=r["version_after"], before=before, after=after, diff=diff))
     fields = {k: e[k] for k in AuditEventOut.model_fields if k in e and k not in ("at", "directive_code", "directive_text")}
+    directive = hub or held is None or "directive" in held
+    if not directive:
+        fields["directive_id"] = None
     if not s.is_hub_admin:
         import re as _re
         fields["summary"] = _re.sub(r"(organizations|trash)/.*$", "<path>", fields["summary"])
     return AuditEventOut(**fields, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), on_behalf_of_name=names.get(e["on_behalf_of"]) if e.get("on_behalf_of") else None,
-                         directive_code=e.get("directive_code"), directive_text=texts(e["directive_id"]) if e.get("directive_id") else None,
+                         directive_code=e.get("directive_code") if directive else None,
+                         directive_text=texts(e["directive_id"]) if directive and e.get("directive_id") else None,
                          entry_count=len(rows), entries=out_entries)
+
+
+def _visible(q, events, held):
+    """Keep only events whose every touched record type the reader may read (company scope)."""
+    if held is None:
+        return q
+    clause = visibility.visible_events(events.c.id, held)
+    return q if clause is None else q.where(clause)
 
 
 def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
@@ -218,7 +232,10 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
         q = q.where(hub_audit.visible_event_ids_filter(s))
     q = _apply_filters(q, events, s, hub, inp, entries)
     authority = {}
+    held = None
     if not hub:
+        held = visibility.admitted(s)
+        q = _visible(q, events, held)
         from bookflow.company.payment_authority import denied_events
         denied = denied_events(s, authority)
         if denied:
@@ -230,7 +247,7 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
     rows = rows[:inp.limit]
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)
-    items = [_event_out(s, hub, r, names, False, authority) for r in rows]
+    items = [_event_out(s, hub, r, names, False, authority, held) for r in rows]
     return AuditListOutput(items=items, count=len(items), next_before=rows[-1]["seq"] if more and rows else None)
 
 
@@ -238,12 +255,14 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
     denied = []
     authority = {}
+    held = None
     if not hub:
+        held = visibility.admitted(s)
         from bookflow.company.payment_authority import denied_events
         denied = denied_events(s, authority)
     after = inp.after
     if after is None:
-        newest = sa.select(sa.func.max(events.c.seq))
+        newest = _visible(sa.select(sa.func.max(events.c.seq)), events, held)
         if denied:
             newest = newest.where(events.c.id.not_in(denied))
         if hub and inp.scan_limit is not None:
@@ -253,7 +272,7 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     scan_more = False
     if inp.scan_limit is not None:
         cap = min(inp.scan_limit, inp.limit)
-        candidates = sa.select(events.c.seq).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(cap + 1)
+        candidates = _visible(sa.select(events.c.seq).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(cap + 1), events, held)
         if denied:
             candidates = candidates.where(events.c.id.not_in(denied))
         if hub:
@@ -267,13 +286,13 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
         q = sa.select(events).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(inp.limit)
         if hub:
             q = q.where(hub_audit.visible_event_ids_filter(s))
-    q = _apply_filters(q, events, s, hub, inp, entries)
+    q = _visible(_apply_filters(q, events, s, hub, inp, entries), events, held)
     if denied:
         q = q.where(events.c.id.not_in(denied))
     rows = [dict(r) for r in db.conn.execute(q).mappings().all()]
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)
-    items = [_event_out(s, hub, r, names, False, authority) for r in rows]
+    items = [_event_out(s, hub, r, names, False, authority, held) for r in rows]
     next_after = scanned[-1] if scanned else rows[-1]["seq"] if rows else None
     return AuditTailOutput(items=items, count=len(items), next_after=next_after, high_water=after,
                            scanned_count=len(scanned), scan_more=scan_more)
@@ -282,14 +301,19 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
 def _show(s: Session, hub: bool, inp: EventSelector) -> AuditEventOut:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
     q = sa.select(events).where(events.c.id == inp.event.upper())
+    held = None
     if hub:
         q = q.where(hub_audit.visible_event_ids_filter(s))
+    else:
+        # An event the reader may not see reads exactly as one that does not exist.
+        held = visibility.admitted(s)
+        q = _visible(q, events, held)
     row = db.conn.execute(q).mappings().first()
     if row is None:
         raise BookflowError("E_EVENT_NOT_FOUND")
     e = dict(row)
     ids = ({e["actor_id"]} if e["actor_id"] else set()) | ({e["on_behalf_of"]} if e.get("on_behalf_of") else set())
-    return _event_out(s, hub, e, resolver(ids), True)
+    return _event_out(s, hub, e, resolver(ids), True, held=held)
 
 
 for hub, prefix in ((True, "hub audit"), (False, "audit")):
@@ -297,17 +321,17 @@ for hub, prefix in ((True, "hub audit"), (False, "audit")):
     role = None if hub else "member"
 
     def _mk(hub=hub, prefix=prefix, scope=scope, role=role):
-        @command(f"{prefix} list", scope=scope, description=("List hub audit events the acting user may see, newest first." if hub else "List this company's audit events, newest first."),
+        @command(f"{prefix} list", scope=scope, description=("List hub audit events the acting user may see, newest first." if hub else "List this company's audit events you may see, newest first; an event that touched a record type you may not read is left out."),
                  input_model=AuditListInput, output_model=AuditListOutput, required_role=role, error_codes=["E_VALIDATION"])
         def plan_list(inp: AuditListInput, ctx: Context, s: Session) -> Plan:
             return Plan(preview=_list(s, hub, inp))
 
-        @command(f"{prefix} show", scope=scope, description=("Show one hub audit event with its entries and field diffs." if hub else "Show one of this company's audit events with its entries and field diffs."),
+        @command(f"{prefix} show", scope=scope, description=("Show one hub audit event with its entries and field diffs." if hub else "Show one of this company's audit events with its entries and field diffs; an event you may not see reads as not found."),
                  input_model=EventSelector, output_model=AuditEventOut, required_role=role, positional=["event"], error_codes=["E_EVENT_NOT_FOUND"])
         def plan_show(inp: EventSelector, ctx: Context, s: Session) -> Plan:
             return Plan(preview=_show(s, hub, inp))
 
-        @command(f"{prefix} tail", scope=scope, description=("Hub audit events newer than a cursor, oldest first; the event feed." if hub else "This company's audit events newer than a cursor, oldest first; the event feed."),
+        @command(f"{prefix} tail", scope=scope, description=("Hub audit events newer than a cursor, oldest first; the event feed." if hub else "This company's audit events you may see newer than a cursor, oldest first; the event feed."),
                  input_model=AuditTailInput, output_model=AuditTailOutput, required_role=role, streams=True, error_codes=["E_VALIDATION"])
         def plan_tail(inp: AuditTailInput, ctx: Context, s: Session) -> Plan:
             return Plan(preview=_tail(s, hub, inp))

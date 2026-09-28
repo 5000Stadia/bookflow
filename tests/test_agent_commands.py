@@ -206,7 +206,8 @@ def test_a_root_activated_at_the_previous_catalog_admits_agents_and_upgrades_wit
         upgraded = hosted.ok("permission.activate", {"expected_generation": state["generation"],
                                                      "expected_catalog_sha256": state["catalog_sha256"]})
         assert upgraded["changed"] and upgraded["affected_agents"] == []
-        assert hub_rows(root, "SELECT catalog_version FROM permission_state") == [{"catalog_version": "agent-administration-v1"}]
+        assert hub_rows(root, "SELECT catalog_version FROM permission_state") == [
+            {"catalog_version": runtime.current_catalog().CATALOG.version}]
         after = admin(hosted, "agent show", {"agent": agent})["authority"]
         assert not after["suspended"] and after["epoch"] == authorized["epoch"]
         assert hub_rows(root, "SELECT revoked_at FROM api_tokens WHERE id=?", token["token_id"]) == [{"revoked_at": None}]

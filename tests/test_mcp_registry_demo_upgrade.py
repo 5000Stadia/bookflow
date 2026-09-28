@@ -25,11 +25,9 @@ def state(root):
 COMMANDS = frozenset({'demo reset','upgrade'})
 
 
-# `demo reset` on an activated root seeds through the policy_v1 permission check on every
-# seeded command and currently outlasts the MCP client's 30 s read + 30 s recovery budget under
-# load (measured 2026-09-27: about 3x the legacy seed time). Until that cost is addressed its
-# four-surface parity is witnessed on a legacy root; `upgrade` runs on the new-install mode.
-@pytest.mark.parametrize('command', [pytest.param('demo reset', marks=pytest.mark.legacy_permissions), 'upgrade'])
+# Both run on the new-install (activated) mode. `demo reset` there once outlasted the MCP
+# client's recovery budget; R74 made permission reads cheap and recovery progress-aware.
+@pytest.mark.parametrize('command', ['demo reset', 'upgrade'])
 @pytest.mark.timeout(provenance.MATRIX_SECONDS)
 def test_owned_demo_replacement_and_current_schema_upgrade(root, tmp_path, command):
     ids = set()

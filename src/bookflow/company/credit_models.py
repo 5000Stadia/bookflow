@@ -91,7 +91,7 @@ class _CreditMemoFields(StrictModel):
             values.pop("sales_tax_calculation", None)
         return values
 
-    date: _Date
+    date: _Date | None = Field(default=None, description="Accounting date. Omitted, it is today in the company's timezone.")
     customer: Selector
     lines: CreditLines
     ar_account: Selector | None = None

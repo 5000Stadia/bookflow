@@ -9,7 +9,8 @@ from bookflow.core.money import Money
 # The three documents that are stored as journal entries and are addressed as themselves.
 # A transfer is here because the journal editor now refuses it by name: a page that still
 # offered `journal update` on one would offer a button the core declines.
-OWNING_NOUNS = (('check', 'check'), ('card-charge', 'card_charge'), ('transfer', 'transfer'))
+OWNING_NOUNS = (('check', 'check'), ('card-charge', 'card_charge'), ('card-credit', 'card_credit'),
+                ('transfer', 'transfer'))
 
 
 def owning_record(run, company_id, transaction_id, revision_number=None):

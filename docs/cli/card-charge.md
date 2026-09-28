@@ -278,7 +278,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].batches[].currency` | string | yes | no | — | — |
 | `items[].batches[].line_count` | integer | yes | no | — | — |
 | `items[].document` | object | yes | no | — | — |
-| `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `items[].document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
 | `items[].document.funding_details` | dict \| null | no | yes | null | — |
 | `items[].document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -639,7 +639,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -960,7 +960,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].credit_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
 | `items[].document` | object | yes | no | — | — |
-| `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `items[].document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
 | `items[].document.funding_details` | dict \| null | no | yes | null | — |
 | `items[].document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -1274,7 +1274,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -1720,7 +1720,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |
@@ -2154,7 +2154,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 | `document` | object | yes | no | — | — |
-| `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
+| `document.kind` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
 | `document.funding_details` | dict \| null | no | yes | null | — |
 | `document.funding` | literal["bank", "credit_card"] | yes | no | — | — |

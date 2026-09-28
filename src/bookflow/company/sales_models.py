@@ -197,7 +197,7 @@ class SalesFields(StrictModel):
 
 
 class SalesPostInput(SalesFields):
-    date: _Date
+    date: _Date | None = Field(default=None, description="Accounting date. Omitted, it is today in the company's timezone.")
     customer: Selector
     lines: Lines
 
@@ -399,7 +399,7 @@ class StatementChargePostInput(StrictModel):
             values.pop('sales_tax_calculation', None)
         return values
 
-    date: _Date
+    date: _Date | None = Field(default=None, description="Accounting date. Omitted, it is today in the company's timezone.")
     customer: Selector
     item: Selector
     quantity: Quantity = "1"

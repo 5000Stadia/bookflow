@@ -238,6 +238,14 @@ def calculate(s, inp):
         origin = 'entered' if amount is not None else 'selection_total' if context['automatically_calculate'] else 'unresolved'
     if inp.amount_mode != 'company' and not (origin == 'entered' and amount is not None and inp.amount_mode == 'selection_total'):
         origin = inp.amount_mode
+    # Row 22 §5: with automatic calculation off, a fresh (inline) calculation has nothing to derive the
+    # received amount from, so it asks for the amount; `entered` always needs one. A saved selection's
+    # own unresolved header stays a readable draft state.
+    if origin == 'entered' and amount is None or (
+            origin == 'unresolved' and inp.amount_mode == 'company' and inp.applications.mode == 'inline'):
+        raise _invalid('amount', 'required: enter the amount received, or use amount_mode selection_total to '
+                                 'total the selected invoices (automatic payment calculation is off for this company)'
+                       if origin == 'unresolved' else 'required: enter the amount received for amount_mode entered')
     try:
         result = calc.calculate(amount, origin, selection._rows(items),
             calculate_unresolved=context['automatically_calculate'] or inp.amount_mode == 'selection_total',
@@ -297,7 +305,11 @@ def payment_page(s, inp):
         owner.c.transaction_id == t.c.id, spend.c.kind == 'consume',
         ~sa.exists(sa.select(sa.literal_column("1")).where(release.c.reverses_consumption_id == spend.c.id))
     ).correlate(t).scalar_subquery(), 0)
-    available = sa.case((t.c.status == 'posted', r.c.total_minor_units-used-refunded), else_=0)
+    # An early-payment discount is capacity alongside the cash (discount_schema): a receipt of 490
+    # that settled a 500 invoice with a 10 discount has nothing free, not minus ten.
+    discounted = sa.func.coalesce(sa.select(sa.func.sum(c.payment_discounts.c.amount_minor_units)).where(
+        c.payment_discounts.c.transaction_id == t.c.id).correlate(t).scalar_subquery(), 0)
+    available = sa.case((t.c.status == 'posted', r.c.total_minor_units+discounted-used-refunded), else_=0)
     statement = sa.select(t.c.id, t.c.version, t.c.number, r.c.date, t.c.status, p.c.payer_id.label('customer_id'),
         p.c.payment_method_id, r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(query.cross_join(query.cross_join(p, r,
         r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)).where(t.c.type == 'payment')
@@ -371,8 +383,11 @@ def payment_page(s, inp):
         owner.c.transaction_id.in_(ids), spend.c.kind == 'consume',
         ~sa.exists(sa.select(sa.literal_column("1")).where(release.c.reverses_consumption_id == spend.c.id))
     ).group_by(owner.c.transaction_id)).all()) if ids else {}
+    discounts = dict(s.company.conn.execute(sa.select(c.payment_discounts.c.transaction_id,
+        sa.func.sum(c.payment_discounts.c.amount_minor_units)).where(c.payment_discounts.c.transaction_id.in_(ids))
+        .group_by(c.payment_discounts.c.transaction_id)).all()) if ids else {}
     for row in out['items']:
         row['applied_minor_units'] = amounts.get(row['id'], 0)
-        row['unapplied_minor_units'] = (row['received_minor_units'] - row['applied_minor_units']
+        row['unapplied_minor_units'] = (row['received_minor_units'] + discounts.get(row['id'], 0) - row['applied_minor_units']
                                         - paid_back.get(row['id'], 0)) if row['status'] == 'posted' else 0
     return out

@@ -18,6 +18,12 @@ MATRIX = {
     "company attach": {"E_NOT_IN_ORGANIZATION_DIR": "path outside organizations", "E_INCOMPLETE_COMPANY": "marker state creating", "E_ALREADY_ATTACHED": "id registered",
                        "E_NAME_TAKEN": "name in use", "E_ATTACH_INVALID": "marker or database missing or mismatched, wide mode", "E_SCHEMA_UNKNOWN": "unknown revision", "E_PERMISSION": "non hub admin"},
     "company detach": {"E_COMPANY_NOT_FOUND": "absent company", "E_PERMISSION": "non hub admin"},
+    "company backup": {"E_IO": "backups folder unwritable or disk full", "E_BACKUP_INVALID": "the written archive fails its read-back check",
+                       "E_PERMISSION": "standard member or readonly", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
+    "company restore": {"E_BACKUP_INVALID": "missing file, not a zip, bad manifest, member hash or size mismatch, damaged database", "E_SCHEMA_UNKNOWN": "backup from a newer Bookflow",
+                        "E_ALREADY_ATTACHED": "backed-up company registered here without --as-copy", "E_NAME_TAKEN": "name in use in the organization",
+                        "E_ORGANIZATION_REQUIRED": "several visible organizations", "E_ORGANIZATION_NOT_FOUND": "absent organization", "E_VALIDATION": "relative path or slash in name",
+                        "E_MIGRATION_FAILED": "older backup whose migration fails", "E_IO": "organization folder unwritable", "E_PERMISSION": "non hub admin"},
     "company show": {"E_COMPANY_NOT_FOUND": "absent, invisible, or unselected company", "E_COMPANY_MISSING": "folder or database absent", "E_SCHEMA_BEHIND": "behind head on read", "E_IO": "corrupt database"},
     "company rename": {"E_NAME_TAKEN": "existing name", "E_RENAME_INCOMPLETE": "move failed", "E_COMPANY_MISSING": "folder absent", "E_PERMISSION": "readonly or standard member", "E_IO": "corrupt database", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
     "demo reset": {"E_DEMO_RESET_INCOMPLETE": "trash move failed", "E_NAME_TAKEN": "non-demo organization holds the seed name", "E_PERMISSION": "non hub admin"},
@@ -88,6 +94,18 @@ MATRIX = {
     "agent authorize": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
                         "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "no --confirm-permitted-use, no principals, or a required --acknowledge-fresh-context missing",
                         "E_VERSION_CONFLICT": "stale --expected-version", "E_AGENT_PRINCIPAL_MISMATCH": "the assigned principals do not hold identical permissions"},
+    "agent deactivate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                         "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "malformed input", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "agent activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                       "E_USER_NOT_FOUND": "no such agent", "E_VALIDATION": "malformed input", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user deactivate": {"E_PERMISSION": "not a human hub administrator, a never-activated installation, or the last active installation administrator",
+                        "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent deactivate), or yourself",
+                        "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
+                      "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent activate)",
+                      "E_VERSION_CONFLICT": "stale --expected-version"},
+    "report export": {"E_VALIDATION": "not an exportable report, or the report's own filters are invalid (named filters.<field>)",
+                      "E_QUERY_STALE": "the books changed on every attempt to read the report through"},
     "token revoke": {"E_TOKEN_NOT_FOUND": "unknown token id", "E_PERMISSION": "another user's token, as a non-admin"},
 }
 
@@ -237,7 +255,7 @@ MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('
 # The money-out documents are the register split under their own names, so they raise the
 # ledger's own codes; only the unbalanced one reads differently, because what it names is the
 # difference between the expense lines and the figure on the face of the document.
-for _noun in ('check', 'card-charge'):
+for _noun in ('check', 'card-charge', 'card-credit'):
     MATRIX[_noun + ' post'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
         'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER',
         'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_IDEMPOTENCY_MISMATCH',
@@ -275,7 +293,8 @@ MATRIX['check post']['E_DUPLICATE_NUMBER'] = (
     'the typed check number is already on another cheque drawn on the same bank account, '
     'including a voided one; 1001 and 01001 are one number')
 
-for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
+for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('card-credit', 'card-credit'),
+                     ('transfer', 'transfer')):
     MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
     MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
         'expected_version is stale: the document changed since it was read')
@@ -716,7 +735,7 @@ MATRIX['payment unapply'].update({
 MATRIX['payment void'].update({
     'E_HAS_APPLICATIONS': 'the receipt still carries active applications; unapply them before voiding',
     'E_HAS_REFUND': 'a live refund paid this receipt\'s overpayment back; void the refund before voiding the receipt',
-    'E_REASON_REQUIRED': 'the void has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the void has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
     'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
     'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
@@ -746,7 +765,7 @@ MATRIX['payment delete'] = {
 MATRIX['payment update'].update({
     'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',
-    'E_REASON_REQUIRED': 'the correction has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the correction has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on a related invoice named by invoice_versions',
     'E_PREVIEW_STALE': 'the supplied settlement_guard no longer matches, or invoice_versions omits a related invoice; a fresh guard is returned',
     'E_DUPLICATE_NUMBER': 'the corrected receipt number belongs to another payment',

@@ -243,7 +243,7 @@
     'item-receipt':'vendors', 'vendor-credit':'vendors', 'pay-bills':'vendors',
     employee:'employees', item:'items', inventory:'items', deposit:'banking', register:'banking', _registers:'banking',
     reconcile:'banking', account:'accounting', journal:'accounting', report:'reports',
-    company:'company', audit:'audit', transfer:'banking', check:'vendors', 'card-charge':'vendors', 'bill-payment':'vendors'
+    company:'company', audit:'audit', transfer:'banking', check:'vendors', 'card-charge':'vendors', 'card-credit':'vendors', 'bill-payment':'vendors'
   };
   // The profile lists sit under Settings, where the anchor keeps them.
   for (const list of ['customer-type', 'vendor-type', 'job-type', 'term', 'payment-method', 'sales-rep', 'ship-method',

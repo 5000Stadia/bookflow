@@ -378,6 +378,8 @@
     }
     // Advice the command returns (a check reference already on file for this customer) shows before saving.
     for(const warning of preview.out.warnings||[]) {const p=el('p',warning);p.className='warn';p.setAttribute('data-payment-warning','');area.append(p);}
+    // The command's own summary line: invoices paid, what each still owes, credit left, discounts.
+    if(preview.out.summary) {const p=el('p',preview.out.summary.text);p.setAttribute('data-payment-summary','');area.append(p);}
     area.append(el('p',`Received ${cash(preview.out.current.received_minor_units)}; applied ${cash(preview.out.current.applied_minor_units)}; available ${cash(preview.out.current.available_minor_units)}.`));
     if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {
@@ -410,9 +412,9 @@
         key='WB-'+crypto.randomUUID();resetDraftView();mode='receive';
         $('amount').value='';$('memo').value='';$('reference').value='';$('number').value='';
         const url=new URL(location.href);url.search='';history.replaceState(null,'',url);await drawCustom();await loadInvoices();
-        note('Payment '+payment.number+' saved. New blank payment started; customer/date/method/destination retained.');
+        note('Payment '+payment.number+' saved. '+(out.summary?out.summary.text+' ':'')+'New blank payment started; customer/date/method/destination retained.');
       } else {mode='show';await drawRecord(payment);note(out.idempotent_replay?'Recovered original payment. No new financial effect.':
-        performed==='payment delete'?'Payment deleted. Its history is retained and readable below.':'Payment saved successfully.');}
+        performed==='payment delete'?'Payment deleted. Its history is retained and readable below.':'Payment saved successfully.'+(out.summary?' '+out.summary.text:''));}
     } catch(err) {
       if(err.code && !['E_INTERNAL','E_DB_BUSY','E_UNAUTHENTICATED'].includes(err.code)) {submitted=null;sessionStorage.removeItem(storageKey);lockSubmitted(false);}
       throw err;
