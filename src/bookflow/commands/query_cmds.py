@@ -70,7 +70,7 @@ def _register(noun: str) -> None:
         return Plan(preview=output.model_validate(values))
 
     registry.command(
-        definition.query_command, scope="company", description=f"Query a bounded page of {definition.plural_label.lower()}.",
+        definition.query_command, scope="company", description=f"Query a bounded page of {definition.plural_label.lower()}; `query` searches by name (for example \"query\": \"Riverside\"), and `{noun} query options` lists the filters, sorts and columns.",
         input_model=QueryInput, output_model=output, required_role=show.required_role,
         capability=show.capability, error_codes=list(dict.fromkeys((*registry.REGISTRY[f"{noun} list"].error_codes, "E_QUERY_STALE"))),
     )(plan)
