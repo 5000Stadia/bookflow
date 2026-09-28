@@ -132,12 +132,12 @@ def test_new_companies_and_the_demo_have_a_plain_credit_card_payment_method(book
     assert [row['kind'] for row in demo if row['name'] == 'Credit Card'] == ['credit_card']
 
 
-M = importlib.import_module('bookflow.storage.company_migrations.versions.0062_card_credits')
+M = importlib.import_module('bookflow.storage.company_migrations.versions.0063_card_credits')
 
 
-def test_co0062_widens_the_money_out_kind_and_changes_nothing_else(tmp_path):
+def test_co0063_widens_the_money_out_kind_and_changes_nothing_else(tmp_path):
     from tests.test_early_discount_migration import _at, _objects
-    assert M.down_revision == 'co0061'
+    assert M.down_revision == 'co0062'
     path = tmp_path / 'kinds.db'
     _at(path, M.down_revision)
     marker = "INSERT INTO money_out_documents VALUES ('{}','journal_entry','{}','t','u','cli','E')"

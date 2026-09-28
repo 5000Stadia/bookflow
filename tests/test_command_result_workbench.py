@@ -79,3 +79,19 @@ def test_a_list_and_a_show_still_open_their_own_pages(hosted):
     assert shown.status_code == 303 and shown.headers["location"].startswith(f"{company}/customer/{customer}")
     listed = browser.post(f"{company}/customer/list", data={}, headers=HEADERS, follow_redirects=False)
     assert listed.status_code == 303 and listed.headers["location"].startswith(f"{company}/customer?")
+
+
+def test_result_tables_name_the_records_a_row_points_at(hosted):
+    """A customer or payment method in a result row reads as its name and opens its record."""
+    browser = _browser(hosted)
+    company = f"/c/{hosted.company_id}"
+    page = _submit(browser, f"{company}/payment/query", {})
+    table = _results(page.text)
+    customer = re.search(rf'<a href="{company}/customer/(\w+)">([^<]+)</a>', table)
+    assert customer and customer.group(2) != customer.group(1)
+    assert re.search(rf'<a href="{company}/payment-method/\w+">[^<]*[a-z][^<]*</a>', table)
+    # An id nobody can open (a revision) is left to the technical result, not a column.
+    orders = _results(_submit(browser, f"{company}/purchase-order/query", {}).text)
+    assert re.search(rf'<a href="{company}/vendor/\w+">[^<]*[a-z][^<]*</a>', orders)
+    assert "Current revision" not in orders
+    assert not re.search(r'<td[^>]*>[0-9A-Z]{26}</td>', orders)

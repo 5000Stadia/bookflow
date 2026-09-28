@@ -5008,3 +5008,24 @@ what they did before.
 to owe no own-date correction; a true-up owed at a later receipt (a short sale entered ahead of
 a receipt already on file) is exempt, because the same change writes it.
 
+
+## Negative-number display (R82)
+
+Company migration co0062 adds `company_info.negative_number_style` (`minus`, the default and
+every upgraded company's value, or `parentheses`), set through `company update` and shown in
+`company show` info. It is display only: the workbench's `money` and `amount` filters
+(`adapters/workbench/display.py`) read it from the context variable `NEGATIVES`, which
+`pages.run` sets for the request when it reads `company show`; a page with no company keeps
+the minus sign. JSON on every interface, exports, print data and form inputs keep the minus.
+
+## Payables reports and received goods
+
+`company/payable_reports._EFFECTS` (read by `report ap-aging`, `report unpaid-bills`, `report
+vendor-balance-summary` and `report vendor-balance-detail`) attributes the Accounts Payable
+transfer a receipt-matched bill posts (debit AP for the claimed receipts, credit AP for the
+bill) to the documents it moved: `receipt_bill_claims.original_minor_units` to the receipt
+line's financial journal, and `billed - original` to the `receipt_bill_adjustments` movement's
+journal, at the bill's effective date; reversals follow their original through
+`posting_line_sources.reversed_source_id`. A bill for received goods is therefore open on
+unpaid bills for what it billed, and only unbilled received value stays on the receipt. Totals
+are unchanged. The Overview's "You owe" is the `report ap-aging` total (Accounts payable).

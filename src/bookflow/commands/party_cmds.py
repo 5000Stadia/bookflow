@@ -285,9 +285,9 @@ _VENDOR_FIELDS: dict[str, tuple[object, object]] = {
     "item_vendor_profiles": (list[VendorItemProfileOutput], Field(default_factory=list)),
     "last_purchase_date": (str | None, None),
     "last_purchase_cost": (MoneyOutput | None, None),
-    "balances_available": (bool, False),
-    "current_balance": (MoneyOutput, ...),
-    "open_balance": (MoneyOutput, ...),
+    "balances_available": (bool, True),
+    "current_balance": (MoneyOutput, Field(description="What the company owes this vendor: net Accounts Payable ledger balance, including credits.")),
+    "open_balance": (MoneyOutput, Field(description="Net Accounts Payable ledger balance for this vendor, the figure the vendor balance summary shows; not bill aging.")),
 }
 
 _EMPLOYEE_FIELDS: dict[str, tuple[object, object]] = {
@@ -728,6 +728,7 @@ def _customer_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.C
 
 
 def _vendor_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.ColumnElement], dict[str, sa.ColumnElement]]:
+    from bookflow.company.customer_balances import vendor_balance_expression
     table = schema.vendors
     person = _concat(*(table.c[field] for field in _PERSON_FIELDS))
     address = _concat(*(table.c[f"address_{leaf}"] for leaf in AddressOutput.model_fields))
@@ -793,7 +794,7 @@ def _vendor_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.Col
                 "work_phone",
                 primary_only=True,
             ),
-            "open_balance": sa.literal(0),
+            "open_balance": vendor_balance_expression(),
             "terms": terms,
             "vendor_type": vendor_type,
         },
@@ -984,7 +985,7 @@ def _register_party(noun: str) -> None:
         manual_profile = next((item.value for item in parsed if item.field == "profile_complete"), None)
         sql_filters = [entry for entry in inp.filter if not entry.startswith("profile_complete=")]
         search, filters, sorts = _expressions(noun)
-        if noun == "customer":
+        if noun in ("customer", "vendor"):
             from bookflow.company.customer_balances import register_functions
             register_functions(s.company)
         manual_sort = inp.sort == "profile_complete"

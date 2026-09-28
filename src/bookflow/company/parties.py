@@ -2443,6 +2443,8 @@ def project_party_record(
         "custom_fields": list(custom),
     }
     if noun == "vendor":
+        from bookflow.company.customer_balances import vendor_balance
+        owed = Money(vendor_balance(db, str(values["id"])), _home_currency(db)).to_dict()
         customer_links = _customer_vendor_links(db, "vendor", str(values["id"]))
         party_collections = collections or read_party_collections(db, "vendor", str(values["id"]))
         public_contacts = _public_contacts(party_collections.get("contacts", ()))
@@ -2482,9 +2484,9 @@ def project_party_record(
                 for item in party_collections.get("expense_accounts", ())
                 if item.get("active", True)
             ],
-            "balances_available": False,
-            "current_balance": Money(0, _home_currency(db)).to_dict(),
-            "open_balance": Money(0, _home_currency(db)).to_dict(),
+            "balances_available": True,
+            "current_balance": owed,
+            "open_balance": owed,
         }
     if noun == "employee":
         employee = {

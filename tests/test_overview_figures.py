@@ -64,15 +64,20 @@ def test_the_overview_figures_are_the_reports_own_totals_and_link_to_them(hosted
     flows = run("report cash-flows", {"date_from": today[:8] + "01", "date_to": today})
     aging = run("report ar-aging", {"as_of": today})
     overdue = run("report open-invoices", {"as_of": today, "past_due_only": True})
-    bills = run("report unpaid-bills", {"as_of": today})
+    payable = run("report ap-aging", {"as_of": today})
     month = run("report profit-and-loss", {"date_from": today[:8] + "01", "date_to": today})
     assert figures["cash"][1] == money(flows["totals"]["closing_cash"])
     assert figures["receivable"][1] == money(aging["totals"]["total"])
     assert figures["overdue"][1] == money(overdue["totals"]["balance"])
-    assert figures["payable"][1] == money(bills["totals"]["balance"])
+    # "You owe" is Accounts Payable: the aging total, which the vendor balance summary and the
+    # balance sheet also report -- received-but-unbilled items and vendor credits included.
+    assert figures["payable"][1] == money(payable["totals"]["total"])
+    summary = run("report vendor-balance-summary", {"as_of": today})
+    assert payable["totals"]["total"] == summary["totals"]["balance"]
+    assert "Accounts payable" in page.text
     assert figures["income"][1] == money(month["totals"]["income"])
     assert figures["cash"][0] == f"/c/{hosted.company_id}/report/cash-flows?f:date_from={today[:8]}01&f:date_to={today}"
-    assert figures["payable"][0] == f"/c/{hosted.company_id}/report/unpaid-bills?f:as_of={today}"
+    assert figures["payable"][0] == f"/c/{hosted.company_id}/report/ap-aging?f:as_of={today}"
 
     # Each figure opens the report that explains it, for the same date.
     assert figures["overdue"][0] == f"/c/{hosted.company_id}/report/open-invoices?f:as_of={today}&f:past_due_only=true"
@@ -89,6 +94,9 @@ def test_the_overview_figures_are_the_reports_own_totals_and_link_to_them(hosted
     activity = page.text.split('id="activity-title"', 1)[1]
     assert f'href="/c/{hosted.company_id}/audit/{latest["id"]}"' in activity
     assert "just now" in activity or "min ago" in activity
+    # In plain words, with who did it: "Posted bill 7", not "post bill 7".
+    from bookflow.adapters.workbench.activity import sentence
+    assert sentence(latest)[0].isupper() and sentence(latest) in activity
 
 
 def test_a_reader_who_cannot_run_a_command_just_does_not_see_its_part(hosted, monkeypatch):

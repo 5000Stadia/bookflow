@@ -26,10 +26,11 @@ LAYOUTS: dict[str, dict[str, Any]] = {
     "invoice": {"amount": "total", "secondary": ("customer_name", "date", "status")},
     "sales-receipt": {"amount": "total", "secondary": ("customer_name", "date", "status")},
     "bill": {"amount": "total", "secondary": ("vendor_name", "due_date", "status")},
+    "time-activity": {"amount": "total", "secondary": ("customer_name", "service_item", "date", "hours", "status")},
 }
 
 # A bare value on a card's second line needs a word to say what it is.
-PREFIX = {"due_date": "Due", "quantity_on_hand": "On hand", "hire_date": "Hired", "release_date": "Released"}
+PREFIX = {"due_date": "Due", "quantity_on_hand": "On hand", "hours": "Hours", "hire_date": "Hired", "release_date": "Released"}
 
 # Parameters that are not list state: paging, and the notices a redirect lands with.
 _NOT_STATE = (*CARRIED, "flash", "deleted")
