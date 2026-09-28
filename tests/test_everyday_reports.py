@@ -254,6 +254,68 @@ def test_open_purchase_orders_are_what_is_still_to_arrive(client):
     assert other["rows"] == [] and _minor(other["totals"]["open_balance"]) == 0
 
 
+
+# --- deposit detail ----------------------------------------------------------------------
+#
+#   Deposit 1, 2026-10-10, to Checking, "Friday takings"                        324.00
+#     DEMO-BANK-SR-1  2026-10-09  one service call at 100.00 + 8% tax, from
+#                     Undeposited Funds                                       -108.00
+#     DEMO-BANK-SR-2  2026-10-09  two service calls, 200.00 + 16.00 tax       -216.00
+DEPOSITS = [
+    ("deposit", "1", "1", "Checking", 32400),
+    ("line", "1", "DEMO-BANK-SR-1", "Undeposited Funds", -10800),
+    ("line", "1", "DEMO-BANK-SR-2", "Undeposited Funds", -21600),
+]
+
+
+def test_deposit_detail_is_each_deposit_and_what_it_gathered(client):
+    result = _run(client, "report deposit-detail", YEAR)
+    assert [(row["kind"], row["deposit_number"], row["number"], row["current_account_label"],
+             _minor(row["amount"])) for row in result["rows"]] == DEPOSITS
+    assert result["totals"]["deposits"] == 1 and _minor(result["totals"]["deposited"]) == 32400
+    head, first, second = result["rows"]
+    assert head["date"] == "2026-10-10" and head["memo"] == "Friday takings"
+    assert first["transaction_type"] == second["transaction_type"] == "sales_receipt"
+    assert first["date"] == "2026-10-09" and first["party_name"] == "Commercial Example Customer"
+    outside = _run(client, "report deposit-detail", {"date_from": "2026-10-11", "date_to": DEMO_AS_OF})
+    assert outside["rows"] == [] and outside["totals"]["deposits"] == 0
+
+
+# --- transaction list by date -------------------------------------------------------------
+#
+# The buying fortnight, 2026-11-20 to 2026-12-02, one row per posting:
+#   DEMO-BUY-PAY-1  bill payment from Payment Example Bank, pays A/P            300.80
+#   check 1         Payment Example Bank to Regional Parts, fittings expense     184.00
+#   card charge 2   Business Credit Card, Regional Parts, fuel expense            96.40
+#   DEMO-BUY-CREDIT-1  vendor credit, A/P against the valves expense              21.90
+#   transfer 3      card paid down from Payment Example Bank                      96.40
+#   DEMO-COUNT      inventory adjustment: two valves written off to expense       21.90
+#   check 4         half a kit to stock and a delivery expense: two splits        11.00
+#   card charge 5   two kits to stock on the card                                 20.00
+FORTNIGHT = [
+    ("2026-11-20", "bill_payment", None, "DEMO-BUY-PAY-1", "Central Supply", "Payment Example Bank", "2000 · Accounts Payable", 30080),
+    ("2026-11-22", "journal_entry", "check", "1", "Regional Parts", "Payment Example Bank", "6400 · Professional Fees", 18400),
+    ("2026-11-24", "journal_entry", "card_charge", "2", "Regional Parts", "Business Credit Card", "6400 · Professional Fees", 9640),
+    ("2026-11-26", "vendor_credit", None, "DEMO-BUY-CREDIT-1", "Central Supply", "2000 · Accounts Payable", "6400 · Professional Fees", 2190),
+    ("2026-11-28", "journal_entry", "transfer", "3", None, "Payment Example Bank", "Business Credit Card", 9640),
+    ("2026-11-30", "journal_entry", None, "DEMO-COUNT", None, "1300 · Inventory Asset", "6400 · Professional Fees", 2190),
+    ("2026-12-01", "journal_entry", "check", "4", "Regional Parts", "Payment Example Bank", "-SPLIT-", 1100),
+    ("2026-12-02", "journal_entry", "card_charge", "5", "Regional Parts", "Business Credit Card", "1300 · Inventory Asset", 2000),
+]
+
+
+def test_transaction_list_by_date_is_every_posting_in_order(client):
+    result = _run(client, "report transaction-list-by-date", {"date_from": "2026-11-20", "date_to": "2026-12-02"})
+    assert [(row["date"], row["transaction_type"], row["money_out_kind"], row["number"], row["party_name"],
+             row["display_account_label"], row["split_account_label"], _minor(row["amount"]))
+            for row in result["rows"]] == FORTNIGHT
+    assert result["totals"]["transactions"] == len(FORTNIGHT)
+    # A void is the original and its reversal on the original date, netting to nothing.
+    voided = _run(client, "report transaction-list-by-date", {"date_from": "2026-10-08", "date_to": "2026-10-08"})
+    assert [(row["number"], row["batch_kind"], _minor(row["amount"])) for row in voided["rows"]] == [
+        ("DEMO-PAY-P-VOID", "original", 1000), ("DEMO-PAY-P-VOID", "reversal", -1000)]
+
+
 # --- the report pages -------------------------------------------------------------------
 #
 # Each page opens already run on the filters its link carries, shows the report's own
@@ -266,6 +328,8 @@ PAGES = {
     "open-purchase-orders": ({"f:date_to": DEMO_AS_OF}, "56.00"),
     "purchases-by-vendor": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "388.97"),
     "purchases-by-item": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "388.97"),
+    "deposit-detail": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "324.00"),
+    "transaction-list-by-date": ({"f:date_from": "2026-11-20", "f:date_to": "2026-12-02"}, "300.80"),
 }
 
 

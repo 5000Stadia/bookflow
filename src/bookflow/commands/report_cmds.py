@@ -47,6 +47,10 @@ from bookflow.company.purchase_reports import (
     PurchasesByVendorInput, PurchasesByVendorOutput, open_purchase_orders, purchases_by_item,
     purchases_by_vendor,
 )
+from bookflow.company.transaction_list_reports import (
+    DepositDetailInput, DepositDetailOutput, TransactionListByDateInput,
+    TransactionListByDateOutput, deposit_detail, transaction_list_by_date,
+)
 from bookflow.company.balance_reports import (
     CustomerBalanceDetailInput, CustomerBalanceDetailOutput, CustomerBalanceSummaryInput,
     CustomerBalanceSummaryOutput, VendorBalanceDetailInput, VendorBalanceDetailOutput,
@@ -289,3 +293,19 @@ def plan_purchases_by_vendor(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_purchases_by_item(inp, ctx, s):
     return Plan(preview=purchases_by_item(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report deposit-detail", scope="company", required_role="member", capability="reports",
+    description="Every deposit posted between date_from and date_to, oldest first, each followed by what it gathered. A deposit row is its effect on the bank account it was made to; the rows beneath it are every other line of the same posting, one per document a deposited line came from -- the payment or sales receipt waiting in Undeposited Funds, with its own type, number, date and name -- and account, plus one per additional line or cash back. Lines are signed debit minus credit, so money taken out of Undeposited Funds is negative under a positive deposit and cash back is positive, and a deposit's lines always net its bank amount to nothing. A correction appears as the reversal and replacement it posted, and a voided deposit, worth nothing on its own date, has no rows. Totals are what was deposited to the bank across the whole report and how many deposits that was; rows are paged.",
+    input_model=DepositDetailInput, output_model=DepositDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_deposit_detail(inp, ctx, s):
+    return Plan(preview=deposit_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report transaction-list-by-date", scope="company", required_role="member", capability="reports",
+    description="Every transaction posted between date_from and date_to, in accounting-date order and then the order it was recorded: one row per posting, with the document's type and number, who it names, its memo, the account it posts to, the other side of the entry and its amount. The account is the one line on the side that has one when the other side has several -- the bank on a check, Accounts Payable on a bill, Accounts Receivable on an invoice; with one line on each side it is the line on a bank, credit card, receivable or payable account in that order, else the credit line; with several on both sides it is the entry's first line. The split is the other side's account when it is one account, and -SPLIT- when it is more. The amount is the entry's total, so a correction appears as a negative reversal and a positive replacement and a void as a negative reversal on the original date, exactly as report transaction-detail shows them. The name is the listed line's party, or the one party the entry names. The total is how many postings the report lists; rows are paged.",
+    input_model=TransactionListByDateInput, output_model=TransactionListByDateOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_transaction_list_by_date(inp, ctx, s):
+    return Plan(preview=transaction_list_by_date(inp, s, principal_id=ctx.on_behalf_of))

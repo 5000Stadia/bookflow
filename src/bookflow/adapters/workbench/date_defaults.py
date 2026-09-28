@@ -23,7 +23,8 @@ PERIOD_REPORTS = (
     'general-ledger', 'transaction-detail', 'profit-and-loss', 'cash-flows',
     'income-tax-summary', 'profit-and-loss-by-class', 'profit-and-loss-by-job',
     'sales-by-customer', 'sales-by-item', 'sales-by-rep', 'expenses-by-vendor',
-    'statement', 'purchases-by-vendor', 'purchases-by-item',
+    'statement', 'purchases-by-vendor', 'purchases-by-item', 'deposit-detail',
+    'transaction-list-by-date',
 )
 AS_OF_REPORTS = (
     'ap-aging', 'ar-aging', 'collections', 'inventory-valuation', 'missing-checks',

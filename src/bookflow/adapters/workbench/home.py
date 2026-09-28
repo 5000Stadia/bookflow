@@ -331,6 +331,7 @@ PANELS: tuple[Panel, ...] = (
                      "report vendor-balance-summary", "report vendor-balance-detail",
                      "report open-purchase-orders", "report purchases-by-vendor",
                      "report purchases-by-item",
+                     "report deposit-detail", "report transaction-list-by-date",
                      "report inventory-valuation", "report stock-status",
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
@@ -558,6 +559,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
             _report("Missing checks", "missing-checks"),
+            _report("Deposit detail", "deposit-detail"),
         ),
     ),
     Section(
@@ -577,6 +579,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             _report("Trial balance", "trial-balance"),
             _report("General ledger", "general-ledger"),
+            _report("Transaction list by date", "transaction-list-by-date"),
             _report("Profit and loss", "profit-and-loss"),
             _report("Balance sheet", "balance-sheet"),
         ),

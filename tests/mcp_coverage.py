@@ -390,6 +390,7 @@ report cash-flows
 report collections
 report customer-balance-detail
 report customer-balance-summary
+report deposit-detail
 report expenses-by-vendor
 report general-ledger
 report income-tax-summary
@@ -408,6 +409,7 @@ report sales-by-rep
 report statement
 report stock-status
 report transaction-detail
+report transaction-list-by-date
 report trial-balance
 report unbilled-costs
 report unpaid-bills

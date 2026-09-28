@@ -416,6 +416,14 @@ MATRIX['report purchases-by-item'] = {
     'E_QUERY_STALE': 'posting, stock movement or item display facts changed between pages',
     'E_VALUE_RANGE': 'public purchase amount, average cost or report total exceeds signed 64-bit range',
 }
+MATRIX['report deposit-detail'] = {
+    'E_QUERY_STALE': 'a deposit, its sources or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public deposit amount or report total exceeds signed 64-bit range',
+}
+MATRIX['report transaction-list-by-date'] = {
+    'E_QUERY_STALE': 'a posting or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public transaction amount exceeds signed 64-bit range',
+}
 MATRIX['report ap-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',

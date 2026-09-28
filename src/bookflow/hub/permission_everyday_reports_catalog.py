@@ -21,9 +21,11 @@ SOURCE_COMMIT = '3686f4b55eda5b22ad2c11f70235d5f76ea3131a'
 REPORTS = {
     'customer-balance-detail': 'plan_customer_balance_detail',
     'customer-balance-summary': 'plan_customer_balance_summary',
+    'deposit-detail': 'plan_deposit_detail',
     'open-purchase-orders': 'plan_open_purchase_orders',
     'purchases-by-item': 'plan_purchases_by_item',
     'purchases-by-vendor': 'plan_purchases_by_vendor',
+    'transaction-list-by-date': 'plan_transaction_list_by_date',
     'vendor-balance-detail': 'plan_vendor_balance_detail',
     'vendor-balance-summary': 'plan_vendor_balance_summary',
 }
