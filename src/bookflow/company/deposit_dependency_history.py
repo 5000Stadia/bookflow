@@ -68,7 +68,9 @@ def _resource_denial(error):
     if error.code != 'E_PERMISSION':
         return False
     details = error.details or {}
-    return (details == {'reason': 'unavailable_target', 'field': 'scope'} or
+    # A policy refusal on an activated install also names the capability and required role
+    # (blueprint 4.3b) beside its reason, so the reason and field are what identify it.
+    return ((details.get('reason'), details.get('field')) == ('unavailable_target', 'scope') or
             set(details) == {'capability', 'required_role', 'role'})
 
 
