@@ -207,4 +207,7 @@ def test_combined_active_tax_and_payment_samples_have_separate_exact_effects(ref
     from tests.demo_oracle import DEMO_POSITION
     bank = DEMO_POSITION['balances']['Payment Example Bank'] if prefix == 'DEMO' else 17000
     assert client.account.show(account='Payment Example Bank',company=company)['balance']['minor_units'] == bank
-    assert client.account.show(account='Accounts Receivable',company=company)['balance']['minor_units'] == 12800+39+1000
+    # The reference year's receivables are this arc's plus the tax and payment samples; the
+    # demo's whole receivable grows with later arcs (discounts, line kinds), so it is the oracle's.
+    receivable = DEMO_POSITION['balances']['Accounts Receivable'] if prefix == 'DEMO' else 12800+39+1000
+    assert client.account.show(account='Accounts Receivable',company=company)['balance']['minor_units'] == receivable
