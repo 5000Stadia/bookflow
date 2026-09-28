@@ -660,6 +660,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
 
+    def result_names(request: Request, company_id: str | None, company_view: dict[str, Any] | None):
+        """Name the records a read result points at, through each record's own `show`."""
+        if not company_id:
+            return None
+
+        def resolve(target: str, identifier: str) -> str | None:
+            try:
+                row = run(request, f"{target} show", {_noun_meta(target)["identifier"]: identifier}, company_id)
+            except BookflowError:
+                return None  # not found, or not the reader's to see: the id stays as it is
+            return _reference_label(target, row, company_view or {}) if isinstance(row, dict) else None
+        return resolve
+
     def annotations(company_id, noun, record_id, shown, role_view, cred):
         """Project target metadata and existing UI authority; commands own all data access."""
         if not company_id or not record_id:
@@ -2171,7 +2184,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       work_history=result if noun in Work.DOCUMENTS and verb == "history" else None,
                       work_results=result if noun in Work.DOCUMENTS and verb == "query" else None,
                       command_result=CommandResult.view(company_id, noun, verb, result,
-                          home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'))
+                          home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'),
+                          resolve=result_names(request, company_id, authorized_company))
                           if not cmd.is_write and not preview and noun != 'report' and not billing else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
