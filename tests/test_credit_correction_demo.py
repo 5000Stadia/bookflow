@@ -4,12 +4,14 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+from tests.demo_oracle import as_edited_by_r83
+
 BASE = '438b36b60ccc596def68f1a75a823d4c1a90d82d'
 RESOURCE = Path(__file__).parents[1] / 'src/bookflow/demo/seed.toml'
 
 
 def test_credit_example_appends_seven_commands_without_changing_old_seed():
-    old = subprocess.check_output(['git', 'show', BASE + ':src/bookflow/demo/seed.toml'])
+    old = as_edited_by_r83(subprocess.check_output(['git', 'show', BASE + ':src/bookflow/demo/seed.toml']), 'seed.toml')
     new = RESOURCE.read_bytes()
     assert new.startswith(old)
     before = tomllib.loads(old.decode())['commands']

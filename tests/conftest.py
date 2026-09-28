@@ -14,6 +14,7 @@ from bookflow.core import registry  # noqa: E402
 from bookflow.core.context import Context, Interface  # noqa: E402
 from bookflow.core.dispatch import run as dispatch_run  # noqa: E402
 from tests import provenance  # noqa: E402
+from tests.demo_oracle import DEMO_AS_OF  # noqa: E402
 
 #: The packaged launcher every CLI witness in this suite runs. One owner names
 #: it (tests/provenance.py), so a test cannot quietly run a different build.
@@ -34,13 +35,28 @@ def _seeded_template(tmp_path_factory):
     try:
         c = bookflow.connect(data_root=str(src))
         c.init()
-        c.demo.reset()
+        c.demo.reset(as_of=DEMO_AS_OF)
     finally:
         if previous is None:
             os.environ.pop("BOOKFLOW_DATA_ROOT", None)
         else:
             os.environ["BOOKFLOW_DATA_ROOT"] = previous
     return src
+
+
+@pytest.fixture(autouse=True)
+def _demo_reset_as_written(monkeypatch):
+    """A demo reset inside a test defaults to the day the seed is written as of, not today.
+
+    `demo reset` moves the demo's dates back to the day it runs (R83), so without this the demo
+    a test sees -- and every date and fiscal-year figure it pins -- would change with the day the
+    suite runs. As of its written day the demo is exactly the seed as written. A test can still
+    pass `as_of`; tests/test_demo_dates.py covers the moving itself and the today default. CLI
+    and host children run the real default, so a child that pins demo dates passes `--as-of`.
+    """
+    from datetime import date
+    from bookflow.demo import dates
+    monkeypatch.setattr(dates, "reset_day", lambda zone: date.fromisoformat(DEMO_AS_OF))
 
 
 def pytest_configure(config):

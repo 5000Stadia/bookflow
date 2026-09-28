@@ -27,6 +27,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `include_reference` | `--include-reference` | boolean | no | no | false | Also seed Reference Plumbing Co with the fixed 2026 reference year. Reset moves the entire existing demo organization, including every company, to trash. |
+| `as_of` | `--as-of` | string \| null | no | yes | null | The day the demo is reset as of, YYYY-MM-DD; defaults to today in the demo company's timezone. The demo's story moves back by whole months so nothing in Demo Plumbing Co is dated after this day and the stock it buys has arrived by then. |
 
 ### Command and context options
 
@@ -65,6 +66,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `display_name` | string | yes | no | — | — |
 | `path` | string \| null | yes | yes | — | — |
 | `trashed_path` | string \| null | yes | yes | — | — |
+| `as_of` | string | yes | no | — | The day the demo was reset as of: nothing in Demo Plumbing Co is dated after it. |
 | `reference_company_id` | string \| null | no | yes | null | Reference company ID when requested; null otherwise. Preview IDs are prospective. |
 | `reference_display_name` | string \| null | no | yes | null | Reference company display name when requested; null otherwise. |
 
@@ -72,6 +74,7 @@ Example JSON output:
 
 ```json
 {
+  "as_of": "value",
   "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "display_name": "value",
   "dry_run": false,

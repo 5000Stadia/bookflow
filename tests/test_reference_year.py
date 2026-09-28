@@ -37,7 +37,7 @@ def demo_runner(client, company, why, *, dry_run=False):
 
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user, make_actor
-from tests.demo_oracle import (DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
+from tests.demo_oracle import (DEMO_ARCS, DEMO_AS_OF, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
 from tests import provenance
 
 REFERENCE = 'Reference Plumbing Co'
@@ -69,7 +69,7 @@ def cli_run(root, *args):
 def reference_template(tmp_path_factory):
     root = tmp_path_factory.mktemp('reference-template') / 'root'
     cli_run(root, 'init')
-    result = cli_run(root, 'demo', 'reset', '--include-reference')
+    result = cli_run(root, 'demo', 'reset', '--include-reference', '--as-of', DEMO_AS_OF)
     assert result['trashed_path'] is None
     assert result['reference_company_id'] != result['company_id']
     return root
