@@ -244,14 +244,28 @@ def _apply_rows(db, rows, moved):
                                                         set_=dict(version_id=version_id)))
 
 
-def materialize(db, identifiers):
-    """Store the statement effects of these documents. Idempotent; returns what it added."""
+def materialize(db, identifiers, observed=None):
+    """Store the statement effects of these documents. Idempotent; returns what it added.
+
+    `observed`, when given, receives the head each moved key had before this write -- None for
+    a key stored for the first time -- so the command that moved it can say what that did to a
+    finished reconciliation (`reconciliation_changes.saved`).
+    """
     rows, moved = rows_for(db, identifiers)
+    if observed is not None and moved:
+        heads = c.reconciliation_effect_heads
+        before = {}
+        ordered = sorted(moved)
+        for offset in range(0, len(ordered), 200):
+            before.update(db.conn.execute(sa.select(heads.c.key_id, heads.c.version_id).where(
+                heads.c.key_id.in_(ordered[offset:offset + 200]))).tuples().all())
+        for key_id in ordered:
+            observed.setdefault(key_id, before.get(key_id))
     _apply_rows(db, rows, moved)
     return rows, moved
 
 
-def drain(db):
+def drain(db, observed=None):
     """Materialize everything the queue owes, in batches, and clear what was handled.
 
     Every queued document is deleted whether or not it produced rows, because a document the
@@ -263,7 +277,7 @@ def drain(db):
         batch = pending_documents(db, limit=BATCH)
         if not batch:
             return handled
-        materialize(db, batch)
+        materialize(db, batch, observed)
         db.conn.execute(c.statement_effect_pending.delete()
                         .where(c.statement_effect_pending.c.transaction_id.in_(batch)))
         handled += len(batch)
@@ -274,7 +288,7 @@ def _has_queue(db):
         "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='statement_effect_pending'").fetchone() is not None
 
 
-def drain_in_command(db, *, commits=None, owner=None):
+def drain_in_command(db, *, commits=None, owner=None, observed=None):
     """The single hook: bring storage level with the ledger inside the caller's transaction.
 
     Called by `core.dispatch._apply` around every company-writing command's apply, and by
@@ -287,7 +301,7 @@ def drain_in_command(db, *, commits=None, owner=None):
     if db is None or not db.writable or not _has_queue(db):
         return 0
     if db.write_transaction:
-        return drain(db)
+        return drain(db, observed)
     if not pending_documents(db, limit=1):
         return 0
     db.raw.execute('BEGIN IMMEDIATE')

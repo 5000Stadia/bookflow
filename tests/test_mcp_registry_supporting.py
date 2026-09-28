@@ -33,7 +33,7 @@ FAMILIES = {
                 'report vendor-balance-summary', 'report vendor-balance-detail',
                 'report open-purchase-orders', 'report purchases-by-vendor', 'report purchases-by-item',
                 'report deposit-detail', 'report transaction-list-by-date',
-                'report vendor-1099-summary'),
+                'report vendor-1099-summary', 'report reconciliation-discrepancy'),
 }
 
 

@@ -2,7 +2,8 @@
 
 Read-only company reports the anchor has and Bookflow lacked: customer and vendor balance
 summary and detail, open purchase orders, purchases by vendor and by item, deposit detail,
-the transaction list by date, and the 1099 vendor summary. Each is admitted exactly as every
+the transaction list by date, the 1099 vendor summary and the reconciliation discrepancy
+report. Each is admitted exactly as every
 other report is -- the `reports` capability at `member` -- with one company action per
 command carrying the planner that runs it. No capability, role default, admin action or
 existing threshold changes, so a root replacing its catalog with this one suspends no agent
@@ -25,6 +26,7 @@ REPORTS = {
     'open-purchase-orders': 'plan_open_purchase_orders',
     'purchases-by-item': 'plan_purchases_by_item',
     'purchases-by-vendor': 'plan_purchases_by_vendor',
+    'reconciliation-discrepancy': 'plan_reconciliation_discrepancy',
     'transaction-list-by-date': 'plan_transaction_list_by_date',
     'vendor-balance-detail': 'plan_vendor_balance_detail',
     'vendor-balance-summary': 'plan_vendor_balance_summary',

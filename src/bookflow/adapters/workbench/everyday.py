@@ -16,6 +16,7 @@ COMMANDS = {
     "report vendor-balance-summary", "report vendor-balance-detail",
     "report open-purchase-orders", "report purchases-by-vendor", "report purchases-by-item",
     "report deposit-detail", "report transaction-list-by-date", "report vendor-1099-summary",
+    "report reconciliation-discrepancy",
 }
 
 # One column: (heading, row field, how the cell is written). `label` is the row's first
@@ -53,6 +54,11 @@ LAYOUTS = {
                             ("Payments", "payments", M),
                             ("Card payments not counted", "card_payments_excluded", M),
                             ("Meets threshold", "threshold_label", T)),
+    "reconciliation-discrepancy": (("Reconciliation", "reconciliation_label", "label"),
+                                   ("Transaction", "number", "document"), ("Date", "date", D),
+                                   ("Memo", "memo", T), ("Change", "change_label", T),
+                                   ("Reconciled", "reconciled", M), ("Now", "current", M),
+                                   ("Difference", "difference", M)),
 }
 # The whole-report figures above the table, in reading order, with their headings.
 TOTALS = {
@@ -69,6 +75,9 @@ TOTALS = {
                             ("vendors_meeting_threshold", "Vendors at or over threshold"),
                             ("payments", "All payments to 1099 vendors"),
                             ("card_payments_excluded", "Card payments not counted")),
+    "reconciliation-discrepancy": (("reconciliations", "Reconciliations"),
+                                   ("out_of_balance", "No longer tie"),
+                                   ("changes", "Transactions changed since reconciled")),
 }
 # What each report says under its table, in a bookkeeper's words.
 NOTES = {
@@ -81,11 +90,14 @@ NOTES = {
     "purchases-by-item": "What was bought of each item in the period, with the quantity bought and its average cost. Stock items count what arrived from vendors; a customer return, an inventory adjustment and a sale are not purchases.",
     "deposit-detail": "Each deposit, then the payments, sales receipts and other lines it gathered, at the amount each took out of the account it came from. Select a transaction to open it.",
     "transaction-list-by-date": "Every transaction posted in the period, in date order: its type and number, who it names, the account it posts to and the other side of the entry. A correction or a void appears as the reversal and replacement it posted. Select a transaction to open it.",
+    "reconciliation-discrepancy": "Each finished reconciliation of the account, with the statement's ending balance, its cleared balance as the transactions it cleared stand now, and the difference; under it, each of those transactions that was changed or voided after it was reconciled, at what it was reconciled and what it counts for now. A later reconciliation carries an earlier one's difference in its beginning balance. Change the transaction back, or re-do the reconciliation, to make it tie again.",
     "vendor-1099-summary": "Payments made in the calendar year to vendors marked eligible for a 1099, from bank accounts only: payments by credit card are reported by the card company, so they are shown but not counted. This is a report, not a filing.",
 }
 PO_STATUS = {"open": "Open", "partly_received": "Partly received"}
 BATCH = {"original": "", "reversal": "Reversal", "replacement": "Correction"}
 BOXES = {"nonemployee_compensation": "1099-NEC box 1"}
+CHANGES = {"amount": "Amount changed", "date": "Dated after the statement", "account": "Moved to another account",
+           "voided": "Voided"}
 
 
 def _link(company_id, verb, row, result):
@@ -128,6 +140,12 @@ def view(result, inputs, company_id, verb):
             shown["threshold_label"] = "Yes" if row["meets_threshold"] else "No"
         if verb == "deposit-detail" and row["kind"] == "deposit":
             shown["document_url"] = None
+        if verb == "reconciliation-discrepancy":
+            shown["is_total"] = row["kind"] == "reconciliation"
+            shown["change_label"] = CHANGES.get(row["type_of_change"], "")
+            shown["reconciliation_label"] = (
+                ("Opening balance " if row["reconciliation"] == "opening" else "Statement ")
+                + row["statement_date"]) if row["kind"] == "reconciliation" else ""
         if verb in ("customer-balance-detail", "vendor-balance-detail") and row["kind"] == "total":
             shown["number"] = "Total"
         rows.append(shown)

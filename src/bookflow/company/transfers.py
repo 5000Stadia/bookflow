@@ -329,7 +329,7 @@ def prepare(s, ctx, inp, operation='post'):
     # journal editor now refuses to write through. Naming this module as the owner is what
     # keeps that refusal off the transfer's own correcting and voiding verbs.
     fresh = journals.prepare(s, ctx, journal, operation, owner=money_out.OWNER)
-    return Plan(_output(fresh.preview, summary), {'input': inp, 'operation': operation})
+    return Plan(_output(fresh.preview, summary), {'input': inp, 'operation': operation, 'prospective': fresh})
 
 
 def apply(plan, ctx, s):
