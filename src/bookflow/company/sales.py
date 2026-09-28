@@ -488,6 +488,11 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     total = calc.total((subtotal, tax))
     if total < 0:
         raise _invalid('total', 'a posted sale total must not be negative')
+    # A statement charge exists to put an amount on the customer's account (tests/error_matrix:
+    # "no positive amount" is its E_VALIDATION); zero-value sales admitted for stock-carrying
+    # invoice and receipt lines do not make a charge of nothing meaningful.
+    if total == 0 and document_type == 'statement_charge':
+        raise _invalid('total', 'a statement charge must charge something: give a rate or amount above 0.00')
     if document_type == 'sales_receipt' and old_revision:
         from bookflow.company.sales_models import money
         received = inp.amount_received
