@@ -9,6 +9,7 @@ from bookflow.company import payment_calculations as calc, payment_queries as qu
 from bookflow.company import payment_operations as operations, early_discounts as early
 from bookflow.company.payment_authority import authorize
 from bookflow.company.payment_models import PaymentContext
+from bookflow.company.payment_summaries import summarize
 from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput, PaymentRevisionOutput
 from bookflow.company.sales_models import money, _invalid
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES as SETTLEABLE
@@ -468,6 +469,7 @@ def prepare(s, ctx, inp, operation):
     journals.open_dates(s, [inp.date])
     changed_headers, app_outputs, allocation_outputs, changes, recipes = [], [], [], [], []
     pending_discounts, warnings = [], []
+    settled = []
     for target in targets:
         facts, units = target['facts'], target['amount'] + target['discount']
         invoice, invoice_revision = facts['header'], facts['revision']
@@ -500,6 +502,8 @@ def prepare(s, ctx, inp, operation):
         app_outputs.append(dict(application_id=app['id'], invoice_id=invoice['id'], invoice_version=changed['version'],
             source_component_key_id=keys[party]['id'], party_id=party, amount=Money(units, context_['currency']).to_dict(), effective_date=inp.date,
             **discount_view))
+        settled.append(dict(document_id=invoice['id'], document_type=invoice['type'], number=invoice['number'],
+            applied=target['amount'], discount=target['discount'], still_due=facts['due'] - units))
         changes.append(dict(invoice_id=invoice['id'], version=changed['version'], revision_id=invoice_revision['id'],
             gross_minor_units=facts['gross'], applied_minor_units=facts['applied'] + units, due_minor_units=facts['due'] - units,
             currency=context_['currency'], status='paid' if facts['due'] == units else 'partial'))
@@ -553,8 +557,14 @@ def prepare(s, ctx, inp, operation):
         audit_event_id=event, before_header=effect_header(previous, revision), after_header=effect_header(header, revision),
         preferences=profile.preferences.model_dump() if operation == 'receive' else json.loads(funding['profile']['profile_snapshot'])['preferences'],
         source_components=component_outputs, applications=app_outputs, allocations=allocation_outputs, document_changes=changes)
+    payer_label = defaults._row(s.company, 'customer', context_['customer_id'], active=False)['full_name']
+    applied_cash = Money(sum(row['applied'] for row in settled), context_['currency'])
+    opening = (f"Received {Money(revision['total_minor_units'], context_['currency'])} from {payer_label}."
+               if operation == 'receive' else f"Applied {applied_cash} of {payer_label}'s credit.")
+    summary = summarize(settled, context_['currency'], opening=opening, credit=current['available_minor_units'],
+                        party_label=payer_label)
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
-        facts_fingerprint=fp, effect=effect, current=current,
+        facts_fingerprint=fp, effect=effect, current=current, summary=summary,
         warnings=(repeated + warnings) if operation == 'receive' else [],
         effect_counts={key: len(effect[key]) for key in ('source_components', 'applications', 'allocations', 'document_changes')})
     return Plan(output, dict(input=inp, operation=operation, header=header, before=previous, pending=pending,

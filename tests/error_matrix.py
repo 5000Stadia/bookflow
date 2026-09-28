@@ -237,7 +237,7 @@ MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('
 # The money-out documents are the register split under their own names, so they raise the
 # ledger's own codes; only the unbalanced one reads differently, because what it names is the
 # difference between the expense lines and the figure on the face of the document.
-for _noun in ('check', 'card-charge'):
+for _noun in ('check', 'card-charge', 'card-credit'):
     MATRIX[_noun + ' post'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
         'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER',
         'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_IDEMPOTENCY_MISMATCH',
@@ -275,7 +275,8 @@ MATRIX['check post']['E_DUPLICATE_NUMBER'] = (
     'the typed check number is already on another cheque drawn on the same bank account, '
     'including a voided one; 1001 and 01001 are one number')
 
-for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
+for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('card-credit', 'card-credit'),
+                     ('transfer', 'transfer')):
     MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
     MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
         'expected_version is stale: the document changed since it was read')
@@ -716,7 +717,7 @@ MATRIX['payment unapply'].update({
 MATRIX['payment void'].update({
     'E_HAS_APPLICATIONS': 'the receipt still carries active applications; unapply them before voiding',
     'E_HAS_REFUND': 'a live refund paid this receipt\'s overpayment back; void the refund before voiding the receipt',
-    'E_REASON_REQUIRED': 'the void has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the void has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
     'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
     'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
@@ -746,7 +747,7 @@ MATRIX['payment delete'] = {
 MATRIX['payment update'].update({
     'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',
-    'E_REASON_REQUIRED': 'the correction has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_REASON_REQUIRED': 'the correction has no reason, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on a related invoice named by invoice_versions',
     'E_PREVIEW_STALE': 'the supplied settlement_guard no longer matches, or invoice_versions omits a related invoice; a fresh guard is returned',
     'E_DUPLICATE_NUMBER': 'the corrected receipt number belongs to another payment',

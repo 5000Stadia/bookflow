@@ -293,6 +293,33 @@ for _noun, _selector, _account in (('check', 'check', 'Checking'),
         f'bookflow {_noun} history {ID} --include-deleted --limit 25 --company "Demo Plumbing Co" --json',
         {_selector: ID, 'limit': 25, 'include_deleted': True})
 
+# A card credit is a card charge in the other direction: a refund put back on the card.
+EXAMPLES.update({
+    'card-credit post': Example(
+        'bookflow card-credit post --account "Company Credit Card" --pay-to-name-type vendor --pay-to-name-id "Northside Supply" --date 2026-04-08 --amount 42.50 --memo "Returned the wrong valve" --expenses \'[{"account":"Office Supplies","amount":"42.50","memo":"Valve returned"}]\' --company "Demo Plumbing Co" --reason "Record the refund on the card" --json',
+        {"account": "Company Credit Card", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"},
+         "date": "2026-04-08", "amount": "42.50", "memo": "Returned the wrong valve",
+         "expenses": [{"account": "Office Supplies", "amount": "42.50", "memo": "Valve returned"}]}),
+    'card-credit show': Example(
+        f'bookflow card-credit show {ID} --company "Demo Plumbing Co" --json', {'card_credit': ID}),
+    'card-credit update': Example(
+        f'bookflow card-credit update {ID} --expected-version 1 --amount 45.00 '
+        f'--expenses \'[{{"account":"Office Supplies","amount":"45.00","memo":"Valve returned"}}]\' '
+        f'--company "Demo Plumbing Co" --reason "The refund was 45.00" --json',
+        {'card_credit': ID, 'expected_version': 1, 'amount': '45.00',
+         'expenses': [{'account': 'Office Supplies', 'amount': '45.00', 'memo': 'Valve returned'}]}),
+    'card-credit void': Example(
+        f'bookflow card-credit void {ID} --expected-version 2 --company "Demo Plumbing Co" '
+        f'--reason "Refund went to the other card" --json', {'card_credit': ID, 'expected_version': 2}),
+    'card-credit query': Example(
+        'bookflow card-credit query --account "Company Credit Card" --date-from 2026-01-01 --date-to 2026-12-31 '
+        '--limit 25 --company "Demo Plumbing Co" --json',
+        {'account': 'Company Credit Card', 'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25}),
+    'card-credit history': Example(
+        f'bookflow card-credit history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {'card_credit': ID, 'limit': 25}),
+})
+
 EXAMPLES.update({
     'transfer show': Example(f'bookflow transfer show {ID} --company "Demo Plumbing Co" --json',
                              {'transfer': ID}),

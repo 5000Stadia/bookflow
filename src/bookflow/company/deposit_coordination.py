@@ -2,7 +2,7 @@
 from dataclasses import asdict, dataclass, is_dataclass
 import json
 from pydantic import BaseModel
-from bookflow.core.errors import BookflowError
+from bookflow.core.errors import BookflowError, require_reason
 
 # Each full owner payload is preserved. New producer fields need a disposition.
 PAYMENT_FIELDS = frozenset('input operation header before pending changed_headers event operation_id selected custom_plan sequence context targets fingerprint at funding old_allocations semantic originals cancellation_set'.split())
@@ -177,8 +177,7 @@ def prepare_source_overlay(s, ctx, inp, source, binding):
     history._authorize_binding_graph(s, binding, targets, write=True)
     if ctx.on_behalf_of != binding.on_behalf_of:
         raise BookflowError('E_UNAUTHENTICATED')
-    if not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140:
-        raise BookflowError('E_REASON_REQUIRED')
+    require_reason(ctx.reason)
     _require(source.action == inp.source_action)
     claimed = dependencies.active_claim(s, identity)
     if claimed is None or claimed['transaction_id'] != inp.deposit:
@@ -275,8 +274,7 @@ def resolve_coordinate(s, ctx, inp, binding):
     history._authorize_binding_graph(s, binding, targets, write=True)
     if ctx.on_behalf_of != binding.on_behalf_of:
         raise BookflowError('E_UNAUTHENTICATED')
-    if not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140:
-        raise BookflowError('E_REASON_REQUIRED')
+    require_reason(ctx.reason)
     provenance = EffectProvenance(at=clock.now_iso(), event_id=new_id(), operation_id=new_id())
     source = deposit_composition.preview_source_effect(s, ctx, inp.source_action, provenance=provenance)
     overlay = prepare_source_overlay(s, ctx, inp, source, binding)
