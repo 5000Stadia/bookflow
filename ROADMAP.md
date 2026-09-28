@@ -38,6 +38,21 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [x] R26 V1 polish: menu, icons, login feedback, version guard, public docs, drifted tests — notes/NOW.md
 - [x] R27 GitHub main current with the live release (d85e43f) — notes/status.sh
 
+## M3.2 — Interface round (phone and desktop audit)
+
+- [x] R31 Human-directed improved UI (phone and desktop audit round, R55–R65) — design/V2-ROADMAP.md item 1
+- [x] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R56 R31 the form first on document forms, recent documents as compact rows (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R64 R31 a quieter document form — sticky save bar, Class and unit columns only when used, picker and date tidying, recording details folded (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R57 R31 reports open with their numbers — one-line filters, date chips, headline figure, statement-shaped layout on desktop (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R58 R31 lists and filters — pinned search as you type, filters apply themselves, phone filter sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R60 R31 readable money and dates across all screens, exact values kept in exports (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R59 R31 ledger tables and money rows — right-aligned figures, currency in the header, fewer default columns (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R63 R31 an Overview with numbers — figures strip, needs attention, recent activity (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R65 R31 live totals on documents from the core preview as you type (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+- [x] R62 R31 the account register on a phone as a list of entries with an add sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
+
 ## M3.5 — V1.5: finished and proven
 
 - [x] R10 Identity, memberships, roles and agent tokens (spec row 7; checked 2026-09-27, gaps R66–R68 fixed and walked through by hand) — design/specs/7-identity-isolation.md
@@ -59,49 +74,52 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [~] R83 the demo sells stock today: demo documents dated after today move into the past so demo items are on hand — notes/blind-trials-20260927.md
 - [~] R87 connecting an agent: the one-time token secret shown plainly with a Copy button, and a New agent button on the Agents panel (the person's yes on gate g9ed945) — notes/manual-agent-walkthrough-20260927.md
 - [~] R80 a fresh agent that has never seen Bookflow runs a week of the plumber's ordinary work through MCP alone (invoice, take a payment, enter a bill, reconcile, run the month's report); interview it on where it hesitated or guessed, fix what is material, retest once — notes/mcp-blind-acceptance-runbook.md
+- [ ] R74 permission checks on current-mode installs cost about 3x; the demo reset through MCP exceeds the client time limit: reuse the permission snapshot only behind a fresh in-transaction version check, and nothing the product does times out — design/permission-resolution.md
+- [ ] R88 agent administration reads like the rest of the product: the finder reaches users, tokens, agents and organizations; names and readable dates instead of raw ids, timestamps and codes on agent and token pages; the principal picked from a list; plain errors; document history says "for k, via agent" — notes/V1.5-resort-draft.md
+- [ ] R89 agents can be deactivated (the gap recorded when R68 shipped) — notes/V1.5-resort-draft.md
+- [ ] R82 negative amounts in parentheses as a company setting — notes/V1.5-resort-draft.md
+- [ ] R90 result tables show record names, not raw ids — notes/V1.5-resort-draft.md
+- [ ] R91 the 2000-span sales-tax forecast recovery works in the browser without timing out — notes/V1.5-resort-draft.md
+- [ ] R92 Overview activity and audit summaries read in plain words with the actor's name — notes/V1.5-resort-draft.md
+- [ ] R93 payment results carry a short summary: invoices paid, what is still due, unapplied credit labelled as credit — notes/V1.5-resort-draft.md
+- [ ] R94 deposit, payment and bill-payment lists in the ledger style, and the wide aging, open-invoice and unpaid-bill tables as phone cards — notes/V1.5-resort-draft.md
+- [ ] R95 small form polish: "Clear Description" only when useful; register query dates and parameters consistent with other queries — notes/V1.5-resort-draft.md
+- [ ] R96 diagnose and fix the older failing tests (sales-tax-code list E_USAGE, delete admission, payment recheck, statement-charge surfaces, receivable report staleness, audit reachable when activated, history redirects, deleted-deposit page, routed-command delete forms): fix what is real, repair what is stale — notes/V1.5-resort-draft.md
+- [ ] R97 payment calculate with auto-calculate off and no amount returns the field error row 22's spec describes — design/specs/22-customer-payments.md
+- [ ] R98 notes/status.sh reports commits behind and the command count correctly (tooling) — notes/status.sh
+- [~] R99 bug sweep: every known defect from notes, trial reports, test runs, Codex reviews and TODO/FIXME comments (wrong results, errors, timeouts, failing or flaky tests) listed as its own item or folded into one; new capabilities go to the future list — notes/bug-sweep-20260928.md
 - [ ] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
-- [ ] R81 release v1.5: docs current, the demo resets cleanly, tag v1.5 — README.md
+- [ ] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current, the demo resets cleanly, tag v1.5 — README.md
 
-## M4 — V2 functional roadmap (held until after v1.5; each increment chosen by the person)
+## M4 — After V1.5: concepts to develop
 
-- [x] R31 Human-directed improved UI (phone and desktop audit round, R55–R65) — design/V2-ROADMAP.md item 1
-- [x] R55 R31 quick fixes — report date order, focus after submit, menu Register to the real register, ☰ in the phone header, tidy Overview tiles (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R56 R31 the form first on document forms, recent documents as compact rows (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R64 R31 a quieter document form — sticky save bar, Class and unit columns only when used, picker and date tidying, recording details folded (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R57 R31 reports open with their numbers — one-line filters, date chips, headline figure, statement-shaped layout on desktop (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R58 R31 lists and filters — pinned search as you type, filters apply themselves, phone filter sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R60 R31 readable money and dates across all screens, exact values kept in exports (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R59 R31 ledger tables and money rows — right-aligned figures, currency in the header, fewer default columns (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R63 R31 an Overview with numbers — figures strip, needs attention, recent activity (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R65 R31 live totals on documents from the core preview as you type (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R61 R31 sections open on their list with + New; types under Settings; a command finder for every action (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [x] R62 R31 the account register on a phone as a list of entries with an add sheet (approved 2026-09-27) — notes/mobile-audit-response-20260927.md
-- [ ] R32 Job scheduling and fuller timekeeping — design/V2-ROADMAP.md item 2
-- [ ] R33 Bulk import and migration — design/V2-ROADMAP.md item 3
-- [ ] R34 Bank imports and feeds — design/V2-ROADMAP.md item 4
-- [ ] R35 Budgets and richer reports — design/V2-ROADMAP.md item 5
-- [ ] R36 Stock sales orders and fulfillment — design/V2-ROADMAP.md item 6
-- [~] R37 Stock availability and on-order (on-order from open POs shipped; reservations wait on R36) — design/V2-ROADMAP.md item 7
-- [ ] R38 Assembly production — design/V2-ROADMAP.md item 8
-- [ ] R39 Advanced inventory — design/V2-ROADMAP.md item 9
-- [ ] R40 Advanced pricing — design/V2-ROADMAP.md item 10
-- [ ] R41 Unattended scheduling and reminders — design/V2-ROADMAP.md item 11
-- [ ] R42 External document delivery — design/V2-ROADMAP.md item 12
-- [ ] R43 Custom forms and print layouts — design/print-templates.md
-- [ ] R44 POS and commissions — design/pos-workspace.md
-- [ ] R45 CRM — design/V2-ROADMAP.md item 15
-- [ ] R46 Payroll and filing — design/V2-ROADMAP.md item 16
-- [ ] R47 Duplicate-record merge — design/V2-ROADMAP.md item 17
-
-## M5 — Later: held until after v1.5
-
-- [ ] R48 Acknowledged opportunities awaiting selection (mileage, depreciation, finance charges, intercompany, OCR and others) — design/V2-ROADMAP.md
-- [ ] R49 Multi-currency ledgers and non-US tax regimes, after a new design pass — design/V2-ROADMAP.md
-- [ ] R50 Cursor signing-key rotation, required before any external or multi-tenant exposure — notes/DECISIONS-PENDING.md D3
-- [ ] R51 Same-company hardening beyond the trusted-LAN premise — notes/V1-COMPLETION-AUDIT-20260917.md
-- [ ] R52 Encryption at rest (parked) — notes/open-questions.md
-- [ ] R53 Windows port with authenticated local hand-off — notes/open-questions.md
-- [ ] R54 Hosted disposable demo sessions — notes/demo-session-preflight.md
-- [ ] R74 permission checks on activated roots cost about 3x (demo reset 104 s vs 33 s): reuse the hub permission snapshot across transactions only behind a fresh in-transaction version check — design/permission-resolution.md
-- [ ] R78 agent administration reads like the rest of the product: a New agent button on the Agents panel, agents listed before they have a membership, the finder reaching installation commands (users, tokens, agents), the one-time token secret shown plainly with a copy button, names and dates instead of raw ids and codes on agent and token pages and errors, principal as a picker, and change history saying "Office assistant for k, via agent" — notes/manual-agent-walkthrough-20260927.md
-- [ ] R82 negative amounts in parentheses as a company setting — notes/mobile-audit-response-20260927.md
+- [ ] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
+- [ ] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
+- [ ] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
+- [ ] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
+- [ ] R105 Negative stock by choice: a company setting to sell stock not yet received, with a warning and a later cost true-up, as the anchor allows.
+- [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
+- [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
+- [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
+- [ ] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
+- [ ] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
+- [ ] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
+- [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends.
+- [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches.
+- [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout.
+- [ ] R115 CRM: leads, a sales pipeline, follow-ups and customer communication history beyond contact records.
+- [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module.
+- [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
+- [ ] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
+- [ ] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
+- [ ] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
+- [ ] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
+- [ ] R122 Approvals: purchase and bill approval steps before posting.
+- [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
+- [ ] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
+- [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review.
+- [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
+- [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
+- [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
+- [ ] R129 Faster permission checks: reuse the permission snapshot between transactions behind a fresh version check, removing the 3× cost on current-mode installs.
+- [ ] R130 Windows: a supported Windows build with an authenticated local hand-off.
