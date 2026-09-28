@@ -89,7 +89,7 @@ def test_workbench_family_references_resolve_to_real_tests():
     from pathlib import Path
     from tests.mcp_coverage import workbench_family_policies
     policies = workbench_family_policies()
-    assert len(policies) == 14
+    assert len(policies) == 16  # + delete_confirmation and dedicated_page (record and own-page commands)
     for family, (witness, limits) in policies.items():
         assert witness and limits, family
         filename, name = witness.split('::')

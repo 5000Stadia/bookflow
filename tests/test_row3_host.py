@@ -485,10 +485,10 @@ def test_workbench_pages_and_a_generated_form(hosted):
     assert hosted.ok("audit.list", {"command": "company update"}, company=hosted.company_id)["count"] == before
 
     # the record page carries the audit trail
-    # (its change history names the change in words: "updated company info: phone")
+    # (its change history names the change in words: "Updated company info: phone")
     record = api.get(f"/c/{hosted.company_id}/company/self")
     assert record.status_code == 200 and "555-9" in record.text
-    assert re.search(r"updated company info: phone", record.text), "the record page shows no change history"
+    assert re.search(r"(?i)updated company info: phone", record.text), "the record page shows no change history"
 
 
 def test_workbench_preview_runs_the_dry_run(hosted):
@@ -1505,6 +1505,14 @@ def _page_url(cmd, company_id):
 
 
 
+#: Commands with a page of their own instead of a generated form: path, and the controls that
+#: carry the command's inputs (the restore page offers the saved backups as `backup`).
+DEDICATED_PAGES = {
+    "company backup": ("/company/backup", ()),
+    "company restore": ("/company/restore", ("backup", "organization", "name", "as_copy")),
+}
+
+
 def _generated_form(text):
     """The generated command form on a page, or the whole page when it has none."""
     marker = text.find("data-generated-form")
@@ -1596,6 +1604,18 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                 for control in ("reason", "expected_version", "operation_key", "confirmed"):
                     assert f'name="{control}"' in page.text, (cmd.name, control)
             coverage.append(delete_confirmation_row(cmd, str(page.url), page.text))
+            continue
+        if cmd.name in DEDICATED_PAGES:
+            # Backing up and restoring have pages of their own (R133), whose controls are the
+            # command's inputs; no generated form stands in for them.
+            path, controls = DEDICATED_PAGES[cmd.name]
+            page = api.get(f"/c/{hosted.company_id}{path}")
+            assert page.status_code == 200, (cmd.name, page.text[:300])
+            assert f'action="/c/{hosted.company_id}{path}"' in page.text or 'method="post"' in page.text, cmd.name
+            for control in controls:
+                assert f'name="{control}"' in page.text, (cmd.name, control)
+            coverage.append(delete_confirmation_row(cmd, str(page.url), page.text,
+                                                    surface='dedicated_page', family='dedicated_page'))
             continue
         url = _page_url(cmd, hosted.company_id)
         page = api.get(url)
