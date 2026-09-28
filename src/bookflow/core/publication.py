@@ -120,7 +120,7 @@ class OSBinding:
 
 # Only these current lifecycle operations may account for their own membership
 # row additions/removals. Each substitution must be in this request's hub audit.
-MEMBERSHIP_EFFECTS = frozenset({"permission activate", "organization new", "company new", "company attach", "company detach",
+MEMBERSHIP_EFFECTS = frozenset({"permission activate", "organization new", "company new", "company attach", "company restore", "company detach",
                                 "demo reset", "membership grant", "membership revoke"})
 
 

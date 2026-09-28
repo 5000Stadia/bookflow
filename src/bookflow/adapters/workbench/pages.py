@@ -716,6 +716,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # `apply` as a command name on a credit memo and answer `unknown command credit-memo apply`.
     Credits.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                   role_allows=_role_allows)
+    # Mounted ahead of the generic `<noun>/<verb>` routes: `company restore` is a hub command
+    # reached from the company's own menu, and its upload is not a generic form.
+    from bookflow.adapters.workbench import backups as Backups
+    Backups.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)

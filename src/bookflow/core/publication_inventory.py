@@ -17,6 +17,7 @@ HUB = {
     "hub audit tail": "visible_audit_records",
     "company new": "resolved_organization_and_own_lifecycle_certificate",
     "company attach": "hub_admin_and_own_lifecycle_certificate",
+    "company restore": "hub_admin_and_own_lifecycle_certificate",
     "company detach": "hub_admin_and_own_detach_certificate",
     "demo reset": "hub_admin_and_ordered_own_lifecycle_certificates",
     "organization new": "current_hub_admin", "organization rename": "current_hub_admin",

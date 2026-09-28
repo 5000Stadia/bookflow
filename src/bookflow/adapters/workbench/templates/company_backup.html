@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Back up the company{% endblock %}{% block body %}<section id="company-backup">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/company">Company</a> / Back up</nav>
+<h1>Back up {{ company.display_name }}</h1>
+<section class="workspace-card" aria-label="Back up the company">
+<p>A backup is one file holding this company's books, its attached files and its audit trail. Bookflow checks the file after writing it, so a backup it reports as saved opens again.</p>
+<p>The file is saved in this company's <code>backups</code> folder on the machine running Bookflow{% if not hub_admin %}; an installation administrator can copy it from there{% endif %}. It is not downloaded to this browser: the whole company file does not leave the host through a web page. Copy it to another disk or machine to keep it safe; <a href="/c/{{ company_id }}/company/restore">Restore a backup</a> opens it again as a company.</p>
+{% if result %}<div role="status" class="notice" data-backup-result>
+<p><strong>Backup saved and verified.</strong></p>
+<dl>
+<dt>File</dt><dd data-backup-file>{{ result.file_name }}</dd>
+{% if result.path %}<dt>Saved at</dt><dd><code data-backup-path>{{ result.path }}</code></dd>{% endif %}
+<dt>Size</dt><dd>{{ '{:,}'.format(result.size_bytes) }} bytes</dd>
+<dt>Holds</dt><dd>the company database (schema {{ result.schema_revision }}) and {{ result.attachment_count }} attached file{{ '' if result.attachment_count == 1 else 's' }}</dd>
+<dt>SHA-256</dt><dd><code data-backup-sha256>{{ result.sha256 }}</code></dd>
+<dt>Taken</dt><dd>{{ result.created_at }}</dd>
+</dl>
+{% for warning in result.warnings %}<p class="warning">{{ warning }}</p>{% endfor %}
+</div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
+<form method="post" action="/c/{{ company_id }}/company/backup" hx-post="/c/{{ company_id }}/company/backup" hx-target="#company-backup" hx-select="#company-backup" hx-swap="outerHTML">
+<div class="actions"><button type="submit" data-backup-submit>Back up now</button><a href="/c/{{ company_id }}/_group/company">Cancel</a></div>
+</form></section>
+</section>{% endblock %}

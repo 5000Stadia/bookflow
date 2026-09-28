@@ -30,7 +30,8 @@ def resolves(witness):
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
     # 491 -> 492 on main before batch A (not measured here); +6 the card-credit verbs (R135).
-    assert len(rows) == 498
+    # +2 company backup and company restore (R133).
+    assert len(rows) == 500
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -130,7 +131,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # per command here), and batch A adds +41: card-credit post 11, update 15, query 8, and
     # one each for show, history and void (+37, R135); invoice, sales-receipt, credit-memo and
     # statement-charge post each gain the null branch of an optional `date` (+4, R95).
-    assert sum(len(group["paths"]) for group in mapped)==2858
+    # 2858 -> 2860: company restore's optional organization and name each add their null branch (R133).
+    assert sum(len(group["paths"]) for group in mapped)==2860
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

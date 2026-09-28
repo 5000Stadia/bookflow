@@ -41,6 +41,7 @@ ACCEPTED = {
     'agent-administration-v1': (479, 'c15675d00ce1b01aa628eaa2424ee0d8e402957c5eb669da5f9f0384d55add25'),
     'everyday-reports-v1': (490, '4159308ce66339b8414fe62261e8510b460ce11be04ad5bf99c335cdf7836255'),
     'card-credit-v1': (496, 'b6a4609483758c7f1f4c876793aca985772510543741f6e7a0bd13130eb2b8c7'),
+    'company-backup-v1': (498, '75c05cd2dc074a26bd218ab7e48d12c09a5dbeadefb46de0475ca4bb1028f070'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -74,6 +75,7 @@ CHAIN_ADDITIONS = {
     'everyday-reports-v1': {'report customer-balance-detail', 'report customer-balance-summary', 'report deposit-detail', 'report open-purchase-orders', 'report purchases-by-item', 'report purchases-by-vendor', 'report reconciliation-discrepancy', 'report transaction-list-by-date', 'report vendor-1099-summary', 'report vendor-balance-detail', 'report vendor-balance-summary'},
     'card-credit-v1': {'card-credit history', 'card-credit post', 'card-credit query', 'card-credit show',
                        'card-credit update', 'card-credit void'},
+    'company-backup-v1': {'company backup', 'company restore'},
 }
 
 _ANCESTOR_EDIT = """
