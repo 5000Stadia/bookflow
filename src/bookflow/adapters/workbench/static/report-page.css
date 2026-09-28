@@ -50,6 +50,13 @@
   /* A report table that becomes labelled cards on a phone lets its figures wrap with it. */
   .workbench[data-report-page] .document-lines th.num,.workbench[data-report-page] .document-lines td.num{white-space:normal;text-align:left}
   .workbench .report-figure{font-size:28px}
+  /* Whole-report totals wrap into labelled figures rather than scroll sideways. */
+  .workbench .table-wrap:has(>.report-totals){overflow:visible}
+  .workbench table.report-totals,.workbench table.report-totals tbody{display:block}
+  .workbench table.report-totals thead{display:none}
+  .workbench table.report-totals tr{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+  .workbench[data-report-page] table.report-totals td.num{display:block;text-align:left;border:0;padding:8px 12px}
+  .workbench table.report-totals td::before{content:attr(data-label);display:block;font-size:12px;font-weight:600;color:var(--muted)}
   .workbench .table-wrap.statement-wrap{max-width:none}
   .workbench table.statement th,.workbench table.statement td{padding:8px 10px;font-size:14px}
   .workbench table.statement tr.statement-account th{padding-left:18px}

@@ -1,0 +1,10 @@
+{# One phone card (browsing.css): the name and its figure on one line, the non-empty parts on a
+   muted line below, the whole card the target. `extra` is markup that keeps its own clicks above
+   the card's target (a refund link, a telephone number); `data` becomes data-* attributes. #}
+{% macro card(href, name, amount='', parts=(), cls='', extra='', data={}) -%}
+<li class="list-card{{ ' ' ~ cls if cls }}"{% for key, value in data.items() %} data-{{ key }}="{{ value }}"{% endfor %}>
+<div class="list-card-main">{% if href %}<a class="list-card-link" href="{{ href }}">{{ name if name is not none else '' }}</a>{% else %}<span class="list-card-link">{{ name if name is not none else '' }}</span>{% endif %}{% if amount %}<span class="list-card-amount">{{ amount }}</span>{% endif %}</div>
+{% set shown = parts | reject('none') | map('string') | map('trim') | select | list %}{% if shown %}<p class="list-card-sub">{{ shown | join(' · ') }}</p>{% endif %}
+{% if extra %}<div class="list-card-extra">{{ extra }}</div>{% endif %}
+</li>
+{%- endmacro %}

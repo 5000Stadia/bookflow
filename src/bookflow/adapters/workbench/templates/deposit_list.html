@@ -1,34 +1,53 @@
-{% extends "base.html" %}{% block title %}Saved deposits{% endblock %}{% block body %}
-<link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
+{% extends "base.html" %}{% import 'list_card.html' as list_card %}{% block title %}Saved deposits{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['deposit.css'] }}"><link rel="stylesheet" href="{{ static_urls['browsing.css'] }}"><script src="{{ static_urls['browsing.js'] }}" defer></script>
 <section class="deposit-list document-detail">
 <nav class="crumbs"><a href="{{ company_url }}">Company</a> / Saved deposits</nav>
 <h1>Saved deposits</h1>
-<form id="deposit-filters" method="get" action="{{ list_url }}">
-{% for key,label in [('deposit_to','Bank name or ID'),('date_from','Date from'),('date_to','Date to'),('number','Exact deposit number'),('q','Search number, memo or received from')] %}
+{# The filters submit as a plain search; on a phone they wait behind Filters in the list's sheet. #}
+<form id="deposit-filters" method="get" action="{{ list_url }}" class="list-tools list-form" data-list-sheet aria-label="Find saved deposits">
+<label class="list-search">Search<input type="search" name="q" value="{{ filters['q'] }}" placeholder="Number, memo or received from" autocomplete="off"></label>
+<div class="list-bar"><a href="#list-sheet" class="list-bar-button" data-sheet-open aria-controls="list-sheet">Filters{% if list_state.filters %} ({{ list_state.filters }}){% endif %}</a><a href="#list-sheet" class="list-bar-button" data-sheet-open=".list-sort select" aria-controls="list-sheet">Sort</a></div>
+<div class="list-sheet list-tools" id="list-sheet" role="group" aria-label="Filters and sort">
+<div class="list-sheet-head"><h2>Filters and sort</h2><a href="#" class="list-sheet-close" data-sheet-close>Close</a></div>
+{% for key,label in [('deposit_to','Bank name or ID'),('date_from','Date from'),('date_to','Date to'),('number','Exact deposit number')] %}
 <label>{{ label }}<input name="{{ key }}" value="{{ filters[key] }}" type="{{ 'date' if key in ['date_from','date_to'] else 'text' }}"></label>
 {% endfor %}
 {% for key,label,options in [('status','Status',[('','All posted and voided'),('posted','Posted'),('voided','Voided'),('deleted','Deleted')]),('sort','Sort by',[('date','Date'),('number','Number'),('bank_total','Revision bank total')]),('direction','Direction',[('desc','Descending'),('asc','Ascending')])] %}
-<label>{{ label }}<select name="{{ key }}">{% if filters[key] and filters[key] not in options|map(attribute=0)|list %}<option selected value="{{ filters[key] }}">{{ filters[key] }}</option>{% endif %}{% for value,title in options %}<option value="{{ value }}"{% if filters[key]==value %} selected{% endif %}>{{ title }}</option>{% endfor %}</select></label>
+<label{% if key in ('sort', 'direction') %} class="list-sort"{% endif %}>{{ label }}<select name="{{ key }}">{% if filters[key] and filters[key] not in options|map(attribute=0)|list %}<option selected value="{{ filters[key] }}">{{ filters[key] }}</option>{% endif %}{% for value,title in options %}<option value="{{ value }}"{% if filters[key]==value %} selected{% endif %}>{{ title }}</option>{% endfor %}</select></label>
 {% endfor %}
-<label><input type="checkbox" name="include_deleted" value="1"{% if filters['include_deleted'] %} checked{% endif %}> Include deleted deposits</label>
-<button type="submit">Find deposits</button><a href="{{ list_url }}">Clear filters</a>
+<label class="list-toggle"><input type="checkbox" role="switch" name="include_deleted" value="1"{% if filters['include_deleted'] %} checked{% endif %}> Include deleted deposits</label>
+<button type="submit" class="list-apply">Find deposits</button>
+</div>
+<a href="#" class="list-sheet-backdrop" data-sheet-close tabindex="-1" aria-hidden="true"></a>
+{% if list_state.changed %}<a href="{{ list_url }}" class="list-reset">Clear filters</a>{% endif %}
 </form>
 {% if request.query_params.get('deleted') %}<p role="status">Deposit deleted. <a href="{{ list_url }}/{{ request.query_params.get('deleted') }}?include_deleted=1">View retained record and history</a></p>{% endif %}
 {% if error_code %}<section class="deposit-unavailable" role="status"><p>{{ message }}</p><p>{{ error_code }}</p><a id="deposit-restart" href="{{ restart_url }}">Restart with these filters</a></section>{% else %}
+{% set home = math_company_currency | default('') %}
 <section class="deposit-card" aria-label="All matching deposits totals">
 <h2>Totals for all {{ page.total_count }} matching deposits</h2>
 <p>These totals include every match, not just this page. Voided deposits retain their revision amounts and have zero effective bank movement.</p>
-<dl class="deposit-list-totals">{% for key,label in total_labels %}<div data-total="{{ key }}"><dt>{{ label }}</dt><dd>{{ page.totals[key].display|money(page.totals[key].currency, home=math_company_currency) }}</dd></div>{% endfor %}<div data-total="effective_bank_total"><dt>Effective bank movement</dt><dd>{{ page.effective_bank_total.display|money(page.effective_bank_total.currency, home=math_company_currency) }}</dd></div></dl>
+<dl class="deposit-list-totals">{% for key,label in total_labels %}<div data-total="{{ key }}"><dt>{{ label }}</dt><dd>{{ page.totals[key].display|money(page.totals[key].currency, home=home) }}</dd></div>{% endfor %}<div data-total="effective_bank_total"><dt>Effective bank movement</dt><dd>{{ page.effective_bank_total.display|money(page.effective_bank_total.currency, home=home) }}</dd></div></dl>
 </section>
 <p id="deposit-page-count">{{ page['items']|length }} deposits on this page · {{ page.total_count }} matching deposits</p>
 <nav class="deposit-actions" aria-label="Deposit pages">{% if previous_url %}<a rel="prev" href="{{ previous_url }}">Previous page</a>{% endif %}{% if next_url %}<a rel="next" href="{{ next_url }}">Next page</a>{% endif %}<a href="{{ restart_url }}">Restart results</a></nav>
-{% if page['items'] %}<div class="deposit-list-wrap"><table id="deposit-list-lines" class="document-lines" role="table"><caption>Saved deposits — current revisions</caption>
-<thead role="rowgroup"><tr role="row">{% for label in ['Deposit','Bank and memo','Current status','Revision bank amount','Effective bank movement'] %}<th scope="col" role="columnheader"{% if loop.index > 3 %} class="num"{% endif %}>{{ label }}</th>{% endfor %}</tr></thead>
-<tbody role="rowgroup">{% for row in page['items'] %}<tr role="row" data-deposit="{{ row.selected.pin.deposit_id }}">
-<td role="cell"><span class="document-cell-label" aria-hidden="true">Deposit</span><a class="deposit-open" href="{{ row.url }}">{{ row.selected.number }}</a><br>{{ row.selected.date|day }}<br>Revision {{ row.selected.pin.revision_number }}</td>
-<td role="cell" class="document-wide document-prose"><span class="document-cell-label" aria-hidden="true">Bank and memo</span>{{ row.selected.deposit_to.display_label }}<p>{{ row.selected.memo or '—' }}</p><details><summary>Received from and composition totals</summary><ul>{% for party in row.received_from %}<li>{{ party.display_label }}</li>{% else %}<li>No received-from labels</li>{% endfor %}</ul><p>{{ row.counts.sources }} receipts · {{ row.counts.additional }} additional rows · {{ row.counts.cash_allocations }} cash allocations · {{ row.counts.components }} components</p><dl>{% for key,label in total_labels %}<dt>{{ label }}</dt><dd>{{ row.totals[key].display|money(row.totals[key].currency, home=math_company_currency) }}</dd>{% endfor %}</dl></details></td>
-<td role="cell"><span class="document-cell-label" aria-hidden="true">Current status</span>{{ ui_words(row.current.status) }}</td>
-<td role="cell" class="document-total num" data-amount="revision"><span class="document-cell-label" aria-hidden="true">Revision bank amount</span>{{ row.current.revision_bank_total.display|money(row.current.revision_bank_total.currency, home=math_company_currency) }}</td>
-<td role="cell" class="document-total num" data-amount="effective"><span class="document-cell-label" aria-hidden="true">Effective bank movement</span>{{ row.current.effective_bank_total.display|money(row.current.effective_bank_total.currency, home=math_company_currency) }}</td>
-</tr>{% endfor %}</tbody></table></div>{% else %}<p role="status">No deposits match these filters. Change or clear the filters to try again.</p>{% endif %}
+{% if page['items'] %}
+{# Deposits all in the home currency name it once, in the figure headings. #}
+{% set currencies = page['items'] | map(attribute='current.revision_bank_total.currency') | unique | list %}{% set one = currencies[0] if currencies | length == 1 and currencies[0] == home else '' %}
+<div class="table-wrap list-scroll list-desktop"><table id="deposit-list-lines" class="list-ledger" aria-label="Saved deposits — current revisions">
+<thead><tr><th scope="col">Date</th><th scope="col">Deposit</th><th scope="col">Bank</th><th scope="col">Memo</th><th scope="col">Status</th><th scope="col" class="num">Revision bank amount{% if one %} ({{ one }}){% endif %}</th><th scope="col" class="num">Effective bank movement{% if one %} ({{ one }}){% endif %}</th></tr></thead>
+<tbody>{% for row in page['items'] %}{% set revision = row.current.revision_bank_total %}{% set effective = row.current.effective_bank_total %}<tr class="is-linked" data-deposit="{{ row.selected.pin.deposit_id }}">
+<td data-label="Date" class="nowrap">{{ row.selected.date|day }}</td>
+<td data-label="Deposit" class="nowrap"><a class="deposit-open row-link" href="{{ row.url }}">{{ row.selected.number or 'Unnumbered' }}</a>{% if row.selected.pin.revision_number > 1 %} <span class="muted">revision {{ row.selected.pin.revision_number }}</span>{% endif %}</td>
+<td data-label="Bank">{{ row.selected.deposit_to.display_label }}</td>
+<td data-label="Memo" class="deposit-memo"><p>{{ row.selected.memo or '—' }}</p><details><summary>Received from and composition totals</summary><ul>{% for party in row.received_from %}<li>{{ party.display_label }}</li>{% else %}<li>No received-from labels</li>{% endfor %}</ul><p>{{ row.counts.sources }} receipts · {{ row.counts.additional }} additional rows · {{ row.counts.cash_allocations }} cash allocations · {{ row.counts.components }} components</p><dl>{% for key,label in total_labels %}<dt>{{ label }}</dt><dd>{{ row.totals[key].display|money(row.totals[key].currency, home=home) }}</dd>{% endfor %}</dl></details></td>
+<td data-label="Status" class="nowrap" data-status>{{ ui_words(row.current.status) }}</td>
+<td class="num" data-amount="revision">{{ revision.display|amount if one else revision.display|money(revision.currency, home=home) }}</td>
+<td class="num" data-amount="effective">{{ effective.display|amount if one else effective.display|money(effective.currency, home=home) }}</td>
+</tr>{% endfor %}</tbody></table></div>
+<ul class="list-cards" aria-label="Saved deposits">
+{% for row in page['items'] %}{% set revision = row.current.revision_bank_total %}{{ list_card.card(row.url, row.selected.number or 'Unnumbered deposit', revision.display|money(revision.currency, home=home),
+   [row.selected.deposit_to.display_label, row.selected.date|day, row.selected.memo, '' if row.current.status == 'posted' else ui_words(row.current.status)],
+   data={'deposit': row.selected.pin.deposit_id}) }}{% endfor %}
+</ul>{% else %}<p role="status">No deposits match these filters. Change or clear the filters to try again.</p>{% endif %}
 {% endif %}</section>{% endblock %}

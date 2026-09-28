@@ -3,6 +3,7 @@ from bookflow.adapters.workbench.date_defaults import company_today
 
 from fastapi import Request
 
+from bookflow.adapters.workbench import list_layout
 from bookflow.adapters.workbench.transaction_detail import document_noun
 from bookflow.core import registry
 from bookflow.core.deletion_families import PAYMENT_FAMILIES, capability
@@ -108,6 +109,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             next_url = '?' + urlencode(dict(request.query_params, cursor=result['next_cursor'])) if result['next_cursor'] else None
             return render('payment_list.html', request, company_id=company_id, payments=result, methods=methods,
                 filters=dict(request.query_params), next_url=next_url,
+                list_state=list_layout.state(request.query_params, {}, quiet=('q',)),
                 may_receive=role_allows(registry.get('payment receive'), company, hub_admin=credential(request).hub_admin))
         except BookflowError as exc:
             return page_error(request, exc, company_id=company_id)
