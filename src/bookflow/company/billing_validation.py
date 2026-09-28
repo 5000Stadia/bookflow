@@ -73,7 +73,7 @@ def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids
                 source = source_lines[target.position - 1]
                 if source['id'] not in chosen:
                     continue
-                targets.append((target.position - 1, target.amount_minor_units))
+                targets.append((target.position - 1, target.amount_minor_units, target.taxable_minor_units))
             if targets:
                 placed[index] = len(expected) + 1
                 expected.append(('discount', lf, targets))
@@ -90,7 +90,7 @@ def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids
                     and (adjustment.percent_millionths, adjustment.fixed_minor_units) == (lf.profile.adjustment.percent_millionths, lf.profile.adjustment.fixed_minor_units),
                     'carried discount differs from the quote')
             wanted = []
-            for position, quoted_share in extra:
+            for position, quoted_share, quoted_cut in extra:
                 billed_line = source_lines[position]
                 billed_envelope = envelopes[placed[position] - 1]
                 tf = facts[position]
@@ -98,19 +98,21 @@ def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids
                 row = profiles[billed_envelope['id']]
                 proof = SalesLineProfile.model_validate_json(row['item_snapshot']).allocation_proof
                 spans = proof.intervals() if proof else ((0, d),)
-                share = sum(round(Fraction(quoted_share * b, d)) - round(Fraction(quoted_share * a, d)) for a, b in spans)
-                wanted.append((placed[position], share))
-                shares.setdefault(billed_envelope['id'], []).append((share, facts_posted))
-            require([(t.position, t.amount_minor_units) for t in adjustment.targets if t.amount_minor_units] ==
-                    [(position, share) for position, share in wanted if share], 'carried discount shares differ from the quote')
+                part = lambda whole: sum(round(Fraction(whole * b, d)) - round(Fraction(whole * a, d)) for a, b in spans)
+                share = part(quoted_share)
+                cut = None if quoted_cut is None else part(quoted_cut)
+                wanted.append((placed[position], share, cut))
+                shares.setdefault(billed_envelope['id'], []).append((share, share if cut is None else cut, facts_posted))
+            require([(t.position, t.amount_minor_units, t.taxable_minor_units) for t in adjustment.targets] ==
+                    [row for row in wanted if row[1] or row[2]], 'carried discount shares differ from the quote')
     bases = {}
     for envelope in envelopes:
         if envelope['id'] not in allocated_ids:
             continue
         row = profiles[envelope['id']]
-        cut = sum(share for share, discount in shares.get(envelope['id'], ())
+        cut = sum(reduction for _, reduction, discount in shares.get(envelope['id'], ())
                   if discount.tax_code is not None and discount.tax_code.taxable)
-        bases[envelope['id']] = row['net_minor_units'] + sum(share for share, _ in shares.get(envelope['id'], ())) - cut
+        bases[envelope['id']] = row['net_minor_units'] + sum(share for share, _, _ in shares.get(envelope['id'], ())) - cut
     return bases
 
 

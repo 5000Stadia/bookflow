@@ -38,34 +38,21 @@ discount debit, receivable net.
 
 The discount item's tax code decides whether it reduces taxable sales. A taxable discount
 reduces the taxable base of each line it applies to by that line's share; a non-taxable one
-reduces none. The tax calculator receives a line's taxable base separately from its net.
-Refused, as a question for the person rather than a choice: a taxable discount whose span
-holds any non-taxable line (the anchor reduces taxable sales by the whole discount; a
-proportional rule would not). Percentage amounts round with the document's captured policy:
-half-even under `line_component_half_even`, half-up under the two half-up policies.
+reduces none. Over taxable and non-taxable lines together, a taxable discount follows
+QuickBooks, as the person chose on gate g7f6adb ("No refusing — QB way please."): taxable sales
+fall by the whole discount, taken from the taxable lines it applies to by their taxable bases
+(largest remainder, earlier line first) and recorded per line as `taxable_minor_units` on the
+discount's shares. The tax calculator receives a line's taxable base separately from its net.
+Percentage amounts round with the document's captured policy: half-even under
+`line_component_half_even`, half-up under the two half-up policies.
 
 ## Refusals
 
 Discount or charge with nothing above it, directly under a discount, or on a negative
-base; a discount larger than the nets it applies to; group members with zero quantity;
-group lines with anything but item and quantity; quantity other than 1 on subtotal, discount
-and charge lines.
-
-## Billing from estimates and work orders
-
-A selection bills sold lines (whole or by progress share) as before. Subtotal and discount lines
-are never selected: a quoted subtotal comes along when a line of its span is billed, a quoted
-discount when a line it reduced is billed, carrying that line's quoted share of the part billed
-(the same exact endpoint portion as the line's net). A charge is billed as the amount the quote
-fixed. On the sale these are "billed" adjustments: nothing is worked out again from percentages,
-a correction keeps them and moves their shares with the lines' identities, and the billing
-validator rebuilds every carried line from the quote alone.
-
-## Credit memos
-
-A standalone credit takes the same lines by the same rules; its postings are the invoice's
-inverted (income debited at full amounts, the discount credited to its account). A returned line
-of a discounted invoice comes back at its net; a discount or subtotal line is not returned.
+base; a discount larger than the nets it applies to; a taxable discount that applies only to
+non-taxable lines, or that is larger than the taxable sales it applies to (taxable sales cannot
+go below zero here); group members with zero quantity; group lines with anything but item and
+quantity; quantity other than 1 on subtotal, discount and charge lines.
 
 ## Edges
 
@@ -75,7 +62,7 @@ validation, billing resolution/selection/validation, credit memos, sales-by-item
 cash basis, printing, workbench line grid, demo seed. Payments, bill payments and deposits are
 not modified.
 
-## Open with the person (gate on R147)
+## Decided by the person (gate g7f6adb)
 
-A taxable discount over a span holding non-taxable lines is refused. Sharing a subtotal discount
-by net, which decides tax cents under the two per-line policies, stands as built until answered.
+A taxable discount over mixed lines follows QuickBooks, as above. Sharing a subtotal discount by
+net, which decides tax cents under the two per-line policies, stands as built.

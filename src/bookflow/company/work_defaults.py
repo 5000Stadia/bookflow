@@ -91,7 +91,9 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     net = None
     if mode == 'amount':
         net = (money(inp.net_amount, currency, 'net_amount').minor_units
-               if 'net_amount' in inp.model_fields_set else previous.net_minor_units)
+               if 'net_amount' in inp.model_fields_set
+               # The saved net is after any discount; the amount entered is before it.
+               else previous.net_minor_units + (previous.discount_minor_units or 0))
     payload = inp.model_dump(exclude_unset=True, include=set(SalesLineInput.model_fields))
     payload['use_defaults'] = [field for field in inp.use_defaults if field != 'estimated_unit_cost']
     if mode == 'catalog' and previous and previous.pricing_basis != 'catalog' and 'unit_price' not in payload['use_defaults']:

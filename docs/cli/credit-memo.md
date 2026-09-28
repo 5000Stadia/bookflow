@@ -916,6 +916,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
@@ -1905,6 +1906,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
@@ -2726,6 +2728,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |
@@ -3543,6 +3546,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.adjustment.targets` | array[object] | no | no | [] | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].position` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.adjustment.targets[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.adjustment.targets[].taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group` | object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.group.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.group.item.id` | string | yes | no | — | — |

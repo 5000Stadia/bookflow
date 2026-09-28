@@ -568,10 +568,10 @@ def remap_billed(old_lines, lines):
         adjustment = line['profile'].adjustment
         if line['line_id'] is None or adjustment is None or adjustment.applies_to != 'billed' or adjustment.kind != 'discount':
             continue
-        moved = [(now[before[target.position]], target.amount_minor_units) for target in adjustment.targets
-                 if before.get(target.position) in now]
-        adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=units)
-                              for position, units in sorted(moved)]
+        moved = [(now[before[target.position]], target.amount_minor_units, target.taxable_minor_units)
+                 for target in adjustment.targets if before.get(target.position) in now]
+        adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=units, taxable_minor_units=cut)
+                              for position, units, cut in sorted(moved)]
 
 
 def expand_groups(s, entered):

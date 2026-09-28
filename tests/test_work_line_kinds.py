@@ -73,7 +73,7 @@ def test_quote_refusals_write_nothing(client, kinds):
     k = kinds
     before = snapshot(client)
     for lines in ([dict(item=k['off_taxed'])],
-                  [dict(item=k['labor']), dict(item=k['parts']), dict(item=k['subtotal']), dict(item=k['off_taxed'])]):
+                  [dict(item=k['parts']), dict(item=k['off_taxed'])]):
         with pytest.raises(BookflowError) as caught:
             estimate(client, k, lines)
         assert caught.value.code == 'E_VALIDATION'
@@ -147,3 +147,17 @@ def test_progress_billing_bills_each_line_and_its_discount_share_by_the_same_fra
                 expected_version=run(client, 'estimate', 'show', estimate=source['id'])['version'],
                 conversion_key='kinds rebill', date='2026-06-05')
     assert sale(again) == sale(first)
+
+
+def test_resaving_a_quote_does_not_take_a_discount_off_an_entered_amount_twice(client, kinds):
+    k = kinds
+    first = estimate(client, k, [dict(item=k['labor'], net_amount='1.00'), dict(item=k['subtotal']),
+                                 dict(item=k['off_taxed'])])
+    assert quote(first)[0][:3] == ('item', 100, 90)
+    again = run(client, 'estimate', 'update', estimate=first['id'], expected_version=1, memo='Resaved')
+    assert quote(again) == quote(first)
+    accepted = run(client, 'estimate', 'update', estimate=first['id'], expected_version=2, status='accepted',
+                   decision_note='Accepted')
+    billed = run(client, 'estimate', 'invoice', estimate=first['id'], expected_version=accepted['version'],
+                 conversion_key='resaved bill', date='2026-06-02')
+    assert sale(billed) == [('item', 100, 90, 9), ('subtotal', 100, 0, 0), ('discount', -10, 0, 0)]

@@ -198,14 +198,17 @@ def billed_lines(s, rev, selected, profile):
                 d = math.denominator(source.quantity_microunits, source.net_minor_units)
                 spans = item.spans or ((0, d),)
                 share = sum(math.portion(target.amount_minor_units, a, b, d) for a, b in spans)
-                targets.append((placed[target.position - 1], share))
+                cut = (None if target.taxable_minor_units is None else
+                       sum(math.portion(target.taxable_minor_units, a, b, d) for a, b in spans))
+                targets.append((placed[target.position - 1], share, cut))
+            targets = [row for row in targets if row[1] or row[2]]
             if not targets:
                 continue
             adjustment = lf.profile.adjustment.model_copy(deep=True)
             adjustment.applies_to = 'billed'
-            adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=share)
-                                  for position, share in targets]
-            adjustment.amount_minor_units = -sum(share for _, share in targets)
+            adjustment.targets = [AdjustmentTarget(position=position, amount_minor_units=share, taxable_minor_units=cut)
+                                  for position, share, cut in targets]
+            adjustment.amount_minor_units = -sum(share for _, share, _ in targets)
             entry = resolved_line(lf)
             entry['profile'] = Profile.model_validate(dict(entry['profile'].model_dump(), adjustment=adjustment.model_dump()))
         elif line['id'] in chosen:

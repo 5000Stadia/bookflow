@@ -253,8 +253,9 @@ def test_reports_attribute_income_to_items_and_tax_to_the_agency(client, kinds):
     (lambda k: [dict(item=k['off_taxed']), dict(item=k['labor'])], 'lines.0', 'directly above'),
     (lambda k: [dict(item=k['labor']), dict(item=k['off_taxed']), dict(item=k['five_off'])], 'lines.2', 'put a subtotal'),
     (lambda k: [dict(item=k['labor']), dict(item=k['off_taxed']), dict(item=k['fee'])], 'lines.2', 'put a subtotal'),
-    (lambda k: [dict(item=k['labor']), dict(item=k['parts']), dict(item=k['subtotal']), dict(item=k['off_taxed'])],
-     'lines.3', 'non-taxable line'),
+    (lambda k: [dict(item=k['parts']), dict(item=k['off_taxed'])], 'lines.1', 'only to non-taxable lines'),
+    (lambda k: [dict(item=k['labor'], net_amount='0.10'), dict(item=k['parts']), dict(item=k['subtotal']),
+                dict(item=k['off_taxed'])], 'lines.3', 'larger than the taxable sales'),
     (lambda k: [dict(item=k['labor'], net_amount='1.00'), dict(item=k['five_off'])], 'lines.1', 'larger than'),
     (lambda k: [dict(item=k['kit'], unit_price='1.00')], 'lines.0.unit_price', 'group line'),
     (lambda k: [dict(item=k['labor']), dict(item=k['subtotal'], net_amount='1.00')], 'net_amount', 'subtotal'),
@@ -287,3 +288,58 @@ def test_a_cleared_unit_is_no_unit_on_subtotal_and_discount_lines(client, kinds)
                               dict(item=k['off_taxed'], unit=None)])
     assert shown(result) == [('item', 10000, 9000, 900, [9000]), ('subtotal', 10000, 0, 0, []),
                              ('discount', -1000, 0, 0, [])]
+
+
+@pytest.mark.parametrize('policy,tax', [
+    # Labor 1.00 (taxed) and parts 0.50 (not taxed), a subtotal of 1.50 and a 10% taxable
+    # discount of 0.15. The discount shares by net, 0.10 and 0.05, so the nets are 0.90 and 0.45.
+    # QuickBooks' rule, as the person chose it: taxable sales fall by the WHOLE 0.15, all of it
+    # from the one taxed line, so labor is taxed on 0.85 -- exactly 8.5 cents.
+    ('line_component_half_even', 8),   # half-even: 8.5 -> 8
+    ('line_combined_half_up', 9),      # half-up: 8.5 -> 9
+    ('invoice_combined_half_up', 9),   # one bucket of 0.85: 8.5 -> 9
+])
+def test_taxable_discount_over_mixed_lines_reduces_taxable_sales_by_the_whole_discount(client, kinds, policy, tax):
+    k = kinds
+    result = post(client, k, [dict(item=k['labor'], net_amount='1.00'), dict(item=k['parts'], net_amount='0.50'),
+                              dict(item=k['subtotal']), dict(item=k['off_taxed'])], policy=policy)
+    assert shown(result) == [('item', 100, 90, tax, [85]), ('item', 50, 45, 0, []),
+                             ('subtotal', 150, 0, 0, []), ('discount', -15, 0, 0, [])]
+    targets = result['revision']['lines'][3]['item_snapshot']['adjustment']['targets']
+    assert [(t['position'], t['amount_minor_units'], t['taxable_minor_units']) for t in targets] == [(1, 10, 15), (2, 5, 0)]
+    assert result['total_minor_units'] == 135 + tax
+    ar = result['revision']['profile']['control_account']['id']
+    assert_oracle(client, result['id'], {(DATE, ar): 135 + tax, (DATE, k['income']): -150,
+                                         (DATE, k['given']): 15, (DATE, k['liability']): -tax})
+
+
+def test_the_whole_discount_is_taken_from_several_taxable_lines_by_their_bases(client, kinds):
+    k = kinds
+    result = post(client, k, [dict(item=k['labor'], net_amount='1.00'), dict(item=k['labor'], net_amount='1.00'),
+                              dict(item=k['parts'], net_amount='0.50'), dict(item=k['subtotal']), dict(item=k['off_taxed'])])
+    # 0.25 off: shares 0.10, 0.10, 0.05 by net; the whole 0.25 comes off the two taxed lines by
+    # their bases, 12.5 cents each, the odd cent to the earlier line: bases 0.87 and 0.88.
+    assert [line['tax_components'][0]['taxable_minor_units'] if line['tax_components'] else None
+            for line in result['revision']['lines']] == [87, 88, None, None, None]
+    assert [line['net_minor_units'] for line in result['revision']['lines']] == [90, 90, 45, 0, 0]
+    # Invoice-combined: 10% of 1.75 is 17.5 cents, half-up 18.
+    assert result['tax_minor_units'] == 18
+
+
+def test_a_billed_and_a_credited_mixed_discount_keep_the_whole_reduction(client, kinds):
+    from tests.test_customer_work_lifecycle import run
+    k = kinds
+    lines = [dict(item=k['labor'], net_amount='1.00'), dict(item=k['parts'], net_amount='0.50'),
+             dict(item=k['subtotal']), dict(item=k['off_taxed'])]
+    quoted = run(client, 'estimate', 'create', date=DATE, title='Mixed', customer=k['customer'], sales_tax_item=k['tax'],
+                 sales_tax_calculation='line_combined_half_up', lines=lines)
+    assert [line['tax']['minor_units'] for line in quoted['revision']['lines']] == [9, 0, 0, 0]
+    accepted = run(client, 'estimate', 'update', estimate=quoted['id'], expected_version=1, status='accepted',
+                   decision_note='Accepted')
+    billed = run(client, 'estimate', 'invoice', estimate=quoted['id'], expected_version=accepted['version'],
+                 conversion_key='mixed bill', date=DATE)
+    assert shown(billed) == [('item', 100, 90, 9, [85]), ('item', 50, 45, 0, []),
+                             ('subtotal', 150, 0, 0, []), ('discount', -15, 0, 0, [])]
+    credited = client.run('credit-memo post', dict(customer=k['customer'], date=DATE, sales_tax_item=k['tax'],
+        sales_tax_calculation='line_combined_half_up', lines=lines), company=COMPANY)
+    assert shown(credited) == shown(billed)

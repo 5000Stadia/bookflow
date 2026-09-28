@@ -178,9 +178,22 @@ class SalesProfile(CommercialProfile):
 
 
 class AdjustmentTarget(StrictModel):
-    """One share of a discount: the revision-local position of the line it reduces, and how much."""
+    """One share of a discount: the revision-local position of the line it reduces, and how much.
+
+    ``taxable_minor_units`` is how much the discount took off this line's taxable base when that
+    differs from its share: a taxable discount over taxable and non-taxable lines reduces taxable
+    sales by the whole discount, taken from the taxable lines alone. Absent means the share.
+    """
     position: int = Field(ge=1, le=200)
     amount_minor_units: int = Field(ge=0, le=INT64_MAX)
+    taxable_minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX)
+
+    @model_serializer(mode="wrap")
+    def legacy_share(self, handler):
+        values = handler(self)
+        if self.taxable_minor_units is None:
+            values.pop('taxable_minor_units', None)
+        return values
 
 
 class LineAdjustment(StrictModel):
@@ -229,6 +242,9 @@ class LineAdjustment(StrictModel):
             raise ValueError("discount shares name distinct lines in document order")
         if sum(target.amount_minor_units for target in self.targets) != -self.amount_minor_units:
             raise ValueError("discount shares must add up to the discount")
+        split = [target.taxable_minor_units for target in self.targets if target.taxable_minor_units is not None]
+        if split and len(split) != len(self.targets):
+            raise ValueError("a discount names its taxable reduction on every line or on none")
         return self
 
 
