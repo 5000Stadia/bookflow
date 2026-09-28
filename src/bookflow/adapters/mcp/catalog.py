@@ -41,7 +41,7 @@ def command_help(name, view="usage"):
     _commands()
     cmd = registry.get(name)
     if cmd is None:
-        raise BookflowError("E_USAGE", details={"command": name})
+        raise registry.unknown_command(name)
     if view not in HELP_VIEWS:
         raise BookflowError("E_VALIDATION", details={"field": "view", "allowed": HELP_VIEWS})
     from bookflow.documentation.examples import EXAMPLES
@@ -107,5 +107,10 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
     next_cursor = None
     if end < len(rows):
         next_cursor = base64.urlsafe_b64encode(json.dumps({"digest": digest, "prefix": prefix, "offset": end}).encode()).decode()
-    return {"commands": rows[offset:end], "next_cursor": next_cursor,
+    page = {"commands": rows[offset:end], "next_cursor": next_cursor,
             "registry_digest": digest, "bridge_version": BRIDGE_VERSION}
+    if prefix and not rows:
+        # A prefix that names nothing (a synonym, a plural, a typo) is answered with the
+        # nearest real command names rather than a bare empty page.
+        page["suggestions"] = registry.similar_commands(prefix)
+    return page

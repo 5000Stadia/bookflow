@@ -371,7 +371,7 @@ def make_local_handler(host, version: str):
         name = envelope.get("command")
         cmd = registry.get(name) if isinstance(name, str) else None
         if cmd is None:
-            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+            raise registry.unknown_command(name)
         if cmd.bootstrap:
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` runs in the calling process; it is never forwarded to the host.")
         from bookflow.core.publication import OSBinding

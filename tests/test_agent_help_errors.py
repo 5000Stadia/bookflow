@@ -282,6 +282,19 @@ def test_invoice_query_filters_by_what_is_still_owed(client):
     assert invoice["id"] in [row["id"] for row in statuses(settlement="unpaid")[1]]
 
 
+def test_a_wrong_command_name_suggests_the_closest_real_ones(client):
+    from bookflow.adapters.mcp.catalog import command_help, list_commands
+    with pytest.raises(BookflowError) as caught:
+        command_help("invoice list")
+    assert caught.value.code == "E_USAGE" and caught.value.details["suggestions"][0] == "invoice query"
+    assert "`invoice query`" in caught.value.message
+    with pytest.raises(BookflowError) as caught:
+        client.run("sales tax liability", {"as_of": "2026-09-27"}, company=CO)
+    assert caught.value.details["suggestions"][0] == "sales-tax liability"
+    assert list_commands(prefix="reconcile begin")["suggestions"][0] == "reconcile start"
+    assert "suggestions" not in list_commands(prefix="reconcile")
+
+
 def test_item_receipt_reads_each_say_what_they_take():
     from bookflow.adapters.mcp.catalog import list_commands
     rows = {row["name"]: row["description"] for row in list_commands(prefix="item-receipt", limit=200)["commands"]}

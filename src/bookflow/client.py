@@ -20,7 +20,7 @@ class _Noun:
         if registry.get(name) is None:
             if any(c.name.startswith(name + " ") for c in registry.all_commands()):
                 return _Noun(self._client, name)
-            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+            raise registry.unknown_command(name)
 
         def call(**kwargs: Any) -> dict[str, Any]:
             dry_run = kwargs.pop("dry_run", False)
@@ -56,7 +56,7 @@ class Client:
             clear: list[str] | None = None, input_stream=None, output_stream=None) -> dict[str, Any]:
         cmd = registry.get(name)
         if cmd is None:
-            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+            raise registry.unknown_command(name)
         from bookflow.core.context_options import normalize_options
         normalize_options(cmd, company=company, dry_run=dry_run, reason=reason,
                           source_ref=source_ref, directive=directive, idempotency_key=idempotency_key)
