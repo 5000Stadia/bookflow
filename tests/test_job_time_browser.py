@@ -64,6 +64,11 @@ def test_record_correct_and_bill_time_in_the_browser(register_browser, width, tm
     _contained(b, width)
     _click(b, 'submit')
     entry = saved(b, 'time-activity')
+    # Measure the page once its layout has settled after loading; a real overflow still fails below.
+    try:
+        b.wait_for(f'document.readyState === "complete" && document.documentElement.scrollWidth <= {width + 1}', timeout=10)
+    except Exception:
+        pass
 
     # What a person reads back: whose time, how long, what it is charged as, and the charge.
     text = document_text(b)
@@ -83,8 +88,9 @@ def test_record_correct_and_bill_time_in_the_browser(register_browser, width, tm
     b.navigate(base + '/time-activity')
     b.wait_for('!!document.querySelector("table")')
     listing = b.evaluate('document.body.innerText')
-    assert 'Time entries' in listing and 'Time — Dana Fitter' in listing
-    assert '18.51' in listing and 'Recorded' in listing
+    # A timesheet: whose time, for whom, as what and how long, not a document title.
+    assert 'Time entries' in listing and 'Dana Fitter' in listing and 'Time labor' in listing
+    assert '1.5' in listing and '18.51' in listing and 'Recorded' in listing
     # The status filter offers the states recorded time actually holds.
     assert b.evaluate('Array.from(document.querySelector("select[name=status]").options).map(o=>o.value)') == [
         '', 'recorded', 'voided']

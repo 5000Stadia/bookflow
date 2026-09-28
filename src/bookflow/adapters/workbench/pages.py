@@ -1264,8 +1264,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         items = out.get("items", [])
         if noun in Credits.COLUMNS:
             items = Credits.list_rows(noun, items)
+        if noun == 'time-activity':
+            items = Work.time_rows(items)
         definition = meta.get("definition")
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
+                   list(Work.TIME_COLUMNS) if noun == 'time-activity' else
                    ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.DOCUMENTS else
                    ["number", "date", "customer_name", "total", "open_balance", "status"] if noun == 'invoice' else
@@ -1975,6 +1978,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for leaf in described:
                 if leaf['path'] in labels:
                     leaf['label'] = labels[leaf['path']]
+        if noun == 'time-activity' and cmd.is_write:
+            labels = {'employee': 'Employee', 'duration': 'Hours', 'item': 'Service item', 'note': 'What was done',
+                      'rate': 'Rate per hour', 'class_id': 'Class', 'number': 'Number (automatic when blank)'}
+            for leaf in described:
+                if leaf['path'] in labels:
+                    leaf['label'] = labels[leaf['path']]
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if noun == 'sales-receipt' and verb == 'update':
@@ -2173,6 +2182,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return_context = {"token": return_token, "target": return_target}
         panel_return = _agent_panel_return(cmd.name, attempted.get("_back") or request.query_params.get("back"))
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      crumb=meta.get("plural_label"),
                       panel_return=panel_return,
                       heading=Naming.heading(noun, verb, meta), receipt_choices=receipt_choices, order_choices=order_choices, receipt_source_labels=receipt_source_labels, receipt_date=receipt_date,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,

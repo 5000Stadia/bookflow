@@ -4,7 +4,7 @@
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
 {% set invoice_correction_reason = noun == 'invoice' and verb == 'update' and attempted.get('f:operation_key') %}
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
-<nav class="crumbs"><a href="{{ base }}">{{ noun|replace("-", " ")|replace("_", " ")|capitalize }}</a> / {{ document.heading if document else heading }}</nav>
+<nav class="crumbs"><a href="{{ base }}">{{ crumb or noun|replace("-", " ")|replace("_", " ")|capitalize }}</a> / {{ document.heading if document else heading }}</nav>
 <h1>{{ document.heading if document else heading }}</h1>
 {% if noun == "report" %}{% include "report_head.html" %}{% endif %}
 {% if receipt_choices %}<details class="workflow-note" data-receipt-chooser><summary>Bill goods already received</summary>

@@ -2304,3 +2304,18 @@ command = "bill pay"
 capture = "contractor_card_payment"
 reason = "Pay the materials bill on the company card"
 input = { number = "DEMO-1099-PAY-2", date = "2026-12-09", bills = [{ bill = "${contractor_materials_bill.id}" }], funding_account = "${register_card.id}", method = "Visa", memo = "Liner resin on the card" }
+
+# Recorded time on the Riverside Building A job: an afternoon's billable drain clearing waiting to
+# be invoiced (it shows in the unbilled costs report), and a warranty callback that is the job's
+# cost and never a charge.
+[[commands]]
+command = "time-activity create"
+capture = "demo_time_billable"
+reason = "Casey's timesheet for the stack clearing"
+input = { employee = "${employee.id}", customer = "${job_inherit.id}", date = "2026-12-10", duration = "2.5", item = "${service_item.id}", note = "Cleared the main stack and camera-checked the run", number = "DEMO-TIME-1" }
+
+[[commands]]
+command = "time-activity create"
+capture = "demo_time_warranty"
+reason = "Casey's timesheet for the warranty callback"
+input = { employee = "${employee.id}", customer = "${job_inherit.id}", date = "2026-12-11", duration = "0.75", item = "${service_item.id}", note = "Warranty callback: reseated a slipped coupling", billable = false, number = "DEMO-TIME-2" }
