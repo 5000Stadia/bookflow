@@ -300,3 +300,44 @@ def test_item_receipt_reads_each_say_what_they_take():
     rows = {row["name"]: row["description"] for row in list_commands(prefix="item-receipt", limit=200)["commands"]}
     assert len({rows["item-receipt show"], rows["item-receipt query"], rows["item-receipt history"]}) == 3
     assert "`receipt`" in rows["item-receipt history"]
+
+
+def test_deposit_replay_refusals_name_the_requirement_and_nothing_else(monkeypatch):
+    """deposit_lifecycle.recover, deposit_operations.recover and deposit_operation_pages keep
+    the capability, threshold and rule of a refusal (as main's `_refusal` does), never the
+    identity, role or record."""
+    from types import SimpleNamespace
+    from bookflow.company import (deposit_dependency_history as history, deposit_lifecycle as lifecycle,
+                                  deposit_operation_pages as pages, deposit_operations as operations)
+    denial = {"capability": "customer-work", "required_role": "standard", "role": "member",
+              "record": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}
+    public = {"capability": "customer-work", "required_role": "standard"}
+
+    def deny(*args, **kwargs):
+        raise BookflowError("E_PERMISSION", details=dict(denial))
+    saved = {"id": "operation", "transaction_id": "deposit"}
+    monkeypatch.setattr(operations, "find", lambda s, key: saved)
+    monkeypatch.setattr(operations.rows, "rows", lambda *args, **kwargs: [{"transaction_id": "source"}])
+    monkeypatch.setattr(operations.dependencies, "authorize", deny)
+    inp = SimpleNamespace(operation_key="key")
+    with pytest.raises(BookflowError) as caught:
+        operations.recover(None, None, inp, "post")
+    assert caught.value.details == public
+    assert caught.value.message == "This needs customer-work at role standard or above."
+
+    calls = []
+
+    def graph(s, binding, ids, write=False):
+        calls.append(ids)
+        if ids:
+            deny()
+    monkeypatch.setattr(history, "_authorize_binding_graph", graph)
+    binding = SimpleNamespace(on_behalf_of=None)
+    with pytest.raises(BookflowError) as caught:
+        lifecycle.recover(None, SimpleNamespace(on_behalf_of=None), inp, "post", binding)
+    assert caught.value.details == public and calls[-1] == ["source"]
+
+    monkeypatch.setattr(history, "execution_binding", lambda s, binding: None)
+    with pytest.raises(BookflowError) as caught:
+        pages.authorized_original(None, saved, binding)
+    assert caught.value.details == public
