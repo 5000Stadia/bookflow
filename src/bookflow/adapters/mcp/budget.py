@@ -39,7 +39,7 @@ def _page_field(document):
     return max(lists)[1] if lists else None
 
 
-def fit(document, *, show=None, budget=BUDGET):
+def fit(document, *, show=None, paging=None, budget=BUDGET):
     """Return the document unchanged when it fits; otherwise its compact form, which says so."""
     if not isinstance(document, dict):
         return document
@@ -79,8 +79,23 @@ def fit(document, *, show=None, budget=BUDGET):
         result[page] = kept
         if len(kept) < len(rows):
             omitted.insert(0, {"field": page, "items": len(rows), "kept": len(kept)})
-            how.append(f"This page kept its first {len(kept)} of {len(rows)} {page}. Rerun with input.limit "
-                       f"{max(len(kept), 1)} and follow next_cursor to page through them all.")
+            if result.get("next_cursor") is not None:
+                # It continues after the last row the full page held, so it would skip the rows
+                # left out here; a rerun with the smaller limit gets a cursor that does not.
+                result["next_cursor"] = None
+                how.append("next_cursor is left out because it would skip the rows not shown.")
+            limit = max(len(kept), 1)
+            if paging is None or paging.get("paged"):
+                how.append(f"This page kept its first {len(kept)} of {len(rows)} {page}. Rerun with input.limit "
+                           f"{limit} and follow next_cursor to page through them all.")
+            else:
+                ways = []
+                if paging.get("alternative"):
+                    ways.append(f"run {paging['alternative']} with input.limit {limit} and follow next_cursor")
+                if paging.get("narrow"):
+                    ways.append("narrow this command with input." + " or input.".join(paging["narrow"]))
+                how.append(f"This list kept its first {len(kept)} of {len(rows)} {page}; {paging['command']} returns "
+                           f"them all at once and takes no limit." + (f" For the rest, {' or '.join(ways)}." if ways else ""))
     if show:
         how.append(f"Read the full record with bookflow_run {show}.")
     how.append("Or add transport.result_file (an absolute path) to receive the complete JSON as a file, "

@@ -82,7 +82,25 @@ async def serve(inp, origin, secret, inputs, outputs):
                             show = json.dumps(call)
             except Exception:
                 show = None  # the hint is a convenience; the compact result stands without it
-            return fit(document, show=show)
+            paging = None
+            try:
+                from .envelopes import RunArguments
+                if isinstance(arguments, RunArguments):
+                    async def fields(name):
+                        found = await client.post("/adapters/mcp/bookflow_help", json={"arguments": {"command": name, "view": "input_schema"}})
+                        return found.json()["input_schema"].get("properties", {}) if found.status_code == 200 else None
+                    own = await fields(arguments.command)
+                    if own is not None:
+                        paging = {"command": arguments.command, "paged": "limit" in own and "cursor" in own,
+                                  "narrow": [key for key in ("query", "filter") if key in own], "alternative": None}
+                        if not paging["paged"] and " " in arguments.command:
+                            other = arguments.command.rsplit(" ", 1)[0] + " query"
+                            found = await fields(other) if other != arguments.command else None
+                            if found and "limit" in found and "cursor" in found:
+                                paging["alternative"] = other
+            except Exception:
+                paging = None  # without it the page advice is the paged one
+            return fit(document, show=show, paging=paging)
 
         async def call_tool(_ctx, params):
             submitted = False

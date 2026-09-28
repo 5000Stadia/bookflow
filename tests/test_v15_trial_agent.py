@@ -109,6 +109,24 @@ def test_an_oversized_query_page_keeps_the_leading_rows_that_fit():
     assert f"input.limit {kept} and follow next_cursor" in note["full_result"]
 
 
+def test_a_cut_page_drops_the_cursor_that_would_skip_rows_and_a_cut_list_says_how_to_get_the_rest():
+    """R70/R80: invoice query cut to 14 of 50 kept a cursor past row 50; account list cut to 16 of 33 has no limit."""
+    from bookflow.adapters.mcp.budget import fit
+    rows = [{"id": f"01ROW{i:024d}", "memo": "x" * 1400} for i in range(33)]
+    paged = fit({"items": rows, "next_cursor": "past-row-33"},
+                paging={"command": "invoice query", "paged": True, "narrow": [], "alternative": None})
+    kept = len(paged["items"])
+    assert paged["next_cursor"] is None and "would skip the rows not shown" in paged["result_compacted"]["full_result"]
+    assert f"input.limit {kept} and follow next_cursor" in paged["result_compacted"]["full_result"]
+    listed = fit({"items": rows}, paging={"command": "account list", "paged": False, "narrow": ["query", "filter"],
+                                          "alternative": "account query"})
+    note = listed["result_compacted"]
+    assert note["omitted"][0] == {"field": "items", "items": 33, "kept": kept}
+    assert f"kept its first {kept} of 33 items; account list returns them all at once and takes no limit" in note["full_result"]
+    assert f"run account query with input.limit {kept} and follow next_cursor" in note["full_result"]
+    assert "narrow this command with input.query or input.filter" in note["full_result"]
+
+
 # ---------------------------------------------------------------- payment receive as suggested
 
 def _open_invoices(c, company, count):
@@ -214,6 +232,9 @@ def test_actual_mcp_bulk_receipt_arrives_within_budget_with_its_warning(hosted, 
                 assert error["details"]["outcome"] == "not_submitted" and error["details"]["field"] == "transport.result_file"
                 assert error["details"]["allowed_directories"] == [] and "--output-dir" in error["message"]
                 assert hosted.call("invoice.show", {"invoice": "R72-FILE"}, company=company).status_code == 404
+                # A cut list that takes no limit points at its paged query (R80 day 1: account list 16 of 33).
+                listed = json.loads((await session.call_tool("bookflow_run", {"command": "account list", "input": {}})).content[0].text)
+                assert "run account query with input.limit" in listed["result_compacted"]["full_result"]
 
     anyio.run(witness)
 
