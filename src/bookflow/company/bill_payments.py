@@ -44,6 +44,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.company.payment_summaries import summarize
 from bookflow.company import (
     accounts, ap_settlement, bills, check_numbers, early_discounts as early, journals, list_service,
     schema as c)
@@ -277,7 +278,7 @@ def _selected(s, rows, date, currency, *, capacity=None, discounts=False):
             already = ap_settlement.discounts_by_bill(s, [header['id']]).get(header['id'], 0)
             suggested = early.suggested(terms, revision['total_minor_units'], date, taken=already, due=open_amount)
         chosen.append(dict(header=header, revision=revision, obligation=obligation, amount=amount,
-                           discount=discount, terms=terms, suggested=suggested))
+                           discount=discount, terms=terms, suggested=suggested, open=open_amount))
     return chosen
 
 
@@ -823,7 +824,12 @@ def prepare_pay(s, ctx, inp):
             changed_headers.append((old, changed))
     total = checked_sum((row['amount'] for row in chosen), 'bills.total')
     discounted = checked_sum((row['discount'] for row in chosen), 'bills.discount')
-    preview = BillPayOutput(payments=outputs, group_count=len(groups), paid_minor_units=total,
+    payees = list(dict.fromkeys(vendor.label for vendor in resolved['vendors'].values()))
+    summary = summarize([dict(document_id=row['header']['id'], document_type='bill', number=row['header']['number'],
+                              applied=row['amount'], discount=row['discount'],
+                              still_due=row['open'] - row['amount'] - row['discount']) for row in chosen],
+                        currency, opening=f"Paid {Money(total, currency)} to {', '.join(payees)}.")
+    preview = BillPayOutput(payments=outputs, group_count=len(groups), paid_minor_units=total, summary=summary,
                             paid=Money(total, currency).to_dict(), currency=currency,
                             bill_count=len(chosen), discount_minor_units=discounted,
                             discount=Money(discounted, currency).to_dict() if discounted else None,
