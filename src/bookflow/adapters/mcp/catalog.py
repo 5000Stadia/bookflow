@@ -91,6 +91,26 @@ def _registry_digest(contract):
     return hashlib.sha256(json.dumps(schemas, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+# Everyday words for command nouns whose registered names do not contain them.
+KEYWORDS = {
+    "credit card": ("card-charge", "card-credit"), "cc": ("card-charge", "card-credit"),
+    "tax": ("sales-tax", "sales-tax-code", "report income-tax-summary"),
+    "vat": ("sales-tax", "sales-tax-code"), "gst": ("sales-tax", "sales-tax-code"),
+}
+
+
+def keyword_match(query, name):
+    """True when every word of the query starts a word of the name, or a keyword names its noun."""
+    wanted = " ".join(query.replace("-", " ").replace("_", " ").lower().split())
+    if not wanted:
+        return False
+    for phrase, nouns in KEYWORDS.items():
+        if wanted == phrase and any(name == noun or name.startswith(noun + " ") for noun in nouns):
+            return True
+    parts = name.replace("-", " ").split(" ")
+    return all(any(part.startswith(word) for part in parts) for word in wanted.split(" "))
+
+
 def list_commands(*, prefix=None, limit=20, cursor=None):
     commands = _commands()
     rows = [descriptor(cmd) for cmd in commands]
@@ -111,7 +131,14 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
         if decoded["digest"] != digest:
             raise BookflowError("E_QUERY_STALE", details={"scope": "command_catalog", "reason": "registry_changed", "restart": True, "current_registry_digest": digest})
         offset = decoded["offset"]
-    rows = [row for row in rows if prefix is None or row["name"].startswith(prefix)]
+    matched = [row for row in rows if prefix is None or row["name"].startswith(prefix)]
+    searched = False
+    if prefix and not matched:
+        # A prefix that names no command is read as words: "tax" finds the sales-tax nouns,
+        # "credit card" or "cc" finds card charges. Deterministic, so cursors still hold.
+        matched = [row for row in rows if keyword_match(prefix, row["name"])]
+        searched = bool(matched)
+    rows = matched
     if offset > len(rows):
         raise BookflowError("E_VALIDATION", details={"reason": "malformed_cursor"})
     end = offset + limit
@@ -120,6 +147,8 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
         next_cursor = base64.urlsafe_b64encode(json.dumps({"digest": digest, "prefix": prefix, "offset": end}).encode()).decode()
     page = {"commands": rows[offset:end], "next_cursor": next_cursor,
             "registry_digest": digest, "bridge_version": BRIDGE_VERSION}
+    if searched:
+        page["match"] = "keywords"
     if prefix and not rows:
         # A prefix that names nothing (a synonym, a plural, a typo) is answered with the
         # nearest real command names rather than a bare empty page.

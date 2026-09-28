@@ -105,7 +105,7 @@ class RecoveryArguments(Envelope):
 
 RUN = TypeAdapter(RunArguments | RecoveryArguments)
 TOOLS = {
-    "bookflow_list_commands": (ListArguments, "Discover registered Bookflow commands and their scope. Start with a command prefix such as payment or invoice and omit limit for the default 20. Continue with next_cursor as cursor and the same prefix. Broad pages up to the supported limit 200 can exceed client display space; prefer targeted discovery and paging. Prefixes match command names, not business synonyms."),
+    "bookflow_list_commands": (ListArguments, "Discover registered Bookflow commands and their scope. Start with a command prefix such as payment or invoice and omit limit for the default 20. Continue with next_cursor as cursor and the same prefix. Broad pages up to the supported limit 200 can exceed client display space; prefer targeted discovery and paging. A prefix that names no command is searched as words and everyday synonyms (credit card, cc, charge, tax); such a page says match: keywords."),
     "bookflow_help": (HelpArguments, "Read concise usage and complete input constraints by default. Select view=output_schema for complete output fields, input_schema for inputs, or full for both schemas and the entire command reference. All views include context and errors."),
     "bookflow_run": (RUN, "Run a discovered Bookflow command. Files use transport.input_file/output_file on the calling machine; the adapter handles all bytes. Recover an existing intent by its reference without resubmitting it."),
 }
@@ -153,6 +153,31 @@ def tool_schema(name):
     return {"type": "object", "$defs": definitions, "oneOf": branches}
 
 
+RUN_SHAPE = '{"command": "payment receive", "input": {...}, "company": "...", "reason": "...", "dry_run": false}'
+RECOVERY_SHAPE = '{"action": "execute"|"status"|"release"|"inspect", "operation_ref": "..."} (or input_ref), without command'
+
+
+def unknown_fields(name, model, unknown):
+    """Say which top-level field was wrong and show the accepted shape; field names only, never values."""
+    names = sorted(unknown)
+    quoted = ", ".join(repr(item) for item in names)
+    label = "field" if len(names) == 1 else "fields"
+    accepted = sorted(model.model_fields)
+    if name != "bookflow_run":
+        message = f"unknown {label} {quoted} for {name}. Accepted fields: {', '.join(accepted)}."
+    elif model is RunArguments:
+        if "action" in unknown:
+            message = (f"unknown top-level {label} {quoted} beside command: action belongs to recovery of an existing intent, not to a command run. "
+                       f"Run a command with {RUN_SHAPE}; recover an intent with {RECOVERY_SHAPE}.")
+        else:
+            message = (f"unknown top-level {label} {quoted}: put the command's business arguments (such as limit or cursor) inside input. "
+                       f"Accepted top-level fields: {', '.join(accepted)}. Shape: {RUN_SHAPE}.")
+    else:
+        message = (f"unknown top-level {label} {quoted} without command. A command run needs command and input: {RUN_SHAPE}; "
+                   f"recovery accepts {', '.join(accepted)}: {RECOVERY_SHAPE}.")
+    return BookflowError("E_USAGE", message=message, details={"arguments": names, "accepted": accepted})
+
+
 def validate(name, arguments):
     entry = TOOLS.get(name)
     if entry is None:
@@ -161,12 +186,12 @@ def validate(name, arguments):
         if name != "bookflow_run" and isinstance(arguments, dict):
             unknown = set(arguments) - set(entry[0].model_fields)
             if unknown:
-                raise BookflowError("E_USAGE", details={"arguments": sorted(unknown)})
+                raise unknown_fields(name, entry[0], unknown)
         if name == "bookflow_run" and isinstance(arguments, dict):
             model = RunArguments if "command" in arguments else RecoveryArguments
             unknown = set(arguments) - set(model.model_fields)
             if unknown:
-                raise BookflowError("E_USAGE", details={"arguments": sorted(unknown)})
+                raise unknown_fields(name, model, unknown)
             return model.model_validate(arguments)
         return (entry[0].validate_python(arguments) if isinstance(entry[0], TypeAdapter)
                 else entry[0].model_validate(arguments))
