@@ -297,6 +297,8 @@ print(json.dumps(dict(company=old['company'], vendor=old['vendor'], item=item, b
         # receipt_cost_correction_dimensions about returns -- but may not drop it.
         present = {row[0] for row in db.raw.execute("SELECT name FROM sqlite_schema WHERE type='trigger'")}
         assert {guard.split()[2] for guard in migration.GUARDS} <= present
+    from tests.historical_books import hub_to_head
+    hub_to_head(root)
     client = bookflow.connect(data_root=str(root))
     run = lambda name, raw, **ctx: client.run(name, raw, company=ids['company'], **ctx)
     assert run('bill show', dict(bill=ids['bill']))['total_minor_units'] == 2000
