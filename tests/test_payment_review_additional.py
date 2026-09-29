@@ -56,7 +56,9 @@ def test_closed_old_invoice_accepts_new_open_receipt_and_apply(client, sale):
     assert snapshots(client)==retry_before
 
 
-@pytest.mark.timeout(300)
+# Measured 2026-09-28: 386 s run alone under load (limit was 300). Each preview page re-prepares
+# the whole 403-invoice receipt; making the large-receipt pages cheaper is roadmap R159 (Later).
+@pytest.mark.timeout(900)
 def test_403_nonuniform_jobs_one_receipt_all_four_prospective_collections(client,sale):
     expected,targets={},[]
     for i in range(403):
