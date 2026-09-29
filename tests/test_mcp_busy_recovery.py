@@ -76,8 +76,11 @@ def test_filesystem_busy_recovery(short_recovery, mode):
                     assert error.details['recovery']['action'] == 'status'
                     if mode == 'persistent':
                         assert error.details['reason'] == 'recovery_deadline'
-                        assert 0.12 <= time.monotonic() - started < 0.7
-                        assert 3 <= len(poll_times) <= 7
+                        # R74 (47b2f4e): a filesystem_change busy report renews the 0.15 s recovery
+                        # budget up to the 0.3 s progress bound, so persistent busy is waited for to
+                        # that bound: polls near 0, .01, .03, .07, then every .04 s to 0.3 s (nine).
+                        assert 0.3 <= time.monotonic() - started < 0.7
+                        assert 7 <= len(poll_times) <= 11
                     else:
                         assert error.code == {'revoked': 'E_UNAUTHENTICATED', 'denied': 'E_PERMISSION'}.get(mode, 'E_DB_BUSY')
                         assert calls == ['execute'] + ['status'] * (2 if mode in {'revoked', 'denied'} else 1)

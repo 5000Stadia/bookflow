@@ -83,11 +83,23 @@ def test_denied_estimates_and_purchase_orders_stay_out_of_audit_and_activity(hos
                     assert passed is ok, (where, name, document)
                     return document
 
-                page = await run('audit list', {'limit': 1000})
+                # MCP results carry a size budget (d0620f4): a 1000-row page arrives compacted to
+                # its leading rows. Both transports read the whole trail in pages that fit, each
+                # page complete and uncompacted, following the cursor to its end.
+                async def every(name, body, cursor, field):
+                    items, body = [], dict(body, limit=10)
+                    while True:
+                        page = await run(name, body)
+                        assert 'result_compacted' not in page and page['count'] == len(page['items']), (where, name)
+                        items += page['items']
+                        if name == 'audit list' and page[field] is None or not page['items']:
+                            return items
+                        body[cursor] = page[field]
+                page = {'items': await every('audit list', {}, 'before', 'next_before')}
                 ids = {item['id'] for item in page['items']}
-                assert page['count'] == len(page['items']) and page['next_before'] is None, where
-                tail = await run('audit tail', {'after': 0, 'limit': 1000})
-                assert {item['id'] for item in tail['items']} == ids, where
+                assert len(ids) == len(page['items']), where
+                tail = await every('audit tail', {'after': 0}, 'after', 'next_after')
+                assert [item['id'] for item in tail] == sorted(ids, key={i['id']: i['seq'] for i in page['items']}.get), where
                 scan = await run('audit tail', {'after': 0, 'limit': 1000, 'scan_limit': 1000})
                 assert scan['scanned_count'] == len(ids) and not scan['scan_more'], where
                 seen[where] = ids

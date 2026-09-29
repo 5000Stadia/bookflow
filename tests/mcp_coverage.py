@@ -920,6 +920,10 @@ def payment_workspace_row(cmd, url, page_text, config):
                  'applications.items[].amount', 'invoice_versions[].invoice', 'invoice_versions[].expected_version'):
         mapping[path] = ('registry_alternative_not_emitted', None,
                          'workspace uses durable selection or signed settlement guard; no direct input for this alternative')
+    # applications {"mode": "suggested"} (d0620f4) is the agent's one-call alternative; the
+    # workspace asks `payment suggest` itself and saves the chosen rows as its durable selection.
+    mapping['applications.strategy'] = ('registry_alternative_not_emitted', None,
+                                        'workspace suggests through payment suggest and applies a durable selection; it never sends mode "suggested"')
     paths = []
     for field in model_fields(cmd.input_model, leaves_only=True):
         assert field.path in mapping, (cmd.name, field.path)

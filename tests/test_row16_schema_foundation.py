@@ -2,6 +2,7 @@
 import ast
 import importlib
 import inspect
+import re
 import sqlite3
 from types import SimpleNamespace
 
@@ -364,7 +365,15 @@ def test_hub_capabilities_additive_and_fresh(tmp_path):
                        | set(identity.ROLE_CAPABILITY_SEED))
     with open_database(tmp_path/'fresh-hub.db',writable=True,create=True) as db:
         migrate_to_head(db,'hub',None)
-        assert _rows(db.raw) == after
+        fresh=_rows(db.raw)
+    # hub0014 (R74, 6471e5c) draws the authority token with randomblob: each hub gets its own,
+    # so it is compared by shape; the singleton row and its generation are compared exactly.
+    def drawn(rows):
+        columns,values=rows['authority_generation']
+        assert columns == ('id','generation','token') and len(values) == 1
+        assert re.fullmatch('[0-9a-f]{32}', values[0][2])
+        return dict(rows, authority_generation=(columns,[values[0][:2]]))
+    assert drawn(fresh) == drawn(after)
 
 
 @pytest.mark.parametrize('failure', [None, 'drop', 'restore', 'foreign_key'])

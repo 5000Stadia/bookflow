@@ -31,6 +31,8 @@ EXPECTED = {
     ('commands/hub_cmds.py', 'apply_company_attach'): ('hub.attach_projection', 0),
     ('commands/hub_cmds.py', 'apply_company_new'): ('hub.company_new', 1),
     ('commands/hub_cmds.py', 'apply_demo_reset'): ('hub.demo_reset', 1),
+    # R133 (efb0060): restore re-ids an --as-copy archive, then records the restore event.
+    ('commands/backup_cmds.py', 'apply_company_restore'): ('hub.company_restore', 2),
     ('commands/host_cmds.py', 'migrate_everything.job'): ('host.migrate_everything', 1),
     ('core/host.py', 'Host._sweep_on_writer'): ('host.sweep', 1),
     ('hub/moves.py', 'complete_company_move'): ('moves.company', 1),

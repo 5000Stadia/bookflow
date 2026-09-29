@@ -519,11 +519,9 @@ def authorize_publication_transactions(s, occurrences):
     # distinct requirement is asked once, in the order its first occurrence needs it. A page
     # naming hundreds of sales used to repeat the same few requirements hundreds of times on
     # every frame it released.
+    # The two require_resource calls stay in this function's own body: they are the two call
+    # sites the activation catalog declares for this owner, and a helper would move them.
     met = set()
-    def require(capability, role):
-        if (capability, role) not in met:
-            require_resource(s, capability, role)
-            met.add((capability, role))
     while batch := list(islice(occurrences, _BATCH_SIZE)):
         facts = _publication_transaction_facts(s, list(dict.fromkeys(identifier for identifier, _ in batch)))
         for identifier, write in batch:
@@ -531,9 +529,13 @@ def authorize_publication_transactions(s, occurrences):
             if fact is None or fact['unresolved_target']:
                 raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
             role = 'standard' if write else 'member'
-            require('ledger.post' if write else 'ledger.read', role)
-            if fact['linked_work']:
-                require('customer-work', role)
+            ledger = ('ledger.post' if write else 'ledger.read', role)
+            if ledger not in met:
+                require_resource(s, *ledger)
+                met.add(ledger)
+            if fact['linked_work'] and ('customer-work', role) not in met:
+                require_resource(s, 'customer-work', role)
+                met.add(('customer-work', role))
         del facts
 
 
