@@ -58,6 +58,20 @@ def _source(folder: Path, pin: str) -> Path:
     return source
 
 
+def hub_to_head(data_root: Path) -> None:
+    """Bring an earlier release's hub to today's head, and nothing else.
+
+    Today refuses a read against a hub behind its head (E_SCHEMA_BEHIND) until a write or
+    `bookflow upgrade` migrates it. A customer's hub is at head before today's code reads their
+    company, so the witnesses start there. Company files are left as the release wrote them:
+    today's first writer is what the witnesses observe upgrading them.
+    """
+    from bookflow.storage.engine import open_database
+    from bookflow.storage.migrate import migrate_to_head
+    with open_database(Path(data_root) / 'hub.db', True) as hub:
+        migrate_to_head(hub, 'hub', Path(data_root) / 'backups')
+
+
 def books_at(folder: Path, revision: str, script: str = '', *, module: str = 'tests.test_bill_item_lines',
              imports: str = '_inventory_part', data: str = 'items', company: str | None = None) -> dict:
     """`books` as the release at `revision` built it, then `script` run in that release.
@@ -77,6 +91,7 @@ def books_at(folder: Path, revision: str, script: str = '', *, module: str = 'te
                                env=env, capture_output=True, text=True)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     result = json.loads(out.read_text())
+    hub_to_head(folder / data)
     client = bookflow.connect(data_root=str(folder / data))
     company = company or result['books']['company']
 

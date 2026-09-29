@@ -424,6 +424,10 @@
       const purchase = {check: {noun: 'check', label: 'Check'},
         'card-charge': {noun: 'card-charge', label: 'Credit card charge'},
         'card-credit': {noun: 'card-credit', label: 'Credit card credit'}}[row.purchase_noun];
+      // Rows with no page of their own here still read as words, never as a stored type name.
+      const TYPE_LABELS = {bill_payment: 'Bill payment', bill: 'Bill', payment: 'Payment', deposit: 'Deposit',
+        credit_memo: 'Credit memo', customer_refund: 'Refund', vendor_credit: 'Vendor credit',
+        sales_tax_payment: 'Sales tax payment', statement_charge: 'Statement charge'};
       const document = purchase || {
         journal_entry: {noun: 'journal', label: 'Journal'},
         invoice: {noun: 'invoice', label: 'Invoice'},
@@ -434,7 +438,7 @@
       // still reachable from the row.
       const reference = row.check_number
         ? `${row.check_number} · Check · ${row.transaction_number}`
-        : `${row.transaction_number} · ${document?.label || row.transaction_type || ''}`;
+        : `${row.transaction_number} · ${document?.label || TYPE_LABELS[row.transaction_type] || row.transaction_type || ''}`;
       const when = node('td', null, 'reg-date'), effective = node('time', day(row.effective_date));
       effective.dateTime = row.effective_date; when.append(effective, ' ', node('small', row.recorded_at, 'reg-recorded'));
       tr.append(when);
@@ -447,7 +451,7 @@
       for (const [value, cls] of values) tr.append(node('td', value || '', cls + (value ? '' : ' reg-empty')));
       const actions = node('td', null, 'reg-actions'), journal = encodeURIComponent(row.transaction_id);
       if (document) actions.append(link('History', `${base}/${document.noun}/${journal}?` + new URLSearchParams(row.revision_number ? {revision_number: row.revision_number} : {})));
-      if (c.writable && row.transaction_type === 'journal_entry') {
+      if (c.writable && (row.transaction_type === 'journal_entry' || purchase)) {
         actions.append(' ', link('Edit current', purchase ? `${base}/${purchase.noun}/${journal}/update` : path + '?' + new URLSearchParams({edit: row.transaction_id})), ' ', link('Void current', `${base}/${purchase?.noun || 'journal'}/${journal}/void`));
       }
       tr.append(actions); body.append(tr);

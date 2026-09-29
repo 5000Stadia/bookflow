@@ -54,6 +54,11 @@ class Client:
     def run(self, name: str, input: dict[str, Any] | None = None, *, company: str | None = None, dry_run: bool = False,
             reason: str | None = None, source_ref: str | None = None, directive: str | None = None, idempotency_key: str | None = None,
             clear: list[str] | None = None, input_stream=None, output_stream=None) -> dict[str, Any]:
+        from bookflow.core import performance
+        if performance.enabled():
+            # Observe the root before anything here can refuse the call: an invocation rejected
+            # before dispatch (an unknown command, --dry-run on a read) still excludes it.
+            performance.protect_selection(self.data_root)
         cmd = registry.get(name)
         if cmd is None:
             raise registry.unknown_command(name)

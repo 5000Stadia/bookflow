@@ -460,7 +460,8 @@ def test_row5_login_list_detail_form_preview_and_audit_in_real_chrome(
         browser.evaluate("document.querySelector('#company-navigation a[data-section=\"audit\"]').click()")
         browser.wait_for("document.readyState === 'complete' && location.pathname.endsWith('/_group/audit')")
         browser.evaluate(f"document.querySelector('main a[href={json.dumps(audit_path)}]').click()")
-        browser.wait_for(f"document.readyState === 'complete' && location.pathname === {json.dumps(audit_path)} && document.querySelector('h1')?.textContent.trim() === 'Audit'")
+        # R92 (ddbe690) titles the company audit page "Audit trail".
+        browser.wait_for(f"document.readyState === 'complete' && location.pathname === {json.dumps(audit_path)} && document.querySelector('h1')?.textContent.trim() === 'Audit trail'")
         _assert_rendered_page(browser, "company audit", viewport=viewport)
 
         browser.navigate(update_url)

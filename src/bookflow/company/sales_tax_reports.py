@@ -38,9 +38,9 @@ cash-basis policy would be a number nothing supports, so this refuses with
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AfterValidator, Field, model_validator
 
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
@@ -51,17 +51,21 @@ NO_AGENCY = "Not attributed to an agency"
 COLUMNS = ("beginning_balance", "tax_charged", "tax_credited", "remitted", "unattributed", "balance")
 
 
+# An optional accounting date, validated as every report date is. The validator sits on the
+# date itself (not on a wrapper that passes None through), so the workbench still recognises
+# these fields as dates and opens them on the company's calendar.
+OptionalDate = Annotated[str, AfterValidator(iso_date)] | None
+
+
 class SalesTaxLiabilityInput(StrictModel):
-    as_of: str | None = Field(default=None, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD: the balance owed on this date. The same as date_to; pass one or the other.")
-    date_from: str | None = Field(default=None, min_length=10, max_length=10, description="Optional inclusive first accounting date, YYYY-MM-DD. With it, the charged, credited, remitted and adjustment columns cover only the period date_from..date_to (a month's tax: 2026-09-01..2026-09-30), beginning_balance is what was owed the day before it, and balance is what is owed at date_to. Without it, the columns run from the start of the books.")
-    date_to: str | None = Field(default=None, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD; another name for as_of.")
+    as_of: OptionalDate = Field(default=None, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD: the balance owed on this date. The same as date_to; pass one or the other.")
+    date_from: OptionalDate = Field(default=None, min_length=10, max_length=10, description="Optional inclusive first accounting date, YYYY-MM-DD. With it, the charged, credited, remitted and adjustment columns cover only the period date_from..date_to (a month's tax: 2026-09-01..2026-09-30), beginning_balance is what was owed the day before it, and balance is what is owed at date_to. Without it, the columns run from the start of the books.")
+    date_to: OptionalDate = Field(default=None, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD; another name for as_of.")
     basis: Literal["accrual"] = "accrual"
     agency: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional tax agency vendor ID or name; omit for every agency with a balance.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
 
-    _dates = field_validator("as_of", "date_from", "date_to")(
-        lambda value: None if value is None else iso_date(value))
 
     @model_validator(mode="after")
     def _period(self):

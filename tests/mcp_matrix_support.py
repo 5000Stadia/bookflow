@@ -40,6 +40,15 @@ class Matrix:
                 handle = start_serving(root, client_version(), bind='127.0.0.1:8765', secure_cookies=False)
                 self.stack.callback(handle.stop)
                 self.hosts[surface] = Hosted(handle, root, '', self.company, issued, '', {})
+        # MCP alone compacts a result over its size budget (d0620f4); the full result is read
+        # back through the documented route, a result_file beneath an output directory.
+        if '--output-dir' in mcp_args:
+            self.outbox = Path(list(mcp_args)[list(mcp_args).index('--output-dir') + 1])
+        else:
+            self.outbox = directory / 'mcp-results'
+            self.outbox.mkdir(mode=0o700)
+            mcp_args = [*mcp_args, '--output-dir', str(self.outbox)]
+        self.fetched = 0
         generator = live.__wrapped__(self.hosts['mcp'])
         url = next(generator)
         self.stack.callback(generator.close)
@@ -128,8 +137,34 @@ class Matrix:
         else:
             reply = await self.mcp.call_tool('bookflow_run', {'command': command, 'input': raw, **options})
             error, document = reply.is_error, reply.structured_content
+            if isinstance(document, dict) and 'result_compacted' in document:
+                document = await self.full_result(command, raw, options, reply)
         assert bool(error) == rejected, (surface, command, document)
         self.documents[surface].append((command, deepcopy(document)))
+        return document
+
+
+    async def full_result(self, command, raw, options, reply):
+        """A compacted MCP result is within budget and says so; the complete one comes back as a file."""
+        from bookflow.adapters.mcp.budget import BUDGET, size
+        note = reply.structured_content['result_compacted']
+        assert note['reason'] == 'size_budget' and size(reply.structured_content) <= BUDGET < note['full_characters'], note
+        assert 'transport.result_file' in note['full_result'], note
+        self.fetched += 1
+        destination = self.outbox / f'full-{self.fetched}.json'
+        if registry.get(command).is_write and not options.get('dry_run'):
+            # A write is never resubmitted: its retained receipt is recovered by reference.
+            reference = reply.meta['bookflow_transport']['operation_ref']
+            delivered = await self.mcp.call_tool('bookflow_run', {'operation_ref': reference, 'action': 'execute',
+                                                                  'result_file': str(destination)})
+        else:
+            delivered = await self.mcp.call_tool('bookflow_run', {'command': command, 'input': raw, **options,
+                                                                  'transport': {'result_file': str(destination)}})
+        assert delivered.structured_content['delivery'] == 'complete_json_file', delivered.structured_content
+        assert bool(delivered.is_error) == bool(reply.is_error), delivered.structured_content
+        document = json.loads(destination.read_text(encoding='utf-8'))
+        if 'operation_ref' in (delivered.structured_content or {}) and registry.get(command).is_write and not options.get('dry_run'):
+            assert size(document) == note['full_characters'], (size(document), note)
         return document
 
 

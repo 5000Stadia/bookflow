@@ -49,10 +49,10 @@ def _click(b, action):
     b.evaluate(f'document.querySelector("button[value={action}]").click()')
 
 
-def _preview(b):
+def _preview(b, timeout=15):
     b.evaluate('void (window.salesPreviewForm = document.querySelector("[data-sales-form]"))')
     _click(b, 'preview')
-    b.wait_for(f'!window.salesPreviewForm.isConnected && (!!document.querySelector(".error") || (document.querySelector({json.dumps(FP)})?.value.length === 64))')
+    b.wait_for(f'!window.salesPreviewForm.isConnected && (!!document.querySelector(".error") || (document.querySelector({json.dumps(FP)})?.value.length === 64))', timeout=timeout)
     assert not b.evaluate('document.querySelector(".error")?.textContent'), b.evaluate('document.body.innerText')
     fingerprint = b.evaluate(f'document.querySelector({json.dumps(FP)}).value')
     assert re.fullmatch('[0-9a-f]{64}', fingerprint)
@@ -66,8 +66,8 @@ def _contained(b, width):
         .filter(e=>e.getBoundingClientRect().right>innerWidth+1).slice(0,12).map(e=>({tag:e.tagName,name:e.name,cls:e.className}))})''')
 
 
-def _saved(b, noun):
-    b.wait_for(f'!document.querySelector("[data-generated-form]") && !!document.querySelector(".sales-document") && location.pathname.includes("/{noun}/")')
+def _saved(b, noun, timeout=15):
+    b.wait_for(f'!document.querySelector("[data-generated-form]") && !!document.querySelector(".sales-document") && location.pathname.includes("/{noun}/")', timeout=timeout)
     return b.evaluate('location.pathname').rsplit('/', 1)[-1]
 
 

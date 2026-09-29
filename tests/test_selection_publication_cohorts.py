@@ -62,7 +62,9 @@ def test_full_history_403_clear_and_shared_sql(active, monkeypatch, tmp_path):
         roots=[('payment_selection','plain',False),('payment_selection','S',False),('payment_selection','S',True)]
         previous=outcome(lambda:old.check(s,roots));prior=calls[:];calls.clear()
         current=outcome(lambda:pp.check(s,iter(roots)))
-        assert previous==current=={'status':'ok'} and calls==prior and len(calls)==5
+        # R96 (6c685d8): the current check asks each distinct requirement once, in first-need
+        # order; the frozen checker asked S's ledger.read again for its second occurrence.
+        assert previous==current=={'status':'ok'} and len(prior)==5 and calls==list(dict.fromkeys(prior)) and len(calls)==4
         (tmp_path/'graphs.json').write_text(json.dumps(dict(expected=sorted(expected),actual=sorted(reader.resolved['S']),binds=binds,calls=calls,old=previous,new=current)))
 
 
@@ -121,17 +123,19 @@ def test_no_later_cohort_consumed(position,failure,monkeypatch):
         def __init__(self,db,ids):loads.append(ids)
         def requirements(self,identifier,write):
             if failure=='content' and int(identifier)==position:raise TypeError('content')
-            return [('ledger.read','member')]
+            # Each distinct requirement is asked once (R96, 6c685d8), so the permission failure
+            # is a requirement first needed at `position`.
+            return [('ledger.post','standard') if failure=='permission' and int(identifier)==position else ('ledger.read','member')]
     def values():
         for i in range(1,402):consumed.append(i);yield(str(i),False)
     def gate(s,r,role):
         gates.append(r)
-        if failure=='permission' and len(gates)==position:raise BookflowError('E_PERMISSION')
+        if failure=='permission' and r=='ledger.post':raise BookflowError('E_PERMISSION')
     monkeypatch.setattr(pa,'_PublicationSelectionCohort',Reader);monkeypatch.setattr(pa,'require_resource',gate)
     result=outcome(lambda:pa.authorize_publication_selections(SimpleNamespace(company=None),values()))
     assert result['code']==('E_IO' if failure=='content' else 'E_PERMISSION')
     assert len(loads)==(1 if position<=200 else 2) and len(consumed)==len(loads)*200
-    assert len(gates)==position-(failure=='content')
+    assert gates==['ledger.read']+(['ledger.post'] if failure=='permission' else [])
 
 
 def test_no_second_hop_or_reverse_authority():
@@ -222,5 +226,6 @@ def test_empty_duplicate_occurrences_keep_write_flags(count,monkeypatch):
     monkeypatch.setattr(pa,'require_resource',lambda s,r,role:calls.append((r,role)))
     with facts(rows) as s:
         pa.authorize_publication_selections(s,(('plain',bool(i%2)) for i in range(count)))
-    assert calls==[('ledger.post','standard') if i%2 else ('ledger.read','member') for i in range(count)]
+    # Both write flags still reach the gate; each distinct requirement once, first-need order (R96, 6c685d8).
+    assert calls==list(dict.fromkeys(('ledger.post','standard') if i%2 else ('ledger.read','member') for i in range(count)))
     assert loads==[['plain']]*((count+199)//200)

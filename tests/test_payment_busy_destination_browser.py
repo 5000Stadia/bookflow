@@ -100,7 +100,7 @@ def test_queued_row_events_keep_identity_value_and_removal(register_browser,tmp_
     b.evaluate("""(()=>{let row=document.querySelector('#payment-invoices tr');
       let check=row.querySelector('input[type=checkbox]');check.checked=true;
       check.dispatchEvent(new Event('change',{bubbles:true}));
-      let amount=row.querySelector('input[type=text]');amount.value='1.23';
+      let amount=row.querySelector('input[aria-label^="Payment for"]');amount.value='1.23';
       amount.dispatchEvent(new Event('change',{bubbles:true}));
       // A read/redraw can replace display state; event payloads stay immutable.
       check.checked=false;amount.value='9.99';window.releaseRead();})()""")

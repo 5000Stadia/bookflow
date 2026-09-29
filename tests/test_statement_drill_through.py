@@ -423,8 +423,11 @@ def _grant(hosted, capability, why):  # noqa: F811
     state = hosted.ok("permission.show")
     hosted.ok("permission.activate", {"expected_generation": state["generation"],
                                       "expected_catalog_sha256": state["catalog_sha256"]}, headers=why)
+    # The demo also seeds an assistant's membership in this company (as 88a3624 found for the
+    # payment delete journey); grant the person the host acts for.
     member = next(row for row in hosted.ok("membership.list", {"company": hosted.company_id})["items"]
-                  if row["scope_type"] == "company" and row["scope_id"] == hosted.company_id)
+                  if row["scope_type"] == "company" and row["scope_id"] == hosted.company_id
+                  and row["username"] == hosted.login)
     hosted.ok("membership.grant", {"user": member["user_id"], "company": hosted.company_id,
                                    "expected_version": member["version"], "grants": [capability]},
               headers=why)

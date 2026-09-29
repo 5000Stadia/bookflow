@@ -203,7 +203,7 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
         while True:
             browser.wait_for('document.readyState === "complete" && !!document.querySelector(".table-wrap table")')
             found.extend(browser.evaluate('Array.from(document.querySelectorAll(".table-wrap table tr td:first-child a")).map(a=>a.href.split("/").pop())'))
-            older = browser.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent.trim()==="older")?.href || null')
+            older = browser.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent.trim()==="Older events")?.href || null')
             if older is None:
                 break
             parsed = parse_qs(urlsplit(older).query)

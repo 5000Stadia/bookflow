@@ -26,7 +26,7 @@ def test_review_rebases_only_attempted_selection_edits(register_browser,tmp_path
         set_items=[dict(invoice=second,expected_version=1,amount='4',amount_origin='entered'),
                    dict(invoice=third,expected_version=1,amount='1',amount_origin='entered')]))
     target=third if action=='add' else a
-    selector=f'tr[data-invoice="{target}"] input'+('[type="checkbox"]' if action=='remove' else '[type="text"]')
+    selector=f'tr[data-invoice="{target}"] input'+('[type="checkbox"]' if action=='remove' else '[aria-label^="Payment for"]')
     edit="x.checked=false" if action=='remove' else "x.value="+json.dumps('7' if action=='add' else '5')
     b.evaluate(f"(()=>{{const x=document.querySelector({json.dumps(selector)});{edit};x.dispatchEvent(new Event('change',{{bubbles:true}}));}})()")
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')")
@@ -101,7 +101,7 @@ def test_rejected_row_review_refreshes_all_retained_dependencies(register_browse
             operation_key='retained-funding-amount',settlement_guard=shown['settlement_guard']),**{'X-Bookflow-Reason':'Correct receipt amount'})
     else:
         run('invoice update',dict(invoice=second['id'],expected_version=1,memo='Other writer clarified invoice'),**{'X-Bookflow-Reason':'Clarify invoice memo'})
-    selector=f'tr[data-invoice="{first["id"]}"] input[type="text"]'
+    selector=f'tr[data-invoice="{first["id"]}"] input[aria-label^="Payment for"]'
     b.evaluate(f"(()=>{{const x=document.querySelector({json.dumps(selector)});x.value='5';x.dispatchEvent(new Event('change',{{bubbles:true}}));}})()")
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')")
     assert ('E_QUERY_STALE' if payment else 'E_VERSION_CONFLICT') in b.evaluate("document.querySelector('#payment-error').innerText")
@@ -161,7 +161,7 @@ def test_review_recovers_complete_403_stale_rows_on_same_selection_preserving_hi
     run('payment receive',dict(customer=payer,date='2026-06-02',amount='4.03',payment_method=method,
         deposit_to=register_browser.bank['id'],operation_key='403-other-remittance',
         applications=dict(mode='selection',selection=remittance['id'],expected_version=remittance['version'])))
-    target=first['id'];selector=f'tr[data-invoice="{target}"] input[type="text"]'
+    target=first['id'];selector=f'tr[data-invoice="{target}"] input[aria-label^="Payment for"]'
     b.evaluate(f"(()=>{{let x=document.querySelector({json.dumps(selector)});x.value='0.02';x.dispatchEvent(new Event('change',{{bubbles:true}}));}})()")
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=240)
     assert 'E_VERSION_CONFLICT' in b.evaluate("document.querySelector('#payment-error').innerText")

@@ -106,7 +106,10 @@ def _contained(browser, width):
           return box.width > 0 && box.left >= -0.5 && box.right <= window.innerWidth + 0.5;})""")
         assert browser.evaluate('document.querySelectorAll(".list-card").length') == browser.evaluate(
             'document.querySelectorAll("#deposit-list-lines tbody tr").length')
+        # The totals fold into one line (count and bank movement), so the list comes first.
+        assert _totals_fold(browser) == dict(open=False, summary=True, list_near=True)
         return
+    assert _totals_fold(browser) == dict(open=True, summary=False, list_near=False)
     assert browser.evaluate('[document.querySelector("#deposit-list-lines"),document.querySelector("#deposit-list-lines").closest(".table-wrap")]'
                             '.every(e=>e.scrollWidth===e.clientWidth)')
     escaped = browser.evaluate("""[...document.querySelectorAll('#deposit-list-lines tbody td, #deposit-list-lines tbody th')]
@@ -114,6 +117,13 @@ def _contained(browser, width):
       .filter(box => box.left < -0.5 || box.right > window.innerWidth + 0.5).length""")
     assert escaped == 0, f'{escaped} cells left the {width}px viewport'
     assert browser.evaluate('getComputedStyle(document.querySelector("#deposit-list-lines tbody tr")).display') == 'table-row'
+
+
+def _totals_fold(browser):
+    return browser.evaluate("""(() => {const fold = document.querySelector('.deposit-totals-fold'),
+      summary = fold.querySelector('summary'), card = document.querySelector('.list-card');
+      return {open: fold.open, summary: summary.offsetHeight > 0 && /\\d+ matching deposits? · .+ bank movement/.test(summary.innerText),
+              list_near: summary.offsetHeight > 0 && card.getBoundingClientRect().top - summary.getBoundingClientRect().bottom < 200};})()""")
 
 
 def _amounts_painted(browser, width):
@@ -336,6 +346,9 @@ def test_saved_deposit_list_totals_paging_filters_and_journey(register_browser, 
         # The full memo stays readable: in its ledger cell on a wide screen, on its card on a phone.
         where = '.list-cards' if width == 390 else '#deposit-list-lines'
         assert PROSE.strip() in b.evaluate(f'document.querySelector("{where}").innerText')
+        if width == 390:  # a tap on the one-line summary opens the totals
+            b.evaluate('document.querySelector(".deposit-totals-fold>summary").click()')
+            assert b.evaluate('document.querySelector(".deposit-totals-fold").open')
         assert _amounts_painted(b, width)
         if width != 390:
             assert _list_roles(b) == dict(table=1, row=9, columnheader=7, cell=56), width

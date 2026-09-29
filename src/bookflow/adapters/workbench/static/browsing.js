@@ -262,3 +262,13 @@ document.querySelectorAll('form.list-form[data-list-sheet]').forEach(form => {
   populate($('available-columns'),columnPage,columnMap,false); populate($('available-filters'),filterPage,filterMap,false);
   $('more-columns').hidden=!columnPage.next_cursor; $('more-filters').hidden=!filterPage.next_cursor; drawColumns(); drawCriteria();
 })();
+/* A block marked data-phone-fold starts folded on a phone and open on a wide screen
+   (the Saved deposits totals); printing opens it. Without JavaScript it stays open. */
+(() => {
+  const folds = document.querySelectorAll('details[data-phone-fold]');
+  if (!folds.length) return;
+  const phone = matchMedia('(max-width: 700px)');
+  const fold = () => folds.forEach(d => { d.open = !phone.matches; });
+  fold(); phone.addEventListener('change', fold);
+  addEventListener('beforeprint', () => folds.forEach(d => { d.open = true; }));
+})();

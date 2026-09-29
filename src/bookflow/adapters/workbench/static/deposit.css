@@ -63,6 +63,14 @@
 .deposit-list-totals dd{font-weight:700}
 .deposit-list .deposit-memo p{margin:0 0 .3rem;white-space:pre-wrap}
 .deposit-list .deposit-memo details{font-size:13px}
+/* The totals fold: open with no summary line on a wide screen; one tappable line on a phone. */
+.deposit-totals-fold>summary{display:none}
+@media(max-width:700px){
+ .deposit-totals-fold>summary{display:list-item;min-height:44px;box-sizing:border-box;cursor:pointer;font-weight:600;padding:.3rem .6rem;border:1px solid var(--line,#c9d2d9);border-radius:.3rem}
+ .deposit-totals-fold[open]>summary{margin-bottom:.5rem}
+ .deposit-totals-fold .deposit-card>h2{display:none}
+ .deposit-totals-fold .deposit-card>h2+p{margin-top:0}
+}
 @media print{
  .deposit-list #deposit-filters,.deposit-list .deposit-actions,.deposit-list-back{display:none}
 }

@@ -79,7 +79,10 @@ def test_the_payment_list_offers_the_overpayment_back_and_the_refund_takes_it(
         assert f'${OVERAGE} unapplied' in b.evaluate(f'{row}.innerText')
     else:
         number = _cell(b, row, 'Payment')
-        assert _cell(b, row, 'Unapplied credit') == '$' + OVERAGE, _cell(b, row, 'Unapplied credit')
+        # A ledger list names the home currency once, in the heading; the figure stands alone (R94).
+        headings = b.evaluate('[...document.querySelectorAll("#payment-list thead th")].map(th => th.textContent.trim())')
+        assert 'Unapplied credit (USD)' in headings, headings
+        assert _cell(b, row, 'Unapplied credit') == OVERAGE, _cell(b, row, 'Unapplied credit')
     assert b.evaluate(f'!!{row}.querySelector("[data-refund-overpayment]")'), \
         'the overpaid row offers no way to send the money back'
     _contained(b, width)
@@ -122,5 +125,5 @@ def test_the_payment_list_offers_the_overpayment_back_and_the_refund_takes_it(
     if width == 390:
         assert 'unapplied' not in b.evaluate(f'{row}.innerText')
     else:
-        assert _cell(b, row, 'Unapplied credit') == '$0.00', _cell(b, row, 'Unapplied credit')
+        assert _cell(b, row, 'Unapplied credit') == '0.00', _cell(b, row, 'Unapplied credit')
     _contained(b, width)

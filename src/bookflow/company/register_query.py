@@ -76,6 +76,9 @@ class RegisterRow(reports.GeneralLedgerRow):
     # the other side of its own entry.
     check_number: str | None = None
     purchase_noun: Literal['check', 'card-charge', 'card-credit'] | None = None
+    # A check, card charge or card credit is stored as a journal entry; its row names the
+    # document a person entered (its money-out marker), as that document's own results do.
+    transaction_type: reports.TransactionType | Literal['check', 'card_charge', 'card_credit'] | None = None
 
 
 class RegisterQueryOutput(reports.Page):
@@ -282,6 +285,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         rows = []
         for row in result.rows:
             values = row.model_dump()
+            if row.transaction_id in purchases:
+                values['transaction_type'] = purchases[row.transaction_id].replace('-', '_')
             summary = summaries.get(row.revision_id)
             category = class_label = memo = None
             if summary:

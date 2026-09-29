@@ -184,8 +184,7 @@ def apply_company_restore(plan: Plan, ctx: Context, s: Session) -> Applied:
     path, planned, orow = plan.data["path"], plan.data["manifest"], plan.data["org"]
     display, cid = plan.data["display"], plan.data["company_id"]
     org_folder = s.abs_path(orow["path"])
-    owner = "hub.company_restore"
-    with s.commits.operation(owner, s.hub, s.company):
+    with s.commits.operation("hub.company_restore", s.hub, s.company):
         folder = reserve_folder(org_folder, display)
         try:
             write_company_marker(folder, company_id=cid, state="creating", display_name=display)
@@ -199,7 +198,7 @@ def apply_company_restore(plan: Plan, ctx: Context, s: Session) -> Applied:
                 if cid != manifest["company_id"]:
                     db.raw.execute("BEGIN IMMEDIATE")
                     db.raw.execute("UPDATE company_info SET id = ?", (cid,))
-                    s.commits.commit(db, owner)
+                    s.commits.commit(db, "hub.company_restore")
                 before, after = migrate.migrate_company(s, ctx, db, folder, None)
                 facts = db.raw.execute("SELECT legal_name, home_currency FROM company_info").fetchone()
                 db.raw.execute("BEGIN IMMEDIATE")
@@ -211,7 +210,7 @@ def apply_company_restore(plan: Plan, ctx: Context, s: Session) -> Applied:
                 write_event_to(db, ctx, "company restore", f"restored company {display} from backup {path.name}",
                                [Touched("company_backup", manifest.get("backup_id") or cid, "restore", None, None, snapshot, db="company")],
                                actor_id=s.actor.id, actor_kind=s.actor.kind)
-                s.commits.commit(db, owner)
+                s.commits.commit(db, "hub.company_restore")
             for shard in (folder / "attachments").iterdir():
                 sync_directory(shard)
             for sub in ("attachments", "backups", "exports"):

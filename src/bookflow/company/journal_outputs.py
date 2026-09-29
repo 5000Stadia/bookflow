@@ -125,8 +125,14 @@ class JournalWriteOutput(JournalOutput, WriteOutput):
     idempotent_replay: bool = False
 
 
+class JournalListItemOutput(JournalSummaryOutput):
+    # A check, card charge or card credit is stored as a journal entry; the journal list names it
+    # by the document a person entered (its money-out marker), as its own show and post results do.
+    type: Literal['journal_entry', 'check', 'card_charge', 'card_credit']
+
+
 class JournalPageOutput(BaseModel):
-    items: list[JournalSummaryOutput]
+    items: list[JournalListItemOutput]
     count: int
     has_more: bool
     next_cursor: str | None

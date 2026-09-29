@@ -25,7 +25,9 @@ def test_occurrences_match_frozen_checker(graph,monkeypatch,tmp_path,count):
         role='standard' if write else 'member'
         expected.append(('ledger.post' if write else 'ledger.read',role))
         if identifier=='p0':expected.append(('customer-work',role))
-    assert previous==current=={'status':'ok'} and calls==previous_calls==expected
+    # R91 (75fab6e): the current check asks each distinct requirement once, in first-need
+    # order; the frozen checker still asked it per occurrence.
+    assert previous==current=={'status':'ok'} and previous_calls==expected and calls==list(dict.fromkeys(expected))
     assert loads==[list(dict.fromkeys(i for i,_ in occurrences[n:n+200])) for n in range(0,count,200)]
     (tmp_path/'ordered-occurrences.json').write_text(json.dumps({'occurrences':occurrences,'old':previous,'new':current,'old_calls':previous_calls,'new_calls':calls,'loads':loads,'old_source':old.source_sha256},indent=2))
 
@@ -35,18 +37,20 @@ def test_occurrences_match_frozen_checker(graph,monkeypatch,tmp_path,count):
 def test_failure_positions_stop_future_load(monkeypatch,position,failure):
     consumed=[];loads=[];gates=[]
     def stream():
-        for i in range(1,402):consumed.append(i);yield (str(i),False)
+        # Each distinct requirement is asked once (R91, 75fab6e), so the permission failure is a
+        # requirement first needed at `position`: that occurrence alone is a write.
+        for i in range(1,402):consumed.append(i);yield (str(i),failure=='permission' and i==position)
     def load(s,ids):
         loads.append(ids)
         return {i:{'linked_work':False,'unresolved_target':failure=='graph' and int(i)==position} for i in ids}
     def gate(s,r,role):
         gates.append((r,role))
-        if failure=='permission' and len(gates)==position:raise BookflowError('E_PERMISSION',details={'reason':'ordered_gate'})
+        if failure=='permission' and r=='ledger.post':raise BookflowError('E_PERMISSION',details={'reason':'ordered_gate'})
     monkeypatch.setattr(pa,'_publication_transaction_facts',load);monkeypatch.setattr(pa,'require_resource',gate)
     result=outcome(lambda:pa.authorize_publication_transactions(None,stream()))
     assert result['code']=='E_PERMISSION'
     assert result['details']['reason']==('unresolved_payment_evidence' if failure=='graph' else 'ordered_gate')
-    assert len(gates)==position-(failure=='graph')
+    assert gates==[('ledger.read','member')]+([('ledger.post','standard')] if failure=='permission' else [])
     assert len(loads)==(1 if position<=200 else 2)
     assert len(consumed)==200*len(loads)
 

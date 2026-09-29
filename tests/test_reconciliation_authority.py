@@ -37,6 +37,7 @@ NOT_SETTLEMENT = {
     'deposit_current_memberships': 'the current projection of `deposit_memberships`, already an edge',
     'deposit_components': 'component detail beneath a membership the closure already follows',
     'payment_components': "a payment's own components, keyed to that same payment",
+    'payment_discounts': 'discount detail beneath an application the closure already follows (its application_id)',
     'reconciliation_keys': 'our own storage, keyed to the bank effect of the same document',
     'reconciliation_deposit_versions': 'our own storage, keyed to the bank effect of the same document',
     # Settlement-shaped and deliberately not followed. A credit memo naming the sale it credits

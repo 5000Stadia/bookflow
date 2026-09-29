@@ -94,7 +94,7 @@ def test_real_browser_notes_files_conflicts_drafts_and_narrow_keyboard(browser_s
             (() => {const original = window.fetch; let first = true;
               window.fetch = async function(url, ...args) {
                 const response = await original.call(this, url, ...args);
-                if (first && String(url).endsWith('/commands/activity')) {
+                if (first && String(url).includes('/_activity?')) {
                   first = false;
                   await new Promise(resolve => {window.releaseInitialActivity = resolve;});
                 }
@@ -292,7 +292,7 @@ def test_annotation_reads_and_download_ignore_pending_form_directive(browser_sit
         browser.evaluate(f"document.querySelector('[name=\"ctx:directive\"]').value={json.dumps(directive)}")
         browser.evaluate("""window.annotationRequests=[];window.originalAnnotationFetch=fetch;
           window.fetch=async (url, options) => {
-            if (String(url).includes('/commands/') || String(url).includes('/transfers/'))
+            if (String(url).includes('/commands/') || String(url).includes('/transfers/') || String(url).includes('/_activity?'))
               annotationRequests.push({url:String(url), headers:options.headers});
             return originalAnnotationFetch(url, options);
           };
@@ -301,7 +301,7 @@ def test_annotation_reads_and_download_ignore_pending_form_directive(browser_sit
         assert browser.evaluate("[...document.querySelectorAll('[data-list-status]')].every(n=>n.dataset.failed!=='true')")
         browser.evaluate("document.querySelector('[data-link-id] button').click()")
         browser.wait_for("document.querySelector('[data-link-id] [role=status]').textContent.includes('Download handed')")
-        assert browser.evaluate("annotationRequests.filter(r=>/note.list|attachment.list|commands\\/activity|attachment.get/.test(r.url)).every(r=>!r.headers['X-Bookflow-Directive'])")
+        assert browser.evaluate("annotationRequests.filter(r=>/note.list|attachment.list|\\/_activity\\?|attachment.get/.test(r.url)).every(r=>!r.headers['X-Bookflow-Directive'])")
         browser.evaluate("document.querySelector('[name=\"ctx:reason\"]').value='修理 receipt + 100%'; document.querySelector('[name=\"ctx:source_ref\"]').value='工事/é😀'")
         browser.evaluate("document.querySelector('#annotation-note').value='Directive belongs to this new note';document.querySelector('[data-note-add]').requestSubmit()")
         browser.wait_for("document.querySelector('[data-note-add] [role=status]').textContent==='Note added.' && [...document.querySelectorAll('[data-note-id]')].some(n=>n.textContent.includes('Directive belongs to this new note'))")

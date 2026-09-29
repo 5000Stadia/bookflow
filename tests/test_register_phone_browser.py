@@ -103,3 +103,15 @@ def test_phone_register_rows_and_add_entry_sheet(register_browser, tmp_path):
     b.wait_for("document.querySelector('#register-period-summary').textContent === 'Sep 1 – Dec 31'")
     assert not b.evaluate("document.querySelector('#register-period-box').open")
     assert b.evaluate("document.querySelector('#register-history time').dateTime") >= '2026-09-01'
+
+
+def test_register_rows_name_their_document_in_words(register_browser):
+    """A card charge reads as one, and a bill paid by card as a bill payment: never a stored type."""
+    env, b = register_browser, register_browser.browser
+    card = _command(b, env.site, 'account.show', {'account': 'Business Credit Card'})
+    b.navigate(f"{env.site.base_url}/c/{env.site.company_id}/account/{card['id']}/register?date_from=2020-01-01&date_to=2030-12-31")
+    b.wait_for("document.querySelectorAll('#register-history tr[data-kind=posting]').length > 3")
+    refs = b.evaluate("[...document.querySelectorAll('#register-history .reg-ref')].map(e => e.textContent)")
+    assert any('· Credit card charge ·' in r for r in refs), refs
+    assert any('· Bill payment ·' in r for r in refs), refs
+    assert not any('_' in r.split(' · ')[1] for r in refs if ' · ' in r), refs

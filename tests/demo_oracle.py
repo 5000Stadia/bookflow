@@ -33,7 +33,9 @@ from bookflow.storage.engine import open_database
 # The day the demo seed is written as of. `demo reset` moves every seed date back by whole months
 # to the reset day (R83); reset as of this day, the demo is exactly as written, which is the
 # demo every figure below and every date-pinned test was written against.
-DEMO_AS_OF = tomllib.loads(files('bookflow.demo').joinpath('seed.toml').read_text(encoding='utf-8'))['calendar']['written_as_of']
+# A historical source tree (the migration tests seed old files with it, importing these helpers)
+# has a seed without a calendar: its demo never moved its dates, so it has no written-as-of day.
+DEMO_AS_OF = tomllib.loads(files('bookflow.demo').joinpath('seed.toml').read_text(encoding='utf-8')).get('calendar', {}).get('written_as_of')
 
 # The in-place edits R83 made to seed text that earlier appends had frozen, and nothing else. A
 # demo moved into the past accepts an estimate after its expiry, so the acceptance acknowledges
