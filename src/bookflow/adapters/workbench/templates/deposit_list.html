@@ -24,11 +24,13 @@
 {% if request.query_params.get('deleted') %}<p role="status">Deposit deleted. <a href="{{ list_url }}/{{ request.query_params.get('deleted') }}?include_deleted=1">View retained record and history</a></p>{% endif %}
 {% if error_code %}<section class="deposit-unavailable" role="status"><p>{{ message }}</p><p>{{ error_code }}</p><a id="deposit-restart" href="{{ restart_url }}">Restart with these filters</a></section>{% else %}
 {% set home = math_company_currency | default('') %}
+{# On a phone the totals fold into one line (count and bank movement) so the list comes first; a tap opens them. A wide screen keeps them open, summary line hidden (browsing.js, deposit.css). #}
+<details class="deposit-totals-fold" data-phone-fold open><summary><span>{{ page.total_count }} matching deposit{{ '' if page.total_count == 1 else 's' }}</span> · <span>{{ page.effective_bank_total.display|money(page.effective_bank_total.currency, home=home) }} bank movement</span></summary>
 <section class="deposit-card" aria-label="All matching deposits totals">
 <h2>Totals for all {{ page.total_count }} matching deposits</h2>
 <p>These totals include every match, not just this page. Voided deposits retain their revision amounts and have zero effective bank movement.</p>
 <dl class="deposit-list-totals">{% for key,label in total_labels %}<div data-total="{{ key }}"><dt>{{ label }}</dt><dd>{{ page.totals[key].display|money(page.totals[key].currency, home=home) }}</dd></div>{% endfor %}<div data-total="effective_bank_total"><dt>Effective bank movement</dt><dd>{{ page.effective_bank_total.display|money(page.effective_bank_total.currency, home=home) }}</dd></div></dl>
-</section>
+</section></details>
 <p id="deposit-page-count">{{ page['items']|length }} deposits on this page · {{ page.total_count }} matching deposits</p>
 <nav class="deposit-actions" aria-label="Deposit pages">{% if previous_url %}<a rel="prev" href="{{ previous_url }}">Previous page</a>{% endif %}{% if next_url %}<a rel="next" href="{{ next_url }}">Next page</a>{% endif %}<a href="{{ restart_url }}">Restart results</a></nav>
 {% if page['items'] %}
