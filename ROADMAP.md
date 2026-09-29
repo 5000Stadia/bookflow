@@ -150,3 +150,5 @@ Double-entry accounting for small businesses, where people in the browser and th
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
 - [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
 - [ ] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
+- [ ] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
+- [ ] R160 the standard company profile's version moves when its contents change (R135 added a Credit Card payment method; version still 1)
