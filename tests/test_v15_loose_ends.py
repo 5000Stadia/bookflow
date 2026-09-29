@@ -29,11 +29,21 @@ def test_a_card_charge_reads_back_as_a_card_charge_not_a_journal_entry(root):
     assert posted["type"] == "card_charge" and posted["document"]["kind"] == "card_charge"
     assert run("card-charge show", {"card_charge": posted["id"]})["type"] == "card_charge"
     assert {row["type"] for row in run("card-charge query", {})["items"]} == {"card_charge"}
-    # The card's register already names it by its document, and the ledger is untouched.
-    row = next(r for r in run("register query", {"account": "Business Credit Card"})["rows"]
-               if r.get("transaction_id") == posted["id"])
-    assert row["money_out_kind"] == "card_charge" and row["transaction_type"] == "journal_entry"
-    assert run("check query", {"limit": 1})["items"][0]["type"] == "check"
+    credit = run("card-credit post", dict(charge, memo="Returned fittings", amount="10.00",
+                                          expenses=[{"account": expense, "amount": "10.00"}]), reason="x")
+    assert credit["type"] == "card_credit"
+    check = run("check query", {"limit": 1})["items"][0]
+    assert check["type"] == "check"
+    # The register and the journal list name each by the document entered, not the journal
+    # entry it is stored as; storage and the ledger are untouched.
+    rows = {r["transaction_id"]: r for r in run("register query", {"account": "Business Credit Card"})["rows"]
+            if r.get("transaction_id")}
+    assert (rows[posted["id"]]["transaction_type"], rows[posted["id"]]["money_out_kind"]) == ("card_charge", "card_charge")
+    assert rows[credit["id"]]["transaction_type"] == "card_credit"
+    assert "journal_entry" in {r["transaction_type"] for r in rows.values()}  # a plain register entry stays one
+    journals = {j["id"]: j["type"] for j in run("journal query", {"limit": 200})["items"]}
+    assert (journals[posted["id"]], journals[credit["id"]], journals[check["id"]]) == ("card_charge", "card_credit", "check")
+    assert "journal_entry" in journals.values()
 
 
 def test_payment_query_finds_a_receipt_by_its_check_number(root):

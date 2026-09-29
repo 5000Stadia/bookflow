@@ -7,7 +7,7 @@ from bookflow.company import schema as c, accounts, parties, list_service, journ
 from bookflow.company.journal_models import JournalLineInput, parse_domestic_amount, checked_sum
 from bookflow.company.journal_outputs import (
     JournalOutput, JournalWriteOutput, JournalRevisionOutput, JournalBatchOutput,
-    JournalSummaryOutput, JournalPageOutput, JournalHistoryOutput, JournalRevisionSummaryOutput,
+    JournalSummaryOutput, JournalListItemOutput, JournalPageOutput, JournalHistoryOutput, JournalRevisionSummaryOutput,
 )
 from bookflow.core import audit, clock, versioning
 from bookflow.core.errors import BookflowError
@@ -640,6 +640,16 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', n
     return Applied(fresh.preview, touched, summary_text, audited=True)
 
 
+
+def document_kinds(s, ids):
+    """The document each journal-stored check, card charge or card credit was entered as."""
+    if not ids:
+        return {}
+    m = c.money_out_documents
+    return {row.transaction_id: row.kind for row in s.company.conn.execute(
+        sa.select(m.c.transaction_id, m.c.kind).where(
+            m.c.transaction_id.in_(ids), m.c.kind.in_(('check', 'card_charge', 'card_credit'))))}
+
 def page(s, ctx, inp, history=False):
     from bookflow.company.query import page_state, continuation
     # page_state's generic model_dump fingerprint binds every journal filter and limit.
@@ -680,6 +690,8 @@ def page(s, ctx, inp, history=False):
             items=[revision_output(s, r, summary_only=True) for r in found], **shared)
     from bookflow.company.journal_deletions import deleted_ids
     retained = deleted_ids(s, [h['id'] for h in found]) if getattr(inp, 'include_deleted', False) else set()
-    return JournalPageOutput(items=[JournalSummaryOutput(**visible(s, h, summary(h, revision(s, h)), True))
-                                    if h['id'] in retained else JournalSummaryOutput(**summary(h, revision(s, h)))
+    kinds = document_kinds(s, [h['id'] for h in found])
+    found = [dict(h, type=kinds.get(h['id'], h['type'])) for h in found]
+    return JournalPageOutput(items=[JournalListItemOutput(**visible(s, h, summary(h, revision(s, h)), True))
+                                    if h['id'] in retained else JournalListItemOutput(**summary(h, revision(s, h)))
                                     for h in found], **shared)

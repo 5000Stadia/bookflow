@@ -760,7 +760,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
-| `items[].type` | literal["journal_entry"] | yes | no | — | — |
+| `items[].type` | literal["journal_entry", "check", "card_charge", "card_credit"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].current_revision_id` | string | yes | no | — | — |
 | `items[].status` | literal["posted", "voided", "deleted"] | yes | no | — | — |

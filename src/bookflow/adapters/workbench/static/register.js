@@ -447,7 +447,7 @@
       for (const [value, cls] of values) tr.append(node('td', value || '', cls + (value ? '' : ' reg-empty')));
       const actions = node('td', null, 'reg-actions'), journal = encodeURIComponent(row.transaction_id);
       if (document) actions.append(link('History', `${base}/${document.noun}/${journal}?` + new URLSearchParams(row.revision_number ? {revision_number: row.revision_number} : {})));
-      if (c.writable && row.transaction_type === 'journal_entry') {
+      if (c.writable && (row.transaction_type === 'journal_entry' || purchase)) {
         actions.append(' ', link('Edit current', purchase ? `${base}/${purchase.noun}/${journal}/update` : path + '?' + new URLSearchParams({edit: row.transaction_id})), ' ', link('Void current', `${base}/${purchase?.noun || 'journal'}/${journal}/void`));
       }
       tr.append(actions); body.append(tr);
