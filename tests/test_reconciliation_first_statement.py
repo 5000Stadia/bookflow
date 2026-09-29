@@ -80,7 +80,12 @@ def test_a_first_reconciliation_starts_from_zero_and_ticks_everything(client, ba
     assert len(ticked['selections']) == 3
     guards, preview = prepared(client, statement['id'], ticked['version'])
     assert preview['balanced'] and preview['next_step'] is None
-    done = run(client, 'reconcile finish', dict(
-        operation_key=new_id(), draft=statement['id'], expected_version=ticked['version'], **guards))
+    finish = dict(operation_key=new_id(), draft=statement['id'], expected_version=ticked['version'], **guards)
+    assert run(client, 'reconcile finish', finish, dry_run=True)['draft']['state'] == 'consumed'
+    done = run(client, 'reconcile finish', finish)
     assert done['account_id'] == bank and done['certificate_id'] and done['opening_id']
     assert done['totals']['difference'] == 0
+    # The finished draft reads as finished beside its certificate, never still open (R80 rerun).
+    assert (done['draft']['id'], done['draft']['state'], done['draft']['version']) == (
+        statement['id'], 'consumed', ticked['version'] + 1)
+    assert done['draft']['terminal_operation_id']

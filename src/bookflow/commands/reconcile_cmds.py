@@ -288,7 +288,11 @@ def _finish_planner(inp, ctx, s):
     for d in (value, opening_draft):
         if d is not None:
             ids['consume'][d.id] = new_id()
-    return Plan(m.FinishOutput(draft=value, account_id=value.account_id,
+    # The output shows the statement draft as the finish leaves it: consumed by this operation,
+    # its content kept, so a read beside the new certificate never shows it still open.
+    finished = drafts.revised(value, ids['consume'][value.id], state='consumed',
+                              terminal_operation_id=ids['operation'])
+    return Plan(m.FinishOutput(draft=finished, account_id=value.account_id,
                                opening_id=value.base_opening_id or ids['opening'],
                                certificate_id=ids['certificate'], totals=totals),
                 dict(ids=ids, input=inp))
@@ -378,7 +382,7 @@ def _finish_apply(plan, ctx, s):
             touched=[Touched('reconciliation_certificate', certificate_id, 'create', None, 1,
                              dict(account_id=account_id, statement_date=value.header.statement_date),
                              db='company')])
-    return Applied(m.FinishOutput(draft=value, account_id=account_id, opening_id=opening_id,
+    return Applied(m.FinishOutput(draft=consumed_values[0], account_id=account_id, opening_id=opening_id,
                                   certificate_id=certificate_id, totals=totals), [],
                    'certified a reconciliation to ' + value.header.statement_date, audited=True)
 
