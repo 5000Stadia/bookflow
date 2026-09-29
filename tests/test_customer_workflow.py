@@ -136,7 +136,8 @@ def test_real_browser_job_edit_name_picker_preview_save_and_conflict(hosted, liv
         job = hosted.ok("customer list", {"query": "Kitchen visit"}, company=hosted.company_id)["items"][0]
         assert job["parent_id"] == parent["id"] and job["terms_id"] == chosen_term
         browser.evaluate("document.querySelector('.actions a[href$=\"/update\"]').click()")
-        browser.wait_for("!!document.querySelector('[data-generated-form]')")
+        # Wait for the update page itself: the saved customer's page carries generated forms too.
+        browser.wait_for("location.pathname.endsWith('/update') && !!document.querySelector('[data-generated-form] [name=\"f:expected_version\"]')")
         version = browser.evaluate("document.querySelector('[name=\"f:expected_version\"]').value")
         _type(browser, "f:notes", "My unsaved note")
         hosted.ok("customer update", {"customer": job["id"], "expected_version": job["version"], "notes": "Other client's note"}, company=hosted.company_id)

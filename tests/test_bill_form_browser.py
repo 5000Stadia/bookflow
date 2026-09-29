@@ -272,13 +272,20 @@ def test_the_bill_list_shows_the_bills_and_the_arrows_step_between_them(register
     assert 'LIST-1' in _text(b, '.sales-document')
     assert 'This is the earliest bill' in _text(b, '.document-nav')
 
-    # The new-bill window offers the last few bills, as every other document window does.
+    # The new-bill window offers the last few bills by date, as every other document window does.
+    # The demo carries bills dated after February (R132 seeds December ones), so a newest bill is
+    # written here for the pane to lead with.
+    newest = run('bill.post', {'vendor': books['vendor'], 'date': '2026-12-31',
+                               'supplier_reference': 'LIST-3',
+                               'expenses': [{'account': books['first'], 'amount': SECOND}]})
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill/post')
     b.wait_for('!!document.querySelector(".document-recent-list")')
     recent = _text(b, '.document-others')
     assert 'Recent bills' in recent, recent
-    assert second['number'] in recent and first['number'] in recent, recent
-    assert 'Listing supply' in recent, recent
+    shown = b.evaluate('''[...document.querySelectorAll(".document-recent-row")].map(a => [
+        a.getAttribute("href"), a.querySelector(".recent-party").textContent.trim()])''')
+    assert 0 < len(shown) <= 5, shown
+    assert shown[0][0].endswith('/bill/' + newest['id']) and shown[0][1] == 'Listing supply', shown
 
 
 def test_a_correction_replaces_the_lines_and_the_saved_bill_shows_the_new_total(register_browser):

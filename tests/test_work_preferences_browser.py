@@ -55,7 +55,7 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
     assert base.removeprefix(env.site.base_url) + '/estimate' in links
     assert base.removeprefix(env.site.base_url) + '/work-order/create' in links
     _contained(b, width)
-    b.evaluate('Array.from(document.querySelectorAll(".noun-row")).find(e => e.querySelector("h3").textContent === "estimate").scrollIntoView({block:"center"})')
+    b.evaluate('Array.from(document.querySelectorAll(".noun-row")).find(e => e.querySelector("h3").textContent === "Estimate").scrollIntoView({block:"center"})')
     (tmp_path/f'home-disabled-{width}.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot', {'format':'png'})['data']))
     b.evaluate('document.querySelector(\'a[href$="/estimate"]\').focus()')
     _key(b, 'Enter')

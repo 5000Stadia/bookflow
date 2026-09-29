@@ -38,6 +38,11 @@ def copy_closed(source, target):
     assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest for p, digest in hashes.items())
 
 
+def _writes(name):
+    from bookflow.core import registry
+    return registry.get(name).is_write
+
+
 @pytest.fixture(scope='module')
 def fragmented_root(tmp_path_factory, _seeded_template):
     root = tmp_path_factory.mktemp('recovery-history') / 'books'
@@ -50,7 +55,9 @@ def fragmented_root(tmp_path_factory, _seeded_template):
         copy_closed(_seeded_template, root)
     client = Client(data_root=str(root))
     company = client.company.list()['items'][0]['company_id']
-    call = lambda name, data: client.run(name, data, company=company, reason='Recovery browser history')
+    # A reason belongs to a write; a read refuses one (E_USAGE).
+    call = lambda name, data: client.run(name, data, company=company,
+        reason='Recovery browser history' if _writes(name) else None)
     if not cached:
         customer = call('customer create', dict(name='Recovery customer'))['id']
         income = call('account create', dict(name='Recovery income', type='income'))['id']
@@ -115,7 +122,8 @@ def recovery_browser(fragmented_root, tmp_path, monkeypatch):
 @pytest.mark.parametrize('width', [1280,390])
 def test_stale_recovery_explicit_adoption_retains_draft(recovery_browser, width, tmp_path):
     env = recovery_browser; b = env.browser; b.viewport(width,900)
-    call = lambda name, data: _command(b, env.site, name, data, **{'X-Bookflow-Reason':'Recovery browser witness'})
+    call = lambda name, data: _command(b, env.site, name, data,
+        **({'X-Bookflow-Reason':'Recovery browser witness'} if _writes(name.replace('.', ' ')) else {}))
     customer = call('customer.show', dict(customer='Recovery customer'))['id']
     source = call('estimate.query', dict(customer=customer))['items'][0]
     source = call('estimate.show', dict(estimate=source['id']))
@@ -147,9 +155,10 @@ def test_stale_recovery_explicit_adoption_retains_draft(recovery_browser, width,
     state = call('estimate.billing', dict(estimate=source['id']))
     assert state['source_version'] == source['version']
     assert state['lines'][0]['requires_bounded_recovery'] and state['lines'][0]['recommended_net_amount']['minor_units'] == 202
-    _click(b,'submit'); b.wait_for('document.body.innerText.includes("E_PREVIEW_STALE") && !document.querySelector(".htmx-request")')
+    # The code stands in the error block; a phone shows its plain words beside the actions instead.
+    _click(b,'submit'); b.wait_for('!!document.querySelector("[data-submit-error-top]")?.textContent.includes("E_PREVIEW_STALE") && !document.querySelector(".htmx-request")')
     assert draft()['billing-recovery:'+line] == '2.00'  # Never silently replace a rejected request.
-    _click(b,'preview'); b.wait_for('document.body.innerText.includes("E_FEATURE_DISABLED") && !document.querySelector(".htmx-request")')
+    _click(b,'preview'); b.wait_for('!!document.querySelector("[data-submit-error-top]")?.textContent.includes("E_FEATURE_DISABLED") && !document.querySelector(".htmx-request")')
     assert draft()['billing-recovery:'+line] == '2.00'
     button = 'document.querySelector("[data-billing-recovery-adopt]")'
     assert b.evaluate(button+'.textContent').strip() == 'Use current recommendation: $2.02 net'

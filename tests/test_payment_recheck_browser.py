@@ -17,7 +17,7 @@ def test_pending_row_patch_survives_attempted_customer_switch(register_browser,t
         set_items=[dict(invoice=invoice['id'],expected_version=1,amount='2',amount_origin='entered')]))
     click(b,'refresh-draft')
     run('payment selection update',dict(selection=selection,expected_version=saved['version'],amount='11'))
-    selector=f'tr[data-invoice="{invoice["id"]}"] input[type="text"]'
+    selector=f'tr[data-invoice="{invoice["id"]}"] input[aria-label^="Payment for"]'
     b.evaluate(f"(()=>{{let x=document.querySelector({json.dumps(selector)});x.value='5';x.dispatchEvent(new Event('change',{{bubbles:true}}));}})()")
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')")
     for name in ('Critic Bob','Critic Alice'):
@@ -76,13 +76,11 @@ def test_stale_shared_amount_review_retains_my_entered_cash(register_browser,tmp
     click(b,'review')
     # Review shares the whole attempted edit as a recovery; the person confirms it.
     comparison=b.evaluate("document.querySelector('#payment-reviewed-comparisons').innerText")
-    press(b,'Confirm complete recovery')
     facts={'error':error,'typed_after_review':b.evaluate("document.querySelector('#payment-amount').value"),'message':b.evaluate("document.querySelector('#payment-message').innerText"),'draft':run('payment selection show',dict(selection=selection))}
     assert '10.00' in comparison and '11.00' in comparison and '12 USD' in comparison
     # Review shares my retained entry as a complete recovery; the other writer's 11.00 stands
     # until I confirm it, and then the shared draft carries the 12 I entered.
     assert facts['draft']['amount']['minor_units']==1100
-    from tests.test_payment_recovery_browser import press
     press(b,'Confirm complete recovery')
     assert run('payment selection show',dict(selection=selection))['amount']['minor_units']==1200
     (tmp_path/'stale-selection.json').write_text(json.dumps(facts,indent=2));shot(b,tmp_path,'stale-selection',width)

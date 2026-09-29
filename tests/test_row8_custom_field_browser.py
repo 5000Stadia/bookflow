@@ -27,7 +27,9 @@ def _save(browser):
     _key(browser, "Enter")
     browser.wait_for("!document.querySelector('#register-receipt').hidden || !!document.querySelector('#register-error').textContent")
     assert browser.evaluate("document.querySelector('#register-error').textContent") == ""
-    browser.wait_for("document.activeElement.id === 'register-date'")
+    # A wide register returns to the date for the next entry; a phone closes the entry sheet and
+    # returns to its Add entry button (R62).
+    browser.wait_for("document.activeElement.id === (matchMedia('(max-width: 700px)').matches ? 'register-sheet-open' : 'register-date')")
     return browser.evaluate("document.querySelector('#register-receipt a').href.split('/').pop()")
 
 
