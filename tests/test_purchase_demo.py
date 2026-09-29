@@ -243,7 +243,8 @@ def test_added_shipping_seed_executes_actual_commands_without_duplicate_stock(tm
         seed=load_seed(resource);commands=seed['commands']
         producers={e['capture']:i for i,e in enumerate(commands) if e.get('capture')}
         start=producers[captures[0]]
-        assert tuple(e['capture'] for e in commands[start:])==captures
+        # The shipping example is one contiguous block; later seed examples may follow it.
+        assert tuple(e.get('capture') for e in commands[start:start+len(captures)])==captures
         needed={i for i,e in enumerate(commands[:start]) if e['command']=='company update'}
         def include(name):
             index=producers[name]

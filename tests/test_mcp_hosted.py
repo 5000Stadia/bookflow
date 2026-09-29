@@ -138,7 +138,12 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
                 again = await call('bookflow_run', {'operation_ref': ref, 'action': 'execute'})
                 assert again == first
                 accounts = await call("bookflow_run", {"command": "account list", "input": {}, "dry_run": False})
-                assert accounts["count"] == len(accounts["items"]) > 0
+                # MCP keeps a result within its size budget (d0620f4): a list too large keeps its
+                # leading rows and says how many it left out.
+                assert 0 < len(accounts["items"]) <= accounts["count"]
+                if len(accounts["items"]) < accounts["count"]:
+                    omitted = accounts["result_compacted"]["omitted"]
+                    assert {"field": "items", "items": accounts["count"], "kept": len(accounts["items"])} in omitted
                 changed = await call("bookflow_run", {"command": "company update", "input": {"fax": "MCP-witness"}, "reason": "Test installed MCP handoff"})
                 assert changed["version"] > 1
         assert not (tmp_path / "never-created").exists()

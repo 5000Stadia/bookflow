@@ -36,7 +36,10 @@ def test_explicit_adoption_preserves_displayed_value_and_new_wire_type(register_
     else:
         _tab(b, 'button[value="preview"]'); _key(b, 'Enter')
         b.wait_for('window.criticSettled > 0')
-        assert 'E_VALIDATION' in b.evaluate('document.body.innerText')
+        # On a phone the refusal is shown beside the actions in words and the top block with the
+        # code is hidden (9bbb555); the code stays in the page's Error details.
+        assert 'E_VALIDATION' in b.evaluate("document.querySelector('.error-details pre').textContent")
+        assert 'field type changed' in b.evaluate("document.querySelector('[data-submit-error]').innerText")
     adoption = '[data-custom-adopt="' + field['id'] + '"]'
     _tab(b, adoption); _key(b, 'Enter')
     if surface != 'dedicated':

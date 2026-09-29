@@ -30,7 +30,7 @@ def test_packaged_reads_are_available_without_company_context(client):
                     "ship-method",
                     "customer-message",
                 ],
-                "record_count": 27,
+                "record_count": 28,  # 2b693bc (R135) adds the Credit Card payment method
             }
         ],
         "count": 1,
@@ -116,4 +116,4 @@ def test_profile_apply_restores_only_absent_seed_keys_and_preserves_existing_row
     assert replay == {**applied, "idempotent_replay": True}
     event = client.audit.list(company=company, command="profile apply")["items"]
     assert len(event) == 2  # rollout plus the one-record repair
-    assert sorted(item["entry_count"] for item in event) == [1, 27]
+    assert sorted(item["entry_count"] for item in event) == [1, 28]  # 28 since 2b693bc (R135)

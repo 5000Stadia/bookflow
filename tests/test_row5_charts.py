@@ -161,4 +161,4 @@ def test_explicit_chartless_rollout_still_applies_standard_profile(client):
         profile_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.payment_methods)).scalar_one()
     assert info["default_chart"] is None and info["version"] == 1
     assert account_count == 0
-    assert profile_count == 11
+    assert profile_count == 12  # 2b693bc (R135) adds the Credit Card payment method

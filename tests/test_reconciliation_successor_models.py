@@ -68,7 +68,10 @@ def test_contract_inventory_strict_shapes_and_storage_payloads():
     with pytest.raises(ValidationError):m.OpeningStart(operation_key='o',account=new_id(),opening_date='20260101',entered_balance='0.00',evidence=Evidence(format=1,statement_reference=None,entered_text=None))
     with pytest.raises(ValidationError):m.SeedTarget(account_id=new_id(),kind='opening',opening_id=new_id(),date='2026-01-01')
     with pytest.raises(ValidationError):m.MemberTarget(draft_id=new_id(),account_id=new_id(),key_id=new_id(),saved_version_id=new_id(),current_version_id=new_id(),action='mark')
-    with pytest.raises(ValidationError):m.Start(operation_key='x',account=new_id(),statement_date='2026-01-01',ending_balance='0.00')
+    # R86 (08e2f31): with no opening named, a statement follows the account's adopted opening;
+    # naming both an opening and an opening draft is still refused.
+    assert m.Start(operation_key='x',account=new_id(),statement_date='2026-01-01',ending_balance='0.00').opening_id is None
+    with pytest.raises(ValidationError):m.Start(operation_key='x',account=new_id(),statement_date='2026-01-01',ending_balance='0.00',opening_id=new_id(),opening_draft_id=new_id())
     for cls in (m.TransactionEvidence,m.AttachmentEvidence):
         with pytest.raises(ValidationError):cls(kind='opening_attachment',transaction_id=new_id())
     with pytest.raises(ValidationError):m.Totals(positive_count=0,positive_sum=2**63,negative_count=0,negative_sum=0,selected_sum=0,beginning_balance=0,ending_balance=0,cleared_balance=0,difference=0,decimal_units={})
