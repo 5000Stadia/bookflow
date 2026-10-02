@@ -2,6 +2,21 @@
 
 Double-entry accounting for small businesses, where people in the browser and their AI agents post to the same books.
 
+
+## Vision
+
+Bookflow is the books a small business owner and their AI assistant keep together. The plumber tells their agent at 9 pm to bill today's jobs and record the checks; the next morning they open Bookflow in the browser and find it all there, correct, signed with who did it and for whom, and they carry on from where the agent stopped. Neither one ever has to tidy up after the other.
+
+It does everything a bookkeeper expects from the desktop accounting product they already know, with the same lists, forms, reports and words, so nothing is missing when the two are put side by side. It is open source and runs on the owner's own machine: no subscription, and no data leaving unless they send it.
+
+Every finished milestone keeps these:
+- **One set of books, many hands.** The browser, an AI agent, the command line and code all do the same things the same way, and each can see and continue the others' work.
+- **An agent gets it right the first time.** A fresh agent with only Bookflow's own help does ordinary business work correctly, without reading code or guessing.
+- **The books can be trusted.** Money is exact, the books always balance, history is never erased, closed periods stay closed, and every change says who made it, how, for whom and why.
+- **Plain to use.** It reads in a bookkeeper's words, on a desk or a phone, and stays quick on real-sized books.
+
+Further out, and open for now: the same core grows into the rest of a small business's system (customers and follow-ups, inventory and assembly, shipping, letters, marketing), each part built the same way.
+
 ## M1 — Foundation
 
 - [x] R1 Company folders, schema migrations with verified backups (spec row 1) — design/architecture.md
