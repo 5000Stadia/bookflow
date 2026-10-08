@@ -47,6 +47,11 @@ EXPECTED = {
     # Claim, then record: entering memorized occurrences commits the claim (or a skip) before
     # the entered documents run, and the outcome after them.
     ('company/memorized_entry.py', 'apply_entry'): ('memorized.enter', 3),
+    # A move-in commits the dispatch transaction before its own commands run, and its
+    # idempotency receipt after them.
+    ('company/cutover.py', 'apply'): ('cutover.apply', 2),
+    # A scheduled backup records its checkpoint in the company it copied (R156).
+    ('core/host.py', 'Host._take_scheduled_backup'): ('host.backup', 1),
 }
 
 

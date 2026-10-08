@@ -4,7 +4,7 @@ import json
 from bookflow.company import schema as c, sales, journals, billing, document_effects as effects
 from bookflow.company import credits, journal_custom_fields as custom, payment_operations as operations
 from bookflow.company import payment_queries as query, payment_dependencies as dependencies, payments
-from bookflow.company import payment_restatement as restatement
+from bookflow.company import payment_restatement as restatement, payment_prefetch as prefetch
 from bookflow.company.payment_outputs import InvoiceCorrectionOutput
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError, require_reason
@@ -18,7 +18,8 @@ from bookflow.core.registry import Plan, Applied, Touched
 # is: resolving every paying document as a payment answered E_RECORD_NOT_FOUND for a credit,
 # which made an applied credit unable to have its invoice corrected at all.
 def _source_facts(s, identifier):
-    header = effects.rows(s, c.transactions, c.transactions.c.id == identifier)
+    known = prefetch.header(s, identifier)
+    header = [dict(known)] if known is not None else effects.rows(s, c.transactions, c.transactions.c.id == identifier)
     if header and header[0]['type'] == 'credit_memo':
         return credits.facts(s, header[0], write=True), True
     return query.payment_facts(s, identifier, write=True), False
@@ -34,12 +35,22 @@ def _selected_source(s, selector):
     return credits.facts(s, selector, write=True)
 
 
-def _source_current(s, identifier):
-    facts, is_credit = _source_facts(s, identifier)
-    return credits.settlement_current_output(s, facts) if is_credit else payments.current_output(s, identifier)
+def _source_current(s, identifier, known=None):
+    """`known` is facts this correction already read for the same paying document."""
+    if known is None:
+        facts, is_credit = _source_facts(s, identifier)
+    else:
+        facts, is_credit = known, known['header']['type'] == 'credit_memo'
+    return credits.settlement_current_output(s, facts) if is_credit else payments.current_output(s, identifier, facts=facts)
 
 
 def prepare(s, ctx, inp):
+    from bookflow.hub.access import one_authorization
+    with one_authorization(s), prefetch.reading(s):
+        return _prepare(s, ctx, inp)
+
+
+def _prepare(s, ctx, inp):
     if inp.operation_key and operations.find(s, inp.operation_key):
         recovered = operations.recover(inp, ctx, s, 'invoice update')
         if recovered:
@@ -47,6 +58,7 @@ def prepare(s, ctx, inp):
         raise BookflowError('E_PAYMENT_OPERATION_KEY_REUSED')
     facts = query.invoice_facts(s, inp.invoice, write=True)
     apps = query.active_applications(s, invoice=facts['header']['id'])
+    prefetch.receipts(s, [row['paying_transaction_id'] for row in apps])
     funding = {row['paying_transaction_id']: _source_facts(s, row['paying_transaction_id'])[0] for row in apps}
     if apps and not inp.operation_key:
         raise BookflowError('E_VALIDATION', message='This invoice has applied payments. Supply one operation_key for this correction and a reason; reuse the key for preview, save and retries.', details={'field': 'operation_key', 'reason': 'applied_invoice_correction'})
@@ -93,7 +105,7 @@ def prepare(s, ctx, inp):
         old = funding[identifier]['header']
         after = dict(old, version=old['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         changed_headers.append((old, after))
-        payment_outputs.append(dict(_source_current(s, identifier), version=after['version']))
+        payment_outputs.append(dict(_source_current(s, identifier, funding[identifier]), version=after['version']))
     data['settlement_headers'] = changed_headers
     fp = query.digest([operations.facts_request(inp, ctx, s, 'invoice update'), plan.preview.facts_fingerprint,
         [value['header'] for _, value in sorted(funding.items())], apps, data.get('settlement_recipe', [])])

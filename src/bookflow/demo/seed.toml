@@ -604,10 +604,59 @@ command = "custom-field create"
 capture = "journal_source"
 input = { name = "Source", kind = "choice", choices = [{ value = "Email" }, { value = "Phone" }], scopes = ["journal_entry"] }
 
+# The company moved in from its old books on the first day of the year: the opening trial balance
+# comes in through the move-in commands, which post it as the DEMO-OPEN journal and tie it out.
+
 [[commands]]
-command = "journal post"
-capture = "opening_journal"
-input = { date = "2026-01-01", number = "DEMO-OPEN", memo = "Opening capital journal", lines = [{ account = "Checking", side = "debit", amount = "5000.00" }, { account = "Opening Balance Equity", side = "credit", amount = "5000.00" }] }
+command = "cutover plan"
+
+[commands.input]
+as_of = "2026-01-01"
+journal_number = "DEMO-OPEN"
+
+[[commands.input.files]]
+name = "Opening trial balance.csv"
+kind = "trial_balance"
+content = """
+,,"Debit","Credit"
+"1000 · Checking",,"5,000.00",
+"3000 · Opening Balance Equity",,,"5,000.00"
+"TOTAL",,"5,000.00","5,000.00"
+"""
+
+[[commands]]
+command = "cutover apply"
+reason = "Opening balances from the old books"
+
+[commands.input]
+as_of = "2026-01-01"
+journal_number = "DEMO-OPEN"
+
+[[commands.input.files]]
+name = "Opening trial balance.csv"
+kind = "trial_balance"
+content = """
+,,"Debit","Credit"
+"1000 · Checking",,"5,000.00",
+"3000 · Opening Balance Equity",,,"5,000.00"
+"TOTAL",,"5,000.00","5,000.00"
+"""
+
+[[commands]]
+command = "cutover tie-out"
+
+[commands.input]
+as_of = "2026-01-01"
+
+[[commands.input.files]]
+name = "Opening trial balance.csv"
+kind = "trial_balance"
+content = """
+,,"Debit","Credit"
+"1000 · Checking",,"5,000.00",
+"3000 · Opening Balance Equity",,,"5,000.00"
+"TOTAL",,"5,000.00","5,000.00"
+"""
 
 [[commands]]
 command = "journal post"

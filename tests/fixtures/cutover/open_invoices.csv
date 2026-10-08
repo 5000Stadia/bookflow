@@ -1,0 +1,37 @@
+"Riverbend Plumbing LLC"
+"Open Invoices"
+"As of September 30, 2026"
+,,"Type","Date","Num","P. O. #","Terms","Due Date","Class","Aging","Open Balance"
+"Adams, Rachel",,,,,,,,,,
+,,"Invoice","09/22/2026","1201",,"Net 15","10/07/2026",,,"412.50"
+"Total Adams, Rachel",,,,,,,,,,"412.50"
+"Brookside Dental",,,,,,,,,,
+,,"Invoice","08/14/2026","1188",,"Net 30","09/13/2026",,"17","840.00"
+,,"Invoice","09/25/2026","1203","BD-0925","Net 30","10/25/2026",,,"615.00"
+"Total Brookside Dental",,,,,,,,,,"1,455.00"
+"Harbor View Apartments",,,,,,,,,,
+,"Boiler Replacement",,,,,,,,,
+,,"Invoice","06/20/2026","1150","HV-2207","Net 30","07/20/2026",,"72","6,450.00"
+,"Total Boiler Replacement",,,,,,,,,"6,450.00"
+,"Unit 4B Remodel",,,,,,,,,
+,,"Invoice","07/29/2026","1176",,"Net 30","08/28/2026",,"33","2,380.25"
+,,"Credit Memo","08/05/2026","1180",,,"08/05/2026",,,"-150.00"
+,"Total Unit 4B Remodel",,,,,,,,,"2,230.25"
+"Total Harbor View Apartments",,,,,,,,,,"8,680.25"
+"Kim, Daniel",,,,,,,,,,
+,,"Invoice","11/18/2025","1099",,"Due on receipt","11/18/2025",,"316","289.00"
+"Total Kim, Daniel",,,,,,,,,,"289.00"
+"Lakeside Cafe",,,,,,,,,,
+,,"Invoice","09/02/2026","1195",,"Net 45","10/17/2026",,,"1,125.00"
+"Total Lakeside Cafe",,,,,,,,,,"1,125.00"
+"Mendez Construction",,,,,,,,,,
+,"Oak Street Duplex",,,,,,,,,
+,,"Invoice","07/08/2026","1162","MC-OSD-3","Net 30","08/07/2026",,"54","9,870.00"
+,,"Payment","09/28/2026","5521",,,"09/28/2026",,,"-500.00"
+,"Total Oak Street Duplex",,,,,,,,,"9,370.00"
+"Total Mendez Construction",,,,,,,,,,"9,370.00"
+"Summit Property Management",,,,,,,,,,
+,,"Invoice","05/15/2026","1140",,"1% 10 Net 30","06/14/2026",,"108","1,560.00"
+,,"Invoice","09/29/2026","1205","SPM-118","1% 10 Net 30","10/29/2026",,,"2,207.30"
+"Total Summit Property Management",,,,,,,,,,"3,767.30"
+"TOTAL",,,,,,,,,,"25,099.05"

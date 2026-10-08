@@ -15,6 +15,7 @@ from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.company.sales_facts import DISCOUNT_ACCOUNT_TYPES
+from bookflow.company.items import sold_account_types
 from bookflow.company.sales_outputs import (
     SalesOutput, SalesSummaryOutput, SalesRevisionOutput, SalesRevisionSummaryOutput,
     SalesWriteOutput, SalesPageOutput, SalesHistoryOutput, history_revision,
@@ -662,7 +663,7 @@ def _posting_accounts_active(s, resolved):
     for line in resolved['lines']:
         account = _line_account(line['profile'])
         if account is not None:
-            eligible(account.id, {'income', 'other_income'} if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES), 'lines',
+            eligible(account.id, sold_account_types(line['profile'].item_type) if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES), 'lines',
                      "Explicitly refresh the affected item's defaults or select an eligible item before posting this correction.")
         for tax in line['taxes']:
             eligible(tax['rule'].liability_account.id, {'other_current_liability'}, 'sales_tax_item',

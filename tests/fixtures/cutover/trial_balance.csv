@@ -1,0 +1,43 @@
+"Riverbend Plumbing LLC"
+"Trial Balance"
+"Accrual Basis"
+"As of September 30, 2026"
+,,"Sep 30, 26"
+,,"Debit","Credit"
+"1000 · Checking",,"18,642.17",
+"1010 · Savings",,"25,000.00",
+"1100 · Accounts Receivable",,"25,099.05",
+"1300 · Inventory Asset",,"1,675.00",
+"1400 · Prepaid Insurance",,"2,100.00",
+"1500 · Truck:1510 · Original Cost",,"48,500.00",
+"1500 · Truck:1520 · Accumulated Depreciation",,,"14,550.00"
+"2000 · Accounts Payable",,,"9,845.90"
+"2050 · Visa",,,"1,284.33"
+"2100 · Sales Tax Payable",,,"1,036.59"
+"2200 · Payroll Liabilities",,,"2,412.80"
+"2700 · Truck Loan",,,"21,350.00"
+"3200 · Owner's Capital",,,"20,000.00"
+"3300 · Owner's Draw",,"36,000.00",
+"3900 · Retained Earnings",,,"51,725.72"
+"4100 · Service Income",,,"38,412.50"
+"4200 · Installation Income",,,"96,880.00"
+"4300 · Materials Income",,,"41,207.65"
+"5000 · Cost of Goods Sold",,"9,850.00",
+"5100 · Job Materials",,"22,615.30",
+"5200 · Subcontractors",,"18,250.00",
+"6000 · Advertising",,"3,420.00",
+"6100 · Bank Fees",,"286.50",
+"6200 · Insurance",,"6,300.00",
+"6300 · Office Supplies",,"1,148.72",
+"6400 · Professional Fees",,"2,750.00",
+"6500 · Rent",,"13,500.00",
+"6600 · Repairs and Maintenance",,"1,986.40",
+"6700 · Utilities:6710 · Telephone",,"1,623.85",
+"6700 · Utilities:6720 · Gas and Electric",,"2,931.16",
+"6800 · Payroll Expenses",,"41,600.00",
+"6900 · Truck Expense:6910 · Fuel",,"5,412.88",
+"6900 · Truck Expense:6920 · Truck Repairs",,"1,876.20",
+"7100 · Depreciation Expense",,"7,275.00",
+"8100 · Interest Income",,,"182.44"
+"9200 · Interest Expense",,"1,045.70",
+"TOTAL",,"298,887.93","298,887.93"

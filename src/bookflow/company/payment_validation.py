@@ -2,6 +2,7 @@
 from collections import defaultdict
 import sqlalchemy as sa
 
+from bookflow.company.aliases import alias
 from bookflow.company import schema as c, journals, payment_queries as query
 from bookflow.company import journal_custom_fields as custom
 from bookflow.core.errors import BookflowError
@@ -55,7 +56,7 @@ def validate(plan, s, ctx):
             for tax in effects.rows(s, c.sales_tax_components, c.sales_tax_components.c.document_line_id == line['id']):
                 if tax['tax_minor_units']:
                     capacity[(ordinals[line['line_id']], 'tax', tax['tax_item_id'])] = tax['tax_minor_units']
-        a, inverse = c.application_allocations, c.application_allocations.alias('inverse')
+        a, inverse = c.application_allocations, alias(c.application_allocations, 'inverse')
         live = s.company.conn.execute(sa.select(a).where(a.c.target_transaction_id == row['paid_transaction_id'],
             a.c.kind == 'allocation', ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_allocation_id == a.c.id)))).mappings()
         for old in live:

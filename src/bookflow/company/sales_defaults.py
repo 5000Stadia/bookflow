@@ -92,6 +92,16 @@ def _account(db, selector, field, allowed, *, role=None):
                    normal_balance=NORMAL_BALANCE[row['type']])
 
 
+def _sold_account(db, item):
+    """The account a sold line of ``item`` credits: income, or for an Other Charge item a
+    balance-sheet account no other ledger owns (items.sold_account_problem)."""
+    from bookflow.company.items import sold_account_problem, sold_account_types
+    account = _account(db, item['income_account_id'], 'item.income_account', sold_account_types(item['type']))
+    if sold_account_problem(item['type'], _row(db, 'account', account.id)):
+        raise _invalid('item.income_account', 'account must have the required type and system role')
+    return account
+
+
 def _capture(row, field):
     ref = _ref(row).model_dump()
     if field in ('tax_code', 'customer_tax_code'):
@@ -653,7 +663,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         if adjustment_role == 'discount':
             profile.adjustment.percent_millionths, profile.adjustment.fixed_minor_units, _ = percent_line
     elif item_changed or refresh:
-        income = _account(db, item['income_account_id'], 'item.income_account', {'income', 'other_income'})
+        income = _sold_account(db, item)
         for name in ('price', 'cost'):
             if item[name + '_minor_units'] is not None and item[name + '_currency'] != currency:
                 raise _invalid('item.' + name, 'item amounts must use home currency')

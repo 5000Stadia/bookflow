@@ -34,6 +34,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.company.aliases import alias
 from bookflow.company import credit_returns as returns
 from bookflow.company import document_effects as effects
 from bookflow.company import journal_custom_fields as custom
@@ -45,7 +46,7 @@ from bookflow.company.credit_models import (
     CreditMemoOutput, CreditMemoPageOutput, CreditMemoWriteOutput, CreditRevisionOutput,
     CreditRevisionSummaryOutput, CreditSourceOutput, CreditTaxComponentOutput,
 )
-from bookflow.company.items import TRACKED_TYPES
+from bookflow.company.items import TRACKED_TYPES, sold_account_types
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.core import clock
@@ -493,7 +494,7 @@ def _posting_accounts_active(s, resolved):
     for line in resolved['lines']:
         account = _line_account(line['profile'])
         if account is not None:
-            eligible(account.id, {'income', 'other_income'} if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES),
+            eligible(account.id, sold_account_types(line['profile'].item_type) if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES),
                      'lines', "Select an item whose income account is still an income account.")
         for cell in line['taxes']:
             eligible(_liability(cell).id, {'other_current_liability'}, 'sales_tax_item',
@@ -1000,7 +1001,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
 
 def active_applications(s, transaction_id):
     """Every apply from this credit that no unapply has taken back."""
-    app, inverse = c.applications, c.applications.alias('credit_apply_inverse')
+    app, inverse = c.applications, alias(c.applications, 'credit_apply_inverse')
     return effects.rows(s, app, app.c.kind == 'apply', app.c.paying_transaction_id == transaction_id,
                         ~sa.exists(sa.select(inverse.c.id).where(
                             inverse.c.reverses_application_id == app.c.id)),
@@ -1017,7 +1018,7 @@ def active_consumptions(s, *, key_id=None, payment_key_id=None, refund_id=None):
     through, and one home is what stops a caller subtracting consumptions of one kind and
     missing the other.
     """
-    table, inverse = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('release')
+    table, inverse = c.customer_refund_consumptions, alias(c.customer_refund_consumptions, 'release')
     where = [table.c.kind == 'consume',
              ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_consumption_id == table.c.id))]
     if key_id is not None:
@@ -1041,7 +1042,7 @@ def _component_use(s, transaction_id, key_id):
     same component. One dictionary, so no caller can subtract one kind and forget the other.
     """
     used = {}
-    allocations, inverse = c.application_allocations, c.application_allocations.alias('credit_alloc_inverse')
+    allocations, inverse = c.application_allocations, alias(c.application_allocations, 'credit_alloc_inverse')
     for row in s.company.conn.execute(sa.select(
             allocations.c.credit_source_component_id,
             sa.func.sum(allocations.c.amount_minor_units)).where(

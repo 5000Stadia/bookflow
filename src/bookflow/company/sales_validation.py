@@ -7,6 +7,7 @@ from bookflow.company import schema as c, document_effects as effects
 from bookflow.company import tax_attribution as tax_facts
 from bookflow.company import journal_custom_fields as custom, sales_calculations as calc
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
+from bookflow.company.items import sold_account_types
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX
 
@@ -274,7 +275,7 @@ def _validate(plan, s, ctx):
                 and envelope['class_name'] == (facts.class_id.label if facts.class_id else None), 'line class facts')
         role = sales_adjustments.kind(facts)
         require(line['item_id'] == facts.item.id and (
-            facts.income_account.type in ('income', 'other_income') if role in ('item', 'charge') else
+            facts.income_account.type in sold_account_types(facts.item_type) if role in ('item', 'charge') else
             facts.adjustment.account.type in sales.DISCOUNT_ACCOUNT_TYPES if role == 'discount' else
             facts.income_account is None), 'item/account facts')
         for name in ('quantity_microunits', 'base_quantity_microunits', 'unit_factor_nanounits'):

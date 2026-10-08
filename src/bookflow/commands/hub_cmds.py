@@ -867,7 +867,8 @@ class DemoResetOutput(WriteOutput):
 
 demo_reset = command("demo reset", scope="hub", description="Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched. On a data root that also holds a real (non-demo) company it refuses unless force names that root.",
                      input_model=DemoResetInput, output_model=DemoResetOutput, writes={"hub", "company", "config"}, required_role="hub_admin",
-                     error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN", "E_PERMISSION"])
+                     error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN", "E_PERMISSION"],
+                     authorization="human hub administrator; a root holding real books needs force naming it")
 
 
 def _load_seed(resource: str = "seed.toml") -> dict[str, Any]:

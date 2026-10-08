@@ -134,6 +134,8 @@ COMMAND_CODES: dict[str, str] = {
     "E_USER_NOT_FOUND": "No such user.",
     "E_AGENT_PRINCIPAL_MISMATCH": "An agent's principals must hold identical permissions; give this person a separate agent identity.",
     "E_TOKEN_NOT_FOUND": "No such token.",
+    "E_CUTOVER_BLOCKED": "The move-in plan has blocking exceptions; fix or map them, then run it again.",
+    "E_CUTOVER_INCOMPLETE": "The move-in stopped part way; what it made stays in and running it again continues.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}

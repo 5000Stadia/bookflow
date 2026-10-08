@@ -12,7 +12,8 @@ say (`AdminAction.human_only`):
   authorization, tokens, accounts, and the activation that enrols administrators. Every write at
   the `user`, `membership` and `token` capabilities in the catalog below is here except `token
   revoke`, which stays open so an agent can always revoke its own token; and `backup schedule`,
-  which chooses where a company's books are copied. Reads stay as they were.
+  which chooses where a company's books are copied; and `demo reset`, which trashes a whole
+  organization and seeds an agent with its access. Reads stay as they were.
 
 `hub.people_only` reads these keys from the tip; the command list lives here and nowhere else.
 No command, capability, role default, company action or threshold changes. The new actions are
@@ -23,7 +24,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_entry_review_catalog as previous, permission_catalog as c
+from . import permission_cutover_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'ac3de3f1318b96dd4ea4a35bfaf6795201954550'
@@ -33,6 +34,8 @@ PEOPLE_ONLY_COMMANDS = (
     'agent activate', 'agent assign', 'agent authorize', 'agent create', 'agent deactivate', 'agent unassign',
     'membership grant', 'membership revoke', 'permission activate', 'token issue',
     'user activate', 'user add', 'user deactivate', 'user set-password',
+    # Trashes the demo organization and seeds a demo agent with its membership and authorization.
+    'demo reset',
 )
 _THRESHOLD = {x.name: x.threshold for x in previous.CATALOG.commands}
 # `backup schedule` (backup-schedule-v1, in the chain below) already refuses anyone but a person in its own
@@ -40,6 +43,7 @@ _THRESHOLD = {x.name: x.threshold for x in previous.CATALOG.commands}
 PEOPLE_ONLY_COMMANDS += tuple(name for name in ('backup schedule',) if name in _THRESHOLD)
 CHANGED_AUTHORIZATION = {
     'company update': 'company admin; changing the closing date needs a person, never an agent',
+    'demo reset': 'human hub administrator; a root holding real books needs force naming it',
 }
 ADDED_ADMIN_ACTIONS = (
     c.AdminAction(CLOSING_DATE_ACTION, 'company', 'admin', True, True),

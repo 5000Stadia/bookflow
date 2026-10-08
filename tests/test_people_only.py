@@ -27,6 +27,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
               and registry.get(d.name).is_write}
     assert writes - people_only.people_only_commands() == {"token revoke"}
     assert not {n for n in people_only.people_only_commands() if not registry.get(n).is_write}
+    assert {"demo reset", "backup schedule"} <= people_only.people_only_commands()
     closing = next(a for a in tip.CATALOG.admin_actions if a.key == people_only.CLOSING_DATE_ACTION)
     assert closing.human_only and closing.domain == "company"
 
