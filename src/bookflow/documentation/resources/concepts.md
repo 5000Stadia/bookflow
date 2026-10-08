@@ -96,6 +96,14 @@ Settings-file changes commit a recoverable intent with their hub audit event, th
 
 Hub and company schema revisions are explicit. Opening a database from an unknown newer schema returns `E_SCHEMA_UNKNOWN`; a known older schema returns `E_SCHEMA_BEHIND` until `upgrade` runs. Upgrades back up each database before migration.
 
+## Backups, schedules and tamper evidence
+
+`company backup` writes one verified archive of a company, read-only (file mode 0444), with an audit checkpoint beside it. `backup schedule <company> --daily-at HH:MM --destination FOLDER --keep N` has the running host (`bookflow serve`) take that same backup every day at that time in the company's timezone, into a folder on the host machine. It keeps the newest N there and removes older ones, but never the newest. Only a person who is an installation administrator can change the schedule or its destination; an agent is refused. `--off` turns the schedule off.
+
+`backup list` shows the schedule, the last scheduled success and failure, and every backup kept. `backup verify` compares the live company and hub audit trails with the newest checkpoint. It reports any audit row changed or removed up to that point, and a database put back to an earlier state (a live seq lower than the checkpoint's). It also reports an archive whose fingerprint changed and a checkpoint whose recorded predecessor was edited. `backup rehearse` restores the newest backup into a temporary scratch folder outside the data root. It checks every file, the trial balance against the totals the backup recorded, and the audit checkpoint, then deletes the folder. The live books are never touched.
+
+What Bookflow does and what you do: Bookflow writes read-only files and the checkpoints that make later changes visible. A read-only file only shows that something was changed; it does not stop the change. Anything running as the same operating-system user as Bookflow, including an agent with shell access, can still change or delete those files. For backups that no agent can write, the destination has to be out of that user's reach: a folder owned by another OS user that Bookflow can only add to, a removable drive you take away, or another machine that pulls the copies. You set that up yourself; Bookflow does not change system security settings.
+
 ## Errors and process exits
 
 Every public failure has the JSON shape `{"code": "E_...", "message": "...", "details": {}}`. Programs branch on the stable `code` and use `details` for structured recovery; message text is for people. HTTP maps authentication, permission, missing-record, conflict, validation, and internal failures to the corresponding 4xx or 5xx status while preserving that document. The CLI exits `0` on success, `2` for `E_USAGE`, `3` for `E_INTERNAL`, and `1` for other named errors.

@@ -13,10 +13,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_audit_visibility_catalog as previous, permission_catalog as c
+from . import permission_statement_import_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = 'ac3de3f1318b96dd4ea4a35bfaf6795201954550'
+SOURCE_COMMIT = '7b0c35069505f3617dbc969ae155c1a89c807688'
 _MODULE = 'bookflow.commands.backup_schedule_cmds'
 _FILE = 'src/bookflow/commands/backup_schedule_cmds.py'
 ADDED_COMMANDS = (

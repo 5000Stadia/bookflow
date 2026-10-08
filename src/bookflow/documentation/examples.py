@@ -1040,6 +1040,17 @@ EXAMPLES['reconcile mark'] = Example(
     '--company "Demo Plumbing Co" --reason "Clear everything the statement shows" --dry-run --json',
     _markall_input)
 
+# The statement file travels as its text: the shell reads it, the command never opens a path.
+EXAMPLES['reconcile import'] = Example(
+    'bookflow reconcile import --account Checking --content "$(cat checking-2026-09.ofx)" --start'
+    ' --company "Demo Plumbing Co" --reason "Import the September checking statement" --json',
+    {"account": "Checking", "start": True,
+     "content": "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\n\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS>"
+                "<CURDEF>USD<BANKTRANLIST><STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260930<TRNAMT>-12.00"
+                "<FITID>202609300001<NAME>MONTHLY SERVICE FEE</STMTTRN></BANKTRANLIST>"
+                "<LEDGERBAL><BALAMT>6236.95<DTASOF>20260930</LEDGERBAL></STMTRS></STMTTRNRS>"
+                "</BANKMSGSRSV1></OFX>"})
+
 # Receiving uses the same registered commands in CLI, HTTP, Python and MCP.
 EXAMPLES.update({
     'item-receipt post': Example(

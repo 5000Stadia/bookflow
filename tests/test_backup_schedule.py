@@ -17,11 +17,9 @@ from types import SimpleNamespace
 import pytest
 
 import bookflow
+from tests.test_row3_host import hosted  # noqa: F401
 from bookflow.company import backup_checkpoint, backup_schedule
 from bookflow.core.clock import parse_iso
-
-AUDIT_TABLES = ("audit_events", "audit_entries")
-
 
 def _company(client):
     return client.company.list()["items"][0]["company_id"]
@@ -135,11 +133,6 @@ def test_only_a_person_changes_the_schedule(root, tmp_path):
     assert relative.value.code == "E_VALIDATION"
 
 
-def _drop_audit_triggers(conn):
-    for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name IN (?, ?)", AUDIT_TABLES).fetchall():
-        conn.execute(f'DROP TRIGGER "{name}"')
-
-
 def test_verify_passes_then_reports_an_altered_row_and_a_rollback_and_the_rehearsal_passes(root, tmp_path):
     client = bookflow.connect(data_root=str(root))
     company = _company(client)
@@ -167,10 +160,11 @@ def test_verify_passes_then_reports_an_altered_row_and_a_rollback_and_the_rehear
     assert {c["name"] for c in rehearsal["checks"]} == {"archive", "trial_balance", "company_audit", "hub_audit"}
     assert not list(Path(root).rglob("bookflow-rehearsal-*"))
 
-    # An audit row altered after the checkpoint (any append-only trigger dropped first).
+    # An audit row altered after the checkpoint (the append-only triggers taken away for it).
+    from tests.audit_tamper import tampering
     with sqlite3.connect(db) as conn:
-        _drop_audit_triggers(conn)
-        conn.execute("UPDATE audit_events SET summary = 'nothing to see' WHERE seq = 2")
+        with tampering(conn):
+            conn.execute("UPDATE audit_events SET summary = 'nothing to see' WHERE seq = 2")
     conn.close()
     changed = client.run("backup verify", {}, company=company)
     assert changed["ok"] is False
@@ -250,3 +244,20 @@ def test_schedule_list_verify_and_rehearse_through_python_cli_http_and_mcp(root,
         assert len(set(seen.values())) == 1, seen
 
     anyio.run(witness)
+
+
+def test_the_browser_shows_the_backups_and_checks_them_from_the_backup_page(hosted):
+    from tests.test_row5_workbench_forms import _browser
+    browser = _browser(hosted)
+    company = hosted.company_id
+    headers = {"X-Bookflow-Workbench": "1"}
+    page = browser.get(f"/c/{company}/company/backup")
+    assert page.status_code == 200 and "data-backup-listing" in page.text and "No backup schedule is set" in page.text
+    assert "outside Bookflow" in page.text
+    assert browser.post(f"/c/{company}/company/backup", headers=headers).status_code == 200
+    page = browser.get(f"/c/{company}/company/backup")
+    assert page.text.count("data-backup-row") == 1
+    verified = browser.post(f"/c/{company}/company/backup/verify", headers=headers)
+    assert verified.status_code == 200 and 'data-backup-check="verify"' in verified.text and "No tampering found." in verified.text
+    rehearsed = browser.post(f"/c/{company}/company/backup/rehearse", headers=headers)
+    assert rehearsed.status_code == 200 and "Restore rehearsed" in rehearsed.text, rehearsed.text[-1500:]

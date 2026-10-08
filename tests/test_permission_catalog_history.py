@@ -45,7 +45,8 @@ ACCEPTED = {
     'identity-deactivation-v1': (502, '51f5128ce50d04fd36fdc9000c3879e404d02a862009906b121a590c1c85ced7'),
     'report-export-v1': (503, '585047459e889e7b48af181307386d6eb476454fd3de624b04c4916455652611'),
     'audit-visibility-v1': (503, '1a6e263186f929c26d8749f6ba1b6c1ec16706287b9db0b09affeb6442789433'),
-    'backup-schedule-v1': (507, '4d17ada97f6502e81c110a009f54e95aea128bc39c188d3fcb30abfcdd985e08'),
+    'statement-import-v1': (504, '43eb5b56cc903f203974cb0ddb0a5fa3958dcca1ed05e8029ae2b254fc4d46e3'),
+    'backup-schedule-v1': (508, '43582adbc2b0fb3341c2af31766c7740a1d8f7c6ea495a79f5675485b4f477b7'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -83,6 +84,7 @@ CHAIN_ADDITIONS = {
     'identity-deactivation-v1': {'agent activate', 'agent deactivate', 'user activate', 'user deactivate'},
     'report-export-v1': {'report export'},
     'audit-visibility-v1': set(),
+    'statement-import-v1': {'reconcile import'},
     'backup-schedule-v1': {'backup list', 'backup rehearse', 'backup schedule', 'backup verify'},
 }
 

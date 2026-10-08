@@ -389,6 +389,7 @@ rate set
 rate show
 reconcile candidates
 reconcile finish
+reconcile import
 reconcile mark
 reconcile opening start
 reconcile preview
@@ -601,6 +602,7 @@ def execution_map():
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
     from tests.test_memorized_transactions import COMMANDS as MEMORIZED_COMMANDS
     from tests.test_reconciliation_commands import RECONCILE_COMMANDS
+    from tests.test_reconcile_import import COMMANDS as RECONCILE_IMPORT_COMMANDS
     from tests.test_purchase_deletion_transports import COMMANDS as PURCHASE_DELETE_COMMANDS
     from tests.test_sales_deletion_transports import COMMANDS as SALES_DELETE_COMMANDS
     from tests.test_receiving_surfaces import COMMANDS as RECEIVING_COMMANDS
@@ -628,6 +630,7 @@ def execution_map():
                    'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
                    'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
                    'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger' if cmd.name in RECONCILE_COMMANDS else
+                   'tests/test_reconcile_import.py::test_the_same_import_through_python_cli_http_and_mcp' if cmd.name in RECONCILE_IMPORT_COMMANDS else  # all four
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_mcp_registry_agent.py::test_agent_administration_full_documents_on_four_actual_surfaces' if cmd.name in AGENT_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
