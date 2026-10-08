@@ -137,7 +137,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
 - [~] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
 - [x] R160 the standard company profile's version moves when its contents change (R135 added a Credit Card payment method; version still 1)
-- [~] R156 Scheduled backups: the host backs companies up on a schedule to a place no agent can write, keeps the last few copies, and one restore is rehearsed
+- [x] R156 Scheduled backups: the host backs companies up on a schedule to a place no agent can write, keeps the last few copies, and one restore is rehearsed
 - [~] R166 move a real company in: at a period boundary the agent brings in lists, opening balances and open invoices and bills from the old books (QuickBooks Desktop exports), with a dry run, saved mappings, stable outside ids and an exception report; a tie-out shows the opening trial balance and receivable and payable agings match the old books to the cent
 - [~] R167 bank statements come in for reconciliation: import CSV, OFX and QFX statements and match them to entries (live feeds stay in R108)
 - [~] R168 the real books are protected: the closing date and user roles are set only by a person, never by an agent; the bookkeeping agent works without admin; the real company lives apart from demo and test data; hash-linked audit checkpoints go with each backup so a rewritten history or a rollback is detected
