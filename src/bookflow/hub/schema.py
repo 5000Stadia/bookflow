@@ -185,7 +185,7 @@ audit_events = _table(
     _column("directive_code", sa.String(16), "Standing-instruction code captured with the event; null when absent.", nullable=True),
     _column("source_ref", sa.String(512), "Caller-supplied reference to the source of the write; null when absent.", nullable=True),
     _column("summary", sa.String(512), "Human-readable summary of what the command did.", nullable=False),
-    description="Append-only hub command events with actor and request provenance.",
+    description="Append-only hub command events with actor and request provenance; the database refuses any UPDATE or DELETE of an event.",
 )
 
 idempotency_keys = _table(
@@ -214,7 +214,7 @@ audit_entries = _table(
     _column("before", sa.LargeBinary, "Encoded pre-change snapshot when recorded; otherwise null.", nullable=True),
     sa.Index("ix_audit_entries_record", "record_type", "record_id"),
     sa.Index("ix_audit_entries_event", "event_id"),
-    description="Record-level snapshots grouped under hub audit events.",
+    description="Record-level snapshots grouped under hub audit events; the database refuses any UPDATE or DELETE of an entry.",
 )
 
 pending_config = _table(

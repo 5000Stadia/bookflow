@@ -7,6 +7,7 @@ from bookflow.company import schema as c
 from bookflow.core import audit
 from bookflow.core.ids import new_id
 from bookflow.storage.engine import open_database
+from tests.audit_tamper import disarm
 from tests.conftest import make_actor, as_user
 from tests.test_row8_journal import database_path
 from tests.test_service_sales_lifecycle import sale, snapshot, COMPANY
@@ -109,6 +110,7 @@ def test_unusable_expected_history_is_unknown(client, document, damage):
     header_only(client, document)
     # Corrupt only the disposable fixture; exercise BOTH gate decoding and enrichment.
     with open_database(database_path(client), writable=True) as db:
+        disarm(db.conn)
         row = dict(db.conn.execute(sa.select(c.audit_entries).where(c.audit_entries.c.record_type == 'transaction',
             c.audit_entries.c.record_id == document[1]['id'], c.audit_entries.c.version_after == 1)).mappings().one())
         old = audit.decode_snapshot(row['after'])
@@ -145,6 +147,7 @@ def test_future_and_missing_intermediate_gate_diagnostics(client, document):
     assert future.details['changed_fields'] == []
     header_only(client, document)
     with open_database(database_path(client), writable=True) as db:
+        disarm(db.conn)
         db.conn.execute(c.audit_entries.delete().where(c.audit_entries.c.record_type == 'transaction',
             c.audit_entries.c.record_id == document[1]['id'], c.audit_entries.c.version_after == 2))
         db.conn.commit()
@@ -177,6 +180,7 @@ def test_authority_and_company_before_history(client, root, document):
 def test_unusable_intervening_snapshot_preserves_gate_unknown(client, document, blob):
     header_only(client, document)
     with open_database(database_path(client), writable=True) as db:
+        disarm(db.conn)
         db.conn.execute(c.audit_entries.update().where(c.audit_entries.c.record_type == 'transaction',
             c.audit_entries.c.record_id == document[1]['id'], c.audit_entries.c.version_after == 2).values(after=blob))
         db.conn.commit()
@@ -188,6 +192,7 @@ def test_unusable_intervening_snapshot_preserves_gate_unknown(client, document, 
 def test_valid_legacy_baseline_snapshot(client, document):
     header_only(client, document)
     with open_database(database_path(client), writable=True) as db:
+        disarm(db.conn)
         db.conn.execute(c.audit_entries.update().where(c.audit_entries.c.record_type == 'transaction',
             c.audit_entries.c.record_id == document[1]['id'], c.audit_entries.c.version_after == 1).values(action='baseline'))
         db.conn.commit()

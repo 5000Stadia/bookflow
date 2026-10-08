@@ -80,6 +80,8 @@ def _rewrite(s,table,row,changes,kind):
     entry=s.company.conn.execute(sa.select(c.audit_entries).where(c.audit_entries.c.record_type==kind,c.audit_entries.c.record_id==row['id'])).mappings().one()
     image=audit.decode_snapshot(entry['after']);assert image['id']==row['id']
     image.update(changes)
+    from tests.audit_tamper import disarm
+    disarm(s.company.raw)
     s.company.conn.execute(c.audit_entries.update().where(c.audit_entries.c.id==entry['id']).values(after=audit.encode_snapshot(image)))
     assert s.company.raw.execute('PRAGMA foreign_keys').fetchone()==(1,)
     assert not s.company.raw.execute('PRAGMA foreign_key_check').fetchall()

@@ -124,6 +124,8 @@ def test_overflow_at_every_counter_has_zero_raw_mutation(path,counter):
         if counter=='generation':db.raw.execute('UPDATE permission_state SET generation=?',(maximum,))
         if counter=='audit_sequence':
             db.raw.execute('BEGIN IMMEDIATE');apply(db,b.PutMembership('B',c.ScopeKey('company','C'),b.Absent(),'standard'));db.raw.execute('COMMIT')
+            from tests.audit_tamper import disarm
+            disarm(db.raw)
             db.raw.execute('UPDATE audit_events SET seq=?',(maximum,))
         db.raw.execute('BEGIN IMMEDIATE');before=snapshot(db.raw)
         if counter=='user':intent=b.SetUserActive('R',maximum,False)
