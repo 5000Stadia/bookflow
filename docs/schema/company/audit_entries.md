@@ -2,7 +2,7 @@
 
 # `company.audit_entries`
 
-Record-level snapshots grouped under company audit events.
+Record-level snapshots grouped under company audit events; the database refuses any UPDATE or DELETE of an entry.
 
 Database: `company`.
 

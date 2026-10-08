@@ -22,7 +22,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_audit_visibility_catalog as previous, permission_catalog as c
+from . import permission_statement_import_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'ac3de3f1318b96dd4ea4a35bfaf6795201954550'
@@ -33,10 +33,13 @@ PEOPLE_ONLY_COMMANDS = (
     'membership grant', 'membership revoke', 'permission activate', 'token issue',
     'user activate', 'user add', 'user deactivate', 'user set-password',
 )
+_THRESHOLD = {x.name: x.threshold for x in previous.CATALOG.commands}
+# `backup schedule` (R165) already refuses anyone but a person; it joins the list once the layer
+# below carries it, so this delta re-chains over backup-schedule-v1 without an edit here.
+PEOPLE_ONLY_COMMANDS += tuple(name for name in ('backup schedule',) if name in _THRESHOLD)
 CHANGED_AUTHORIZATION = {
     'company update': 'company admin; changing the closing date needs a person, never an agent',
 }
-_THRESHOLD = {x.name: x.threshold for x in previous.CATALOG.commands}
 ADDED_ADMIN_ACTIONS = (
     c.AdminAction(CLOSING_DATE_ACTION, 'company', 'admin', True, True),
     *(c.AdminAction(PEOPLE_ONLY_PREFIX + name, 'hub', _THRESHOLD[name], True, True) for name in PEOPLE_ONLY_COMMANDS),

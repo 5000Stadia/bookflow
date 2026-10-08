@@ -316,9 +316,11 @@ def test_budget(client, root):
             s,
             company_selector=cid,
         )
-        s.company.raw.execute("DELETE FROM audit_entries")
-        s.company.raw.execute("DELETE FROM audit_events")
-        s.company.raw.commit()
+        from tests.audit_tamper import tampering
+        with tampering(s.company.raw):
+            s.company.raw.execute("DELETE FROM audit_entries")
+            s.company.raw.execute("DELETE FROM audit_events")
+            s.company.raw.commit()
         s.company.raw.execute("VACUUM")
         codes = []
         for i in range(n):
