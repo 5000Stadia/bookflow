@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Any
 
 import sqlalchemy as sa
@@ -130,8 +131,36 @@ def require_command_activation(s: Session, cmd) -> None:
             require_explicit_grant(s, capability)
 
 
+@contextmanager
+def one_authorization(s: Session):
+    """Within one preparation, ask the hub once for each (capability, role) it requires.
+
+    A receipt applied to hundreds of invoices authorizes every invoice's graph, and each
+    check used to open a hub operation to answer the same two questions. Inside this scope
+    a requirement that was met is not asked again; a refusal is never kept. The scope
+    holds nothing past its own exit, and the actor, company and policy it ran under do not
+    change inside one preparation."""
+    if getattr(s, '_resource_checks', None) is not None:
+        yield
+        return
+    s._resource_checks = set()
+    try:
+        yield
+    finally:
+        s._resource_checks = None
+
+
 def require_resource(s: Session, capability: str, required_role: str) -> None:
     """Company requirement under the explicitly activated policy, or legacy role floor."""
+    met = getattr(s, '_resource_checks', None)
+    if met is not None and (capability, required_role) in met:
+        return
+    _require_resource(s, capability, required_role)
+    if met is not None:
+        met.add((capability, required_role))
+
+
+def _require_resource(s: Session, capability: str, required_role: str) -> None:
     from .permission_access import activated, require
     if activated(s):
         return require(s, capability, required_role)
