@@ -49,9 +49,7 @@ def _books(b, site):
     return bank
 
 
-@pytest.mark.parametrize('width', [1280, 390])
-def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_browser, width):
-    env, b = register_browser, register_browser.browser
+def _reach_the_ticking_page(env, b, width):
     b.viewport(width, 900)
     bank = _books(b, env.site)
 
@@ -83,6 +81,14 @@ def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_brows
 
     # And that lands on the ticking page, already showing what can be cleared.
     b.wait_for('!!document.querySelector("[data-reconcile-list] .reconcile-movement")')
+
+    return bank
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_browser, width):
+    env, b = register_browser, register_browser.browser
+    _reach_the_ticking_page(env, b, width)
 
     rows = '[data-reconcile-list] .reconcile-movement input[type=checkbox]'
     assert b.evaluate(f'document.querySelectorAll({json.dumps(rows)}).length') == 2, \
@@ -116,3 +122,40 @@ def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_brows
     assert b.evaluate('document.querySelector("[data-reconcile-finish]").disabled'), \
         'a certified statement must not offer another finish action'
     _contained(b, width)
+
+
+def test_mark_all_ticks_everything_in_one_step_and_finishes(register_browser):
+    """The Mark all control: one press ticks the list and saves it, Clear all marks undoes it."""
+    env, b = register_browser, register_browser.browser
+    b.viewport(1280, 900)
+    _reach_the_ticking_page(env, b, 1280)
+    rows = '[data-reconcile-list] .reconcile-movement input[type=checkbox]'
+    difference = '.reconcile-difference'
+    both = f'document.querySelectorAll({json.dumps(rows)}).length === 2'
+    unticked = f'{both} && [...document.querySelectorAll({json.dumps(rows)})].every(e => !e.checked)'
+    ticked = f'{both} && [...document.querySelectorAll({json.dumps(rows)})].every(e => e.checked)'
+    assert b.evaluate(unticked)
+
+    b.evaluate('document.querySelector("[data-reconcile-mark-all]").click()')
+    b.wait_for(f'document.querySelector({json.dumps(difference)}).dataset.balanced === "true"')
+    b.wait_for(ticked)       # the list is read again after the save, so the boxes follow it
+    _contained(b, 1280)
+
+    # It is saved, not just shown: clearing and marking again moves the draft on each time.
+    b.evaluate('document.querySelector("[data-reconcile-clear-all]").click()')
+    b.wait_for(f'document.querySelector({json.dumps(difference)}).dataset.balanced === "false"')
+    b.wait_for(unticked)
+    b.evaluate('document.querySelector("[data-reconcile-mark-all]").click()')
+    b.wait_for(ticked)
+    b.wait_for(f'document.querySelector({json.dumps(difference)}).dataset.balanced === "true"')
+
+    # Finishing needs no separate save: the marks are already on the draft.
+    b.wait_for('!!document.querySelector("[data-reconcile-finish]") && '
+               '!document.querySelector("[data-reconcile-finish]").disabled')
+    b.evaluate('document.querySelector("[data-reconcile-finish]").click()')
+    try:
+        b.wait_for('!!document.querySelector(".reconcile-certificate:not([hidden])")')
+    except AssertionError:
+        raise AssertionError('finish did not certify: ' + str(b.evaluate(
+            '[...document.querySelectorAll("[role=alert],[role=status]")].map(e=>e.textContent)')))
+    assert STATEMENT in b.evaluate('document.querySelector(".reconcile-certificate").textContent')

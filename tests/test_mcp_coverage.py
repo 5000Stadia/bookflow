@@ -146,7 +146,13 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # groups 25 -> 26) without adding a node; strategy is a literal, not a variant.
     # 2881 -> 2882 (V1.5 loose ends): payment query's optional `reference` (the customer's check
     # number) adds its null branch; no other routed input changed.
-    assert sum(len(group["paths"]) for group in mapped)==2882
+    # 2882 -> 2890 (R158, reconcile mark --all), measured per command on both trees: reconcile mark
+    # 1 -> 9 nodes, +8. The new `filters` (the same CandidateFilter `reconcile candidates` takes)
+    # carries eight optional fields, each adding its null branch: from_date, to_date, side,
+    # producer, number, payee, memo, amount. `all` and `all_action` are a boolean and a literal and
+    # add none; no other routed input changed. No new variant kind: filters has a default rather
+    # than being nullable, so tests/mcp_coverage.py needs no new policy and the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2890
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
