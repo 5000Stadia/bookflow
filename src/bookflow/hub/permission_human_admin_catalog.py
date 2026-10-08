@@ -11,7 +11,8 @@ say (`AdminAction.human_only`):
   their grants and denials (a role is a membership's), agents and their principals and
   authorization, tokens, accounts, and the activation that enrols administrators. Every write at
   the `user`, `membership` and `token` capabilities in the catalog below is here except `token
-  revoke`, which stays open so an agent can always revoke its own token. Reads stay as they were.
+  revoke`, which stays open so an agent can always revoke its own token; and `backup schedule`,
+  which chooses where a company's books are copied. Reads stay as they were.
 
 `hub.people_only` reads these keys from the tip; the command list lives here and nowhere else.
 No command, capability, role default, company action or threshold changes. The new actions are
@@ -22,7 +23,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_statement_import_catalog as previous, permission_catalog as c
+from . import permission_backup_schedule_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'ac3de3f1318b96dd4ea4a35bfaf6795201954550'
@@ -34,8 +35,8 @@ PEOPLE_ONLY_COMMANDS = (
     'user activate', 'user add', 'user deactivate', 'user set-password',
 )
 _THRESHOLD = {x.name: x.threshold for x in previous.CATALOG.commands}
-# `backup schedule` (R165) already refuses anyone but a person; it joins the list once the layer
-# below carries it, so this delta re-chains over backup-schedule-v1 without an edit here.
+# `backup schedule` (backup-schedule-v1, below) already refuses anyone but a person in its own
+# code; listing it here makes the catalog say so too.
 PEOPLE_ONLY_COMMANDS += tuple(name for name in ('backup schedule',) if name in _THRESHOLD)
 CHANGED_AUTHORIZATION = {
     'company update': 'company admin; changing the closing date needs a person, never an agent',

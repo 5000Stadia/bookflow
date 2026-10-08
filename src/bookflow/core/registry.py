@@ -335,6 +335,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.activity_cmds": ["activity"],
     "bookflow.commands.compact_cmds": ["company"],
     "bookflow.commands.backup_cmds": ["company"],
+    "bookflow.commands.backup_schedule_cmds": ["backup"],
     "bookflow.commands.host_cmds": ["serve", "user", "membership", "token"],
     "bookflow.commands.docs_cmds": ["docs"],
     "bookflow.commands.mcp_cmds": ["mcp"],

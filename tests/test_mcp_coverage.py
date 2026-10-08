@@ -33,7 +33,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +2 company backup and company restore (R133).
     # +4 agent/user deactivate and activate (R89); +1 report export (R145).
     # +1 reconcile import (R167).
-    assert len(rows) == 506
+    # +4 backup schedule, list, verify and rehearse (R156).
+    assert len(rows) == 510
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -156,10 +157,13 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2890 -> 2893 (merge of R167 onto R158): reconcile import adds its 3 nodes, as measured below.
     # 2882 -> 2885 (R167): reconcile import, a new command, measured per command: 3 nodes, the
     # null branches of its optional draft, statement_date and ending_balance. No other input moved.
-    # 2893 -> 2894 (R168, demo reset refuses a root holding real books): demo reset's new optional
+    # 2893 -> 2896 (R156, scheduled backups), measured per command on both trees: backup schedule's
+    # optional daily_at, destination and keep each add their null branch (+3); `off` is a boolean
+    # and `company` a required string, and backup list, verify and rehearse take no input (0 each).
+    # 2896 -> 2897 (R168, demo reset refuses a root holding real books): demo reset's new optional
     # `force` (the data root's path, a nullable string) adds its null branch, +1. The closing-date
     # rule changes only a field description; no other routed input changed. Groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2894
+    assert sum(len(group["paths"]) for group in mapped)==2897
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

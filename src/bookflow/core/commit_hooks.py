@@ -48,6 +48,7 @@ OWNERS = {
     "hub.demo_reset": Impact.CONSERVATIVE,
     "host.migrate_everything": Impact.CONSERVATIVE,
     "host.sweep": Impact.EXPIRED,
+    "host.backup": Impact.CONSERVATIVE,
     "moves.company": Impact.CONSERVATIVE,
     "moves.org": Impact.CONSERVATIVE,
     "migration.head": Impact.CONSERVATIVE,
