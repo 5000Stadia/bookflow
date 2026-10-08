@@ -3,6 +3,8 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.company.aliases import alias
+from bookflow.company import payment_prefetch as prefetch
 from bookflow.company import schema as c, sales, journals, sales_defaults as defaults
 from bookflow.company import document_effects as effects, journal_custom_fields as custom, list_service
 from bookflow.company import payment_calculations as calc, payment_queries as query, payment_selection as selection
@@ -59,8 +61,12 @@ def effect_header(header, revision):
         amount=Money(revision['total_minor_units'], revision['currency']).to_dict(), status=header['status'])
 
 
-def current_output(s, selector, *, complete_components=False):
-    facts = query.payment_facts(s, selector)
+def current_output(s, selector, *, complete_components=False, facts=None):
+    """`facts` are `payment_facts` this caller already read for the same receipt, still current."""
+    if facts is None:
+        facts = query.payment_facts(s, selector)
+    else:
+        query.authorize(s, [facts['header']['id']])
     header, revision = facts['header'], facts['revision']
     capacities = {row['component_key_id']: row for row in facts['components']}
     applied_by_key = {}
@@ -72,7 +78,7 @@ def current_output(s, selector, *, complete_components=False):
     for key_id, key in ordered if complete_components else ordered[:50]:
         component = capacities.get(key_id)
         capacity = component['amount_minor_units'] if component else 0
-        party = defaults._row(s.company, 'customer', key['party_id'], active=False)
+        party = prefetch.customer(s, key['party_id'], False, lambda: defaults._row(s.company, 'customer', key['party_id'], active=False))
         applied = applied_by_key.get(key_id, 0)
         rendered.append(dict(component_key_id=key_id, component_id=component['id'] if component else None,
             party_id=key['party_id'], party_name=party['full_name'], ar_account_id=key['ar_account_id'], currency=key['currency'],
@@ -155,6 +161,7 @@ def _applications(s, inp, context_, *, amount=None):
         entries = [(item.invoice, item.expected_version, money(item.amount, context_['currency'], 'applications.amount').minor_units)
                    for item in inp.applications.items]
     result, seen = [], set()
+    prefetch.invoices(s, [entry[0] for entry in entries])
     for selector_, version, units in entries:
         if units is None or units <= 0:
             raise _invalid('applications.amount', 'resolve a positive selected amount or explicitly deselect the row')
@@ -173,8 +180,11 @@ def _applications(s, inp, context_, *, amount=None):
 def _target_components(s, facts, pending, created, event):
     """Stored invoice amounts plus durable ordinals, never reconstructed prices."""
     header, revision = facts['header'], facts['revision']
-    lines = sales.saved_lines(s, revision)
-    keys = effects.rows(s, c.settlement_line_keys, c.settlement_line_keys.c.transaction_id == header['id'])
+    known = prefetch.invoice(s, header['id'])
+    if known is not None and known['revision']['id'] != revision['id']:
+        known = None
+    lines = known['lines'] if known else sales.saved_lines(s, revision)
+    keys = known['keys'] if known else effects.rows(s, c.settlement_line_keys, c.settlement_line_keys.c.transaction_id == header['id'])
     ordinals = {row['line_id']: row['ordinal'] for row in keys}
     maximum = max(ordinals.values(), default=0)
     for line in sorted(lines, key=lambda line: line['line_id']) if not keys else lines:
@@ -184,10 +194,10 @@ def _target_components(s, facts, pending, created, event):
             pending['settlement_line_keys'].append(dict(**created(), transaction_id=header['id'], line_id=line['line_id'],
                                                        ordinal=maximum, audit_event_id=event))
     source, leg = c.posting_line_sources, c.posting_lines
-    sources = [dict(row) for row in s.company.conn.execute(sa.select(source,
+    sources = known['sources'] if known else [dict(row) for row in s.company.conn.execute(sa.select(source,
         leg.c.account_id, leg.c.debit_minor_units, leg.c.credit_minor_units).join(leg, leg.c.id == source.c.posting_line_id).where(
         source.c.transaction_id == header['id'], source.c.revision_id == revision['id'], source.c.reversed_source_id.is_(None))).mappings()]
-    taxes = effects.rows(s, c.sales_tax_components, c.sales_tax_components.c.revision_id == revision['id'])
+    taxes = known['taxes'] if known else effects.rows(s, c.sales_tax_components, c.sales_tax_components.c.revision_id == revision['id'])
     result = {}
     for line in lines:
         values = [(None, line['net_minor_units'])] + [(tax, tax['tax_minor_units'])
@@ -206,8 +216,8 @@ def _target_components(s, facts, pending, created, event):
             result[key] = dict(capacity=capacity, line=line, tax_component_id=physical, tax_item_id=tax_item,
                 ar=ar, recognition=rec, semantic=dict(account_id=rec['account_id'],
                     net_minor_units=line['net_minor_units'], tax=tax))
-    allocations, inverse = c.application_allocations, c.application_allocations.alias('inverse')
-    live = s.company.conn.execute(sa.select(allocations).where(allocations.c.target_transaction_id == header['id'],
+    allocations, inverse = c.application_allocations, alias(c.application_allocations, 'inverse')
+    live = known['live'] if known else s.company.conn.execute(sa.select(allocations).where(allocations.c.target_transaction_id == header['id'],
         allocations.c.kind == 'allocation', ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_allocation_id == allocations.c.id)))).mappings()
     for row in live:
         key = calc.ComponentKey(row['target_ordinal'], int(row['logical_kind'] == 'tax'), row['tax_item_id'] or '')
@@ -221,6 +231,9 @@ def _target_components(s, facts, pending, created, event):
 
 def discount_rows(s, payment_id):
     """Every early-payment discount this receipt took, by the application it was taken on."""
+    known = prefetch.receipt(s, payment_id)
+    if known is not None:
+        return {key: dict(row) for key, row in known['discounts'].items()}
     return {row['application_id']: row for row in effects.rows(
         s, c.payment_discounts, c.payment_discounts.c.transaction_id == payment_id)}
 
@@ -232,7 +245,7 @@ def discounts_by_invoice(s, invoice_ids):
     if not identifiers:
         return totals
     d, a = c.payment_discounts, c.applications
-    inverse = a.alias('inverse')
+    inverse = alias(a, 'inverse')
     for row in s.company.conn.execute(sa.select(d.c.invoice_id, sa.func.sum(d.c.amount_minor_units).label('net'))
             .select_from(d.join(a, a.c.id == d.c.application_id))
             .where(d.c.invoice_id.in_(identifiers),
@@ -275,11 +288,12 @@ def _discounts(s, inp, targets, currency, context_):
         facts = target['facts']
         _capacity('target', target['amount'] + units, facts['due'], currency, header['id'])
         target['discount'] = units
+    standing = discounts_by_invoice(s, [target['facts']['header']['id'] for target in targets])
     for target in targets:
         facts = target['facts']
         target.setdefault('discount', 0)
         target['terms'] = early.invoice_terms(facts['profile']['profile_snapshot'])
-        already = discounts_by_invoice(s, [facts['header']['id']])[facts['header']['id']]
+        already = standing[facts['header']['id']]
         target['suggested'] = early.suggested(target['terms'], facts['gross'], inp.date,
                                               taken=already, due=facts['due'])
     return targets
@@ -332,7 +346,26 @@ def repeated_reference(s, customer_id, reference):
 
 
 def prepare(s, ctx, inp, operation):
+    from bookflow.hub.access import one_authorization
+    with one_authorization(s), prefetch.reading(s):
+        return _prepare(s, ctx, inp, operation)
+
+
+def _prepare(s, ctx, inp, operation):
     command = 'payment ' + operation
+    # Each party's row and ancestry is read once for this preparation, however many of its
+    # steps name the party (a receipt applied to hundreds of jobs names each one three times).
+    customers, lineages = {}, {}
+    def customer(party_id, active=True):
+        if not active and (party_id, True) in customers:
+            return customers[(party_id, True)]
+        if (party_id, active) not in customers:
+            customers[(party_id, active)] = defaults._row(s.company, 'customer', party_id, active=active)
+        return customers[(party_id, active)]
+    def lineage(party_id, row):
+        if party_id not in lineages:
+            lineages[party_id] = party_lineage(s, row)
+        return lineages[party_id]
     if operations.find(s, inp.operation_key):
         recovered = operations.recover(inp, ctx, s, command)
         if recovered:
@@ -414,22 +447,22 @@ def prepare(s, ctx, inp, operation):
                 class_id=None, class_name=None, description=inp.memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
             pending['posting_lines'].append(value)
             return value
-        payer = defaults._row(s.company, 'customer', context_['customer_id'])
+        payer = customer(context_['customer_id'])
         cash = leg(profile.deposit_account, amount, True, payer, 1)
         keys, component_rows, source_rows = {}, {}, {}
         # One discount debit per customer whose invoice took one, after the receivable credits.
-        discount_legs = {party_id: leg(discount_account, units, True, defaults._row(s.company, 'customer', party_id),
+        discount_legs = {party_id: leg(discount_account, units, True, customer(party_id),
                                        len(components) + 2 + position)
                          for position, (party_id, units) in enumerate(sorted(party_discounts.items()))}
         for position, (party_id, capacity) in enumerate(sorted(components.items()), 2):
-            party = defaults._row(s.company, 'customer', party_id)
+            party = customer(party_id)
             key = dict(**audited(), transaction_id=header['id'], line_id=identity['id'], party_id=party_id,
                        ar_account_id=context_['ar_account_id'], currency=context_['currency'])
             pending['payment_component_keys'].append(key)
             component = dict(**audited(), transaction_id=header['id'], revision_id=revision['id'], document_line_id=line['id'],
                 component_key_id=key['id'], amount_minor_units=capacity, currency=context_['currency'],
                 component_snapshot=query.canonical(dict(party=defaults._ref(party).model_dump(), ar_account=profile.ar_account.model_dump(),
-                                                       lineage=party_lineage(s, party))))
+                                                       lineage=lineage(party_id, party))))
             pending['payment_components'].append(component)
             ar = leg(profile.ar_account, capacity, False, party, position)
             discount = party_discounts.get(party_id, 0)
@@ -534,12 +567,12 @@ def prepare(s, ctx, inp, operation):
                 target_ordinal=key.ordinal, logical_kind=allocation['logical_kind'], tax_item_id=component['tax_item_id'],
                 amount=Money(allocated, context_['currency']).to_dict()))
         recipes.append([invoice['id'], invoice['version'], invoice_revision['id'], units, target['discount'],
-            used_reference_facts(party_lineage(s, defaults._row(s.company, 'customer', party))),
+            used_reference_facts(lineage(party, customer(party))),
             [(key.ordinal, key.kind, key.tax_item_id, value['capacity'], value['semantic'], split.get(key, 0)) for key, value in sorted(capacities.items())]])
     component_outputs = []
     for party, key in sorted(keys.items()):
         capacity = components.get(party, 0)
-        party_row = defaults._row(s.company, 'customer', party, active=False)
+        party_row = customer(party, False)
         component_outputs.append(dict(component_key_id=key['id'], component_id=component_rows[party]['id'] if party in component_rows else None,
             party_id=party, party_name=party_row['full_name'], ar_account_id=context_['ar_account_id'], currency=context_['currency'],
             received_minor_units=capacity, applied_minor_units=capacity - available.get(party, 0), available_minor_units=available.get(party, 0)))

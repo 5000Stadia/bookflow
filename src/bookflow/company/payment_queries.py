@@ -6,7 +6,8 @@ import json
 
 import sqlalchemy as sa
 
-from bookflow.company import schema as c, sales, document_effects as effects
+from bookflow.company.aliases import alias
+from bookflow.company import schema as c, sales, document_effects as effects, payment_prefetch as prefetch
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.payment_authority import authorize
 from bookflow.core.errors import BookflowError
@@ -54,7 +55,7 @@ def digest(value):
 
 
 def active_applications(s, *, invoice=None, payment=None):
-    app, inverse = c.applications, c.applications.alias('inverse')
+    app, inverse = c.applications, alias(c.applications, 'inverse')
     query = sa.select(app).where(app.c.kind == 'apply', ~sa.exists(sa.select(inverse.c.id).where(
         inverse.c.reverses_application_id == app.c.id)))
     if invoice:
@@ -73,11 +74,18 @@ def invoice_facts(s, selector, *, write=False):
     the active applications subtract from. `SETTLEABLE_RECEIVABLE_TYPES` is the whole difference,
     which is why it is read here rather than written out.
     """
-    header = sales.resolve(s, selector, SETTLEABLE_RECEIVABLE_TYPES)
-    authorize(s, [header['id']], write=write)
-    revision = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.id == header['current_revision_id'])[0]
-    profile = sales.profile_row(s, revision)
-    applications = active_applications(s, invoice=header['id'])
+    prefetched = prefetch.invoice(s, selector)
+    if prefetched is not None:
+        header = dict(prefetched['header'])
+        authorize(s, [header['id']], write=write)
+        revision, profile = dict(prefetched['revision']), dict(prefetched['profile'][0])
+        applications = [dict(row) for row in prefetched['applications']]
+    else:
+        header = sales.resolve(s, selector, SETTLEABLE_RECEIVABLE_TYPES)
+        authorize(s, [header['id']], write=write)
+        revision = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.id == header['current_revision_id'])[0]
+        profile = sales.profile_row(s, revision)
+        applications = active_applications(s, invoice=header['id'])
     applied = sum(row['amount_minor_units'] for row in applications)
     gross = revision['total_minor_units'] if header['status'] == 'posted' else 0
     return dict(header=header, revision=revision, profile=profile, applications=applications,
@@ -109,7 +117,7 @@ def invoice_currents(s, headers, revisions):
         return {}
     ids = [header['id'] for header in headers]
     authorize(s, ids)
-    app, inverse = c.applications, c.applications.alias('page_inverse')
+    app, inverse = c.applications, alias(c.applications, 'page_inverse')
     amounts = {identifier: 0 for identifier in ids}
     # Python integers preserve the single-record projection's exact arithmetic;
     # the query is restricted to page identities, not all company applications.
@@ -167,15 +175,25 @@ def payment_facts(s, selector, *, write=False):
     through this dictionary.
     """
     from bookflow.company.credits import active_consumptions
-    header = sales.resolve(s, selector, 'payment')
-    authorize(s, [header['id']], write=write)
-    revision = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.id == header['current_revision_id'])[0]
-    profile = effects.rows(s, c.payment_profiles, c.payment_profiles.c.revision_id == revision['id'])[0]
-    components = effects.rows(s, c.payment_components, c.payment_components.c.revision_id == revision['id'])
-    keys = {row['id']: row for row in effects.rows(s, c.payment_component_keys,
-            c.payment_component_keys.c.transaction_id == header['id'])}
-    applications = active_applications(s, payment=header['id'])
-    consumptions = active_consumptions(s, payment_key_id=list(keys)) if keys else []
+    known = prefetch.receipt(s, selector)
+    if known is not None:
+        header = dict(known['header'])
+        authorize(s, [header['id']], write=write)
+        revision, profile = dict(known['revision']), dict(known['profile'][0])
+        components = [dict(row) for row in known['components']]
+        keys = {key: dict(row) for key, row in known['keys'].items()}
+        applications = [dict(row) for row in known['applications']]
+        consumptions = [dict(row) for row in known['consumptions']]
+    else:
+        header = sales.resolve(s, selector, 'payment')
+        authorize(s, [header['id']], write=write)
+        revision = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.id == header['current_revision_id'])[0]
+        profile = effects.rows(s, c.payment_profiles, c.payment_profiles.c.revision_id == revision['id'])[0]
+        components = effects.rows(s, c.payment_components, c.payment_components.c.revision_id == revision['id'])
+        keys = {row['id']: row for row in effects.rows(s, c.payment_component_keys,
+                c.payment_component_keys.c.transaction_id == header['id'])}
+        applications = active_applications(s, payment=header['id'])
+        consumptions = active_consumptions(s, payment_key_id=list(keys)) if keys else []
     available = {key: 0 for key in keys}
     if header['status'] == 'posted':
         available.update({row['component_key_id']: row['amount_minor_units'] for row in components})

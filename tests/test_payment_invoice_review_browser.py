@@ -1,4 +1,5 @@
 """Independent 403-payment invoice correction oracle retained as regression."""
+import time
 import json,sqlite3
 from pathlib import Path
 import pytest
@@ -7,10 +8,10 @@ from tests.test_row8_register_browser import register_browser,_command
 from tests.test_service_sales_browser import _fill,_preview,_click,_saved
 from tests.test_customer_payment_browser import shot,recorded_state
 
-# Measured 2026-09-28 run alone: preview 25 s, then 24 settlement pages at about 8 s each
-# (~192 s), because each page re-prepares the whole 403-invoice receipt. The waits below fit
-# that with headroom; making the large-receipt pages cheaper is roadmap R159 (Later).
-@pytest.mark.timeout(1200)
+# Measured 2026-10-08 alone with R159's bulk reads: 278 s in all, of which the correction preview
+# is 8.3 s (was 25 s) and its 24 settlement pages 32 s (was ~192 s, ~8 s each); posting the 403
+# payments is the rest. The waits are back to their defaults (preview 15 s, pages 180 s, save 15 s).
+@pytest.mark.timeout(600)
 def test_gui_invoice_correction_all_403_payment_dependencies(register_browser,tmp_path):
     env=register_browser;b=env.browser
     run=lambda name,data,**headers:_command(b,env.site,name.replace(' ','.'),data,**headers)
@@ -27,7 +28,8 @@ def test_gui_invoice_correction_all_403_payment_dependencies(register_browser,tm
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/invoice/{invoice["id"]}/update')
     b.wait_for("!!document.querySelector('[data-sales-form]')")
     _fill(b,'c:lines:0:quantity','2');_fill(b,'ctx:reason','Correct complete 403 installment invoice')
-    _preview(b,timeout=90);b.wait_for("document.querySelector('#invoice-settlement-preview')?.dataset.complete==='true'",timeout=480)
+    started=time.time();_preview(b);previewed=time.time();b.wait_for("document.querySelector('#invoice-settlement-preview')?.dataset.complete==='true'",timeout=180)
+    print(f'403 payments: invoice-correction preview {previewed-started:.1f} s, 24 settlement pages {time.time()-previewed:.1f} s')
     text=b.evaluate("document.querySelector('#invoice-settlement-preview').innerText")
     assert 'document changes: 404 complete changes' in text and 'allocations: 806 complete changes' in text,text
     assert recorded_state(path)==before
@@ -40,7 +42,7 @@ def test_gui_invoice_correction_all_403_payment_dependencies(register_browser,tm
     for width in [1280,390]:
         b.viewport(width,900);b.evaluate("document.querySelector('#invoice-settlement-preview').scrollIntoView()")
         shot(b,tmp_path,'all-403-invoice-preview',width)
-    _click(b,'submit');assert _saved(b,'invoice',timeout=180)==invoice['id']
+    _click(b,'submit');assert _saved(b,'invoice')==invoice['id']
     with sqlite3.connect(path) as db:
         cash=db.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',(env.bank['id'],)).fetchone()[0]
         revenue=db.execute('SELECT sum(credit_minor_units-debit_minor_units) FROM posting_lines WHERE account_id=?',(income,)).fetchone()[0]

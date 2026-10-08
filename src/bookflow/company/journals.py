@@ -151,7 +151,10 @@ def open_dates(s, dates):
 
 
 def version_meta(s, h, expected, *, history_decoder=None):
-    writer = versioning.current_writer(s.company, 'transaction', h['id'], h)
+    # Who wrote the current version only describes a blind write or a conflict; an expected
+    # version that is the current one is neither, and asking costs two reads a document.
+    writer = (None if expected is not None and expected == h['version']
+              else versioning.current_writer(s.company, 'transaction', h['id'], h))
     from bookflow.company.info import principal_names
     if writer:
         names = principal_names(s.company, {x for x in (writer.updated_by, writer.on_behalf_of) if x})

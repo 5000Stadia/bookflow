@@ -71,7 +71,7 @@ def prepare(plan, s, ctx):
                 semantic=semantic(dict(account_id=recognition[credit['posting_line_id']]['account_id'], net_minor_units=net[line['id']], tax=tax)))
     available = {key: value['capacity'] for key, value in components.items()}
     allocations, changed_payments, recipes = [], set(), []
-    live_by_application = {}
+    live_by_application, open_dates = {}, set()
     for row in live_allocations(s, [app['id'] for app in applications]):
         live_by_application.setdefault(row['application_id'], []).append(row)
     for app in applications:  # query order is original effective date, binary ID
@@ -87,7 +87,11 @@ def prepare(plan, s, ctx):
         recipes.append([app['id'], new_recipe])
         if old_recipe == new_recipe:
             continue
-        journals.open_dates(s, [row['effective_date'] for row in previous])
+        # A closed date refuses the correction the first time it is met; a date already met open need not be asked again.
+        unmet = [date for date in dict.fromkeys(row['effective_date'] for row in previous) if date not in open_dates]
+        if unmet:
+            journals.open_dates(s, unmet)
+        open_dates.update(row['effective_date'] for row in previous)
         changed_payments.add(app['paying_transaction_id'])
         for row in previous:
             allocations.append(dict(row, **created(), kind='reversal', reverses_allocation_id=row['id']))
