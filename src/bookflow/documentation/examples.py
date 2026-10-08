@@ -24,6 +24,10 @@ EXAMPLES: dict[str, Example] = {
     "attachment get": Example(f'bookflow attachment get {ID} --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json', {"attachment": ID}),
     "company backup": Example('bookflow company backup --company "Demo Plumbing Co" --json', {}),
     "company restore": Example('bookflow company restore "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup" --as-copy --name "Demo Plumbing (restored)" --json', {"archive": "/srv/backups/Demo Plumbing Co 2026-09-28-170500.bookflow-backup", "as_copy": True, "name": "Demo Plumbing (restored)"}),
+    "backup schedule": Example('bookflow backup schedule "Demo Plumbing Co" --daily-at 02:00 --destination /mnt/offsite/bookflow --keep 14 --json', {"company": "Demo Plumbing Co", "daily_at": "02:00", "destination": "/mnt/offsite/bookflow", "keep": 14}),
+    "backup list": Example('bookflow backup list --company "Demo Plumbing Co" --json', {}),
+    "backup verify": Example('bookflow backup verify --company "Demo Plumbing Co" --json', {}),
+    "backup rehearse": Example('bookflow backup rehearse --company "Demo Plumbing Co" --json', {}),
     "company compact": Example('bookflow company compact --company "Demo Plumbing Co" --limit 200 --dry-run --reason "Preview unlinked file collection" --json', {"limit": 200}),
     "audit list": Example('bookflow audit list --company "Demo Plumbing Co" --limit 5 --json', {"limit": 5}),
     "audit show": Example(f'bookflow audit show {ID} --company "Demo Plumbing Co" --json', {"event": ID}),
@@ -1038,6 +1042,17 @@ EXAMPLES['reconcile mark'] = Example(
     f'bookflow reconcile mark {ID} --expected-version 1 --operation-key example-mark-1 --all '
     '--company "Demo Plumbing Co" --reason "Clear everything the statement shows" --dry-run --json',
     _markall_input)
+
+# The statement file travels as its text: the shell reads it, the command never opens a path.
+EXAMPLES['reconcile import'] = Example(
+    'bookflow reconcile import --account Checking --content "$(cat checking-2026-09.ofx)" --start'
+    ' --company "Demo Plumbing Co" --reason "Import the September checking statement" --json',
+    {"account": "Checking", "start": True,
+     "content": "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\n\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS>"
+                "<CURDEF>USD<BANKTRANLIST><STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260930<TRNAMT>-12.00"
+                "<FITID>202609300001<NAME>MONTHLY SERVICE FEE</STMTTRN></BANKTRANLIST>"
+                "<LEDGERBAL><BALAMT>6236.95<DTASOF>20260930</LEDGERBAL></STMTRS></STMTTRNRS>"
+                "</BANKMSGSRSV1></OFX>"})
 
 # Receiving uses the same registered commands in CLI, HTTP, Python and MCP.
 EXAMPLES.update({

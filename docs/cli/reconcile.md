@@ -294,6 +294,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.cleared_balance` | integer | yes | no | — | — |
 | `totals.difference` | integer | yes | no | — | — |
 | `totals.decimal_units` | object[string, string] | yes | no | — | — |
+| `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
+| `cleared_without_statement_line[].movement` | object | yes | no | — | — |
+| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.transaction_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.revision_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.account_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.component_id` | string \| null | no | yes | null | — |
+| `cleared_without_statement_line[].group_fingerprint` | string | yes | no | — | — |
+| `cleared_without_statement_line[].date` | string | yes | no | — | — |
+| `cleared_without_statement_line[].amount` | integer | yes | no | — | — |
+| `cleared_without_statement_line[].number` | string | yes | no | — | — |
+| `cleared_without_statement_line[].payees` | array[string] | yes | no | — | — |
+| `cleared_without_statement_line[].memo` | string \| null | yes | yes | — | — |
 | `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
@@ -302,6 +316,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "certificate_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "cleared_without_statement_line": null,
   "contract": "reconciliation.private.v1",
   "draft": {
     "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -365,6 +380,278 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
+| `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
+| `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. |
+| `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
+| `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
+| `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |
+| `E_RECONCILIATION_OPENING_UNPROVEN` | The opening does not account for every movement on or before its date. |
+| `E_RECONCILIATION_OPERATION_KEY_REUSED` | That permanent reconciliation operation key belongs to a different original request. |
+| `E_RECONCILIATION_SELECTION_STALE` | A selected movement changed since it was selected; read the candidates again. |
+| `E_RECONCILIATION_SOURCE_INVALID` | The stored statement effects do not reconcile to the general ledger. |
+| `E_RECONCILIATION_UNSUPPORTED` | Statement reconciliation cannot represent this account or one of its documents. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `reconcile import`
+
+Read a bank or credit card statement file (OFX, QFX or CSV text) against the account: each line comes back matched to one entry, suggested, unmatched (enter it), or already reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a statement reconciliation, started from the file's statement date and ending balance; finish it with `reconcile preview` and `reconcile finish`. Safe to run again: nothing already true is repeated. Use --dry-run to preview.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/reconcile.import` |
+| External binary body | none |
+
+### CLI
+
+`bookflow reconcile import --account Checking --content "$(cat checking-2026-09.ofx)" --start --company "Demo Plumbing Co" --reason "Import the September checking statement" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile import", "input": {"account": "Checking", "start": true, "content": "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\n\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>USD<BANKTRANLIST><STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260930<TRNAMT>-12.00<FITID>202609300001<NAME>MONTHLY SERVICE FEE</STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>6236.95<DTASOF>20260930</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
+| `content` | `--content` | string | yes | no | — | The statement file's text, exactly as downloaded from the bank.; minimum length 1; maximum length 5000000 |
+| `format` | `--format` | literal["auto", "ofx", "qfx", "csv"] | no | no | "auto" | File format; auto tells OFX/QFX (an <OFX> element) from CSV. |
+| `csv_mapping.date` | `--csv-mapping-date` | string | no | no | "" | Header of the posted-date column.; maximum length 200 |
+| `csv_mapping.amount` | `--csv-mapping-amount` | string | no | no | "" | Header of a signed amount column (positive = money in).; maximum length 200 |
+| `csv_mapping.debit` | `--csv-mapping-debit` | string | no | no | "" | Header of a money-out column, when the bank splits amounts.; maximum length 200 |
+| `csv_mapping.credit` | `--csv-mapping-credit` | string | no | no | "" | Header of a money-in column, when the bank splits amounts.; maximum length 200 |
+| `csv_mapping.payee` | `--csv-mapping-payee` | string | no | no | "" | Header of the payee or description column.; maximum length 200 |
+| `csv_mapping.memo` | `--csv-mapping-memo` | string | no | no | "" | Header of a memo column.; maximum length 200 |
+| `csv_mapping.number` | `--csv-mapping-number` | string | no | no | "" | Header of the check-number column.; maximum length 200 |
+| `csv_mapping.fitid` | `--csv-mapping-fitid` | string | no | no | "" | Header of the bank's own transaction id column.; maximum length 200 |
+| `csv_mapping.balance` | `--csv-mapping-balance` | string | no | no | "" | Header of a running-balance column; the latest one is the ending balance.; maximum length 200 |
+| `csv_mapping.date_format` | `--csv-mapping-date-format` | literal["auto", "YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "MM/DD/YY", "YYYYMMDD"] | no | no | "auto" | How dates are written; auto reads ISO, YYYYMMDD and US month-first dates. |
+| `csv_mapping.invert` | `--csv-mapping-invert` | boolean | no | no | false | Flip every amount, for a bank that shows money in as negative. |
+| `draft` | `--draft` | string \| null | no | yes | null | An open statement reconciliation on this account to tick the matched movements on. |
+| `start` | `--start` | boolean | no | no | false | Start a statement reconciliation from the file (or reuse the open one for the same statement date) and tick the matched movements on it. |
+| `statement_date` | `--statement-date` | string \| null | no | yes | null | Statement date; defaults to the file's balance date (OFX) or its last line's date (CSV). |
+| `ending_balance` | `--ending-balance` | string \| null | no | yes | null | Ending balance, as money ("6236.95"); defaults to the file's ledger balance (OFX) or latest running balance (CSV). |
+| `match_days` | `--match-days` | integer | no | no | 4 | Days apart a line and an entry of the same amount may be dated and still match.; minimum 0; maximum 60 |
+| `suggest_days` | `--suggest-days` | integer | no | no | 14 | Days apart for a same-amount entry to be offered as a suggestion.; minimum 0; maximum 120 |
+| `mapping_name` | `--mapping-name` | string | no | no | "" | Use the CSV mapping saved under this name for the account; columns given in csv_mapping override it.; maximum length 80 |
+| `save_mapping` | `--save-mapping` | string | no | no | "" | Save the CSV mapping used for this import under this name for the account (a newer save of a name replaces it for later use).; maximum length 80 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/reconcile.import`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `account_id` | string | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `format` | literal["ofx", "qfx", "csv"] | yes | no | — | — |
+| `statement_date` | string \| null | yes | yes | — | — |
+| `ending_balance` | integer \| null | yes | yes | — | Minor units, in the reconciliation's sign (what a card owes is positive). |
+| `counts` | object | yes | no | — | — |
+| `counts.lines` | integer | yes | no | — | — |
+| `counts.matched` | integer | yes | no | — | — |
+| `counts.suggested` | integer | yes | no | — | — |
+| `counts.unmatched` | integer | yes | no | — | — |
+| `counts.reconciled` | integer | yes | no | — | — |
+| `counts.duplicate` | integer | yes | no | — | — |
+| `counts.newly_marked` | integer | yes | no | — | — |
+| `counts.cleared_without_line` | integer | yes | no | — | — |
+| `counts.previously_imported` | integer | yes | no | — | — |
+| `draft` | object \| null | yes | yes | — | — |
+| `draft.id` | string | yes | no | — | — |
+| `draft.account_id` | string | yes | no | — | — |
+| `draft.kind` | literal["opening", "statement", "amendment"] | yes | no | — | — |
+| `draft.version` | integer | yes | no | — | — |
+| `draft.current_revision_id` | string | yes | no | — | — |
+| `draft.state` | literal["open", "consumed", "canceled"] | yes | no | — | — |
+| `draft.terminal_operation_id` | string \| null | no | yes | null | — |
+| `draft.header` | object | yes | no | — | — |
+| `draft.header.format` | literal[1] | yes | no | — | — |
+| `draft.header.opening_date` | string \| null | yes | yes | — | — |
+| `draft.header.statement_date` | string \| null | yes | yes | — | — |
+| `draft.header.entered_balance` | integer \| null | yes | yes | — | — |
+| `draft.header.evidence` | object | yes | no | — | — |
+| `draft.header.evidence.format` | literal[1] | no | no | 1 | — |
+| `draft.header.evidence.statement_reference` | string \| null | no | yes | null | — |
+| `draft.header.evidence.entered_text` | string \| null | no | yes | null | — |
+| `draft.header.preferences` | object | yes | no | — | — |
+| `draft.header.preferences.format` | literal[1] | yes | no | — | — |
+| `draft.header.preferences.columns` | array[literal["date", "number", "payee", "memo", "amount", "type", "status"]] | yes | no | — | — |
+| `draft.header.preferences.sort` | literal["date", "number", "payee", "amount", "type"] | yes | no | — | — |
+| `draft.header.preferences.descending` | boolean | yes | no | — | — |
+| `draft.header.preferences.hide_after_date` | boolean | yes | no | — | — |
+| `draft.header.preferences.view` | literal["as_certified", "current_discrepancy"] | yes | no | — | — |
+| `draft.base_chain_version` | integer | yes | no | — | — |
+| `draft.base_opening_id` | string \| null | no | yes | null | — |
+| `draft.base_head_id` | string \| null | no | yes | null | — |
+| `draft.repair_of_opening_id` | string \| null | no | yes | null | — |
+| `draft.repair_of_certificate_id` | string \| null | no | yes | null | — |
+| `draft.selections` | array[object] | no | no | [] | — |
+| `draft.selections[].key_id` | string | yes | no | — | — |
+| `draft.selections[].version_id` | string | yes | no | — | — |
+| `draft.selections[].action` | literal["mark", "covered", "outstanding"] | yes | no | — | — |
+| `draft.proposal_revision_ids` | array[string] | no | no | [] | — |
+| `draft.evidence_references` | array[object \| object] | no | no | [] | — |
+| `draft.evidence_references[].kind` | literal["transaction"] \| literal["transaction_attachment"] | yes | no | — | — |
+| `draft.evidence_references[].transaction_id` | string | yes | no | — | — |
+| `draft.evidence_references[].attachment_id` | string | no | no | — | Present in AttachmentEvidence. |
+| `draft.evidence_references[].attachment_link_id` | string | no | no | — | Present in AttachmentEvidence. |
+| `draft_started` | boolean | yes | no | — | — |
+| `lines` | array[object] | yes | no | — | — |
+| `lines[].line_id` | string | yes | no | — | FITID-based, or a stable hash of the line when the bank gave no FITID. |
+| `lines[].fitid` | string \| null | yes | yes | — | — |
+| `lines[].date` | string | yes | no | — | — |
+| `lines[].amount` | integer | yes | no | — | Minor units as the bank shows it: positive is money in (or a card payment). |
+| `lines[].amount_decimal` | string | yes | no | — | — |
+| `lines[].payee` | string | yes | no | — | — |
+| `lines[].memo` | string | yes | no | — | — |
+| `lines[].number` | string | yes | no | — | — |
+| `lines[].status` | literal["matched", "suggested", "unmatched", "reconciled", "duplicate"] | yes | no | — | — |
+| `lines[].reason` | string | yes | no | — | — |
+| `lines[].movement` | object \| null | no | yes | null | — |
+| `lines[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `lines[].movement.transaction_id` | string | yes | no | — | — |
+| `lines[].movement.revision_id` | string | yes | no | — | — |
+| `lines[].movement.account_id` | string | yes | no | — | — |
+| `lines[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `lines[].movement.component_id` | string \| null | no | yes | null | — |
+| `lines[].group_fingerprint` | string \| null | no | yes | null | — |
+| `lines[].already_marked` | boolean | no | no | false | The matched movement was ticked on the draft before this import. |
+| `lines[].marked` | boolean | no | no | false | This import ticks the matched movement on the draft. |
+| `lines[].suggestions` | array[object] | no | no | [] | — |
+| `lines[].suggestions[].movement` | object | yes | no | — | — |
+| `lines[].suggestions[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `lines[].suggestions[].movement.transaction_id` | string | yes | no | — | — |
+| `lines[].suggestions[].movement.revision_id` | string | yes | no | — | — |
+| `lines[].suggestions[].movement.account_id` | string | yes | no | — | — |
+| `lines[].suggestions[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `lines[].suggestions[].movement.component_id` | string \| null | no | yes | null | — |
+| `lines[].suggestions[].group_fingerprint` | string | yes | no | — | — |
+| `lines[].suggestions[].date` | string | yes | no | — | — |
+| `lines[].suggestions[].amount` | integer | yes | no | — | — |
+| `lines[].suggestions[].number` | string | yes | no | — | — |
+| `lines[].suggestions[].payees` | array[string] | yes | no | — | — |
+| `lines[].suggestions[].memo` | string \| null | yes | yes | — | — |
+| `lines[].previously_imported` | boolean | no | no | false | This line (by FITID, or by its hash) was imported for this account before. |
+| `cleared_without_line` | array[object] | yes | no | — | Movements ticked on the draft that no line of this statement accounts for: cleared without a statement line. Flagged, never refused; check each before finishing. |
+| `cleared_without_line[].movement` | object | yes | no | — | — |
+| `cleared_without_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_line[].movement.transaction_id` | string | yes | no | — | — |
+| `cleared_without_line[].movement.revision_id` | string | yes | no | — | — |
+| `cleared_without_line[].movement.account_id` | string | yes | no | — | — |
+| `cleared_without_line[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `cleared_without_line[].movement.component_id` | string \| null | no | yes | null | — |
+| `cleared_without_line[].group_fingerprint` | string | yes | no | — | — |
+| `cleared_without_line[].date` | string | yes | no | — | — |
+| `cleared_without_line[].amount` | integer | yes | no | — | — |
+| `cleared_without_line[].number` | string | yes | no | — | — |
+| `cleared_without_line[].payees` | array[string] | yes | no | — | — |
+| `cleared_without_line[].memo` | string \| null | yes | yes | — | — |
+| `next_step` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "cleared_without_line": [],
+  "counts": {
+    "cleared_without_line": 1,
+    "duplicate": 1,
+    "lines": 1,
+    "matched": 1,
+    "newly_marked": 1,
+    "previously_imported": 1,
+    "reconciled": 1,
+    "suggested": 1,
+    "unmatched": 1
+  },
+  "currency": "USD",
+  "draft": null,
+  "draft_started": false,
+  "ending_balance": null,
+  "format": "ofx",
+  "lines": [],
+  "next_step": "value",
+  "statement_date": null
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -636,7 +923,7 @@ Example JSON output:
 
 ## `reconcile preview`
 
-Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement; on a statement that does not tie, it says what to do instead of forcing it.
+Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement; on a statement that does not tie, it says what to do instead of forcing it. When a statement was imported into the draft (`reconcile import`), cleared_without_statement_line lists each ticked movement no statement line accounts for; `reconcile finish` reports and records the same list, and refuses nothing for it.
 
 | Contract | Value |
 |---|---|
@@ -714,6 +1001,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dependency_guard` | string | yes | no | — | — |
 | `balanced` | boolean | yes | no | — | — |
 | `next_step` | string \| null | no | yes | null | — |
+| `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
+| `cleared_without_statement_line[].movement` | object | yes | no | — | — |
+| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.transaction_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.revision_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.account_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.component_id` | string \| null | no | yes | null | — |
+| `cleared_without_statement_line[].group_fingerprint` | string | yes | no | — | — |
+| `cleared_without_statement_line[].date` | string | yes | no | — | — |
+| `cleared_without_statement_line[].amount` | integer | yes | no | — | — |
+| `cleared_without_statement_line[].number` | string | yes | no | — | — |
+| `cleared_without_statement_line[].payees` | array[string] | yes | no | — | — |
+| `cleared_without_statement_line[].memo` | string \| null | yes | yes | — | — |
 
 Example JSON output:
 
@@ -721,6 +1022,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "balanced": false,
+  "cleared_without_statement_line": null,
   "contract": "reconciliation.private.v1",
   "currency": "USD",
   "dependency_guard": "value",

@@ -650,6 +650,23 @@ class DraftOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
 
+class StatementGap(Model):
+    """A ticked movement no line of the draft's imported statement accounts for."""
+    movement: MovementKey
+    group_fingerprint: Fingerprint
+    date: str
+    amount: Units
+    number: str
+    payees: tuple[str,...]
+    memo: str|None
+
+
+CLEARED_WITHOUT_LINE=Field(default=None,description=(
+    'Only when a statement was imported into this draft (`reconcile import`): each ticked movement '
+    'no statement line accounts for -- cleared without a statement line. Flagged, never refused; '
+    'null when nothing was imported, as for any reconciliation built by hand.'))
+
+
 class FinishOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
@@ -657,6 +674,7 @@ class FinishOutput(Model):
     opening_id: ID
     certificate_id: ID
     totals: Totals
+    cleared_without_statement_line: tuple[StatementGap,...]|None=CLEARED_WITHOUT_LINE
     # What the owner's review would flag in what this reconciliation cleared (R163), e.g. an entry
     # an agent posted after the reconciliation was started; the finish is not refused.
     warnings: list[str]=Field(default_factory=list)
@@ -700,3 +718,4 @@ class PreviewOutput(Model):
     # An opening draft is not finished by itself; this names the step that finishes it. On a
     # statement that does not tie, it says what to do instead: leave it open with a note.
     next_step: str|None=None
+    cleared_without_statement_line: tuple[StatementGap,...]|None=CLEARED_WITHOUT_LINE

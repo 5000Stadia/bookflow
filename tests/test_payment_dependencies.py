@@ -4,6 +4,7 @@ import sqlite3
 import pytest
 
 from bookflow import BookflowError
+from tests.audit_tamper import disarm
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_payment_receipts import posted, method
 from tests.test_row8_journal import database_path
@@ -30,6 +31,7 @@ def test_guard_actual_settlement_event_and_safe_corrupt_baseline(client, sale):
         client.run('payment settlement changes', dict(guard=baseline[:-8] + 'AAAAAAAA'), company=COMPANY)
     assert caught.value.code == 'E_PREVIEW_STALE' and caught.value.details['reason'] == 'invalid_guard'
     with sqlite3.connect(database_path(client)) as db:
+        disarm(db)
         # Disposable corruption witness; no application or commercial state changes.
         db.execute("UPDATE audit_entries SET after=? WHERE record_type='transaction' AND record_id=? AND version_after=1",
                    (b'\x00[]', invoice['id']))
@@ -66,6 +68,7 @@ def test_guard_rejects_owned_header_with_foreign_revision_baseline(client, sale)
         payment_method=method(client), operation_key='foreign-baseline-cash', applications=dict(mode='inline', items=[
             dict(invoice=invoice['id'], expected_version=1, amount='10.00')])), company=COMPANY)
     with sqlite3.connect(database_path(client)) as db:
+        disarm(db)
         entry_id, raw = db.execute("SELECT id, after FROM audit_entries WHERE record_type='transaction' AND record_id=? AND version_after=1",
                                    (invoice['id'],)).fetchone()
         snapshot = audit.decode_snapshot(raw)
@@ -104,6 +107,7 @@ def test_interleaved_actors_keep_event_attribution_separate_from_latest_writer(c
     assert own[2]['settlement_fields'] == []
     assert all(row['latest_writer_id'] == corrected['updated_by'] for row in own)
     with sqlite3.connect(database_path(client)) as db:
+        disarm(db)
         db.execute("UPDATE audit_entries SET after=? WHERE event_id=? AND record_id=?", (b'\x00[]', own[0]['event_id'], invoice['id']))
     unknown = client.run('payment settlement changes', dict(guard=guard), company=COMPANY)
     assert unknown['unknown_history'] and invoice['id'] in unknown['unknown_record_ids']

@@ -214,6 +214,8 @@ def test_legacy_summary_redacted_whole(client, root):
     make_actor(root, "lmember", company_role=(a["company_id"], "standard"))
     with _hub(root, True) as db:
         db.raw.execute("BEGIN IMMEDIATE")
+        from tests.audit_tamper import disarm
+        disarm(db.conn)
         db.conn.execute(h.audit_events.update().where(h.audit_events.c.command == "company new").values(summary="moved company L Co to organizations/Org L/L Co (2)"))
         db.raw.execute("COMMIT")
     m = as_user(root, "lmember")

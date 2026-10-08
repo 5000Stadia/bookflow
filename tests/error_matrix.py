@@ -1623,6 +1623,11 @@ _RECONCILE_ERRORS = {
 }
 for _verb in ("opening start", "start", "mark", "finish"):
     MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)
+# `reconcile import` starts and marks through the same aggregate, and reads exact money from a file.
+MATRIX["reconcile import"] = {
+    **_RECONCILE_ERRORS,
+    "E_AMOUNT_PRECISION": "a statement amount with more decimal places than the account's currency has",
+}
 
 # The two reads walk that same aggregate, so they carry the family's reasons too -- but neither
 # takes an idempotency key or a directive, and each has one page-level reason the other cannot give.

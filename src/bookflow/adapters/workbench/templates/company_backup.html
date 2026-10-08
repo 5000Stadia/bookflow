@@ -20,4 +20,28 @@
 <form method="post" action="/c/{{ company_id }}/company/backup" hx-post="/c/{{ company_id }}/company/backup" hx-target="#company-backup" hx-select="#company-backup" hx-swap="outerHTML">
 <div class="actions"><button type="submit" data-backup-submit>Back up now</button><a href="/c/{{ company_id }}/_group/company">Cancel</a></div>
 </form></section>
+
+<section class="workspace-card" aria-label="Backups kept" data-backup-listing>
+<h2>Backups kept</h2>
+{% if listing %}
+{% if listing.schedule %}<p data-backup-schedule>Backed up automatically every day at <strong>{{ listing.schedule.daily_at }}</strong> ({{ listing.schedule.timezone }}), keeping the newest {{ listing.schedule.keep }}{% if listing.schedule.destination %}, in <code>{{ listing.schedule.destination }}</code>{% endif %}. Next: {{ listing.schedule.next_at }}.</p>
+{% else %}<p data-backup-schedule>No backup schedule is set. An installation administrator sets one with <code>bookflow backup schedule</code>.</p>{% endif %}
+{% if listing.last_success %}<p data-backup-last-success>Last scheduled backup: {{ listing.last_success.at }}{% if listing.last_success.file_name %} ({{ listing.last_success.file_name }}){% endif %}.</p>{% endif %}
+{% if listing.last_failure %}<p class="warning" data-backup-last-failure>Last failure: {{ listing.last_failure.at }}: {{ listing.last_failure.message }}</p>{% endif %}
+{% if listing['items'] %}<table><thead><tr><th>File</th><th>Taken</th><th>Where</th><th>Size</th><th>Read-only</th><th>Checkpoint</th></tr></thead><tbody>
+{% for b in listing['items'] %}<tr data-backup-row><td>{{ b.file_name }}</td><td>{{ b.created_at or '' }}</td><td>{{ 'schedule destination' if b.location == 'scheduled' else 'company folder' }}</td><td>{{ '{:,}'.format(b.size_bytes) }} bytes</td><td>{{ 'yes' if b.read_only else 'no' }}</td><td>{{ 'yes' if b.has_checkpoint else 'no' }}</td></tr>
+{% endfor %}</tbody></table>{% else %}<p>No backups yet.</p>{% endif %}
+<p>{{ listing.note }}</p>
+<div class="actions">
+<form method="post" action="/c/{{ company_id }}/company/backup/verify" hx-post="/c/{{ company_id }}/company/backup/verify" hx-target="#company-backup" hx-select="#company-backup" hx-swap="outerHTML"><button type="submit" data-backup-verify>Check for tampering</button></form>
+<form method="post" action="/c/{{ company_id }}/company/backup/rehearse" hx-post="/c/{{ company_id }}/company/backup/rehearse" hx-target="#company-backup" hx-select="#company-backup" hx-swap="outerHTML"><button type="submit" data-backup-rehearse>Rehearse a restore</button></form>
+</div>
+{% else %}<p>Only an administrator of this company sees its backups.</p>{% endif %}
+{% if check %}<div role="status" class="notice" data-backup-check="{{ check_kind }}">
+<p><strong>{% if check_kind == 'verify' %}{{ 'No tampering found.' if check.ok else 'Check failed.' }}{% else %}{{ 'Restore rehearsed: the backup opens and matches what it recorded.' if check.ok else 'The rehearsal failed.' }}{% endif %}</strong></p>
+{% if check_kind == 'verify' and check.checkpoint %}<p>Compared with {{ check.checkpoint }}{% if check.company_audit %} (company audit trail: {{ check.company_audit.status }}{% endif %}{% if check.hub_audit %}; hub audit trail: {{ check.hub_audit.status }}){% else %}){% endif %}.</p>{% endif %}
+{% if check_kind == 'rehearse' %}<ul>{% for c in check.checks %}<li>{{ c.name }}: {{ 'ok' if c.ok else 'failed' }}{% if c.detail %} ({{ c.detail }}){% endif %}</li>{% endfor %}</ul>{% endif %}
+{% for p in check.problems %}<p class="warning">{{ p }}</p>{% endfor %}
+</div>{% endif %}
+</section>
 </section>{% endblock %}

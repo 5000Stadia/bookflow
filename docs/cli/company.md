@@ -122,7 +122,7 @@ Example JSON output:
 
 ## `company backup`
 
-Write a verified, portable backup of the selected company: one .bookflow-backup archive holding its database (a consistent copy), its attachment files and a manifest of fingerprints, saved in the company folder's backups/. The archive is reopened and checked before success is reported. Copy it anywhere; `company restore` opens it.
+Write a verified, portable backup of the selected company: one .bookflow-backup archive holding its database (a consistent copy), its attachment files and a manifest of fingerprints, saved read-only in the company folder's backups/ with an audit checkpoint beside it (`backup verify`). The archive is reopened and checked before success is reported. Copy it anywhere; `company restore` opens it.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

@@ -2,7 +2,7 @@
 
 # `hub.audit_events`
 
-Append-only hub command events with actor and request provenance.
+Append-only hub command events with actor and request provenance; the database refuses any UPDATE or DELETE of an event.
 
 Database: `hub`.
 

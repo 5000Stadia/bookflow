@@ -11,10 +11,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_audit_visibility_catalog as previous, permission_catalog as c
+from . import permission_backup_schedule_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = 'bbf00542f48d4491a693c6650e2334b094cb2da1'
+SOURCE_COMMIT = '0750a0f8680cacc4c7bd065494fef196a3b5bcc4'
 REPORTS = {
     'entries-to-review': 'plan_entries_to_review',
     'prior-balances': 'plan_prior_balances',
