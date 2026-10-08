@@ -228,7 +228,7 @@ Example JSON output:
 
 ## `cutover plan`
 
-Read the old books' export files and return what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), each given as an attachment or as text.
+Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), each given as an attachment or as text.
 
 | Contract | Value |
 |---|---|

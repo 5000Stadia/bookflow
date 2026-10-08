@@ -232,9 +232,11 @@ def test_actual_mcp_bulk_receipt_arrives_within_budget_with_its_warning(hosted, 
                 assert error["details"]["outcome"] == "not_submitted" and error["details"]["field"] == "transport.result_file"
                 assert error["details"]["allowed_directories"] == [] and "--output-dir" in error["message"]
                 assert hosted.call("invoice.show", {"invoice": "R72-FILE"}, company=company).status_code == 404
-                # A cut list that takes no limit points at its paged query (R80 day 1: account list 16 of 33).
+                # R80 day 1 cut account list to 16 of 33, R166 to 16 of 23: rows now shed their empty
+                # fields first, so the demo chart arrives whole; a cut one says so first (unit test above).
                 listed = json.loads((await session.call_tool("bookflow_run", {"command": "account list", "input": {}})).content[0].text)
-                assert "run account query with input.limit" in listed["result_compacted"]["full_result"]
+                assert len(listed["items"]) == listed["count"] and list(listed)[0] == "result_compacted"
+                assert "audit stamps" in listed["result_compacted"]["full_result"]
 
     anyio.run(witness)
 

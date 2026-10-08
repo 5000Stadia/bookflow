@@ -15,6 +15,21 @@ The workbench records `interface=http` and `client_name=bookflow-workbench`; an 
 automation identifies its own client name. Audit actor and on-behalf-of fields
 identify the authenticated writer and bound principal, independently of that name.
 
+## Moving a company in
+
+To bring a company in from its old books (QuickBooks Desktop IIF list exports and report CSVs: trial
+balance, open invoices, unpaid bills), use the `cutover` commands, not hand-made accounts, invoices and
+journals. Old documents posted by hand keep their old dates and put old income into earlier periods.
+
+1. `cutover plan`: reads the exports and shows every mapping, write and exception. Writes nothing.
+2. `cutover apply`: makes the lists, posts each open document for its open balance and one opening
+   journal at the cutover date. Every write carries the source reference `cutover:` plus its outside
+   id, so a rerun makes only what is missing.
+3. `cutover tie-out`: compares the trial balance and the aging with the old books; the Cutover
+   Clearing account ties at 0.00.
+
+The three take the same input. [Moving a company in](cutover.md) lists the exports and each step.
+
 ## Operator bootstrap
 
 Install the `bookflow-core` distribution first, or run from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise it creates and synchronizes a dedicated environment inside the disposable trial directory, then uses `uv run --frozen --no-sync`; the checkout's lockfile and shared environment remain unchanged. Every later command uses the selected array, so the rest of the instructions are identical in both environments.
