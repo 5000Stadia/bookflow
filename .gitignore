@@ -26,3 +26,4 @@ build/
 
 # harness settings and agent worktrees
 .claude/
+research/
