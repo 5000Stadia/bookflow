@@ -123,6 +123,23 @@ Further out, and open for now: the same core grows into the rest of a small busi
 - [x] R30 the person's walkthrough of the live app on desktop and phone, offered as one plain `colony ready` with what to try — notes/V1-HUMAN-WALKTHROUGH-20260917.md
 - [x] R81 release v1.5: no known bugs, the full test suite passes clean with nothing skipped as flaky, docs current (the README says demo dates follow the reset day), the demo resets cleanly, tag v1.5. Reviews of V1.5 changes: fix what is material, then move on after one re-review. The bug sweep (R99) closes when its one-pass list is written — README.md
 
+## M5 — v1.6: ready for real use
+
+Kabe can keep a real company's books in Bookflow day to day without hitting a wall. Done when Kabe has
+used it on real work for a week and approves (pause for that approval); everything else here is checked by us.
+
+- [~] R161 the audit log is protected like the ledger: audit rows cannot be updated or deleted in company or hub databases (append-only enforced in storage, not only by description)
+- [~] R162 a closing date set in the future is caught: the change warns that it stops all posting until that date, and the setup screen says so
+- [ ] R163 an agent cannot quietly make the books balance: unexplained adjustments into reconciled accounts, suspense or opening-balance equity are surfaced for the owner (shaped by the R164 study)
+- [~] R164 study: how AI agents keeping books over many months go wrong (AccountingBench and newer), which of those failures Bookflow's guards already stop, and which slip through — notes/research/
+- [~] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
+- [ ] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
+- [~] R160 the standard company profile's version moves when its contents change (R135 added a Credit Card payment method; version still 1)
+- [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
+- [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
+- [ ] R151 Restore a deleted document from its preserved history
+- [ ] R165 fixes from Kabe's live use of v1.5 and v1.6, as they arrive
+
 ## M4 — After V1.5: concepts to develop
 
 - [ ] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
@@ -140,7 +157,6 @@ Further out, and open for now: the same core grows into the rest of a small busi
 - [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout.
 - [ ] R115 CRM: leads, a sales pipeline, follow-ups and customer communication history beyond contact records.
 - [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module.
-- [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
 - [ ] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
 - [ ] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
 - [ ] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
@@ -158,12 +174,7 @@ Further out, and open for now: the same core grows into the rest of a small busi
 - [ ] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
 - [ ] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
-- [ ] R151 Restore a deleted document from its preserved history
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment
 - [ ] R153 Very large deposits (over 200 rows) and billing part of a purchase order
 - [ ] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
-- [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
-- [ ] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
-- [ ] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
-- [ ] R160 the standard company profile's version moves when its contents change (R135 added a Credit Card payment method; version still 1)
