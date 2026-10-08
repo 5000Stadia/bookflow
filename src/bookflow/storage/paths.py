@@ -18,9 +18,28 @@ _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f
 MAX_BYTES = 90
 
 
+def default_data_root() -> Path:
+    """Where a person's real books live when nothing names another root."""
+    return Path(os.path.join(os.path.expanduser("~"), ".bookflow"))
+
+
 def resolve_data_root(option: str | None = None) -> Path:
-    raw = option or os.environ.get("BOOKFLOW_DATA_ROOT") or os.path.join(os.path.expanduser("~"), ".bookflow")
-    return Path(raw).expanduser()
+    raw = option or os.environ.get("BOOKFLOW_DATA_ROOT") or str(default_data_root())
+    root = Path(raw).expanduser()
+    if os.environ.get("PYTEST_CURRENT_TEST") and _same_path(root, default_data_root()):
+        # A test (or a child process a test started, which inherits this variable) never
+        # touches the real books: each one must name its own temporary data root.
+        raise BookflowError("E_USAGE", message=(
+            f"Refusing to use the real data root {default_data_root()} under a test: give the test its "
+            "own temporary root (BOOKFLOW_DATA_ROOT or --data-root)."), details={"reason": "real_root_under_test"})
+    return root
+
+
+def _same_path(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return os.path.abspath(a) == os.path.abspath(b)
 
 
 def normalize_display_name(name: str, field: str = "name") -> str:

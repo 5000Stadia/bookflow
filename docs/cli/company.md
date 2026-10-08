@@ -1193,7 +1193,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | company |
 | Kind | write |
-| Required role | admin |
+| Required role | company admin; changing the closing date needs a person, never an agent |
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/company.update` |
@@ -1250,7 +1250,7 @@ The same example as complete `bookflow_run` arguments:
 | `tax_year_start_month` | `--tax-year-start-month` | integer \| null | no | yes | null | First month of the tax year |
 | `report_basis` | `--report-basis` | literal["accrual", "cash"] \| null | no | yes | null | Company default for compatible financial reports: cash or accrual. Individual reports may override it. Does not change posted transactions or sales-tax liability timing. |
 | `timezone` | `--timezone` | string \| null | no | yes | null | IANA zone |
-| `closing_date` | `--closing-date` | string \| null | no | yes | null | Books closed through this date, YYYY-MM-DD |
+| `closing_date` | `--closing-date` | string \| null | no | yes | null | Books closed through this date, YYYY-MM-DD. Only a person may set, move or clear it; an agent is refused. |
 | `recent_activity_window_seconds` | `--recent-activity-window-seconds` | integer \| null | no | yes | null | Window for the recent-activity warning |
 | `use_account_numbers` | `--use-account-numbers` | boolean \| null | no | yes | null | Show account numbers in forms, tables, and pickers |
 | `show_lowest_subaccount_only` | `--show-lowest-subaccount-only` | boolean \| null | no | yes | null | Use leaf account names in pickers |

@@ -839,6 +839,8 @@ class DemoResetInput(BaseModel):
     include_reference: bool = Field(False, description="Also seed Reference Plumbing Co with the fixed 2026 reference year. Reset moves the entire existing demo organization, including every company, to trash.")
     as_of: str | None = Field(None, min_length=10, max_length=10, pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
                               description="The day the demo is reset as of, YYYY-MM-DD; defaults to today in the demo company's timezone. The demo's story moves back by whole months so nothing in Demo Plumbing Co is dated after this day and the stock it buys has arrived by then.")
+    force: str | None = Field(None, min_length=1, max_length=4096,
+                              description="Needed only when this data root also holds a real (non-demo) company: the data root's full path, typed out, to confirm resetting the demo beside real books. Any other value is refused.")
 
     @field_validator("as_of")
     @classmethod
@@ -863,15 +865,39 @@ class DemoResetOutput(WriteOutput):
     reference_display_name: str | None = Field(None, description="Reference company display name when requested; null otherwise.")
 
 
-demo_reset = command("demo reset", scope="hub", description="Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched.",
+demo_reset = command("demo reset", scope="hub", description="Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched. On a data root that also holds a real (non-demo) company it refuses unless force names that root.",
                      input_model=DemoResetInput, output_model=DemoResetOutput, writes={"hub", "company", "config"}, required_role="hub_admin",
-                     error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN"])
+                     error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN", "E_PERMISSION"])
 
 
 def _load_seed(resource: str = "seed.toml") -> dict[str, Any]:
     import tomllib
     from importlib import resources
     return tomllib.loads(resources.files("bookflow.demo").joinpath(resource).read_text(encoding="utf-8"))
+
+
+def _require_demo_only_root(inp: DemoResetInput, s: Session) -> None:
+    """A root holding real books resets its demo only when the request names that root."""
+    real = s.hub.conn.execute(sa.select(h.companies.c.display_name).where(
+        h.companies.c.is_demo.is_(False),
+        sa.or_(h.companies.c.pending_path.is_(None), sa.not_(h.companies.c.pending_path.like("trash/%"))),
+    ).order_by(h.companies.c.display_name)).scalars().all()
+    if not real:
+        return
+    root = Path(s.data_root)
+    if inp.force is not None:
+        given = Path(inp.force).expanduser()
+        try:
+            if given.is_absolute() and given.resolve() == root.resolve():
+                return
+        except OSError:
+            pass
+    raise BookflowError("E_PERMISSION", message=(
+        f"This data root ({root}) holds real books ({len(real)} non-demo "
+        f"compan{'y' if len(real) == 1 else 'ies'}). Demo reset is meant for a root that holds only the demo; "
+        "to reset the demo here anyway, pass force with this data root's full path."),
+        details={"reason": "real_company_present", "data_root": str(root), "real_companies": list(real),
+                 "force": "the data root's full path" if inp.force is None else "does not name this data root"})
 
 
 @demo_reset
@@ -884,6 +910,7 @@ def plan_demo_reset(inp: DemoResetInput, ctx: Context, s: Session) -> Plan:
     day = date.fromisoformat(inp.as_of) if inp.as_of else demo_dates.reset_day(seed["company"].get("timezone") or _machine_zone())
     seed = demo_dates.move_seed(seed, day)
     reference = _load_seed("reference.toml") if inp.include_reference else None
+    _require_demo_only_root(inp, s)
     existing = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.is_demo.is_(True))).mappings().first()
     existing = dict(existing) if existing else None
     if existing is None and org.name_taken(s, name_key(seed["organization"]["display_name"])):

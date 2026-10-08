@@ -152,7 +152,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # producer, number, payee, memo, amount. `all` and `all_action` are a boolean and a literal and
     # add none; no other routed input changed. No new variant kind: filters has a default rather
     # than being nullable, so tests/mcp_coverage.py needs no new policy and the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2890
+    # 2890 -> 2891 (R168, demo reset refuses a root holding real books): demo reset's new optional
+    # `force` (the data root's path, a nullable string) adds its null branch, +1. The closing-date
+    # rule changes only a field description; no other routed input changed. Groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2891
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

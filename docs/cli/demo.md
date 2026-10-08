@@ -4,7 +4,7 @@
 
 ## `demo reset`
 
-Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched.
+Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched. On a data root that also holds a real (non-demo) company it refuses unless force names that root.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -36,6 +36,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `include_reference` | `--include-reference` | boolean | no | no | false | Also seed Reference Plumbing Co with the fixed 2026 reference year. Reset moves the entire existing demo organization, including every company, to trash. |
 | `as_of` | `--as-of` | string \| null | no | yes | null | The day the demo is reset as of, YYYY-MM-DD; defaults to today in the demo company's timezone. The demo's story moves back by whole months so nothing in Demo Plumbing Co is dated after this day and the stock it buys has arrived by then. |
+| `force` | `--force` | string \| null | no | yes | null | Needed only when this data root also holds a real (non-demo) company: the data root's full path, typed out, to confirm resetting the demo beside real books. Any other value is refused. |
 
 ### Command and context options
 

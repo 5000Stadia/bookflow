@@ -4,6 +4,8 @@ This is the shortest end-to-end path from a fresh demo to a versioned, audited H
 
 The bootstrap bearer belongs to the human who issued it. The current command registry has no public commands for creating agent identities or assigning principals, so do not describe this token as an independent agent identity.
 
+Some changes are a person's, whatever role an agent holds: the company's closing date (set, moved or cleared through `company update`) and anything that changes who can do what (memberships with their grants and denials, roles, agent assignment and authorization, token issue, users added, activated or deactivated, passwords, permission activation). An agent asking for one gets `E_PERMISSION` with `details.reason` `people_only` and the rule it met; ask your principal to make the change. Reads, every other company setting and ordinary posting are unchanged.
+
 Browser and programmatic clients operate on the same records. After another writer
 corrects an invoice, read `invoice show` again and use its current `version` for the
 next update. Retain existing line IDs, preview the intended correction and submit
