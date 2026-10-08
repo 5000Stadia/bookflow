@@ -108,6 +108,7 @@ class ImportCounts(m.Model):
     reconciled: m.Count
     duplicate: m.Count
     newly_marked: m.Count
+    cleared_without_line: m.Count
 
 
 class ImportOutput(m.Model):
@@ -120,6 +121,9 @@ class ImportOutput(m.Model):
     draft: m.Draft | None
     draft_started: bool
     lines: tuple[ImportedLine, ...]
+    cleared_without_line: tuple[Suggestion, ...] = Field(description=(
+        'Movements ticked on the draft that no line of this statement accounts for: cleared '
+        'without a statement line. Flagged, never refused; check each before finishing.'))
     next_step: str
 
 
@@ -245,6 +249,7 @@ def _prepare(inp, ctx, s, ids):
         value = drafts.mark(snapshot, value, mark_input, revision_id=new_id())
         marks.append(mark_input)
     marked = {id(c) for c in to_mark}
+    unsupported = files.cleared_without_line(results, candidates) if draft is not None else []
 
     out_lines = []
     for result in results:
@@ -266,16 +271,25 @@ def _prepare(inp, ctx, s, ids):
     count = lambda status: sum(1 for v in out_lines if v.status == status)
     counts = ImportCounts(lines=len(out_lines), matched=count('matched'), suggested=count('suggested'),
                           unmatched=count('unmatched'), reconciled=count('reconciled'),
-                          duplicate=count('duplicate'), newly_marked=len(to_mark))
+                          duplicate=count('duplicate'), newly_marked=len(to_mark),
+                          cleared_without_line=len(unsupported))
     if value is None:
         step = ('Review only: pass start (or draft) to tick the matched entries on a reconciliation. '
                 'Enter each unmatched line as a transaction, then import again.')
     else:
         step = ('Enter each unmatched line as a transaction and import again, settle the suggestions with '
                 '`reconcile mark`, then `reconcile preview` and `reconcile finish` draft ' + value.id + '.')
+        if unsupported:
+            step = (f'{len(unsupported)} ticked movement(s) match no line of this statement (cleared without '
+                    'a statement line): untick each one the bank did not show, with `reconcile mark` '
+                    'action unmark, unless you know why it is missing. ' + step)
     output = ImportOutput(account_id=account_id, currency=currency, format=parsed.format,
                           statement_date=statement_date, ending_balance=ending, counts=counts,
                           draft=value, draft_started=started is not None, lines=tuple(out_lines),
+                          cleared_without_line=tuple(
+                              Suggestion(movement=c.ref[0], group_fingerprint=c.ref[1], date=c.date,
+                                         amount=c.amount, number=c.number, payees=c.payees,
+                                         memo=c.memo or None) for c in unsupported),
                           next_step=step)
     return dict(output=output, account_id=account_id, started=started, start_value=draft if started else None,
                 opening_draft=opening_draft, marks=marks)

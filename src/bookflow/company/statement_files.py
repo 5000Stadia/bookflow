@@ -443,6 +443,16 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
     for i, result in enumerate(results):
         if result.match is not None:
             continue
+        # A same-amount entry inside the suggestion window that a person already ticked is their
+        # answer to this line's suggestion, and the line is matched to it.
+        ticked = [j for _, j, _ in by_line.get(i, []) if j not in taken_movement
+                  and candidates[j].selected and candidates[j].eligible]
+        if len(ticked) == 1:
+            taken_movement.add(ticked[0])
+            result.match, result.status = candidates[ticked[0]], 'matched'
+            result.reason = (f'same amount, {_days(result.line.date, result.match.date)} days apart; '
+                             'ticked by a person')
+            continue
         options = [candidates[j] for _, j, _ in sorted(by_line.get(i, []), key=lambda r: r[0])
                    if j not in taken_movement]
         if options:
@@ -457,3 +467,14 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
             result.reason = 'no entry in the books has this amount near this date; enter it, then import again'
     return results
 
+
+
+def cleared_without_line(results, candidates):
+    """Ticked movements no statement line accounts for.
+
+    This is the one check of truth rather than consistency: a reconciliation can tie because an
+    invented entry was ticked to make it tie, and only the bank's own lines can tell. Flagged,
+    never refused -- a person may know why (a bank that omits a line, a file cut short).
+    """
+    supported = {id(r.match) for r in results if r.match is not None}
+    return [c for c in candidates if c.selected and c.eligible and id(c) not in supported]

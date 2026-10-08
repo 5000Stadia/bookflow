@@ -222,3 +222,43 @@ def test_the_same_import_through_python_cli_http_and_mcp(root, tmp_path):
     assert python['counts']['newly_marked'] == 8 and python['selections'] == 9
     for surface in ('cli', 'http', 'mcp'):
         assert comparable(results[surface]) == python, surface
+
+
+def test_a_ticked_entry_no_statement_line_shows_is_flagged(client):
+    """Truth, not only consistency: an entry ticked to make a statement tie is named, not hidden."""
+    content = sample('checking-2026-09.ofx')
+    opening(client)
+    first = run(client, 'reconcile import', dict(account='Checking', content=content, start=True))
+    draft = first['draft']
+    assert first['counts']['cleared_without_line'] == 0 and first['cleared_without_line'] == []
+
+    # The person settles the late deposit's suggestion; read again, that line is matched to it.
+    late, = [v for v in first['lines'] if v['status'] == 'suggested']
+    choice = late['suggestions'][0]
+    version = run(client, 'reconcile mark', dict(
+        operation_key=new_id(), draft=draft['id'], expected_version=draft['version'],
+        entries=[dict(movement=choice['movement'], group_fingerprint=choice['group_fingerprint'],
+                      action='mark')]))['draft']['version']
+
+    # An entry the bank never showed, posted and ticked.
+    run(client, 'journal post', dict(date='2026-09-15', memo='Invented deposit', lines=[
+        dict(account='Checking', side='debit', amount='25.00'),
+        dict(account='Bank Fees', side='credit', amount='25.00')]))
+    page = run(client, 'reconcile candidates', dict(draft=draft['id'], limit=50,
+                                                    filters=dict(amount=2500)))
+    invented, = page['items']
+    run(client, 'reconcile mark', dict(
+        operation_key=new_id(), draft=draft['id'], expected_version=version,
+        entries=[dict(movement=invented['movement'], group_fingerprint=invented['group_fingerprint'],
+                      action='mark')]))
+
+    again = run(client, 'reconcile import', dict(account='Checking', content=content, draft=draft['id']))
+    assert again['counts']['suggested'] == 0
+    assert [v['reason'] for v in again['lines'] if v['date'] == '2026-04-24'] == [
+        'same amount, 9 days apart; ticked by a person']
+    flagged, = again['cleared_without_line']
+    assert (flagged['date'], flagged['amount']) == ('2026-09-15', 2500)
+    assert again['counts']['cleared_without_line'] == 1
+    assert 'cleared without a statement line' in again['next_step']
+    # Flagged, not refused: the import wrote nothing and the draft is as the person left it.
+    assert again['counts']['newly_marked'] == 0

@@ -510,6 +510,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts.reconciled` | integer | yes | no | — | — |
 | `counts.duplicate` | integer | yes | no | — | — |
 | `counts.newly_marked` | integer | yes | no | — | — |
+| `counts.cleared_without_line` | integer | yes | no | — | — |
 | `draft` | object \| null | yes | yes | — | — |
 | `draft.id` | string | yes | no | — | — |
 | `draft.account_id` | string | yes | no | — | — |
@@ -585,6 +586,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].suggestions[].number` | string | yes | no | — | — |
 | `lines[].suggestions[].payees` | array[string] | yes | no | — | — |
 | `lines[].suggestions[].memo` | string \| null | yes | yes | — | — |
+| `cleared_without_line` | array[object] | yes | no | — | Movements ticked on the draft that no line of this statement accounts for: cleared without a statement line. Flagged, never refused; check each before finishing. |
+| `cleared_without_line[].movement` | object | yes | no | — | — |
+| `cleared_without_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_line[].movement.transaction_id` | string | yes | no | — | — |
+| `cleared_without_line[].movement.revision_id` | string | yes | no | — | — |
+| `cleared_without_line[].movement.account_id` | string | yes | no | — | — |
+| `cleared_without_line[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `cleared_without_line[].movement.component_id` | string \| null | no | yes | null | — |
+| `cleared_without_line[].group_fingerprint` | string | yes | no | — | — |
+| `cleared_without_line[].date` | string | yes | no | — | — |
+| `cleared_without_line[].amount` | integer | yes | no | — | — |
+| `cleared_without_line[].number` | string | yes | no | — | — |
+| `cleared_without_line[].payees` | array[string] | yes | no | — | — |
+| `cleared_without_line[].memo` | string \| null | yes | yes | — | — |
 | `next_step` | string | yes | no | — | — |
 
 Example JSON output:
@@ -592,7 +607,9 @@ Example JSON output:
 ```json
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "cleared_without_line": [],
   "counts": {
+    "cleared_without_line": 1,
     "duplicate": 1,
     "lines": 1,
     "matched": 1,
