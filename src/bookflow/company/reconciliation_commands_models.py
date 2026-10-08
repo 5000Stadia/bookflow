@@ -645,6 +645,23 @@ class DraftOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
 
+class StatementGap(Model):
+    """A ticked movement no line of the draft's imported statement accounts for."""
+    movement: MovementKey
+    group_fingerprint: Fingerprint
+    date: str
+    amount: Units
+    number: str
+    payees: tuple[str,...]
+    memo: str|None
+
+
+CLEARED_WITHOUT_LINE=Field(default=None,description=(
+    'Only when a statement was imported into this draft (`reconcile import`): each ticked movement '
+    'no statement line accounts for -- cleared without a statement line. Flagged, never refused; '
+    'null when nothing was imported, as for any reconciliation built by hand.'))
+
+
 class FinishOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
@@ -652,6 +669,7 @@ class FinishOutput(Model):
     opening_id: ID
     certificate_id: ID
     totals: Totals
+    cleared_without_statement_line: tuple[StatementGap,...]|None=CLEARED_WITHOUT_LINE
 
 
 # A generated documentation sample fills an unconstrained string with "value", which a
@@ -691,3 +709,4 @@ class PreviewOutput(Model):
     balanced: bool
     # An opening draft is not finished by itself; this names the step that finishes it.
     next_step: str|None=None
+    cleared_without_statement_line: tuple[StatementGap,...]|None=CLEARED_WITHOUT_LINE

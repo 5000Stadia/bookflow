@@ -469,12 +469,29 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
 
 
 
-def cleared_without_line(results, candidates):
+def cleared_without_line(lines, ticked, *, suggest_days=SUGGEST_DAYS):
     """Ticked movements no statement line accounts for.
 
     This is the one check of truth rather than consistency: a reconciliation can tie because an
-    invented entry was ticked to make it tie, and only the bank's own lines can tell. Flagged,
-    never refused -- a person may know why (a bank that omits a line, a file cut short).
+    invented entry was ticked to make it tie, and only the bank's own lines can tell. A ticked
+    movement is supported by a line of the same amount dated within `suggest_days` whose check
+    number, when both carry one, agrees; each line supports one movement, nearest first.
+    Flagged, never refused -- a person may know why (a bank that omits a line, a file cut short).
     """
-    supported = {id(r.match) for r in results if r.match is not None}
-    return [c for c in candidates if c.selected and c.eligible and id(c) not in supported]
+    pairs = []
+    for i, line in enumerate(lines):
+        for j, candidate in enumerate(ticked):
+            if candidate.amount != line.amount:
+                continue
+            days = _days(line.date, candidate.date)
+            ours, theirs = _digits(line.number), _digits(candidate.number)
+            if days > suggest_days or (ours and theirs and ours != theirs):
+                continue
+            pairs.append(((0 if ours and ours == theirs else 1, days), i, j))
+    used_lines, supported = set(), set()
+    for _, i, j in sorted(pairs):
+        if i in used_lines or j in supported:
+            continue
+        used_lines.add(i)
+        supported.add(j)
+    return [c for j, c in enumerate(ticked) if j not in supported]

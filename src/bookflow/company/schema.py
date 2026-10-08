@@ -1164,3 +1164,6 @@ globals().update(_define_journal_deletions(metadata, _column, _table))
 
 from bookflow.company.discount_schema import define_tables as _define_discount_tables
 globals().update(_define_discount_tables(metadata, _column, _table))
+
+from bookflow.company.statement_schema import define_tables as _define_statement_tables
+globals().update(_define_statement_tables(metadata, _column, _table))

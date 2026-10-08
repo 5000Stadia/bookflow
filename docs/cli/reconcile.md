@@ -298,6 +298,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.cleared_balance` | integer | yes | no | — | — |
 | `totals.difference` | integer | yes | no | — | — |
 | `totals.decimal_units` | object[string, string] | yes | no | — | — |
+| `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
+| `cleared_without_statement_line[].movement` | object | yes | no | — | — |
+| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.transaction_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.revision_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.account_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.component_id` | string \| null | no | yes | null | — |
+| `cleared_without_statement_line[].group_fingerprint` | string | yes | no | — | — |
+| `cleared_without_statement_line[].date` | string | yes | no | — | — |
+| `cleared_without_statement_line[].amount` | integer | yes | no | — | — |
+| `cleared_without_statement_line[].number` | string | yes | no | — | — |
+| `cleared_without_statement_line[].payees` | array[string] | yes | no | — | — |
+| `cleared_without_statement_line[].memo` | string \| null | yes | yes | — | — |
 
 Example JSON output:
 
@@ -305,6 +319,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "certificate_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "cleared_without_statement_line": null,
   "contract": "reconciliation.private.v1",
   "draft": {
     "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -460,6 +475,8 @@ The same example as complete `bookflow_run` arguments:
 | `ending_balance` | `--ending-balance` | string \| null | no | yes | null | Ending balance, as money ("6236.95"); defaults to the file's ledger balance (OFX) or latest running balance (CSV). |
 | `match_days` | `--match-days` | integer | no | no | 4 | Days apart a line and an entry of the same amount may be dated and still match.; minimum 0; maximum 60 |
 | `suggest_days` | `--suggest-days` | integer | no | no | 14 | Days apart for a same-amount entry to be offered as a suggestion.; minimum 0; maximum 120 |
+| `mapping_name` | `--mapping-name` | string | no | no | "" | Use the CSV mapping saved under this name for the account; columns given in csv_mapping override it.; maximum length 80 |
+| `save_mapping` | `--save-mapping` | string | no | no | "" | Save the CSV mapping used for this import under this name for the account (a newer save of a name replaces it for later use).; maximum length 80 |
 
 ### Command and context options
 
@@ -511,6 +528,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts.duplicate` | integer | yes | no | — | — |
 | `counts.newly_marked` | integer | yes | no | — | — |
 | `counts.cleared_without_line` | integer | yes | no | — | — |
+| `counts.previously_imported` | integer | yes | no | — | — |
 | `draft` | object \| null | yes | yes | — | — |
 | `draft.id` | string | yes | no | — | — |
 | `draft.account_id` | string | yes | no | — | — |
@@ -586,6 +604,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].suggestions[].number` | string | yes | no | — | — |
 | `lines[].suggestions[].payees` | array[string] | yes | no | — | — |
 | `lines[].suggestions[].memo` | string \| null | yes | yes | — | — |
+| `lines[].previously_imported` | boolean | no | no | false | This line (by FITID, or by its hash) was imported for this account before. |
 | `cleared_without_line` | array[object] | yes | no | — | Movements ticked on the draft that no line of this statement accounts for: cleared without a statement line. Flagged, never refused; check each before finishing. |
 | `cleared_without_line[].movement` | object | yes | no | — | — |
 | `cleared_without_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
@@ -614,6 +633,7 @@ Example JSON output:
     "lines": 1,
     "matched": 1,
     "newly_marked": 1,
+    "previously_imported": 1,
     "reconciled": 1,
     "suggested": 1,
     "unmatched": 1
@@ -905,7 +925,7 @@ Example JSON output:
 
 ## `reconcile preview`
 
-Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement.
+Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement. When a statement was imported into the draft (`reconcile import`), cleared_without_statement_line lists each ticked movement no statement line accounts for; `reconcile finish` reports and records the same list, and refuses nothing for it.
 
 | Contract | Value |
 |---|---|
@@ -987,6 +1007,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dependency_guard` | string | yes | no | — | — |
 | `balanced` | boolean | yes | no | — | — |
 | `next_step` | string \| null | no | yes | null | — |
+| `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
+| `cleared_without_statement_line[].movement` | object | yes | no | — | — |
+| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.transaction_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.revision_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.account_id` | string | yes | no | — | — |
+| `cleared_without_statement_line[].movement.role` | literal["entered", "cash", "control", "net", "main_bank", "cash_back", "additional", "funding"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.component_id` | string \| null | no | yes | null | — |
+| `cleared_without_statement_line[].group_fingerprint` | string | yes | no | — | — |
+| `cleared_without_statement_line[].date` | string | yes | no | — | — |
+| `cleared_without_statement_line[].amount` | integer | yes | no | — | — |
+| `cleared_without_statement_line[].number` | string | yes | no | — | — |
+| `cleared_without_statement_line[].payees` | array[string] | yes | no | — | — |
+| `cleared_without_statement_line[].memo` | string \| null | yes | yes | — | — |
 
 Example JSON output:
 
@@ -994,6 +1028,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "balanced": false,
+  "cleared_without_statement_line": null,
   "contract": "reconciliation.private.v1",
   "currency": "USD",
   "dependency_guard": "value",
