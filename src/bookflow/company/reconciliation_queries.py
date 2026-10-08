@@ -83,8 +83,7 @@ def mark_everything(s,draft,inp, *, revision_id):
     changed since it was ticked is still refused: that one needs a person's eye."""
     from bookflow.company.reconciliation_drafts import editable
     editable(s,draft,inp.expected_version);require(inp.draft==draft.id and draft.kind!='opening','E_RECONCILIATION_MANIFEST')
-    filters=inp.filters or m.CandidateFilter()
-    return _mark_all(s,draft,filters,None,inp.all_action,revision_id,skip_claimed=True)
+    return _mark_all(s,draft,inp.filters,None,inp.all_action,revision_id,skip_claimed=True)
 
 
 def _slice(values, *, limit,offset,expected_fingerprint):

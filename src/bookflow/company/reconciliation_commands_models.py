@@ -189,11 +189,11 @@ class Mark(DraftChange):
     entries: tuple[MarkEntry,...]=Field(default=(),max_length=200)
     all: bool=False
     all_action: Literal['mark','unmark']='mark'
-    filters: CandidateFilter|None=None
+    filters: CandidateFilter=Field(default_factory=CandidateFilter)
     @model_validator(mode='after')
     def shape(self):
         if self.all==bool(self.entries):raise ValueError('give entries, or all=true and no entries')
-        if not self.all and (self.filters is not None or self.all_action!='mark'):raise ValueError('filters and all_action need all=true')
+        if not self.all and (self.all_action!='mark' or self.filters!=CandidateFilter()):raise ValueError('filters and all_action need all=true')
         return self
 
 class MarkAll(DraftChange):
