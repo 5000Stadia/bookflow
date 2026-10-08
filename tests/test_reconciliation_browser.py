@@ -86,7 +86,8 @@ def test_the_page_asks_for_what_the_command_takes(workbench):
 
 def test_every_reconcile_command_has_a_page_that_answers(workbench):
     """Each of the four, reached the way the workbench reaches any command."""
-    for name in ('reconcile opening start', 'reconcile start', 'reconcile mark', 'reconcile finish'):
+    for name in ('reconcile opening start', 'reconcile start', 'reconcile mark', 'reconcile finish',
+                 'reconcile import'):
         cmd = registry.get(name)
         assert cmd is not None and not cmd.local_only, name
         url = f"/c/{workbench.company_id}/{cmd.noun.replace(' ', '-')}/{cmd.verb}"
