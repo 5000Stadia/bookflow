@@ -21,6 +21,7 @@ HUB = {
     "company detach": "hub_admin_and_own_detach_certificate",
     "demo reset": "hub_admin_and_ordered_own_lifecycle_certificates",
     "organization new": "current_hub_admin", "organization rename": "current_hub_admin",
+    "backup schedule": "current_hub_admin",
     "token issue": "resolved_target_principal_and_epoch",
     "token list": "resolved_target_and_actor_projection",
     "token revoke": "resolved_target_and_exact_own_revocation_certificate",

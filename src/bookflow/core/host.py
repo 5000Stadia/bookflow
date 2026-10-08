@@ -47,7 +47,8 @@ class Host:
     def __init__(self, data_root: Path, *, version: str, idle_checkpoint_seconds: float = 30.0,
                  sweep_seconds: float = 3600.0, filesystem_wait_seconds: float = 5.0,
                  transfer_limit: int = 8, principal_transfer_limit: int = 2,
-                 transfer_lifetime_seconds: float = 300.0, shutdown_wait_seconds: float = 30.0):
+                 transfer_lifetime_seconds: float = 300.0, shutdown_wait_seconds: float = 30.0,
+                 backup_check_seconds: float = 60.0):
         if (type(transfer_limit) is not int or not 0 < transfer_limit <= 8
                 or type(principal_transfer_limit) is not int or not 0 < principal_transfer_limit <= 2
                 or not math.isfinite(transfer_lifetime_seconds) or not 0 < transfer_lifetime_seconds <= 300
@@ -66,6 +67,7 @@ class Host:
         self.principal_transfer_limit = principal_transfer_limit
         self.transfer_lifetime_seconds = transfer_lifetime_seconds
         self.shutdown_wait_seconds = shutdown_wait_seconds
+        self.backup_check_seconds = backup_check_seconds
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
@@ -535,8 +537,9 @@ class Host:
     # ---------------------------------------------------------------- timers
     def _timer_loop(self) -> None:
         """One daemon thread for both timers; every database touch is submitted to the writer."""
-        tick = max(0.05, min(1.0, self.idle_checkpoint_seconds, self.sweep_seconds))
+        tick = max(0.05, min(1.0, self.idle_checkpoint_seconds, self.sweep_seconds, self.backup_check_seconds))
         last_sweep = time.monotonic()
+        last_backup_check = time.monotonic()
         while not self._timer_stop.wait(tick):
             now = time.monotonic()
             with self._readers_lock:
@@ -554,6 +557,12 @@ class Host:
                     self.sweep_now()
                 except BaseException as e:  # noqa: BLE001
                     log.warning("session sweep: %s", e)
+            if now - last_backup_check >= self.backup_check_seconds:
+                last_backup_check = now
+                try:
+                    self.backups_now()
+                except BaseException as e:  # noqa: BLE001
+                    log.warning("scheduled backups: %s", e)
 
     def checkpoint_now(self) -> dict[str, Any]:
         """RESTART checkpoint the hub and every pooled company connection, on the writer. Results are logged."""
@@ -615,6 +624,96 @@ class Host:
             log.info("session sweep removed %d expired session token(s)", len(rows))
             self._after_write()
             return len(rows)
+
+    # ---------------------------------------------------------------- scheduled backups
+    def backups_now(self, now=None) -> dict[str, Any]:
+        """Take every scheduled company backup that is due at ``now`` (default: the clock), on the writer.
+
+        Returns ``{company_id: status}`` for the companies it tried. Tests pass ``now`` to move time.
+        """
+        if not self._writer.is_alive():
+            return {}
+        return self.submit(lambda: self._backups_on_writer(now), _maintenance=True)
+
+    def _backups_on_writer(self, now=None) -> dict[str, Any]:
+        import sqlalchemy as sa
+
+        from bookflow.company import backup_schedule as bs
+        from bookflow.core import clock
+        from bookflow.hub import schema as h
+        now = now if now is not None else clock.now()
+        hub = self._ensure_hub_on_writer()
+        config = Config.load(self.data_root / "config.toml")
+        tried: dict[str, Any] = {}
+        for company_id in sorted(config.data.get("backups") or {}):
+            entry = bs.entry(config.data, company_id)
+            if entry is None:
+                continue
+            row = hub.conn.execute(sa.select(h.companies).where(h.companies.c.id == company_id)).mappings().first()
+            if row is None or row.get("pending_path"):
+                continue
+            folder = self.data_root / row["path"]
+            status = bs.read_status(folder)
+            if not bs.is_due(entry, status, now):
+                continue
+            tried[company_id] = self._take_scheduled_backup(hub, dict(row), entry, folder, status, now)
+        return tried
+
+    def _take_scheduled_backup(self, hub, row, entry, folder: Path, status: dict[str, Any], now) -> dict[str, Any]:
+        import sqlalchemy as sa
+
+        from bookflow.company import backup_schedule as bs
+        from bookflow.core.audit import write_event_to
+        from bookflow.core.context import client_version
+        from bookflow.core.ids import new_id
+        from bookflow.core.registry import Touched
+        from bookflow.hub import schema as h
+        status = dict(status)
+        status["last_attempt_at"] = bs._iso(now)
+        destination = Path(entry["destination"])
+        try:
+            problem = bs.destination_problem(destination, self.data_root)
+            if problem:
+                raise BookflowError("E_IO", message=f"The backup destination {destination} {problem}.",
+                                    details={"operation": "scheduled backup", "path": str(destination)})
+            system = hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "system")).mappings().first()
+            company = self._company_for_writer(row, True, folder / "company.db")
+            ctx = self._system_ctx()
+            with self._commit_hooks.operation("host.backup", hub, company):
+                company.raw.execute("BEGIN IMMEDIATE")
+                try:
+                    result = bs.take(company, hub.raw, company_folder=folder, company_id=row["id"],
+                                     display_name=row["display_name"], destination=destination,
+                                     created_by={"user_id": system["id"] if system else None, "username": "system",
+                                                 "display_name": "Scheduled backup"},
+                                     bookflow_version=client_version() if self.version is None else self.version,
+                                     backup_id=new_id())
+                    m = result["manifest"]
+                    snapshot = {"file_name": result["file_name"], "sha256": result["sha256"], "size_bytes": result["size_bytes"],
+                                "schema_revision": m["schema_revision"], "attachment_count": len(m["files"]) - 1,
+                                "created_at": m["created_at"], "scheduled": True}
+                    write_event_to(company, ctx, "backup scheduled", f"scheduled backup of company {row['display_name']} to {result['file_name']}",
+                                   [Touched("company_backup", m["backup_id"], "create", None, None, snapshot, db="company")],
+                                   actor_id=system["id"] if system else None, actor_kind="system")
+                    self._commit_hooks.commit(company, "host.backup")
+                except BaseException:
+                    if company.write_transaction:
+                        company.raw.execute("ROLLBACK")
+                    raise
+            removed = bs.prune(destination, row["id"], entry["keep"])
+            status["last_success"] = {"at": bs._iso(now), "file_name": result["file_name"], "sha256": result["sha256"],
+                                      "removed": removed}
+            log.info("scheduled backup of %s: %s", row["id"], result["file_name"])
+        except Exception as e:  # noqa: BLE001 - a failed backup is recorded, never fatal to the host
+            status["last_failure"] = {"at": bs._iso(now), "code": getattr(e, "code", "E_IO"),
+                                      "message": getattr(e, "message", None) or str(e)}
+            log.warning("scheduled backup of %s failed: %s", row["id"], e)
+        try:
+            bs.write_status(folder, status)
+        except OSError as e:
+            log.warning("scheduled backup status of %s not saved: %s", row["id"], e)
+        self._after_write()
+        return status
 
     # ---------------------------------------------------------------- descriptor
     def write_descriptor(self, bind: str, socket_path: str) -> None:

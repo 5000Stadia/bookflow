@@ -22,6 +22,7 @@ migrate = lazy("bookflow.storage.migrate")
 engine = lazy("bookflow.storage.engine")
 co = lazy("bookflow.hub.companies")
 info = lazy("bookflow.company.info")
+schedule = lazy("bookflow.company.backup_schedule")
 
 
 class BackupFile(BaseModel):
@@ -48,8 +49,9 @@ class CompanyBackupOutput(WriteOutput):
 company_backup = command(
     "company backup", scope="company",
     description=("Write a verified, portable backup of the selected company: one .bookflow-backup archive holding its database "
-                 "(a consistent copy), its attachment files and a manifest of fingerprints, saved in the company folder's backups/. "
-                 "The archive is reopened and checked before success is reported. Copy it anywhere; `company restore` opens it."),
+                 "(a consistent copy), its attachment files and a manifest of fingerprints, saved read-only in the company folder's "
+                 "backups/ with an audit checkpoint beside it (`backup verify`). The archive is reopened and checked before success "
+                 "is reported. Copy it anywhere; `company restore` opens it."),
     input_model=Empty, output_model=CompanyBackupOutput, writes={"company"}, required_role="admin", capability="company",
     error_codes=["E_IO", "E_BACKUP_INVALID"])
 
@@ -77,7 +79,9 @@ def apply_company_backup(plan: Plan, ctx: Context, s: Session) -> Applied:
     row = s.company_row
     result = archive.create(s.company.path.parent, company_id=row["id"], display_name=row["display_name"],
                             created_by={"user_id": s.actor.id, "username": s.actor.username, "display_name": s.actor.display_name},
-                            bookflow_version=client_version(), backup_id=plan.data["backup_id"])
+                            bookflow_version=client_version(), backup_id=plan.data["backup_id"],
+                            inspect=schedule.inspect_snapshot, read_only=True)
+    schedule.write_checkpoint(result, s.hub.raw if s.hub is not None else None)
     m = result["manifest"]
     warnings = []
     if m["missing_attachments"]:

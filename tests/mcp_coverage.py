@@ -134,6 +134,10 @@ attachment unlink
 audit list
 audit show
 audit tail
+backup list
+backup rehearse
+backup schedule
+backup verify
 bill history
 bill pay
 bill payment apply
@@ -609,6 +613,7 @@ def execution_map():
     from tests.test_deposit_deletion_transports import COMMANDS as DEPOSIT_DELETE_COMMANDS
     from tests.test_journal_deletion_transports import COMMANDS as JOURNAL_DELETE_COMMANDS
     from tests.test_report_export_surfaces import COMMANDS as REPORT_EXPORT_COMMANDS
+    from tests.test_backup_schedule import COMMANDS as BACKUP_SCHEDULE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -669,6 +674,7 @@ def execution_map():
                    'tests/test_deposit_deletion_transports.py::test_deposit_deletion_crosses_all_four_actual_transports' if cmd.name in DEPOSIT_DELETE_COMMANDS else
                    'tests/test_journal_deletion_transports.py::test_journal_deletion_crosses_all_four_actual_transports' if cmd.name in JOURNAL_DELETE_COMMANDS else
                    'tests/test_report_export_surfaces.py::test_report_csv_is_the_same_file_on_every_surface' if cmd.name in REPORT_EXPORT_COMMANDS else  # all four
+                   'tests/test_backup_schedule.py::test_schedule_list_verify_and_rehearse_through_python_cli_http_and_mcp' if cmd.name in BACKUP_SCHEDULE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

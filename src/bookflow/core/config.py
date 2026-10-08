@@ -43,13 +43,19 @@ def dump(data: dict[str, Any]) -> str:
             if v is not None:
                 lines.append(f"{k} = {_toml_str(str(v))}")
         lines.append("")
+    for company_id, table in sorted(data.get("backups", {}).items()):
+        lines.append(f"[backups.{_toml_str(company_id)}]")
+        for k, v in table.items():
+            if v is not None:
+                lines.append(f"{k} = {_toml_str(str(v))}")
+        lines.append("")
     return "\n".join(lines)
 
 
 class Config:
     def __init__(self, path: Path):
         self.path = path
-        self.data: dict[str, Any] = {"client": {}, "users": {}}
+        self.data: dict[str, Any] = {"client": {}, "users": {}, "backups": {}}
 
     @classmethod
     def load(cls, path: Path) -> "Config":
@@ -150,9 +156,12 @@ def _parse(contents: str, path: Path) -> dict[str, Any]:
         raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": str(e)})
     users = raw.get("users", {})
     client = raw.get("client", {})
-    if not isinstance(users, dict) or not isinstance(client, dict) or any(not isinstance(v, dict) for v in users.values()):
+    backups = raw.get("backups", {})
+    if (not isinstance(users, dict) or not isinstance(client, dict) or any(not isinstance(v, dict) for v in users.values())
+            or not isinstance(backups, dict) or any(not isinstance(v, dict) for v in backups.values())):
         raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": "unexpected shape"})
-    return {"client": dict(client), "users": {k: dict(v) for k, v in users.items()}}
+    return {"client": dict(client), "users": {k: dict(v) for k, v in users.items()},
+            "backups": {k: dict(v) for k, v in backups.items()}}
 
 
 def _pending_row(conn: sqlite3.Connection) -> dict[str, str] | None:
