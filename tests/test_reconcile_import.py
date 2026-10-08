@@ -16,6 +16,7 @@ import pytest
 
 from bookflow.company import statement_files as files
 from bookflow.core.ids import new_id
+from tests.test_deposit_lifecycle import driver  # noqa: F401
 from tests.test_service_sales_lifecycle import COMPANY
 
 SURFACES = ('python', 'cli', 'http', 'mcp')
@@ -224,13 +225,23 @@ def test_the_same_import_through_python_cli_http_and_mcp(root, tmp_path):
         assert comparable(results[surface]) == python, surface
 
 
-def test_a_ticked_entry_no_statement_line_shows_is_flagged(client):
-    """Truth, not only consistency: an entry ticked to make a statement tie is named, not hidden."""
+def test_a_ticked_entry_no_statement_line_shows_is_flagged(client, driver):
+    """Truth, not only consistency: a plug ticked to make a statement tie is named, not hidden.
+
+    The bank charged a 12.00 fee on 30 September. Instead of entering it, an invented 12.00
+    payment dated 1 August is posted and ticked: the statement then ties to the cent. The import,
+    the preview and the finish each name it, and the finish keeps the list with its record.
+    """
+    import json
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
     content = sample('checking-2026-09.ofx')
     opening(client)
     first = run(client, 'reconcile import', dict(account='Checking', content=content, start=True))
     draft = first['draft']
     assert first['counts']['cleared_without_line'] == 0 and first['cleared_without_line'] == []
+    guards = run(client, 'reconcile preview', dict(draft=draft['id'], expected_version=draft['version']))
+    assert guards['cleared_without_statement_line'] == []
 
     # The person settles the late deposit's suggestion; read again, that line is matched to it.
     late, = [v for v in first['lines'] if v['status'] == 'suggested']
@@ -240,25 +251,73 @@ def test_a_ticked_entry_no_statement_line_shows_is_flagged(client):
         entries=[dict(movement=choice['movement'], group_fingerprint=choice['group_fingerprint'],
                       action='mark')]))['draft']['version']
 
-    # An entry the bank never showed, posted and ticked.
-    run(client, 'journal post', dict(date='2026-09-15', memo='Invented deposit', lines=[
-        dict(account='Checking', side='debit', amount='25.00'),
-        dict(account='Bank Fees', side='credit', amount='25.00')]))
+    run(client, 'journal post', dict(date='2026-08-01', memo='Plug', lines=[
+        dict(account='Bank Fees', side='debit', amount='12.00'),
+        dict(account='Checking', side='credit', amount='12.00')]))
     page = run(client, 'reconcile candidates', dict(draft=draft['id'], limit=50,
-                                                    filters=dict(amount=2500)))
-    invented, = page['items']
-    run(client, 'reconcile mark', dict(
+                                                    filters=dict(amount=-1200)))
+    plug, = page['items']
+    version = run(client, 'reconcile mark', dict(
         operation_key=new_id(), draft=draft['id'], expected_version=version,
-        entries=[dict(movement=invented['movement'], group_fingerprint=invented['group_fingerprint'],
-                      action='mark')]))
+        entries=[dict(movement=plug['movement'], group_fingerprint=plug['group_fingerprint'],
+                      action='mark')]))['draft']['version']
 
     again = run(client, 'reconcile import', dict(account='Checking', content=content, draft=draft['id']))
-    assert again['counts']['suggested'] == 0
+    assert again['counts']['suggested'] == 0 and again['counts']['unmatched'] == 1
     assert [v['reason'] for v in again['lines'] if v['date'] == '2026-04-24'] == [
         'same amount, 9 days apart; ticked by a person']
     flagged, = again['cleared_without_line']
-    assert (flagged['date'], flagged['amount']) == ('2026-09-15', 2500)
-    assert again['counts']['cleared_without_line'] == 1
+    assert (flagged['date'], flagged['amount']) == ('2026-08-01', -1200)
     assert 'cleared without a statement line' in again['next_step']
-    # Flagged, not refused: the import wrote nothing and the draft is as the person left it.
+    # Every line was imported into this draft before: nothing new is stored, nothing ticked.
+    assert again['counts']['previously_imported'] == again['counts']['lines'] == 11
     assert again['counts']['newly_marked'] == 0
+
+    guards = run(client, 'reconcile preview', dict(draft=draft['id'], expected_version=version))
+    assert guards['balanced'], 'the plug makes it tie'
+    gap, = guards['cleared_without_statement_line']
+    assert (gap['date'], gap['amount'], gap['movement']) == ('2026-08-01', -1200, plug['movement'])
+
+    # Flagged, not refused: the finish certifies, and says and keeps the same list.
+    done = run(client, 'reconcile finish', dict(
+        operation_key=new_id(), draft=draft['id'], expected_version=version,
+        expected_facts_fingerprint=guards['expected_facts_fingerprint'],
+        dependency_guard=guards['dependency_guard']))
+    assert done['certificate_id'] and done['totals']['difference'] == 0
+    assert done['cleared_without_statement_line'] == guards['cleared_without_statement_line']
+    with driver.session() as s:
+        operations = s.company.conn.execute(sa.select(c.reconciliation_operations.c.original_effect_snapshot)
+                                            .where(c.reconciliation_operations.c.command == 'reconcile finish')).scalars().all()
+        lines = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.statement_lines)).scalar()
+    effect, = [json.loads(v)['document'] for v in operations]
+    assert effect['certificate'] == done['certificate_id']
+    assert [v['date'] for v in effect['cleared_without_statement_line']] == ['2026-08-01']
+    assert lines == 10, 'the draft holds each statement line once, however often it was imported'
+
+
+def test_a_hand_built_reconciliation_carries_no_statement_check(client):
+    """Without an imported statement, preview and finish behave as before: the list is null."""
+    adopted = opening(client)
+    started = run(client, 'reconcile start', dict(
+        operation_key=new_id(), account='Checking', statement_date='2026-01-31',
+        ending_balance='5000.00', opening_draft_id=adopted['draft']['id']))
+    preview = run(client, 'reconcile preview', dict(draft=started['draft']['id'], expected_version=1))
+    assert preview['cleared_without_statement_line'] is None
+
+
+def test_a_saved_csv_mapping_is_used_by_name(client):
+    content = ('When;What;Out;In\n'
+               '2026-09-30;MONTHLY SERVICE FEE;12.00;\n')
+    mapping = dict(date='When', payee='What', debit='Out', credit='In')
+    with pytest.raises(Exception):
+        run(client, 'reconcile import', dict(account='Checking', content=content))
+    saved = run(client, 'reconcile import', dict(account='Checking', content=content, csv_mapping=mapping,
+                                                 save_mapping='My bank'))
+    assert saved['lines'][0]['amount'] == -1200
+    again = run(client, 'reconcile import', dict(account='Checking', content=content, mapping_name='My bank'))
+    assert [(v['date'], v['amount'], v['payee']) for v in again['lines']] == [
+        ('2026-09-30', -1200, 'MONTHLY SERVICE FEE')]
+    from bookflow import BookflowError
+    with pytest.raises(BookflowError) as raised:
+        run(client, 'reconcile import', dict(account='Checking', content=content, mapping_name='Other'))
+    assert raised.value.to_dict()['code'] == 'E_VALIDATION'
