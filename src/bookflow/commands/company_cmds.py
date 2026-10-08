@@ -324,6 +324,21 @@ company_update = command("company update", scope="company", description="Update 
                          error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"], version_source=("company show", None, "info_version"))
 
 
+def _future_closing_warning(closing_date: str, timezone_name: str | None, now: Any = None) -> str | None:
+    """A closing date after today on the company calendar blocks all posting up to it; it is allowed, but said plainly."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    try:
+        zone = ZoneInfo(timezone_name) if timezone_name else timezone.utc
+    except Exception:
+        zone = timezone.utc
+    today = (now or datetime.now(timezone.utc)).astimezone(zone).date().isoformat()
+    if closing_date > today:
+        return (f"Closing date {closing_date} is in the future: nothing dated on or before it can be posted "
+                "until you move it back.")
+    return None
+
+
 @company_update
 def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Plan:
     current = cinfo.read_info(s.company)
@@ -351,6 +366,10 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
         if meta.previous_on_behalf_of_name:
             who = f"{who} on behalf of {meta.previous_on_behalf_of_name}"
         warnings.append(f"{who} changed this record {meta.seconds_since_previous_update} s ago through {meta.previous_updated_via}")
+    if "closing_date" in changed and new.get("closing_date") is not None:
+        closing_warning = _future_closing_warning(new["closing_date"], new.get("timezone"))
+        if closing_warning:
+            warnings.append(closing_warning)
     preview = UpdateOutput(company_id=current["id"], warnings=warnings, **{k: v for k, v in meta.as_dict().items()})
     return Plan(preview=preview, data={"current": current, "new": new, "changed": sorted(changed), "meta": meta, "warnings": warnings})
 
