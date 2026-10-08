@@ -23,7 +23,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_backup_schedule_catalog as previous, permission_catalog as c
+from . import permission_entry_review_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'ac3de3f1318b96dd4ea4a35bfaf6795201954550'
@@ -35,7 +35,7 @@ PEOPLE_ONLY_COMMANDS = (
     'user activate', 'user add', 'user deactivate', 'user set-password',
 )
 _THRESHOLD = {x.name: x.threshold for x in previous.CATALOG.commands}
-# `backup schedule` (backup-schedule-v1, below) already refuses anyone but a person in its own
+# `backup schedule` (backup-schedule-v1, in the chain below) already refuses anyone but a person in its own
 # code; listing it here makes the catalog say so too.
 PEOPLE_ONLY_COMMANDS += tuple(name for name in ('backup schedule',) if name in _THRESHOLD)
 CHANGED_AUTHORIZATION = {

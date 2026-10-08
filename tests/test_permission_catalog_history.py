@@ -47,7 +47,8 @@ ACCEPTED = {
     'audit-visibility-v1': (503, '1a6e263186f929c26d8749f6ba1b6c1ec16706287b9db0b09affeb6442789433'),
     'statement-import-v1': (504, '43eb5b56cc903f203974cb0ddb0a5fa3958dcca1ed05e8029ae2b254fc4d46e3'),
     'backup-schedule-v1': (508, '43582adbc2b0fb3341c2af31766c7740a1d8f7c6ea495a79f5675485b4f477b7'),
-    'human-administration-v1': (508, '0ad10f65e8bfec022de480c86948e44d17aec88ef63e68b07a66c08f79973c19'),
+    'entry-review-v1': (511, '50fd1552c34eb3ab3d6e73d129491a00bbff1efd2f721a1b94c37003b719a7c0'),
+    'human-administration-v1': (511, 'f9f2929d90191f5d6eaa14bb30a976164c4b420f765b45e4b32b984265f4df0a'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -87,6 +88,7 @@ CHAIN_ADDITIONS = {
     'audit-visibility-v1': set(),
     'statement-import-v1': {'reconcile import'},
     'backup-schedule-v1': {'backup list', 'backup rehearse', 'backup schedule', 'backup verify'},
+    'entry-review-v1': {'report entries-to-review', 'report prior-balances', 'review mark'},
     'human-administration-v1': set(),
 }
 

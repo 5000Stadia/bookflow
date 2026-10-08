@@ -39,6 +39,19 @@ CLEARED = ('opening_covered', 'prior_cleared', 'selected')
 VERSION_FIELDS = ('active', 'account_id', 'account_type', 'effective_date', 'signed_debit')
 
 
+def held_next(noun, void, *, verb='delete'):
+    """What to do instead when a finished reconciliation holds a document a caller wants to {verb}.
+
+    There is no command that undoes a finished reconciliation yet (R163), so the refusal names
+    the paths that exist: void the document, which keeps it and warns that the reconciliation no
+    longer ties, or ask the company owner.
+    """
+    return (f'A finished bank reconciliation holds this {noun}, and no command undoes a '
+            f'reconciliation yet, so it cannot be {verb}d. Void it instead with `{void}`: the record '
+            f'stays, the void warns that the reconciliation no longer ties, and the reconciliation '
+            f'discrepancy report shows it. Or ask the company owner.')
+
+
 def amount(version, account_id, cutoff):
     """What one movement version adds to a reconciliation of `account_id` at `cutoff`.
 

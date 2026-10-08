@@ -73,6 +73,7 @@ PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability",
 AUDITED_REPORTS = frozenset({
     "open-purchase-orders", "purchases-by-vendor", "purchases-by-item", "deposit-detail",
     "transaction-list-by-date", "vendor-1099-summary", "reconciliation-discrepancy",
+    "entries-to-review", "prior-balances",
 })
 
 # Which list a reference-valued report filter names, by the input field that names it. A

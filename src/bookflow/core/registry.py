@@ -351,6 +351,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.party_cmds": ["customer", "vendor", "employee", "other-name"],
     "bookflow.commands.item_cmds": ["item"],
     "bookflow.commands.undo_cmds": ["undo"],
+    "bookflow.commands.review_cmds": ["review"],
     "bookflow.commands.query_cmds": [
         "account", "customer", "vendor", "employee", "other-name", "item", "item-category",
         "class", "term", "payment-method", "sales-tax-code", "customer-type", "vendor-type",

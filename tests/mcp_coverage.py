@@ -406,6 +406,7 @@ report collections
 report customer-balance-detail
 report customer-balance-summary
 report deposit-detail
+report entries-to-review
 report expenses-by-vendor
 report export
 report general-ledger
@@ -414,6 +415,7 @@ report inventory-valuation
 report missing-checks
 report open-invoices
 report open-purchase-orders
+report prior-balances
 report profit-and-loss
 report profit-and-loss-by-class
 report profit-and-loss-by-job
@@ -433,6 +435,7 @@ report unpaid-bills
 report vendor-1099-summary
 report vendor-balance-detail
 report vendor-balance-summary
+review mark
 sales-receipt history
 sales-receipt post
 sales-receipt query
@@ -616,6 +619,7 @@ def execution_map():
     from tests.test_journal_deletion_transports import COMMANDS as JOURNAL_DELETE_COMMANDS
     from tests.test_report_export_surfaces import COMMANDS as REPORT_EXPORT_COMMANDS
     from tests.test_backup_schedule import COMMANDS as BACKUP_SCHEDULE_COMMANDS
+    from tests.test_entry_review import COMMANDS as ENTRY_REVIEW_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -678,6 +682,7 @@ def execution_map():
                    'tests/test_journal_deletion_transports.py::test_journal_deletion_crosses_all_four_actual_transports' if cmd.name in JOURNAL_DELETE_COMMANDS else
                    'tests/test_report_export_surfaces.py::test_report_csv_is_the_same_file_on_every_surface' if cmd.name in REPORT_EXPORT_COMMANDS else  # all four
                    'tests/test_backup_schedule.py::test_schedule_list_verify_and_rehearse_through_python_cli_http_and_mcp' if cmd.name in BACKUP_SCHEDULE_COMMANDS else  # all four
+                   'tests/test_entry_review.py::test_the_study_scenario_warns_the_agent_and_lands_on_the_owners_list' if cmd.name in ENTRY_REVIEW_COMMANDS else  # http
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
@@ -812,11 +817,6 @@ def variant_policies():
             ['payment receive applications mode suggested (V1.5 trials) has an actual-MCP witness; its browser form branch has no dedicated case yet']),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
-        ('anyOf', ('Adjustment', 'null')): ([
-            'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger',
-            'tests/test_reconciliation_browser.py::test_every_reconcile_command_has_a_page_that_answers'],
-            ['the certification witnesses finish on a difference of zero and omit the adjustment; '
-             'the branch that writes an adjusting entry has no executed case on any surface yet']),
         ('anyOf', ('StatementMoney', 'string')): ([
             'tests/test_reconciliation_commands.py::test_a_statement_balance_is_money_and_may_be_zero_or_negative',
             'tests/test_reconciliation_commands.py::test_an_overdrawn_statement_reconciles',

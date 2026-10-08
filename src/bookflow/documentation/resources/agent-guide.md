@@ -504,3 +504,19 @@ never silently cascade. A bill still answered by a bill payment or a vendor cred
 refuses and names the settlement; unapply it first. Retry the original operation key
 only under current authority. There is no Restore command. `design/transaction-deletion.md`
 lists every posted family and, for each one without a delete command, the reason.
+
+## When a reconciliation will not tie
+
+Never post, change or tick an entry just to make a reconciliation's difference zero. If a
+statement will not tie, stop: leave the draft open, add a note to it saying what you checked
+(`note add reconciliation_draft <draft id> --body "..."`), and tell the owner. The open draft,
+its difference and your note appear on the owner's Overview. `reconcile finish` has no
+adjustment input; a statement is certified only when its ticked movements tie.
+
+The owner's `report entries-to-review` lists, from any command and any actor, entries dated
+into a reconciled statement period or a closed period but entered later, entries an agent
+posted after a reconciliation was started and then cleared on it, entries touching Opening
+Balance Equity outside the move-in, and an agent's round, unexplained month-end amounts into a
+bank account. Your write's result carries a warning when it lands there. Nothing is refused;
+the owner reviews it (`review mark`, a person's step). `report prior-balances` shows any
+reconciled or closed balance that has moved since, with the entries that moved it.

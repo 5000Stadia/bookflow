@@ -34,7 +34,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 agent/user deactivate and activate (R89); +1 report export (R145).
     # +1 reconcile import (R167).
     # +4 backup schedule, list, verify and rehearse (R156).
-    assert len(rows) == 510
+    # +3 report entries-to-review, report prior-balances and review mark (R163).
+    assert len(rows) == 513
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -107,7 +108,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==26
+    assert len(mapped)==len(variant_policies())==25
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -160,10 +161,14 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2893 -> 2896 (R156, scheduled backups), measured per command on both trees: backup schedule's
     # optional daily_at, destination and keep each add their null branch (+3); `off` is a boolean
     # and `company` a required string, and backup list, verify and rehearse take no input (0 each).
-    # 2896 -> 2897 (R168, demo reset refuses a root holding real books): demo reset's new optional
+    # 2896 -> 2895 (R163), measured: reconcile preview and finish each lose the dormant
+    # `adjustment` input and its nullable class_id, -4 (its Adjustment|null variant group goes,
+    # 26 -> 25 groups); report entries-to-review /cursor, report prior-balances /cursor and
+    # review mark /note add one null branch each, +3.
+    # 2895 -> 2896 (R168, demo reset refuses a root holding real books): demo reset's new optional
     # `force` (the data root's path, a nullable string) adds its null branch, +1. The closing-date
-    # rule changes only a field description; no other routed input changed. Groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2897
+    # rule changes only a field description; no other routed input changed. Groups stay 25.
+    assert sum(len(group["paths"]) for group in mapped)==2896
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

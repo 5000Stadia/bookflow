@@ -62,6 +62,10 @@ class ImportInput(m.Dated):
                             description='Days apart a line and an entry of the same amount may be dated and still match.')
     suggest_days: int = Field(files.SUGGEST_DAYS, strict=True, ge=0, le=120,
                               description='Days apart for a same-amount entry to be offered as a suggestion.')
+    mapping_name: str = Field('', max_length=80, description=(
+        "Use the CSV mapping saved under this name for the account; columns given in csv_mapping override it."))
+    save_mapping: str = Field('', max_length=80, description=(
+        'Save the CSV mapping used for this import under this name for the account (a newer save of a name replaces it for later use).'))
 
     @model_validator(mode='after')
     def target(self):
@@ -98,6 +102,8 @@ class ImportedLine(m.Model):
     already_marked: bool = Field(False, description='The matched movement was ticked on the draft before this import.')
     marked: bool = Field(False, description='This import ticks the matched movement on the draft.')
     suggestions: tuple[Suggestion, ...] = ()
+    previously_imported: bool = Field(False, description=(
+        'This line (by FITID, or by its hash) was imported for this account before.'))
 
 
 class ImportCounts(m.Model):
@@ -109,6 +115,7 @@ class ImportCounts(m.Model):
     duplicate: m.Count
     newly_marked: m.Count
     cleared_without_line: m.Count
+    previously_imported: m.Count
 
 
 class ImportOutput(m.Model):
@@ -163,7 +170,8 @@ def _opening_draft(snapshot, account_id):
     return rc._draft(snapshot, found[0]['id'])
 
 
-def _candidates(snapshot, account_id, cutoff, draft):
+def candidates(snapshot, account_id, cutoff, draft):
+    """Each whole movement on the account as a match candidate, in reconciliation sign."""
     values, _ = account_population(snapshot, account_id, cutoff)
     selected = {v.key_id for v in draft.selections} if draft is not None else set()
     claims = claimed(snapshot)
@@ -192,7 +200,18 @@ def _prepare(inp, ctx, s, ids):
     currency = account['currency']
     card = account['type'] == 'credit_card'
     places = _places(currency)
-    parsed = files.parse(inp.content, inp.format, places, inp.csv_mapping.model_dump())
+    from bookflow.company import statement_store as store
+    mapping = {}
+    if inp.mapping_name:
+        mapping = store.saved_mapping(s.company.conn, account_id, inp.mapping_name)
+        if mapping is None:
+            raise files.invalid('mapping_name', f'no CSV mapping is saved as {inp.mapping_name!r} for this account')
+    given = inp.csv_mapping.model_dump()
+    default = CsvMapping().model_dump()
+    mapping = {**default, **mapping, **{k: v for k, v in given.items() if v != default[k]}}
+    parsed = files.parse(inp.content, inp.format, places, mapping)
+    if inp.save_mapping and parsed.format != 'csv':
+        raise files.invalid('save_mapping', 'only a CSV file has a column mapping to save')
     if parsed.currency and parsed.currency.upper() != currency:
         raise files.invalid('content', f'the file is in {parsed.currency}; this account is in {currency}')
     sign = -1 if card else 1
@@ -230,8 +249,9 @@ def _prepare(inp, ctx, s, ids):
         raise files.invalid('content', 'the file has no transactions')
 
     lines = [files.Line(**{**v.__dict__, 'amount': sign * v.amount}) for v in parsed.lines]
-    candidates = _candidates(snapshot, account_id, cutoff, draft)
-    results = files.match(lines, candidates, match_days=inp.match_days, suggest_days=inp.suggest_days)
+    population = candidates(snapshot, account_id, cutoff, draft)
+    results = files.match(lines, population, match_days=inp.match_days, suggest_days=inp.suggest_days)
+    known = store.known_line_ids(s.company.conn, account_id)
 
     to_mark = []
     if draft is not None:
@@ -249,7 +269,16 @@ def _prepare(inp, ctx, s, ids):
         value = drafts.mark(snapshot, value, mark_input, revision_id=new_id())
         marks.append(mark_input)
     marked = {id(c) for c in to_mark}
-    unsupported = files.cleared_without_line(results, candidates) if draft is not None else []
+    unsupported = []
+    if draft is not None:
+        # The draft's statement is every line imported into it before, and this file's.
+        held, window = (store.draft_lines(s.company.conn, draft.id)
+                        if started is None else (None, None))
+        held_ids = {v.line_id for v in lines}
+        statement = lines + [v for v in held or () if v.line_id not in held_ids]
+        ticked = [c for c in population if c.eligible and (c.selected or id(c) in marked)]
+        unsupported = files.cleared_without_line(statement, ticked,
+                                                 suggest_days=max(inp.suggest_days, window or 0))
 
     out_lines = []
     for result in results:
@@ -260,6 +289,7 @@ def _prepare(inp, ctx, s, ids):
             number=line.number, status=result.status, reason=result.reason,
             movement=match.ref[0] if match else None, group_fingerprint=match.ref[1] if match else None,
             already_marked=bool(match and match.selected), marked=bool(match and id(match) in marked),
+            previously_imported=line.line_id in known,
             suggestions=tuple(Suggestion(movement=c.ref[0], group_fingerprint=c.ref[1], date=c.date,
                                          amount=c.amount, number=c.number, payees=c.payees,
                                          memo=c.memo or None) for c in result.suggestions)))
@@ -267,12 +297,14 @@ def _prepare(inp, ctx, s, ids):
         out_lines.append(ImportedLine(
             line_id=line.line_id, fitid=line.fitid, date=line.date, amount=line.amount,
             amount_decimal=_decimal(line.amount, places), payee=line.payee, memo=line.memo,
-            number=line.number, status='duplicate', reason='the file repeats this FITID; read once'))
+            number=line.number, status='duplicate', reason='the file repeats this FITID; read once',
+            previously_imported=line.line_id in known))
     count = lambda status: sum(1 for v in out_lines if v.status == status)
     counts = ImportCounts(lines=len(out_lines), matched=count('matched'), suggested=count('suggested'),
                           unmatched=count('unmatched'), reconciled=count('reconciled'),
                           duplicate=count('duplicate'), newly_marked=len(to_mark),
-                          cleared_without_line=len(unsupported))
+                          cleared_without_line=len(unsupported),
+                          previously_imported=sum(1 for v in out_lines if v.previously_imported))
     if value is None:
         step = ('Review only: pass start (or draft) to tick the matched entries on a reconciliation. '
                 'Enter each unmatched line as a transaction, then import again.')
@@ -292,7 +324,9 @@ def _prepare(inp, ctx, s, ids):
                                          memo=c.memo or None) for c in unsupported),
                           next_step=step)
     return dict(output=output, account_id=account_id, started=started, start_value=draft if started else None,
-                opening_draft=opening_draft, marks=marks)
+                opening_draft=opening_draft, marks=marks, parsed=parsed, lines=lines, mapping=mapping,
+                draft_id=value.id if value is not None else None, ending=ending,
+                statement_date=statement_date)
 
 
 def _commit(s, ctx, operation, *, account_id, operation_id, event_id, kind, summary, document,
@@ -400,4 +434,48 @@ def _apply(plan, ctx, s):
     counts = output.counts
     summary = (f'imported a {output.format} statement: {counts.matched} matched, {counts.suggested} suggested, '
                f'{counts.unmatched} unmatched, {counts.newly_marked} newly marked')
-    return Applied(output, [], summary, audited=started is not None or bool(prepared['marks']))
+    stored = _store(s, ctx, inp, prepared, summary)
+    return Applied(output, [], summary,
+                   audited=started is not None or bool(prepared['marks']) or stored)
+
+
+def _store(s, ctx, inp, prepared, summary):
+    """Keep the draft's statement lines and any saved mapping; True when anything was written."""
+    import hashlib
+    from bookflow.company import statement_store as store
+    from bookflow.core import clock
+    from bookflow.core.audit import write_event_to
+    conn = s.company.conn
+    account_id, draft_id = prepared['account_id'], prepared['draft_id']
+    new_lines = []
+    if draft_id is not None:
+        held = {v.line_id for v in (store.draft_lines(conn, draft_id)[0] or ())}
+        new_lines = [v for v in prepared['lines'] if v.line_id not in held]
+    saving = bool(inp.save_mapping) and store.saved_mapping(conn, account_id, inp.save_mapping) != prepared['mapping']
+    if not new_lines and not saving:
+        return False
+    actor = s.actor
+    touched = []
+    import_id = None
+    if new_lines:
+        import_id = new_id()
+        touched.append(Touched('statement_import', import_id, 'create', None, 1,
+                               dict(draft_id=draft_id, new_lines=len(new_lines)), db='company'))
+    if saving:
+        touched.append(Touched('statement_csv_mapping', account_id, 'create', None, 1,
+                               dict(name=inp.save_mapping), db='company'))
+    event = write_event_to(s.company, ctx, 'reconcile import', summary, touched,
+                           actor_id=actor.id if actor else None, actor_kind=actor.kind if actor else None)
+    at = clock.now_iso()
+    if new_lines:
+        store.store(conn, identity=import_id, account_id=account_id, draft_id=draft_id,
+                    parsed_format=prepared['parsed'].format,
+                    file_sha256=hashlib.sha256(inp.content.encode()).hexdigest(),
+                    statement_date=prepared['statement_date'], ending_balance=prepared['ending'],
+                    suggest_days=inp.suggest_days, line_count=len(prepared['lines']), lines=new_lines,
+                    made=dict(created_at=at, created_by=actor.id if actor else None,
+                              created_via=ctx.interface.value, audit_event_id=event))
+    if saving:
+        store.save_mapping(conn, account_id=account_id, name=inp.save_mapping, mapping=prepared['mapping'],
+                           created_at=at, created_by=actor.id if actor else None, audit_event_id=event)
+    return True

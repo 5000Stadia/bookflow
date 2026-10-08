@@ -791,6 +791,12 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         try:
             if co_tx:
                 _upsert_principals(s, ctx)
+            # An agent's write is checked, after it is made, against the owner's review flags
+            # (`company/entry_review.py`); a match comes back as a warning and nothing is refused.
+            review_before = None
+            if co_tx and s.actor is not None and s.actor.kind == "agent":
+                from bookflow.company import entry_review
+                review_before = entry_review.watermark(s)
             with performance.span("command.apply", command=cmd.name):
                 applied = cmd.apply(plan, ctx, s)
             # Everything this command posted becomes stored statement effects inside the
@@ -807,6 +813,10 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                     from bookflow.company import reconciliation_changes
                     applied.output = reconciliation_changes.with_warnings(
                         applied.output, reconciliation_changes.saved(s, moved))
+                if review_before is not None:
+                    from bookflow.company import entry_review, reconciliation_changes
+                    applied.output = reconciliation_changes.with_warnings(
+                        applied.output, entry_review.write_warnings(s, review_before))
             if applied.finalized:
                 if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
                     raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")
