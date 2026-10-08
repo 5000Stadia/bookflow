@@ -232,15 +232,23 @@ class Adjustment(Dated):
     class_id: ID|None=None
     reason: str=Field(min_length=1)
 
-# A finish with a difference has no adjustment: the `adjustment` input these two once accepted
-# was never read, and advertised a caller-chosen plug account (R163). It is withdrawn until the
-# anchor's labelled discrepancy adjustment is decided; an old caller sending it is refused as an
-# unknown field. A statement that will not tie stays an open draft with a note for the owner.
+# Preview takes no adjustment: the `adjustment` input it once accepted was never read, and
+# advertised a caller-chosen plug account (R163); an old caller sending it is refused as an
+# unknown field. The anchor's labelled adjustment lives only on Finish (DiscrepancyAdjustment):
+# a person may finish with it, to Reconciliation Discrepancies; nobody chooses the account.
 class Preview(DraftRef):
     expected_version: Version
 
+class DiscrepancyAdjustment(Model):
+    """Finish a statement that will not tie: QuickBooks' "Enter Adjustment" on Reconcile Now.
+
+    Only a person may ask for it. It posts one journal for the exact remaining difference, dated
+    the statement date, to the Reconciliation Discrepancies account; nobody chooses the account.
+    """
+    reason: str=Field(min_length=1,max_length=500,description='Why the statement is being finished with an adjustment instead of found and fixed')
+
 class Finish(PreparedChange):
-    pass
+    adjustment: DiscrepancyAdjustment|None=Field(default=None,description='Only a person: finish with a labelled adjusting journal for the remaining difference, posted to Reconciliation Discrepancies. Agents are refused.')
 
 class MemberTarget(Model):
     draft_id: ID
@@ -666,6 +674,17 @@ CLEARED_WITHOUT_LINE=Field(default=None,description=(
     'no statement line accounts for -- cleared without a statement line. Flagged, never refused; '
     'null when nothing was imported, as for any reconciliation built by hand.'))
 
+class AdjustmentOutput(Model):
+    """The adjusting journal a finish posted, or on a dry run the one it would post."""
+    journal_id: ID|None
+    number: str|None
+    date: str
+    amount: Units
+    amount_decimal: str
+    account_id: ID|None
+    account_name: str
+    account_created: bool
+    reason: str
 
 class FinishOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
@@ -678,6 +697,9 @@ class FinishOutput(Model):
     # What the owner's review would flag in what this reconciliation cleared (R163), e.g. an entry
     # an agent posted after the reconciliation was started; the finish is not refused.
     warnings: list[str]=Field(default_factory=list)
+    # Present only when the finish posted (or, on a dry run, would post) an adjustment.
+    original_difference: Units=0
+    adjustment: AdjustmentOutput|None=None
 
 
 # A generated documentation sample fills an unconstrained string with "value", which a

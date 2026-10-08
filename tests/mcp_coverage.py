@@ -823,6 +823,11 @@ def variant_policies():
             ['payment receive applications mode suggested (V1.5 trials) has an actual-MCP witness; its browser form branch has no dedicated case yet']),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
+        ('anyOf', ('DiscrepancyAdjustment', 'null')): ([
+            'tests/test_reconciliation_discrepancies.py::test_a_person_finishes_with_an_adjustment_for_the_exact_difference',
+            'tests/test_reconciliation_discrepancies.py::test_an_agent_is_refused_and_the_draft_stays_open',
+            'tests/test_reconciliation_window_browser.py::test_a_person_finishes_a_statement_that_will_not_tie_with_an_adjustment'],
+            []),
         ('anyOf', ('StatementMoney', 'string')): ([
             'tests/test_reconciliation_commands.py::test_a_statement_balance_is_money_and_may_be_zero_or_negative',
             'tests/test_reconciliation_commands.py::test_an_overdrawn_statement_reconciles',

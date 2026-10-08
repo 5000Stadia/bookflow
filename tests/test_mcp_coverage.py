@@ -109,7 +109,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==25
+    assert len(mapped)==len(variant_policies())==26
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -170,7 +170,12 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # cutover apply 6 each (the null branches of a file's attachment, content, name and kind, and of
     # clearing_account and journal_number), cutover tie-out 5 (no journal_number). No new variant
     # kind; the groups stay 25.
-    assert sum(len(group["paths"]) for group in mapped)==2912
+    # 2912 -> 2913 (merge of reconciliation adjustments onto R166), measured on the merged tree:
+    # reconcile finish gains the person-only `adjustment` (DiscrepancyAdjustment|null, a reason and
+    # nothing else; nobody chooses the account it posts to), its null branch the one new node. A new
+    # variant kind, ('anyOf', ('DiscrepancyAdjustment', 'null')), so the groups go 25 -> 26. Preview
+    # keeps no adjustment (R163).
+    assert sum(len(group["paths"]) for group in mapped)==2913
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

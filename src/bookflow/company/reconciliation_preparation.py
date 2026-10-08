@@ -68,7 +68,9 @@ STOP_RULE=('If it will not tie, stop: leave this draft open, add a note to it sa
     'checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never '
     'post, change or tick an entry just to make the difference zero; the owner\'s entries-to-review '
     'list shows entries that do. The open draft and its difference stay on the Overview until '
-    'someone finishes it.')
+    'someone finishes it. Only a person, never an agent, may instead finish it with a labelled '
+    'adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to '
+    'Reconciliation Discrepancies.')
 
 def statement_only(draft):
     """Details for a statement step handed a draft it does not take."""
