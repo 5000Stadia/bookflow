@@ -1121,3 +1121,11 @@ EXAMPLES.update({
                              ' --limit 25 --company "Demo Plumbing Co" --json',
                              {"customer": "Riverside Apartments", "settlement": "open", "direction": "asc", "limit": 25}),
 })
+
+# Restoring a deleted document posts a new one; the preview shows what it would post.
+EXAMPLES['journal restore'] = Example(
+    f'bookflow journal restore {ID} --reason "Deleted by mistake" --company "Demo Plumbing Co" --dry-run --json',
+    {'journal': ID})
+EXAMPLES['invoice restore'] = Example(
+    f'bookflow invoice restore {ID} --date 2026-07-01 --reason "Deleted by mistake" --company "Demo Plumbing Co" --json',
+    {'invoice': ID, 'date': '2026-07-01'})

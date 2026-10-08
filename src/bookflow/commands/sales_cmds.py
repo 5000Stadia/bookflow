@@ -132,3 +132,31 @@ def _delete(noun, model):
 from bookflow.company.sales_deletion_models import InvoiceDeleteInput, SalesReceiptDeleteInput
 invoice_delete = _delete('invoice', InvoiceDeleteInput)
 sales_receipt_delete = _delete('sales-receipt', SalesReceiptDeleteInput)
+
+
+def restore_invoice(inp, ctx, s):
+    from bookflow.company import restorations
+    plan = restorations.prepare_invoice(s, ctx, inp)
+    plan.data['input'] = inp
+    return plan
+
+
+def _restore():
+    from bookflow.company import restorations
+    from bookflow.company.restoration_models import InvoiceRestoreInput, RestoreOutput
+    from bookflow.core.deletion_families import capability
+    cmd = command('invoice restore', scope='company',
+        description='Restore a deleted invoice as it stood before deletion: post a new invoice for the same customer, lines, prices, quantities, tax codes, terms, addresses and custom fields through invoice post, and link it to the deleted one in the audit trail. The deleted invoice stays deleted with its number and history; the new one takes the next number unless number is given. Posts at the deleted invoice\'s date unless date is given. Refused when it would no longer come to the same subtotal, tax and total, when the period is closed, or when a customer, item or account is inactive; group, subtotal and discount lines and invoices billed from estimates or work orders are not restored yet. People only: an agent is refused. Requires the explicit invoice Delete grant and ledger.post. Asking again for the same deleted invoice answers with the first restoration and posts nothing.',
+        input_model=InvoiceRestoreInput, output_model=RestoreOutput, writes={'company'},
+        required_role='standard', capability=capability('invoice'), explicit_grant_only=True,
+        accepts_idempotency_key=True, positional=['invoice'],
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PERMISSION', 'E_PERIOD_CLOSED',
+                     'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE'])(restore_invoice)
+    cmd.resource_requirements = (('ledger.post', 'standard'),)
+    cmd.ledger = True
+    cmd.applier(restorations.apply_invoice)
+    return cmd
+
+
+invoice_restore = _restore()
+SALES_COMMANDS.append(invoice_restore)

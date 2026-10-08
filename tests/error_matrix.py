@@ -1692,3 +1692,18 @@ for _name, _face in (('invoice delete', 'invoice'), ('sales-receipt delete', 'sa
     }
 for _name in ('invoice delete', 'sales-receipt delete'):
     MATRIX[_name]['E_SOURCE_CORRECTION_CONFLICT'] = 'a credit memo line claimed from this sale prevents its cancellation'
+# Restoring a deleted document posts a new one through its family's post writer (R151).
+for _name, _face in (('journal restore', 'journal entry'), ('invoice restore', 'invoice')):
+    MATRIX[_name] = {
+        'E_RECORD_NOT_FOUND': 'no ' + _face + ' carries that id or number',
+        'E_VALIDATION': 'the ' + _face + ' is not deleted, was void when deleted, or would not post the same today',
+        'E_PERMISSION': 'an agent asked; restoring is a person\'s act',
+        'E_PERIOD_CLOSED': 'its date is on or before the closing date; give an open date',
+        'E_DUPLICATE_NUMBER': 'the number given is taken',
+        'E_INACTIVE_REFERENCE': 'an account, name or item it used is inactive',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+MATRIX['journal restore']['E_UNBALANCED_ENTRY'] = 'the retained lines no longer balance'
+MATRIX['journal restore']['E_NO_EXCHANGE_RATE'] = 'no stored rate for a foreign line on the restore date'
