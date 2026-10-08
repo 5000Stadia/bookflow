@@ -1124,6 +1124,132 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `account uncategorized`
+
+What is waiting in the Uncategorized accounts (Uncategorized Expense (Ask My Accountant) and Uncategorized Income, which the standard profile adds to every company). When you are unsure which account an entry belongs to, post it to one of these with a memo saying what is unclear rather than guessing; someone who knows moves it to its account later by updating the document. This lists every entry still in those accounts, oldest first, with each account's count and amount. An entry that has been moved, voided or deleted is no longer counted, so each account's amount is its balance. The accounts are found by their seed keys, so a renamed one is still read.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | account |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/account.uncategorized` |
+| External binary body | none |
+
+### CLI
+
+`bookflow account uncategorized --limit 5 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "account uncategorized", "input": {"limit": 5}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 20 | Most entries to list, oldest first; counts and amounts always cover every entry.; minimum 1; maximum 200 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/account.uncategorized`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `count` | integer | yes | no | — | Entries still waiting across both accounts. |
+| `accounts` | array[object] | yes | no | — | Each Uncategorized account the company has, expense first. |
+| `accounts[].account_id` | string | yes | no | — | — |
+| `accounts[].label` | string | yes | no | — | The account as reports show it, under the company's number and subaccount preferences. |
+| `accounts[].name` | string | yes | no | — | — |
+| `accounts[].type` | string | yes | no | — | — |
+| `accounts[].active` | boolean | yes | no | — | — |
+| `accounts[].count` | integer | yes | no | — | Entries still in this account. |
+| `accounts[].amount` | object | yes | no | — | What those entries come to on the account's normal side; equals the account's balance. |
+| `accounts[].amount.amount` | string | yes | no | — | — |
+| `accounts[].amount.currency` | string | yes | no | — | — |
+| `accounts[].amount.minor_units` | integer | yes | no | — | — |
+| `accounts[].oldest_date` | string \| null | yes | yes | — | Accounting date of the oldest entry still waiting; null when none is. |
+| `entries` | array[object] | yes | no | — | The oldest waiting entries, up to limit. |
+| `entries[].account_id` | string | yes | no | — | — |
+| `entries[].posting_line_id` | string | yes | no | — | — |
+| `entries[].transaction_id` | string | yes | no | — | — |
+| `entries[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `entries[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
+| `entries[].number` | string | yes | no | — | — |
+| `entries[].date` | string | yes | no | — | — |
+| `entries[].memo` | string \| null | yes | yes | — | The document's memo, which should say what is unclear. |
+| `entries[].description` | string \| null | yes | yes | — | The line's own description. |
+| `entries[].party_name` | string \| null | yes | yes | — | — |
+| `entries[].amount` | object | yes | no | — | On the account's normal side: positive is spending in the expense account and money received in the income account. |
+| `entries[].amount.amount` | string | yes | no | — | — |
+| `entries[].amount.currency` | string | yes | no | — | — |
+| `entries[].amount.minor_units` | integer | yes | no | — | — |
+| `more` | boolean | yes | no | — | True when more entries wait than are listed. |
+
+Example JSON output:
+
+```json
+{
+  "accounts": [],
+  "count": 0,
+  "entries": [],
+  "more": false
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `account update`
 
 Update a account.

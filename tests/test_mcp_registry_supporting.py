@@ -34,6 +34,8 @@ FAMILIES = {
                 'report open-purchase-orders', 'report purchases-by-vendor', 'report purchases-by-item',
                 'report deposit-detail', 'report transaction-list-by-date',
                 'report vendor-1099-summary', 'report reconciliation-discrepancy'),
+    # What waits in the Uncategorized (Ask My Accountant) accounts; the demo seeds one entry there.
+    'uncategorized': ('account uncategorized',),
 }
 
 
@@ -100,6 +102,10 @@ def test_supporting_family_full_documents_and_rejections(root, tmp_path, family)
                     assert (await call('customer link-vendor', raw, rejected=True))['code'] == 'E_VERSION_CONFLICT'
                     converted = await write('other-name convert', {'other_name': other['id'], 'to': 'vendor', 'expected_version': other['version']})
                     assert converted['target_type'] == 'vendor'
+                elif family == 'uncategorized':
+                    waiting = await call('account uncategorized', {'limit': 5})
+                    assert waiting['count'] >= 1 and waiting['entries']
+                    assert (await call('account uncategorized', {'limit': 0}, rejected=True))['code'] == 'E_VALIDATION'
                 else:
                     for command in FAMILIES[family]:
                         raw = {**EXAMPLES[command].input, 'limit': 200}
@@ -126,7 +132,7 @@ def test_supporting_family_full_documents_and_rejections(root, tmp_path, family)
                 for index, (a, b) in enumerate(zip(expected, actual)):
                     assert a == b, (surface, index, a, b)
             # Preview/replay/rejections must not create extra attributed writes.
-            expected_audits = {'rates': 2, 'annotations': 4, 'links': 3, 'reports': 0, 'everyday_reports': 0}[family]
+            expected_audits = {'rates': 2, 'annotations': 4, 'links': 3, 'reports': 0, 'everyday_reports': 0, 'uncategorized': 0}[family]
             for surface, data_root in matrix.roots.items():
                 with sqlite3.connect((data_root / 'hub.db').as_uri() + '?mode=ro', uri=True) as db:
                     relative = db.execute('SELECT path FROM companies WHERE id=?', (company,)).fetchone()[0]

@@ -914,7 +914,28 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
 
     events = ask("audit list", {"limit": ATTENTION_ROWS})
     activity = None if events is None else [dict(event, href=f"{base}/audit/{event['id']}") for event in events["items"]]
-    return dict(figures=figures, attention=attention, activity=activity, today=today)
+    return dict(figures=figures, attention=attention, activity=activity, today=today,
+                uncategorized=_uncategorized(company_id, today, ask, report))
+
+
+def _uncategorized(company_id: str, today: str, ask: Ask, report) -> dict[str, Any] | None:
+    """What waits in the Uncategorized (Ask My Accountant) accounts, or None when nothing does.
+
+    Each account's count and amount are the read command's own figures. An income or expense
+    account's register is its general ledger, so each account links there, from its oldest
+    waiting entry to today; each listed entry opens its own document.
+    """
+    from bookflow.adapters.workbench.transaction_detail import document_link
+    waiting = ask("account uncategorized", {"limit": ATTENTION_ROWS})
+    if waiting is None or not waiting["count"]:
+        return None
+    labels = {account["account_id"]: account["label"] for account in waiting["accounts"]}
+    accounts = [dict(account, href=report("general-ledger", date_from=account["oldest_date"],
+                                          date_to=max(account["oldest_date"], today), account=account["account_id"]))
+                for account in waiting["accounts"] if account["count"]]
+    entries = [dict(entry, account_label=labels.get(entry["account_id"], ""), href=document_link(company_id, entry))
+               for entry in waiting["entries"]]
+    return dict(count=waiting["count"], accounts=accounts, entries=entries, more=waiting["more"])
 
 
 # ---------------------------------------------------------------- the command finder

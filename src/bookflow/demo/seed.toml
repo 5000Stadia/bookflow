@@ -2379,3 +2379,12 @@ command = "invoice post"
 capture = "line_kinds_invoice"
 reason = "Keep an active example of a subtotal, a percentage discount and a group item on one sale"
 input = { date = "2026-12-10", number = "DEMO-LINE-KINDS", customer = "${line_kinds_customer.id}", lines = [{ item = "${service_item.id}", quantity = "2" }, { item = "${noninventory_item.id}", quantity = "4" }, { item = "${subtotal_item.id}" }, { item = "${discount_item.id}" }, { item = "${group_item.id}" }] }
+
+# Ask My Accountant: a bank line nobody could place yet. Rather than guess an account, it waits in
+# Uncategorized Expense (Ask My Accountant), which the standard profile gives every company, with
+# a memo saying what to ask; the Overview counts it until someone moves it to its account.
+[[commands]]
+command = "journal post"
+capture = "demo_ask_accountant"
+reason = "Record a payment whose account is unclear, for the accountant to place"
+input = { date = "2026-12-09", number = "DEMO-ASK-1", memo = "Hardware store, no itemised receipt: tools (equipment) or job supplies?", lines = [{ account = "Uncategorized Expense (Ask My Accountant)", side = "debit", amount = "38.50" }, { account = "Checking", side = "credit", amount = "38.50" }] }

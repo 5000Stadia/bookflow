@@ -116,6 +116,7 @@ account deactivate
 account list
 account query
 account show
+account uncategorized
 account update
 activity
 agent activate

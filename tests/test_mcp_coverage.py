@@ -32,7 +32,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # 491 -> 492 on main before batch A (not measured here); +6 the card-credit verbs (R135).
     # +2 company backup and company restore (R133).
     # +4 agent/user deactivate and activate (R89); +1 report export (R145).
-    assert len(rows) == 505
+    # +1 account uncategorized (Ask My Accountant); its read input adds no census node.
+    assert len(rows) == 506
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
