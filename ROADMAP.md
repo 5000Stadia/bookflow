@@ -133,7 +133,7 @@ used it on real work for a week and approves (pause for that approval); everythi
 - [ ] R163 an agent cannot quietly make the books balance: unexplained adjustments into reconciled accounts, suspense or opening-balance equity are surfaced for the owner (shaped by the R164 study)
 - [~] R164 study: how AI agents keeping books over many months go wrong (AccountingBench and newer), which of those failures Bookflow's guards already stop, and which slip through — notes/research/
 - [~] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
-- [ ] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
+- [~] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
 - [~] R160 the standard company profile's version moves when its contents change (R135 added a Credit Card payment method; version still 1)
 - [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
 - [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
