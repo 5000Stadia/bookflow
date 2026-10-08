@@ -13,6 +13,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
 from bookflow.hub import access
+from bookflow.company.reconciliation_changes import held_next
 
 FAMILY, = PAYMENT_FAMILIES
 NOUN = 'payment'
@@ -94,7 +95,7 @@ def dependencies(s, identity):
         keys.c.transaction_id == identity)).first()
     if held is not None:
         raise BookflowError('E_RECONCILIATION_DEPENDENCY', details={'payment_id': identity,
-            'next': 'Undo the bank reconciliation that holds this receipt before deleting it.'})
+            'next': held_next('payment', 'payment void')})
     # A refund that paid this receipt's overpayment back holds capacity it took from here.
     # Deleting the receipt under it would leave the refund debiting a receivable the cash no
     # longer credits, so the refund goes first -- the same order `payment void` requires.

@@ -24,6 +24,8 @@ _TARGETS.update({
     "customer_vendor_link": ("customer_vendor_links", "id"),
     "note": ("notes", "id"),
     "work_document": ("work_documents", "id"),
+    # An open reconciliation draft carries the note that says why it was left unfinished (R163).
+    "reconciliation_draft": ("reconciliation_drafts", "id"),
     "purchase_order": ("purchase_orders", "id"),
     "work_revision": ("work_revisions", "id"),
     "work_line": ("work_lines", "id"),

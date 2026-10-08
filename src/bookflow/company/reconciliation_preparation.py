@@ -60,6 +60,16 @@ FIRST_RECONCILIATION=('An opening is certified together with the first statement
     'entered_balance 0.00 and tick every movement on the statement, as a first reconciliation '
     'starts from zero.')
 
+# What to do when a statement will not tie (R163). An agent under pressure to finish will find a
+# way past a check that only asks for a zero difference -- by posting an entry that makes it tie,
+# or by ticking one that does not belong -- unless stopping is a designed, named way out. This is
+# that way out, said in the refusal, in the preview and in the help.
+STOP_RULE=('If it will not tie, stop: leave this draft open, add a note to it saying what you '
+    'checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never '
+    'post, change or tick an entry just to make the difference zero; the owner\'s entries-to-review '
+    'list shows entries that do. The open draft and its difference stay on the Overview until '
+    'someone finishes it.')
+
 def statement_only(draft):
     """Details for a statement step handed a draft it does not take."""
     if draft.state!='open':
@@ -232,8 +242,13 @@ def _statement(s,draft, *, predecessor=_HEAD, released_keys=frozenset(), opening
     require(not keys&excluded and not keys&(set(claimed(s))-set(released_keys)),'E_RECONCILIATION_MEMBERSHIP_CONFLICT')
     return totals(beginning,draft.header.entered_balance,selected)
 
-def certify(result):
-    require(result.difference==0,'E_RECONCILIATION_DIFFERENCE')
+def certify(result,currency=None):
+    def details():
+        from bookflow.core.money import Money
+        shown=(lambda v:Money(v,currency).amount) if currency else str
+        return {'difference':shown(result.difference),'cleared_balance':shown(result.cleared_balance),
+                'ending_balance':shown(result.ending_balance),'next':STOP_RULE}
+    require(result.difference==0,'E_RECONCILIATION_DIFFERENCE',details)
     return result
 
 def fingerprint(s,draft):

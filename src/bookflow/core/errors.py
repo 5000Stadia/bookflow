@@ -45,7 +45,7 @@ RECONCILIATION_CODES: dict[str, str] = {
     "E_RECONCILIATION_CHAIN_STALE": "The account's reconciliation chain moved since this draft read it.",
     "E_RECONCILIATION_DATE": "A date is outside what this statement period admits.",
     "E_RECONCILIATION_DEPENDENCY": "Another reconciliation record depends on the one this change would move.",
-    "E_RECONCILIATION_DIFFERENCE": "The statement does not balance: the cleared balance and the entered ending balance differ.",
+    "E_RECONCILIATION_DIFFERENCE": "The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie.",
     "E_RECONCILIATION_DRAFT_STATE": "That reconciliation draft is not open, or is not the kind this step accepts.",
     "E_RECONCILIATION_MANIFEST": "The supplied selection is not the complete, consistent set this operation requires.",
     "E_RECONCILIATION_MEMBERSHIP_CONFLICT": "A chosen movement is already claimed by the opening or by another statement.",

@@ -331,3 +331,25 @@ def plan_vendor_1099_summary(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND", "E_VALIDATION"])
 def plan_reconciliation_discrepancy(inp, ctx, s):
     return Plan(preview=reconciliation_discrepancy(inp, s, principal_id=ctx.on_behalf_of))
+
+
+from bookflow.company.entry_review_reports import (  # noqa: E402
+    EntriesToReviewInput, EntriesToReviewOutput, PriorBalancesInput, PriorBalancesOutput,
+    entries_to_review, prior_balances,
+)
+
+
+@command("report entries-to-review", scope="company", required_role="member", capability="reports",
+    description="Entries an owner should look at, newest entry first, from any command and any person or agent; nothing is refused or changed. An entry is listed when it is dated inside a bank or card statement period already reconciled but was entered afterwards and not cleared (reconciled_period); dated on or before the closing date but entered after the books were closed (closed_period); entered by an agent after a reconciliation was started and cleared on that same reconciliation (cleared_on_arrival); touches Opening Balance Equity or the move-in's Cutover Clearing account outside the move-in (opening_balance_equity; a person's move-in entries, whose source reference starts with cutover:, are setup); or is an agent's journal entry with no memo putting a round amount into a bank or card account in the last three days of a month (round_unexplained). Each row says why, who posted it, for whom, through which interface, with what reason and source reference, and the reconciliation or closing date it touches. Only what each document posts now counts: a voided entry drops off. An entry the owner marked reviewed (`review mark`) is left out unless include_reviewed is true, until it is corrected or gains a new flag. open_reconciliations lists every open statement reconciliation whose difference is not zero, with who started it and the latest note on it. Rows are paged; totals cover the whole report.",
+    input_model=EntriesToReviewInput, output_model=EntriesToReviewOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_VALIDATION"])
+def plan_entries_to_review(inp, ctx, s):
+    return Plan(preview=entries_to_review(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report prior-balances", scope="company", required_role="member", capability="reports",
+    description="Account balances that changed after they were reviewed, as the anchor's Troubleshoot Prior Account Balances shows them. A finished reconciliation reviews its account's balance at its statement date, and the closing date reviews every account's balance at the closing date. For each review dated on or before as_of whose balance has since moved, one balance row gives the balance as of the review date as it stood when reviewed, as it is now, and the change; under it, one entry row per transaction responsible, with its share of the change -- a back-dated entry, or a void or correction of one already there. Balances are in each account's normal sign. Nothing is stored: the reviewed balance is the ledger's immutable lines dated on or before the review date and written before the review. Totals count the reviews, the moved balances and the entries; rows are paged.",
+    input_model=PriorBalancesInput, output_model=PriorBalancesOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_VALIDATION"])
+def plan_prior_balances(inp, ctx, s):
+    return Plan(preview=prior_balances(inp, s, principal_id=ctx.on_behalf_of))

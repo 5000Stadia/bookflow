@@ -16,7 +16,7 @@ COMMANDS = {
     "report vendor-balance-summary", "report vendor-balance-detail",
     "report open-purchase-orders", "report purchases-by-vendor", "report purchases-by-item",
     "report deposit-detail", "report transaction-list-by-date", "report vendor-1099-summary",
-    "report reconciliation-discrepancy",
+    "report reconciliation-discrepancy", "report entries-to-review", "report prior-balances",
 }
 
 # One column: (heading, row field, how the cell is written). `label` is the row's first
@@ -59,6 +59,15 @@ LAYOUTS = {
                                    ("Memo", "memo", T), ("Change", "change_label", T),
                                    ("Reconciled", "reconciled", M), ("Now", "current", M),
                                    ("Difference", "difference", M)),
+    "entries-to-review": (("Why", "why", "label"), ("Transaction", "number", "document"),
+                          ("Date", "date", D), ("Posted by", "posted_by_label", T),
+                          ("Reason", "reason", T), ("Entered", "entered_at", T),
+                          ("Reviewed", "reviewed_label", T), ("Amount", "amount", M)),
+    "prior-balances": (("Reviewed", "review_label", "label"), ("Account", "display_account_label", T),
+                       ("Transaction", "number", "document"), ("Date", "date", D),
+                       ("Entered", "entered_at", T), ("Posted by", "posted_by", T),
+                       ("When reviewed", "reviewed_balance", M), ("Now", "current_balance", M),
+                       ("Change", "change", M)),
 }
 # The whole-report figures above the table, in reading order, with their headings.
 TOTALS = {
@@ -78,6 +87,10 @@ TOTALS = {
     "reconciliation-discrepancy": (("reconciliations", "Reconciliations"),
                                    ("out_of_balance", "No longer tie"),
                                    ("changes", "Transactions changed since reconciled")),
+    "entries-to-review": (("entries", "Entries to review"),
+                          ("open_reconciliations", "Reconciliations left open with a difference")),
+    "prior-balances": (("reviews", "Reviewed balance dates"), ("changed_balances", "Balances that moved"),
+                       ("entries", "Entries responsible")),
 }
 # What each report says under its table, in a bookkeeper's words.
 NOTES = {
@@ -91,6 +104,8 @@ NOTES = {
     "deposit-detail": "Each deposit, then the payments, sales receipts and other lines it gathered, at the amount each took out of the account it came from. Select a transaction to open it.",
     "transaction-list-by-date": "Every transaction posted in the period, in date order: its type and number, who it names, the account it posts to and the other side of the entry. A correction or a void appears as the reversal and replacement it posted. Select a transaction to open it.",
     "reconciliation-discrepancy": "Each finished reconciliation of the account, with the statement's ending balance, its cleared balance as the transactions it cleared stand now, and the difference; under it, each of those transactions that was changed or voided after it was reconciled, at what it was reconciled and what it counts for now. A later reconciliation carries an earlier one's difference in its beginning balance. Change the transaction back, or re-do the reconciliation, to make it tie again.",
+    "entries-to-review": "Entries anyone posted that an owner should look at: dated inside a statement already reconciled or a closed period but entered later, cleared by an agent on the very reconciliation it was entered during, touching Opening Balance Equity outside the move-in, or an agent's round, unexplained month-end amount into a bank account. Nothing was refused or changed. Open one to check it; mark it reviewed with review mark, which changes nothing in the entry.",
+    "prior-balances": "Each finished reconciliation and the closing date reviewed an account balance as of a date. Where that balance has changed since, the first row shows it as it was when reviewed and as it is now; the rows under it are the entries that moved it, entered after the review but dated on or before it. Open one to see who entered it.",
     "vendor-1099-summary": "Payments made in the calendar year to vendors marked eligible for a 1099, from bank accounts only: payments by credit card are reported by the card company, so they are shown but not counted. This is a report, not a filing.",
 }
 PO_STATUS = {"open": "Open", "partly_received": "Partly received"}
@@ -146,6 +161,16 @@ def view(result, inputs, company_id, verb):
             shown["reconciliation_label"] = (
                 ("Opening balance " if row["reconciliation"] == "opening" else "Statement ")
                 + row["statement_date"]) if row["kind"] == "reconciliation" else ""
+        if verb == "entries-to-review":
+            who = row.get("posted_by") or row.get("posted_by_id") or ""
+            if row.get("actor_kind") == "agent":
+                who += " (agent" + (" for " + row["on_behalf_of"] if row.get("on_behalf_of") else "") + ")"
+            shown["posted_by_label"] = who
+            shown["reviewed_label"] = ("Yes, by " + (row["reviewed_by"] or "") if row["reviewed"] else "")
+        if verb == "prior-balances":
+            shown["is_total"] = row["kind"] == "balance"
+            shown["review_label"] = (("Statement " if row["review"] == "statement" else "Closing date ")
+                                     + row["review_date"]) if row["kind"] == "balance" else ""
         if verb in ("customer-balance-detail", "vendor-balance-detail") and row["kind"] == "total":
             shown["number"] = "Total"
         rows.append(shown)

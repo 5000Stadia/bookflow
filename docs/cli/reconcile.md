@@ -150,7 +150,7 @@ Example JSON output:
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
-| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. |
 | `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
 | `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
 | `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |
@@ -168,7 +168,7 @@ Example JSON output:
 
 ## `reconcile finish`
 
-Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it.
+Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -203,10 +203,6 @@ The same example as complete `bookflow_run` arguments:
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string | yes | no | — | pattern "^[0-9a-f]{64}$" |
 | `dependency_guard` | `--dependency-guard` | string | yes | no | — | — |
-| `adjustment.date` | `--adjustment-date` | string | yes | no | — | — |
-| `adjustment.offset_account_id` | `--adjustment-offset-account-id` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
-| `adjustment.class_id` | `--adjustment-class-id` | string \| null | no | yes | null | — |
-| `adjustment.reason` | `--adjustment-reason` | string | yes | no | — | minimum length 1 |
 
 ### Command and context options
 
@@ -298,6 +294,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.cleared_balance` | integer | yes | no | — | — |
 | `totals.difference` | integer | yes | no | — | — |
 | `totals.decimal_units` | object[string, string] | yes | no | — | — |
+| `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
 
@@ -359,7 +356,8 @@ Example JSON output:
     "positive_count": 1,
     "positive_sum": 1,
     "selected_sum": 1
-  }
+  },
+  "warnings": []
 }
 ```
 
@@ -391,7 +389,7 @@ Example JSON output:
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
-| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. |
 | `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
 | `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
 | `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |
@@ -619,7 +617,7 @@ Example JSON output:
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
-| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. |
 | `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
 | `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
 | `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |
@@ -638,7 +636,7 @@ Example JSON output:
 
 ## `reconcile preview`
 
-Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement.
+Show what a reconciliation draft currently comes to, and hand back the exact facts fingerprint and dependency guard `reconcile finish` requires. On an opening draft, next_step says how it is finished: through its first statement; on a statement that does not tie, it says what to do instead of forcing it.
 
 | Contract | Value |
 |---|---|
@@ -668,10 +666,6 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `draft` | `DRAFT` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
-| `adjustment.date` | `--adjustment-date` | string | yes | no | — | — |
-| `adjustment.offset_account_id` | `--adjustment-offset-account-id` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
-| `adjustment.class_id` | `--adjustment-class-id` | string \| null | no | yes | null | — |
-| `adjustment.reason` | `--adjustment-reason` | string | yes | no | — | minimum length 1 |
 
 ### Command and context options
 
@@ -775,7 +769,7 @@ Example JSON output:
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
-| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. |
 | `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
 | `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
 | `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |
@@ -794,7 +788,7 @@ Example JSON output:
 
 ## `reconcile start`
 
-Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; an account with no opening needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`.
+Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; an account with no opening needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -985,7 +979,7 @@ Example JSON output:
 | `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
 | `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
 | `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
-| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. |
 | `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
 | `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
 | `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |

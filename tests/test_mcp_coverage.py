@@ -32,7 +32,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # 491 -> 492 on main before batch A (not measured here); +6 the card-credit verbs (R135).
     # +2 company backup and company restore (R133).
     # +4 agent/user deactivate and activate (R89); +1 report export (R145).
-    assert len(rows) == 505
+    # +3 report entries-to-review, report prior-balances and review mark (R163).
+    assert len(rows) == 508
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -105,7 +106,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==26
+    assert len(mapped)==len(variant_policies())==25
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -152,7 +153,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # producer, number, payee, memo, amount. `all` and `all_action` are a boolean and a literal and
     # add none; no other routed input changed. No new variant kind: filters has a default rather
     # than being nullable, so tests/mcp_coverage.py needs no new policy and the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2890
+    # 2890 -> 2889 (R163), measured: reconcile preview and finish each lose the dormant
+    # `adjustment` input and its nullable class_id, -4 (its Adjustment|null variant group goes,
+    # 26 -> 25 groups); report entries-to-review /cursor, report prior-balances /cursor and
+    # review mark /note add one null branch each, +3.
+    assert sum(len(group["paths"]) for group in mapped)==2889
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

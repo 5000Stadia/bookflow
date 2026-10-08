@@ -184,7 +184,7 @@ reconcile_start = _start_family(
     'Open a draft for one bank or credit card statement. It follows the account\'s adopted opening '
     'unless you name opening_id, or opening_draft_id for an opening not finished yet; an account '
     'with no opening needs `reconcile opening start` first. Then `reconcile candidates`, '
-    '`reconcile mark`, `reconcile preview` and `reconcile finish`.')
+    '`reconcile mark`, `reconcile preview` and `reconcile finish`. ' + preparation.STOP_RULE)
 
 
 def _marked(inp, value):
@@ -276,7 +276,8 @@ def _finish_prepare(inp, ctx, s, ids):
     preparation.require(inp.expected_facts_fingerprint == preparation.fingerprint(snapshot, value),
                         'E_RECONCILIATION_SELECTION_STALE')
     opening_draft, totals = _totals(snapshot, value)
-    return snapshot, value, opening_draft, preparation.certify(totals)
+    currency = snapshot.source.accounts[account_id]['currency']
+    return snapshot, value, opening_draft, preparation.certify(totals, currency)
 
 
 reconcile_finish = command(
@@ -284,7 +285,8 @@ reconcile_finish = command(
     description='Certify a statement reconciliation whose difference is zero, storing the statement '
                 'it reconciles to and the account exactly as it stood when it was certified. Takes a '
                 'statement draft from `reconcile start`, never an opening draft: on an account\'s '
-                'first reconciliation the opening that statement follows is certified with it.',
+                'first reconciliation the opening that statement follows is certified with it. '
+                + preparation.STOP_RULE,
     input_model=m.Finish, output_model=m.FinishOutput, writes={'company'}, required_role='standard',
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
     error_codes=list(ERRORS))(
@@ -475,7 +477,8 @@ def _preview(inp, ctx, s):
         draft=value.id, account_id=account_id,
         currency=snapshot.source.accounts[account_id]['currency'],
         kind=value.kind, version=value.version,
-        next_step=preparation.FIRST_RECONCILIATION if value.kind == 'opening' else None,
+        next_step=(preparation.FIRST_RECONCILIATION if value.kind == 'opening'
+                   else None if totals.difference == 0 else preparation.STOP_RULE),
         totals=totals, expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
         dependency_guard=dependency_guard(value), balanced=totals.difference == 0))
 
@@ -484,6 +487,7 @@ reconcile_preview = command(
     'reconcile preview', scope='company',
     description='Show what a reconciliation draft currently comes to, and hand back the exact '
                 'facts fingerprint and dependency guard `reconcile finish` requires. On an opening '
-                'draft, next_step says how it is finished: through its first statement.',
+                'draft, next_step says how it is finished: through its first statement; on a '
+                'statement that does not tie, it says what to do instead of forcing it.',
     input_model=m.Preview, output_model=m.PreviewOutput, required_role='member',
     capability='ledger.read', positional=['draft'], error_codes=list(ERRORS))(_preview)

@@ -1636,6 +1636,186 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report entries-to-review`
+
+Entries an owner should look at, newest entry first, from any command and any person or agent; nothing is refused or changed. An entry is listed when it is dated inside a bank or card statement period already reconciled but was entered afterwards and not cleared (reconciled_period); dated on or before the closing date but entered after the books were closed (closed_period); entered by an agent after a reconciliation was started and cleared on that same reconciliation (cleared_on_arrival); touches Opening Balance Equity or the move-in's Cutover Clearing account outside the move-in (opening_balance_equity; a person's move-in entries, whose source reference starts with cutover:, are setup); or is an agent's journal entry with no memo putting a round amount into a bank or card account in the last three days of a month (round_unexplained). Each row says why, who posted it, for whom, through which interface, with what reason and source reference, and the reconciliation or closing date it touches. Only what each document posts now counts: a voided entry drops off. An entry the owner marked reviewed (`review mark`) is left out unless include_reviewed is true, until it is corrected or gains a new flag. open_reconciliations lists every open statement reconciliation whose difference is not zero, with who started it and the latest note on it. Rows are paged; totals cover the whole report.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.entries-to-review` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report entries-to-review --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report entries-to-review", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive date, YYYY-MM-DD; entries dated after it are left out.; minimum length 10; maximum length 10 |
+| `include_reviewed` | `--include-reviewed` | boolean | no | no | false | Also list entries an owner already marked reviewed. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.entries-to-review`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.entries` | integer | yes | no | — | Entries listed, whole report. |
+| `totals.open_reconciliations` | integer | yes | no | — | Open statement reconciliations whose difference is not zero. |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].transaction_id` | string | yes | no | — | — |
+| `rows[].revision_id` | string | yes | no | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].flags` | array[literal["reconciled_period", "closed_period", "cleared_on_arrival", "opening_balance_equity", "round_unexplained"]] | yes | no | — | — |
+| `rows[].why` | string | yes | no | — | Why it is listed, one sentence per flag. |
+| `rows[].account` | string \| null | yes | yes | — | The account the first flag is about. |
+| `rows[].statement_date` | string \| null | yes | yes | — | The reconciliation (or closing date) it touches, when a flag names one. |
+| `rows[].posted_by_id` | string \| null | yes | yes | — | — |
+| `rows[].posted_by` | string \| null | yes | yes | — | — |
+| `rows[].actor_kind` | string \| null | yes | yes | — | — |
+| `rows[].on_behalf_of_id` | string \| null | yes | yes | — | — |
+| `rows[].on_behalf_of` | string \| null | yes | yes | — | — |
+| `rows[].interface` | string \| null | yes | yes | — | — |
+| `rows[].reason` | string \| null | yes | yes | — | — |
+| `rows[].source_ref` | string \| null | yes | yes | — | — |
+| `rows[].entered_at` | string \| null | yes | yes | — | — |
+| `rows[].reviewed` | boolean | yes | no | — | — |
+| `rows[].reviewed_by` | string \| null | yes | yes | — | — |
+| `rows[].reviewed_at` | string \| null | yes | yes | — | — |
+| `open_reconciliations` | array[object] | yes | no | — | — |
+| `open_reconciliations[].draft_id` | string | yes | no | — | — |
+| `open_reconciliations[].account_id` | string | yes | no | — | — |
+| `open_reconciliations[].display_account_label` | string | yes | no | — | — |
+| `open_reconciliations[].statement_date` | string \| null | yes | yes | — | — |
+| `open_reconciliations[].difference` | object \| null | yes | yes | — | Null when the draft can no longer be read against the ledger. |
+| `open_reconciliations[].difference.amount` | string | yes | no | — | — |
+| `open_reconciliations[].difference.currency` | string | yes | no | — | — |
+| `open_reconciliations[].difference.minor_units` | integer | yes | no | — | — |
+| `open_reconciliations[].started_by_id` | string | yes | no | — | — |
+| `open_reconciliations[].started_by` | string \| null | yes | yes | — | — |
+| `open_reconciliations[].started_by_kind` | string \| null | yes | yes | — | — |
+| `open_reconciliations[].started_at` | string | yes | no | — | — |
+| `open_reconciliations[].note` | string \| null | yes | yes | — | The latest note on the draft: what was checked, as whoever stopped left it. |
+| `open_reconciliations[].note_by` | string \| null | yes | yes | — | — |
+| `open_reconciliations[].note_at` | string \| null | yes | yes | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "open_reconciliations": [],
+  "rows": [],
+  "totals": {
+    "entries": 1,
+    "open_reconciliations": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report expenses-by-vendor`
 
 Uses the company cash/accrual report preference unless basis is supplied. Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer or job filter: a bill posts its vendor onto every leg including the expense ones, so the customer typed in a bill's Customer:Job column never reaches the posting line and a job-filtered expense report would silently omit every bill. Under a filter the total is the expense the filter admits, and scope states the whole period and what was kept out of it, so the total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every vendor the filter admits and rows are paged.
@@ -3043,6 +3223,169 @@ Example JSON output:
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report prior-balances`
+
+Account balances that changed after they were reviewed, as the anchor's Troubleshoot Prior Account Balances shows them. A finished reconciliation reviews its account's balance at its statement date, and the closing date reviews every account's balance at the closing date. For each review dated on or before as_of whose balance has since moved, one balance row gives the balance as of the review date as it stood when reviewed, as it is now, and the change; under it, one entry row per transaction responsible, with its share of the change -- a back-dated entry, or a void or correction of one already there. Balances are in each account's normal sign. Nothing is stored: the reviewed balance is the ledger's immutable lines dated on or before the review date and written before the review. Totals count the reviews, the moved balances and the entries; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.prior-balances` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report prior-balances --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report prior-balances", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive date, YYYY-MM-DD; reviews of dates after it are left out.; minimum length 10; maximum length 10 |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.prior-balances`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.reviews` | integer | yes | no | — | Finished reconciliations and the closing date, each a reviewed balance date. |
+| `totals.changed_balances` | integer | yes | no | — | Account balances that moved after they were reviewed. |
+| `totals.entries` | integer | yes | no | — | Entries responsible, counted once per balance they moved. |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["balance", "entry"] | yes | no | — | — |
+| `rows[].review` | literal["statement", "closing_date"] | yes | no | — | — |
+| `rows[].review_id` | string | yes | no | — | The certificate, or 'closing-date'. |
+| `rows[].review_date` | string | yes | no | — | The statement date or the closing date: the balance is as of this date. |
+| `rows[].reviewed_at` | string | yes | no | — | When it was reviewed: the reconciliation finished, or the closing date set. |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].reviewed_balance` | object \| null | yes | yes | — | Balance as of review_date as it stood when reviewed; balance rows only. |
+| `rows[].reviewed_balance.amount` | string | yes | no | — | — |
+| `rows[].reviewed_balance.currency` | string | yes | no | — | — |
+| `rows[].reviewed_balance.minor_units` | integer | yes | no | — | — |
+| `rows[].current_balance` | object \| null | yes | yes | — | Balance as of review_date now; balance rows only. |
+| `rows[].current_balance.amount` | string | yes | no | — | — |
+| `rows[].current_balance.currency` | string | yes | no | — | — |
+| `rows[].current_balance.minor_units` | integer | yes | no | — | — |
+| `rows[].change` | object | yes | no | — | What moved since the review: on a balance row the total, on an entry row that entry's share. |
+| `rows[].change.amount` | string | yes | no | — | — |
+| `rows[].change.currency` | string | yes | no | — | — |
+| `rows[].change.minor_units` | integer | yes | no | — | — |
+| `rows[].transaction_id` | string \| null | yes | yes | — | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | yes | yes | — | — |
+| `rows[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].date` | string \| null | yes | yes | — | — |
+| `rows[].entered_at` | string \| null | yes | yes | — | — |
+| `rows[].posted_by` | string \| null | yes | yes | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "changed_balances": 1,
+    "entries": 1,
+    "reviews": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

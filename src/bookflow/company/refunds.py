@@ -63,6 +63,7 @@ from bookflow.core.ids import is_ulid, new_id
 from bookflow.core.money import Money
 from bookflow.core.registry import Applied, Plan, Touched
 from bookflow.hub.users import common
+from bookflow.company.reconciliation_changes import held_next
 
 DOCUMENT_TYPE = 'customer_refund'
 
@@ -571,7 +572,7 @@ def _reconciled(s, transaction_id):
     if held is not None:
         raise BookflowError('E_RECONCILIATION_DEPENDENCY', details={
             'refund_id': transaction_id,
-            'next': 'Undo the bank reconciliation that holds this refund, then correct it.'})
+            'next': held_next('refund', 'customer-refund void', verb='correcte')})
 
 
 def _semantic(profile):
