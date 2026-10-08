@@ -454,7 +454,11 @@ def test_follow_keeps_high_water(cli, root):
     from tests.conftest import BIN
     p = subprocess.Popen([str(BIN), "audit", "tail", "--follow", "--company", "Demo Plumbing Co", "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     time.sleep(3)
-    cli.json("company", "update", "--phone", "followed", "--company", "Demo Plumbing Co")
+    # Each poll holds the root for as long as its read takes (seconds on a loaded machine), so the
+    # writer waits for the lock as a real one does (the product's 5 s default, with head-room)
+    # rather than the suite's 0.2 s, which made this a race against the poll.
+    cli.json("company", "update", "--phone", "followed", "--company", "Demo Plumbing Co",
+             env={"BOOKFLOW_LOCK_TIMEOUT": "30"})
     time.sleep(3)
     p.send_signal(signal.SIGINT)
     out, _ = p.communicate(timeout=10)
