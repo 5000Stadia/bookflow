@@ -119,6 +119,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.DEACTIVATION_POLICY_VERSION: '51f5128ce50d04fd36fdc9000c3879e404d02a862009906b121a590c1c85ced7',
     c.REPORT_EXPORT_POLICY_VERSION: '585047459e889e7b48af181307386d6eb476454fd3de624b04c4916455652611',
     c.AUDIT_VISIBILITY_POLICY_VERSION: '1a6e263186f929c26d8749f6ba1b6c1ec16706287b9db0b09affeb6442789433',
+    c.CUTOVER_POLICY_VERSION: '17bf236f2ad3f4b4c1e5972044cb2c98047f704df07a9c726b4a2d21da4e46d4',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -213,7 +214,7 @@ def known_catalog(version):
     from . import permission_agent_catalog, permission_everyday_reports_catalog, permission_card_credit_catalog
     from . import permission_backup_catalog
     from . import permission_deactivation_catalog, permission_report_export_catalog
-    from . import permission_audit_visibility_catalog
+    from . import permission_audit_visibility_catalog, permission_cutover_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -234,6 +235,7 @@ def known_catalog(version):
         c.DEACTIVATION_POLICY_VERSION: permission_deactivation_catalog,
         c.REPORT_EXPORT_POLICY_VERSION: permission_report_export_catalog,
         c.AUDIT_VISIBILITY_POLICY_VERSION: permission_audit_visibility_catalog,
+        c.CUTOVER_POLICY_VERSION: permission_cutover_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -244,7 +246,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.AUDIT_VISIBILITY_POLICY_VERSION)
+    return known_catalog(c.CUTOVER_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

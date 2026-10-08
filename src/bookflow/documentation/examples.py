@@ -13,6 +13,8 @@ class Example:
 
 
 ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+_CUTOVER_FILES = [{"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB3"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB4"},
+                  {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB5"}]
 
 EXAMPLES: dict[str, Example] = {
     "mcp": Example("bookflow mcp --url http://127.0.0.1:8765 --token-env BOOKFLOW_TOKEN", {"url": "http://127.0.0.1:8765"}),
@@ -196,6 +198,12 @@ EXAMPLES.update({
     "report cash-flows": Example('bookflow report cash-flows --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report income-tax-summary": Example('bookflow report income-tax-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "cutover plan": Example('bookflow cutover plan --as-of 2026-09-30 --files \'[{"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB3"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB4"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB5"}]\' --mappings-accounts \'{"6150 · Uncategorized Expenses": "6300"}\' --company "Riverbend Plumbing" --json',
+                            {"as_of": "2026-09-30", "files": _CUTOVER_FILES, "mappings": {"accounts": {"6150 · Uncategorized Expenses": "6300"}}}),
+    "cutover apply": Example('bookflow cutover apply --as-of 2026-09-30 --files \'[{"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB3"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB4"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB5"}]\' --company "Riverbend Plumbing" --reason "Move in from the old books" --idempotency-key move-in-2026-09-30 --json',
+                             {"as_of": "2026-09-30", "files": _CUTOVER_FILES}),
+    "cutover tie-out": Example('bookflow cutover tie-out --as-of 2026-09-30 --files \'[{"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB3"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB4"}, {"attachment": "01ARZ3NDEKTSV4RRFFQ69G5FB5"}]\' --company "Riverbend Plumbing" --json',
+                               {"as_of": "2026-09-30", "files": _CUTOVER_FILES}),
     "report export": Example('bookflow report export profit-and-loss --filters \'{"date_from": "2026-01-01", "date_to": "2026-12-31"}\' --company "Demo Plumbing Co" --json',
                              {"report": "profit-and-loss", "filters": {"date_from": "2026-01-01", "date_to": "2026-12-31"}}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),

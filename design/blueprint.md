@@ -1369,7 +1369,7 @@ shared report mechanics are described in design/architecture.md.
 
 ### 14.1 Import and export
 
-`import <noun> <file.csv>` reads one row per record, maps columns to the noun's `create` input model by header name, and runs one `create` command per row through the registry, so every row is validated, audited, and idempotent (the idempotency key is the file hash plus row number). The output reports created, replayed, and rejected rows with their errors. `--dry-run` validates every row and writes nothing. Import of transactions uses the same mechanism with one file per transaction type. Export is `list --csv` on any noun and `report <name> --csv`. IIF import is a later addition that maps IIF sections onto the same imports. Import and export are release 2.
+`import <noun> <file.csv>` reads one row per record, maps columns to the noun's `create` input model by header name, and runs one `create` command per row through the registry, so every row is validated, audited, and idempotent (the idempotency key is the file hash plus row number). The output reports created, replayed, and rejected rows with their errors. `--dry-run` validates every row and writes nothing. Import of transactions uses the same mechanism with one file per transaction type. Export is `list --csv` on any noun and `report <name> --csv`. IIF import is a later addition that maps IIF sections onto the same imports. Import and export are release 2. Moving a company in from its old books at a period boundary is `cutover plan`, `cutover apply` and `cutover tie-out` (design/architecture.md, *Moving a company in*).
 
 ## 15. Adapters
 

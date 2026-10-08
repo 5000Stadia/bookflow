@@ -5088,3 +5088,77 @@ marked `json_schema_extra={"x-bookflow-local-path": True}` absolute before dispa
 `card-credit-v1`. Browser: `adapters/workbench/backups.py` mounts `/c/{id}/company/backup` and
 `/c/{id}/company/restore` (multipart upload to a private temporary folder, removed after the
 command) ahead of the generic routes; the Company section links both.
+
+## Moving a company in (R166)
+
+`commands/cutover_cmds.py` registers `cutover plan` (read, `ledger.read`), `cutover apply` (write,
+`ledger.post` at `standard`, idempotency key) and `cutover tie-out` (read, `reports`); the permission
+delta is `hub/permission_cutover_catalog.py` (`cutover-v1`). They take one input model
+(`company/cutover_models.py`): `as_of`, `files` (each an attachment id or inline text, with an
+optional `kind`), `mappings` and `clearing_account`; apply and plan add `journal_number`, tie-out
+adds `detail`. `docs/cutover.md` is the user page.
+
+`company/cutover_sources.py` is pure parsing. IIF list files are tab-separated, one `!KEYWORD`
+header per list (`!ACCNT`, `!CUST`, `!VEND`, `!INVITEM`, `!TERMS`; others are counted and
+ignored), decoded as UTF-8 and otherwise Windows-1252. Report CSVs are found by their headings
+(title rows optional): Debit/Credit for the trial balance, Type/Open Balance for open invoices and
+unpaid bills, Current/TOTAL for the aging summaries, On Hand/Asset Value for inventory valuation.
+`_grouped` walks indent columns into `Customer:Job` paths, checks every `Total <name>` row and the
+`TOTAL` row against the rows read, and `split_account_label` reads `6700 · Utilities:6710 ·
+Telephone` as number `6710`, path `Utilities:Telephone`. Amounts become integer minor units.
+
+`company/cutover.py` plans by reading the books once (`Books`): accounts, lists, company settings,
+and the outside-id links -- every company audit event whose `source_ref` starts with `cutover:`,
+with its audit entries, regardless of actor. A link is the record a write with that source
+reference made, so a step whose outside id is linked is `already_in` and is never made again.
+Outside ids: `account:<path key>`, `customer:<path key>`, `vendor:<key>`, `item:<path key>`,
+`term:<key>`, `clearing-account`, `opening-balance-item`, `<side>:<type>:<party>:<num>:<date>:<n>`
+for documents (n counts identical rows within a file), `inventory:<item key>`,
+`journal:<as_of>:<part>`, and `<list outside id>:inactive` for deactivations.
+
+Matching order for an account: explicit mapping; link; system role (IIF `EXTRA` marker, AR/AP
+type, or the well-known system names); full name and type; otherwise made from the IIF row with
+its number. A taken number with another name, a name of another type, a trial-balance account in
+no list, and a receivable or payable account mapped to anything but a receivable or payable
+account are blocking exceptions. Customers, vendors, items and terms match by mapping, link, then
+name; terms reading `Net N` or `N% D Net M` are made, others are a warning. Jobs bring only job
+facts (they inherit their customer's address and contacts). Tax codes go on customers only when
+the company has sales tax on. Group, assembly, payment and sales-tax-group items are skipped with a
+warning.
+
+Steps run in order: accounts, terms, customers and jobs, vendors, items, the clearing account and
+the `Opening balance` other-charge item (made only when something posts to them), invoices and
+credit memos, bills and vendor credits, `inventory adjust` per stocked item, the opening journal
+(at most 199 account lines per journal plus its clearing line), deactivations. The opening journal
+omits every account whose target is a receivable or payable account or the inventory-asset role,
+so those balances arrive only as documents and stock; its clearing line is minus the sum of its
+lines, and the documents and stock post the same amount back, so the clearing account nets to zero
+exactly when they equal the trial balance. The plan's checks compare the trial balance's
+receivables, payables and inventory with the documents and stock before anything is written; a
+difference is blocking.
+
+`apply` commits the dispatch transaction, then runs each step through `run_in_session` with
+`source_ref` `cutover:<outside id>`, no idempotency key and the caller's reason (or `Move-in from
+the old books`), saving and restoring the session's touched lists and dry-run flag around each call
+as memorized entries do. Ids made by earlier steps replace `Ref` placeholders in later inputs. A
+failing step stops the run with `E_CUTOVER_INCOMPLETE` naming the step and its cause; everything
+made before it stays, and a rerun continues. The apply's own receipt is stored only for an
+idempotency key; it writes no audit event of its own (each step's event is the record), and is
+registered in `core/commit_hooks.OWNERS` as `cutover.apply`.
+
+`tie_out` reads `report trial-balance`, `report ar-aging` and `report ap-aging` as of `as_of`
+through `run_in_session`, every page, and compares per Bookflow account (source rows aggregated
+through the plan's mapping) and per customer, job and vendor in every aging column; the source
+aging is the aging summary file when given, otherwise the open documents aged by `aging.bucket_of`
+on their due dates (credits on their dates).
+
+Other-charge items may name a balance-sheet account (`items.sold_account_types` and
+`sold_account_problem`, read by item validation, `sales_defaults._sold_account`, the sales and
+credit-memo correction eligibility checks, `sales_validation` and work billing). Such a line credits
+its account; sales by item and the profit and loss read income postings and so never count it,
+cash-basis recognition defers only P&L components and so leaves it as posted, and its tax follows
+its tax code like any line (`tests/test_other_charge_balance_sheet.py`).
+
+The demo seed's opening balance is a one-file move-in (`cutover plan`, `cutover apply` with
+`journal_number` `DEMO-OPEN`, `cutover tie-out`); `tests/fixtures/cutover/` holds the sample export
+set the tests move in.

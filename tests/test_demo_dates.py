@@ -30,7 +30,8 @@ OPENING = SEED['calendar']['fiscal_year_start']
 HAPPENED = {'date', 'effective_date', 'source_date', 'statement_date', 'opening_date', 'entry_date',
             'slot_date', 'through_date', 'purchase_date', 'hire_date'}
 # Seed input keys that date a document or something done: the same idea on the written seed.
-HAPPENED_KEYS = {'date', 'actual_start', 'actual_end'}
+# `as_of` is the move-in's cutover date, the day the opening balances are posted.
+HAPPENED_KEYS = {'date', 'actual_start', 'actual_end', 'as_of'}
 
 
 def happened(commands):

@@ -1,0 +1,20 @@
+"Riverbend Plumbing LLC"
+"Unpaid Bills Detail"
+"As of September 30, 2026"
+,,"Type","Date","Num","Due Date","Aging","Open Balance"
+"Ferguson Supply",,,,,,,
+,,"Bill","08/20/2026","INV-87790","09/19/2026","11","1,206.40"
+,,"Bill","09/10/2026","INV-88213","10/10/2026",,"3,412.88"
+,,"Credit","09/15/2026","CR-1022",,,"-212.00"
+"Total Ferguson Supply",,,,,,,"4,407.28"
+"Midwest Gas & Electric",,,,,,,
+,,"Bill","09/26/2026","0926-4471","10/11/2026",,"318.62"
+"Total Midwest Gas & Electric",,,,,,,"318.62"
+"Reliable Rooter LLC",,,,,,,
+,,"Bill","06/01/2026","3301","06/16/2026","106","480.00"
+,,"Bill","09/05/2026","3317","09/20/2026","10","2,750.00"
+"Total Reliable Rooter LLC",,,,,,,"3,230.00"
+"State Farm Insurance",,,,,,,
+,,"Bill","07/01/2026","POL-77-1203","07/31/2026","61","1,890.00"
+"Total State Farm Insurance",,,,,,,"1,890.00"
+"TOTAL",,,,,,,"9,845.90"

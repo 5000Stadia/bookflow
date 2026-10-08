@@ -1,0 +1,10 @@
+!HDR	PROD	VER	REL	IIFVER	DATE	TIME	ACCNTNT	ACCNTNTSPLITTIME
+HDR	QuickBooks Pro	Version 33.0D	Release R6P	1	10/01/2026	1791158400	N	0
+!VEND	NAME	REFNUM	TIMESTAMP	PRINTAS	ADDR1	ADDR2	ADDR3	ADDR4	ADDR5	VTYPE	CONT1	CONT2	PHONE1	PHONE2	FAXNUM	EMAIL	NOTE	TAXID	LIMIT	TERMS	NOTEPAD	SALUTATION	COMPANYNAME	FIRSTNAME	MIDINIT	LASTNAME	CUSTFLD1	CUSTFLD2	CUSTFLD3	CUSTFLD4	CUSTFLD5	CUSTFLD6	CUSTFLD7	CUSTFLD8	CUSTFLD9	CUSTFLD10	CUSTFLD11	CUSTFLD12	CUSTFLD13	CUSTFLD14	CUSTFLD15	1099	HIDDEN	DELCOUNT
+VEND	Ferguson Supply	400	1715623380	Ferguson Supply	Ferguson Supply	3100 S Dirksen Pkwy	Springfield, IL 62703						217-555-0300			ar@ferguson.example				Net 30			Ferguson Supply																			N	N	0
+VEND	Midwest Gas & Electric	401	1715623380	Midwest Gas & Electric	Midwest Gas & Electric	PO Box 7000	Springfield, IL 62791						800-555-0122							Net 15			Midwest Gas & Electric																			N	N	0
+VEND	State Farm Insurance	402	1715623380	State Farm Insurance	State Farm Insurance	1 State Farm Plaza	Bloomington, IL 61710						309-555-0101							Net 30			State Farm Insurance																			N	N	0
+VEND	Reliable Rooter LLC	403	1715623380	Reliable Rooter LLC	Reliable Rooter LLC	88 Industrial Dr	Springfield, IL 62707						217-555-0412			billing@reliablerooter.example				Net 15			Reliable Rooter LLC																			Y	N	0
+VEND	First Community Bank	404	1715623380	First Community Bank	First Community Bank	500 E Monroe St	Springfield, IL 62701						217-555-0900										First Community Bank																			N	N	0
+VEND	Illinois Department of Revenue	405	1715623380	Illinois Department of Revenue	Illinois Department of Revenue	PO Box 19034	Springfield, IL 62794						800-555-0150										Illinois Department of Revenue																			N	N	0
+VEND	Office Depot	406	1715623380	Office Depot	Office Depot	2501 Wabash Ave	Springfield, IL 62704						217-555-0550							Due on receipt			Office Depot																			N	N	0

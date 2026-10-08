@@ -108,9 +108,13 @@ DELETION_CLOSE_COMMANDS = frozenset("""credit-memo delete
 deposit delete
 journal delete""".splitlines())
 
+# R166, the move-in from the old books. Its witness drives all four surfaces over identical copies
+# of one fresh company: the same plan, the same seventy-five writes and the same tie-out on each.
+CUTOVER_COMMANDS = frozenset(('cutover apply', 'cutover plan', 'cutover tie-out'))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -609,6 +613,7 @@ def execution_map():
     from tests.test_deposit_deletion_transports import COMMANDS as DEPOSIT_DELETE_COMMANDS
     from tests.test_journal_deletion_transports import COMMANDS as JOURNAL_DELETE_COMMANDS
     from tests.test_report_export_surfaces import COMMANDS as REPORT_EXPORT_COMMANDS
+    from tests.test_cutover_surfaces import COMMANDS as CUTOVER_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -669,6 +674,7 @@ def execution_map():
                    'tests/test_deposit_deletion_transports.py::test_deposit_deletion_crosses_all_four_actual_transports' if cmd.name in DEPOSIT_DELETE_COMMANDS else
                    'tests/test_journal_deletion_transports.py::test_journal_deletion_crosses_all_four_actual_transports' if cmd.name in JOURNAL_DELETE_COMMANDS else
                    'tests/test_report_export_surfaces.py::test_report_csv_is_the_same_file_on_every_surface' if cmd.name in REPORT_EXPORT_COMMANDS else  # all four
+                   'tests/test_cutover_surfaces.py::test_the_same_move_in_through_python_cli_http_and_mcp' if cmd.name in CUTOVER_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
