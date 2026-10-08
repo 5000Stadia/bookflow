@@ -1,6 +1,7 @@
 # Independent additional Gate A witnesses copied unchanged from the frozen review report.
 """Public accounting-only oracles on supported stored amount/progress facts."""
 import sqlite3
+import time
 import pytest
 from bookflow import BookflowError
 from tests.test_service_sales_lifecycle import sale, COMPANY
@@ -56,9 +57,11 @@ def test_closed_old_invoice_accepts_new_open_receipt_and_apply(client, sale):
     assert snapshots(client)==retry_before
 
 
-# Measured 2026-09-28: 386 s run alone under load (limit was 300). Each preview page re-prepares
-# the whole 403-invoice receipt; making the large-receipt pages cheaper is roadmap R159 (Later).
-@pytest.mark.timeout(900)
+# Each preview page re-prepares the whole 403-invoice receipt, now in bulk reads (R159: 2,105
+# statements a page, was 8,937). Measured 2026-10-08 alone: 282 s in all, of which the preview
+# is 2.0 s (was 7 s) and paging all four collections 46 s (was ~250 s); posting the 403 invoices
+# is the rest. Before R159: 386-435 s, limit raised from 300 to 900.
+@pytest.mark.timeout(600)
 def test_403_nonuniform_jobs_one_receipt_all_four_prospective_collections(client,sale):
     expected,targets={},[]
     for i in range(403):
@@ -75,7 +78,9 @@ def test_403_nonuniform_jobs_one_receipt_all_four_prospective_collections(client
     data=dict(customer=sale['customer'],date='2026-06-02',amount='16.06',deposit_to=bank,payment_method=method(client),
         operation_key='critic-403-cash',applications=dict(mode='selection',selection=draft['id'],expected_version=draft['version']))
     before=snapshots(client)
+    started=time.time()
     preview=run(client,'payment receive',data,dry_run=True)
+    previewed=time.time()
     page_evidence={}
     for d in preview['prospective_pages']:
         items=list(preview['effect'][d['kind']])
@@ -94,6 +99,7 @@ def test_403_nonuniform_jobs_one_receipt_all_four_prospective_collections(client
             assert {r['invoice_id'] for r in items}=={r['invoice'] for r in targets}
             assert all(r['due_minor_units']==0 for r in items)
         page_evidence[d['kind']]=len(items)
+    print(f'403 invoices: preview {previewed-started:.1f} s, all four collections paged {time.time()-previewed:.1f} s')
     assert snapshots(client)==before
     paid=run(client,'payment receive',dict(data,expected_facts_fingerprint=preview['facts_fingerprint']))
     with sqlite3.connect(database_path(client)) as db:
