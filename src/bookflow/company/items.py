@@ -563,8 +563,40 @@ def _reference(db: Database, table: sa.Table, record_id: str, *, field: str, rec
     return result
 
 
-def _validate_account(db: Database, record_id: str, field: str, *, active: bool) -> dict[str, Any]:
+# What a sold line of an item credits. An income account always; an Other Charge item may
+# instead name a balance-sheet account, as the anchor allows -- a customer deposit held as a
+# liability, or an open balance brought in against a clearing account when a company moves
+# in. Never a receivable, payable, bank or card account, whose movements their own documents
+# record, and never an account another ledger owns (any system role).
+SOLD_INCOME_TYPES = frozenset({"income", "other_income"})
+CHARGE_BALANCE_SHEET_TYPES = frozenset({
+    "other_current_asset", "fixed_asset", "other_asset",
+    "other_current_liability", "long_term_liability", "equity",
+})
+
+
+def sold_account_types(item_type: str) -> frozenset[str]:
+    """The account types a sold line of ``item_type`` may credit."""
+    return SOLD_INCOME_TYPES | CHARGE_BALANCE_SHEET_TYPES if item_type == "other_charge" else SOLD_INCOME_TYPES
+
+
+def sold_account_problem(item_type: str, account: dict[str, Any]) -> str | None:
+    """Why ``account`` cannot be what a sold line of ``item_type`` credits, or None."""
+    allowed = sold_account_types(item_type)
+    if account["type"] not in allowed:
+        return f"must reference an account of type {', '.join(sorted(allowed))}"
+    if account["type"] not in SOLD_INCOME_TYPES and account.get("system_role"):
+        return "must not be a balance-sheet account another ledger owns"
+    return None
+
+
+def _validate_account(db: Database, record_id: str, field: str, *, active: bool, item_type: str = "") -> dict[str, Any]:
     account = _reference(db, schema.accounts, record_id, field=field, record_type="account", active=active)
+    if field == "income_account_id" and item_type == "other_charge":
+        problem = sold_account_problem(item_type, account)
+        if problem:
+            raise _validation(field, problem)
+        return account
     allowed = {
         "income_account_id": {"income", "other_income"},
         "expense_account_id": {"expense", "other_expense", "cost_of_goods_sold"},
@@ -757,7 +789,8 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
     for field in account_fields:
         identifier = values[field]
         if identifier is not None:
-            account = _validate_account(db, str(identifier), field, active=active_all or field in reference_changes)
+            account = _validate_account(db, str(identifier), field, active=active_all or field in reference_changes,
+                                        item_type=parsed.type)
             if field == "asset_account_id" and parsed.type in {"inventory_part", "inventory_assembly"} and account.get("system_role") != "inventory_asset":
                 raise _validation(field, "inventory items require the inventory-asset system account")
             if field == "asset_account_id" and parsed.type == "fixed_asset" and account["type"] != "fixed_asset":

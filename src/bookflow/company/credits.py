@@ -45,7 +45,7 @@ from bookflow.company.credit_models import (
     CreditMemoOutput, CreditMemoPageOutput, CreditMemoWriteOutput, CreditRevisionOutput,
     CreditRevisionSummaryOutput, CreditSourceOutput, CreditTaxComponentOutput,
 )
-from bookflow.company.items import TRACKED_TYPES
+from bookflow.company.items import TRACKED_TYPES, sold_account_types
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.core import clock
@@ -493,7 +493,7 @@ def _posting_accounts_active(s, resolved):
     for line in resolved['lines']:
         account = _line_account(line['profile'])
         if account is not None:
-            eligible(account.id, {'income', 'other_income'} if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES),
+            eligible(account.id, sold_account_types(line['profile'].item_type) if line['profile'].income_account else set(DISCOUNT_ACCOUNT_TYPES),
                      'lines', "Select an item whose income account is still an income account.")
         for cell in line['taxes']:
             eligible(_liability(cell).id, {'other_current_liability'}, 'sales_tax_item',
