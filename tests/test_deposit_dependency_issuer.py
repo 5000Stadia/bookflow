@@ -93,6 +93,7 @@ def test_issuer_missing_or_bypassed_history_fails_closed_without_copy(root,clien
     path=database_path(client)
     # Explicit U1 owned negative fixture; no real root, trigger, or guard changes.
     with writer(root) as db:
+        __import__('tests.audit_tamper',fromlist=['disarm']).disarm(db.conn)
         if damage=='missing':
             db.conn.execute(h.audit_entries.delete().where(h.audit_entries.c.record_type=='company',h.audit_entries.c.record_id==company))
         else:
