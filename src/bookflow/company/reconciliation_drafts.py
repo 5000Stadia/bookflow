@@ -102,6 +102,9 @@ def update(s,draft,inp, *, revision_id):
     return revised(draft,revision_id,header=header)
 
 def mark(s,draft,inp, *, revision_id):
+    if inp.all:
+        from bookflow.company.reconciliation_queries import mark_everything
+        return mark_everything(s,draft,inp,revision_id=revision_id)
     editable(s,draft,inp.expected_version);require(inp.draft==draft.id,'E_RECONCILIATION_MANIFEST')
     current,_=account_population(s,draft.account_id,draft.header.statement_date or draft.header.opening_date)
     available=groups(current);selections={v.key_id:v for v in draft.selections};seen=set()

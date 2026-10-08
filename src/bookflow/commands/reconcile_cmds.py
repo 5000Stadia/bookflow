@@ -187,6 +187,12 @@ reconcile_start = _start_family(
     '`reconcile mark`, `reconcile preview` and `reconcile finish`.')
 
 
+def _marked(inp, value):
+    if inp.all and inp.all_action == 'unmark':
+        return 'cleared every mark; ' + str(len(value.selections)) + ' movements remain marked'
+    return 'marked ' + str(len(value.selections)) + ' movements on a reconciliation'
+
+
 def _mark_prepare(inp, ctx, s, ids):
     _reuse(s, inp.operation_key)
     account_id = _account_of(s, inp.draft)
@@ -204,7 +210,13 @@ def _mark_planner(inp, ctx, s):
 reconcile_mark = command(
     'reconcile mark', scope='company',
     description='Tick or untick whole movements on an open reconciliation draft; a movement is '
-                'marked in full or not at all, so its components can never be half cleared.',
+                'marked in full or not at all, so its components can never be half cleared. Name '
+                'the movements in `entries` (movement and group_fingerprint, from `reconcile '
+                'candidates`), or pass `all` to tick every movement dated on or before the '
+                'statement date that no earlier statement has cleared, in one step (QuickBooks\' '
+                '"Mark All"); `all_action: unmark` clears every tick, and `filters` narrows what '
+                '`all` touches. Preview it with --dry-run, then `reconcile preview` and `reconcile '
+                'finish`.',
     input_model=m.Mark, output_model=m.DraftOutput, writes={'company'}, required_role='standard',
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
     error_codes=list(ERRORS))(_mark_planner)
@@ -219,7 +231,7 @@ def _mark_apply(plan, ctx, s):
     table = c.reconciliation_drafts
     _commit(s, ctx, 'reconcile mark', account_id=value.account_id, operation_id=ids['operation'],
             event_id=ids['event'], kind='draft_change',
-            summary='marked ' + str(len(value.selections)) + ' movements on a reconciliation',
+            summary=_marked(inp, value),
             document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
                           effect=dict(draft=value.id, version=value.version,
                                       selected=len(value.selections))),
@@ -230,9 +242,7 @@ def _mark_apply(plan, ctx, s):
                 version=value.version, current_revision_id=value.current_revision_id)],
             touched=[Touched('reconciliation_draft', value.id, 'update', value.version - 1,
                              value.version, dict(selected=len(value.selections)), db='company')])
-    return Applied(m.DraftOutput(draft=value), [],
-                   'marked ' + str(len(value.selections)) + ' movements on a reconciliation',
-                   audited=True)
+    return Applied(m.DraftOutput(draft=value), [], _marked(inp, value), audited=True)
 
 
 def _adopting(snapshot, draft):

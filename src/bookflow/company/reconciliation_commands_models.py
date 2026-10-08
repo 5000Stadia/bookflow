@@ -183,7 +183,18 @@ class MarkEntry(GroupRef):
     action: Literal['mark','unmark','covered','outstanding']
 
 class Mark(DraftChange):
-    entries: tuple[MarkEntry,...]=Field(min_length=1,max_length=200)
+    # Either name the movements (entries, from `reconcile candidates`) or tick the whole list at
+    # once with `all`: every movement dated on or before the statement date that no earlier
+    # statement has cleared -- QuickBooks' "Mark All". `all_action` 'unmark' clears every tick.
+    entries: tuple[MarkEntry,...]=Field(default=(),max_length=200)
+    all: bool=False
+    all_action: Literal['mark','unmark']='mark'
+    filters: CandidateFilter|None=None
+    @model_validator(mode='after')
+    def shape(self):
+        if self.all==bool(self.entries):raise ValueError('give entries, or all=true and no entries')
+        if not self.all and (self.filters is not None or self.all_action!='mark'):raise ValueError('filters and all_action need all=true')
+        return self
 
 class MarkAll(DraftChange):
     filters: CandidateFilter

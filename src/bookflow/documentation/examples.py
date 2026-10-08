@@ -997,11 +997,6 @@ _RECONCILE_EXAMPLES = {
     'reconcile start': dict(
         account='Checking', statement_date='2026-02-28', ending_balance='1482.50',
         operation_key='example-statement-1'),
-    'reconcile mark': dict(
-        draft=ID, expected_version=1, operation_key='example-mark-1',
-        entries=[dict(movement=dict(producer='journal_entry', transaction_id=ID, revision_id=ID,
-                                    account_id=ID, role='entered', component_id=ID),
-                      group_fingerprint=_RECONCILE_FINGERPRINT, action='mark')]),
     'reconcile finish': dict(
         draft=ID, expected_version=2, operation_key='example-finish-1',
         expected_facts_fingerprint=_RECONCILE_FINGERPRINT, dependency_guard=_RECONCILE_FINGERPRINT),
@@ -1032,6 +1027,14 @@ for _name, _payload in _RECONCILE_EXAMPLES.items():
         _args.extend(['--reason', _RECONCILE_REASONS[_name]])
     _args.append('--json')
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)
+
+# `reconcile mark` takes either named movements or `--all`; the example shows the one a person
+# types, ticking everything on the statement. The named form is in the command's description.
+_markall_input = dict(draft=ID, expected_version=1, operation_key='example-mark-1', all=True)
+EXAMPLES['reconcile mark'] = Example(
+    f'bookflow reconcile mark {ID} --expected-version 1 --operation-key example-mark-1 --all '
+    '--company "Demo Plumbing Co" --reason "Clear everything the statement shows" --dry-run --json',
+    _markall_input)
 
 # Receiving uses the same registered commands in CLI, HTTP, Python and MCP.
 EXAMPLES.update({

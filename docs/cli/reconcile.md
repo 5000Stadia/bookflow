@@ -410,7 +410,7 @@ Example JSON output:
 
 ## `reconcile mark`
 
-Tick or untick whole movements on an open reconciliation draft; a movement is marked in full or not at all, so its components can never be half cleared.
+Tick or untick whole movements on an open reconciliation draft; a movement is marked in full or not at all, so its components can never be half cleared. Name the movements in `entries` (movement and group_fingerprint, from `reconcile candidates`), or pass `all` to tick every movement dated on or before the statement date that no earlier statement has cleared, in one step (QuickBooks' "Mark All"); `all_action: unmark` clears every tick, and `filters` narrows what `all` touches. Preview it with --dry-run, then `reconcile preview` and `reconcile finish`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -426,14 +426,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow reconcile mark 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key example-mark-1 --entries '[{"movement":{"producer":"journal_entry","transaction_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","revision_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","account_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","role":"entered","component_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"},"group_fingerprint":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","action":"mark"}]' --company 'Demo Plumbing Co' --reason 'Clear the movements the statement shows' --json`
+`bookflow reconcile mark 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key example-mark-1 --all --company "Demo Plumbing Co" --reason "Clear everything the statement shows" --dry-run --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "reconcile mark", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "example-mark-1", "entries": [{"movement": {"producer": "journal_entry", "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "role": "entered", "component_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "group_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "action": "mark"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+{"command": "reconcile mark", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "example-mark-1", "all": true}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
@@ -451,6 +451,19 @@ The same example as complete `bookflow_run` arguments:
 | `entries[].movement.component_id` | inside `--entries` JSON array | string \| null | no | yes | null | — |
 | `entries[].group_fingerprint` | inside `--entries` JSON array | string | yes | no | — | pattern "^[0-9a-f]{64}$" |
 | `entries[].action` | inside `--entries` JSON array | literal["mark", "unmark", "covered", "outstanding"] | yes | no | — | — |
+| `all` | `--all` | boolean | no | no | false | — |
+| `all_action` | `--all-action` | literal["mark", "unmark"] | no | no | "mark" | — |
+| `filters.from_date` | `--filters-from-date` | string \| null | no | yes | null | — |
+| `filters.to_date` | `--filters-to-date` | string \| null | no | yes | null | — |
+| `filters.side` | `--filters-side` | literal["positive", "negative"] \| null | no | yes | null | — |
+| `filters.producer` | `--filters-producer` | literal["journal_entry", "payment", "sales_receipt", "invoice", "deposit", "bill_payment", "customer_refund", "sales_tax_payment"] \| null | no | yes | null | — |
+| `filters.number` | `--filters-number` | string \| null | no | yes | null | — |
+| `filters.payee` | `--filters-payee` | string \| null | no | yes | null | — |
+| `filters.memo` | `--filters-memo` | string \| null | no | yes | null | — |
+| `filters.amount` | `--filters-amount` | integer \| null | no | yes | null | — |
+| `filters.hide_after_date` | `--filters-hide-after-date` | boolean | no | no | true | — |
+| `filters.sort` | `--filters-sort` | literal["date", "number", "payee", "amount", "type"] | no | no | "date" | — |
+| `filters.descending` | `--filters-descending` | boolean | no | no | false | — |
 
 ### Command and context options
 
