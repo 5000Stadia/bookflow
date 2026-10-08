@@ -32,7 +32,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # 491 -> 492 on main before batch A (not measured here); +6 the card-credit verbs (R135).
     # +2 company backup and company restore (R133).
     # +4 agent/user deactivate and activate (R89); +1 report export (R145).
-    assert len(rows) == 505
+    # +1 reconcile import (R167).
+    assert len(rows) == 506
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -152,7 +153,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # producer, number, payee, memo, amount. `all` and `all_action` are a boolean and a literal and
     # add none; no other routed input changed. No new variant kind: filters has a default rather
     # than being nullable, so tests/mcp_coverage.py needs no new policy and the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2890
+    # 2890 -> 2893 (merge of R167 onto R158): reconcile import adds its 3 nodes, as measured below.
+    # 2882 -> 2885 (R167): reconcile import, a new command, measured per command: 3 nodes, the
+    # null branches of its optional draft, statement_date and ending_balance. No other input moved.
+    assert sum(len(group["paths"]) for group in mapped)==2893
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
