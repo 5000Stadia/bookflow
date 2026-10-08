@@ -14,6 +14,14 @@ access = lazy("bookflow.hub.access")
 users = lazy("bookflow.hub.users")
 moves = lazy("bookflow.hub.moves")
 
+# The anchor's "Ask My Accountant" habit, said once for every command that picks an account.
+UNSURE_ACCOUNT = (
+    " When you are unsure which account fits, do not guess: post the line to Uncategorized Expense"
+    " (Ask My Accountant), or Uncategorized Income for money received, with a memo saying what is"
+    " unclear. `account uncategorized` lists what is waiting there, and moving an entry to its"
+    " account later is an ordinary update of the document."
+)
+
 
 class CommonOut(BaseModel):
     id: str

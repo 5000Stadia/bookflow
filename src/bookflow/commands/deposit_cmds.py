@@ -11,13 +11,14 @@ from bookflow.company import deposit_outputs as outputs, deposit_source_queries 
 from bookflow.company.deposit_draft_models import SourceQuery
 from bookflow.company.deposit_lifecycle_models import DeleteInput, LifecycleOutput, PostInput, UpdateInput, VoidInput
 from bookflow.company.deposit_outputs import DepositSourcesOutput, DepositWriteOutput
+from bookflow.commands.common import UNSURE_ACCOUNT
 
 
 DESCRIPTIONS = {
     'post': ('Bank selected undeposited customer payments and sales receipts into one bank account as one '
              'deposit, with any other money entered beside them and an optional cash-back line; credits '
              'Undeposited Funds for each receipt and debits the bank for the net total. Discover the '
-             'receipts, their ids and their expected versions with `deposit sources`.'),
+             'receipts, their ids and their expected versions with `deposit sources`.' + UNSURE_ACCOUNT),
     'update': ('Correct a posted deposit by complete replacement: the old batch is reversed at its own date, '
                'a new revision and its claims are recorded at the new date, and receipts left out of the '
                'replacement return to Undeposited Funds.'),

@@ -15,6 +15,7 @@ from bookflow.company.check_models import (
     CheckQueryInput, CheckShowInput, CheckUpdateInput, CheckVoidInput, MoneyOutHistoryOutput,
     MoneyOutOutput, MoneyOutPageOutput, MoneyOutWriteOutput,
 )
+from bookflow.commands.common import UNSURE_ACCOUNT
 
 _SHARED = (
     ' `items` accepts purchased items with fractional quantity, unit_cost or amount, description, '
@@ -47,7 +48,7 @@ DESCRIPTIONS = {
             ' bank accounts can each have a cheque 1001 and a number already used on this one is'
             ' refused. Leave it out to take the next number from the account’s own next check number,'
             ' skipping any it has already issued. The journal this posts as keeps its own document'
-            ' reference from the shared series, which is not the check number.' + _SHARED),
+            ' reference from the shared series, which is not the check number.' + _SHARED + UNSURE_ACCOUNT),
         'update': ('Correct a check, including moving it to another bank account or giving it a'
                    ' different number. A cheque that moves keeps its number unless a new one is'
                    ' supplied; the number it had stays on the revision that carried it and is never'
@@ -70,7 +71,7 @@ DESCRIPTIONS = {
         'post': (
             'Enter a purchase made on a company credit card. What is owed on the card goes up by'
             ' `amount` and the expense accounts go up by their own line amounts. `account` must be a'
-            ' credit card account. A card charge carries no check number.' + _SHARED),
+            ' credit card account. A card charge carries no check number.' + _SHARED + UNSURE_ACCOUNT),
         'update': ('Correct a credit card charge, including moving it to another card.' + _CORRECTION),
         'void': ('Void a credit card charge with a required reason. Its accounting is reversed'
                  ' exactly, at the charge’s own date, and its history stays readable.'),

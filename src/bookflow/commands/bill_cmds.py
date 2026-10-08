@@ -9,6 +9,7 @@ from bookflow.company.bill_models import (
     BillHistoryInput, BillHistoryOutput, BillOutput, BillPageOutput, BillPostInput,
     BillQueryInput, BillShowInput, BillUpdateInput, BillVoidInput, BillWriteOutput,
 )
+from bookflow.commands.common import UNSURE_ACCOUNT
 
 _LINES = (
     ' A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows'
@@ -64,7 +65,7 @@ DESCRIPTIONS = {
              ' refused. Voiding the bill does not free the'
              ' order again: enter the replacement bill outright.'
              ' Alternatively, `receipts` selects immutable received-line IDs, current receipt versions and quantities. The bill date is explicit, including when receipt dates differ. Matched items transfer receipt-owned AP to this bill without receiving stock again. Give a product-only unit_cost or amount, excluding retained receipt shipping, to correct acquisition value at each receipt date and affected issue costs at their sale dates. Omit cost to transfer exact original product and shipping interval values. Shipping from the same receipt vendor is retained exactly once, including when product cost is zero. The selected receipts must share vendor, AP account and currency; new items and a whole-order source cannot be combined with receipt selections.'
-             + _HEADER + _LINES),
+             + _HEADER + _LINES + UNSURE_ACCOUNT),
     'update': ('Correct a bill. The old accounting is reversed at its original date and replaced in'
                ' full at the new one; every earlier revision stays readable. Supply `expenses` or'
                ' `items` to replace that whole grid, carrying each surviving row’s `line_id`; the'
