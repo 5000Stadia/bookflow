@@ -22,7 +22,7 @@ def test_packaged_reads_are_available_without_company_context(client):
         "items": [
             {
                 "profile_id": "standard",
-                "version": 1,
+                "version": 2,
                 "lists": [
                     "term",
                     "payment-method",

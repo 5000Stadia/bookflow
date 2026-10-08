@@ -1,6 +1,6 @@
 {
   "manifest_id": "standard",
-  "version": 1,
+  "version": 2,
   "lists": [
     "term",
     "payment-method",
