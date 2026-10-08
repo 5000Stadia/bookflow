@@ -36,6 +36,8 @@ SYSTEM_ROLE_TYPES = {
     "inventory_asset": "other_current_asset",
     "cost_of_goods_sold": "cost_of_goods_sold",
     "exchange_gain_loss": "other_income",
+    # Made on first use by a person's reconciliation adjustment, never by a chart template.
+    "reconciliation_discrepancies": "expense",
 }
 _NUMBER = re.compile(r"^[0-9]{1,7}$")
 

@@ -481,6 +481,14 @@ stable record IDs). Combine it with `projection: "reference"` and
 collections. It intersects every other criterion and remains subject to ordinary
 company authority and cursor checks. Omitted `ids` preserves ordinary browsing.
 
+## A reconciliation that will not tie
+
+Never force a statement to tie. `reconcile finish` with `adjustment` (a journal to
+Reconciliation Discrepancies for whatever is left) is for a person only and refuses an
+agent with `E_PERMISSION`. When the difference will not reach zero, leave the draft open
+and tell the owner the account, the statement date and the remaining difference from
+`reconcile preview`.
+
 ## Deleting duplicate documents
 
 Use `invoice delete`, `sales-receipt delete`, `check delete`, `card-charge delete`,

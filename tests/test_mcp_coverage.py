@@ -105,7 +105,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==26
+    assert len(mapped)==len(variant_policies())==27
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -152,7 +152,13 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # producer, number, payee, memo, amount. `all` and `all_action` are a boolean and a literal and
     # add none; no other routed input changed. No new variant kind: filters has a default rather
     # than being nullable, so tests/mcp_coverage.py needs no new policy and the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2890
+    # 2890 -> 2889 (reconciliation adjustments, build/v16-discrepancies), measured per command on
+    # both trees: reconcile finish 2 -> 1. Its `adjustment` is now the person-only
+    # DiscrepancyAdjustment (a reason, nothing else) instead of the dormant Adjustment, whose
+    # nullable class_id was the second node; nobody may choose the account it posts to. That is
+    # a new variant kind, ('anyOf', ('DiscrepancyAdjustment', 'null')), so the groups go 26 -> 27;
+    # reconcile preview still carries the dormant Adjustment until it is withdrawn (R163).
+    assert sum(len(group["paths"]) for group in mapped)==2889
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

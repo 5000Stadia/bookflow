@@ -168,7 +168,7 @@ Example JSON output:
 
 ## `reconcile finish`
 
-Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it.
+Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it. A person whose statement genuinely will not tie may pass `adjustment` with a reason (QuickBooks' "Enter Adjustment"): it posts one journal for the exact remaining difference, dated the statement date, to the Reconciliation Discrepancies expense account (made on first use), and certifies the statement with it. Preview it with --dry-run. An agent is refused: leave the draft open and tell the owner.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -203,10 +203,7 @@ The same example as complete `bookflow_run` arguments:
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string | yes | no | — | pattern "^[0-9a-f]{64}$" |
 | `dependency_guard` | `--dependency-guard` | string | yes | no | — | — |
-| `adjustment.date` | `--adjustment-date` | string | yes | no | — | — |
-| `adjustment.offset_account_id` | `--adjustment-offset-account-id` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
-| `adjustment.class_id` | `--adjustment-class-id` | string \| null | no | yes | null | — |
-| `adjustment.reason` | `--adjustment-reason` | string | yes | no | — | minimum length 1 |
+| `adjustment.reason` | `--adjustment-reason` | string | yes | no | — | Why the statement is being finished with an adjustment instead of found and fixed; minimum length 1; maximum length 500 |
 
 ### Command and context options
 
@@ -298,12 +295,24 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.cleared_balance` | integer | yes | no | — | — |
 | `totals.difference` | integer | yes | no | — | — |
 | `totals.decimal_units` | object[string, string] | yes | no | — | — |
+| `original_difference` | integer | no | no | 0 | — |
+| `adjustment` | object \| null | no | yes | null | — |
+| `adjustment.journal_id` | string \| null | yes | yes | — | — |
+| `adjustment.number` | string \| null | yes | yes | — | — |
+| `adjustment.date` | string | yes | no | — | — |
+| `adjustment.amount` | integer | yes | no | — | — |
+| `adjustment.amount_decimal` | string | yes | no | — | — |
+| `adjustment.account_id` | string \| null | yes | yes | — | — |
+| `adjustment.account_name` | string | yes | no | — | — |
+| `adjustment.account_created` | boolean | yes | no | — | — |
+| `adjustment.reason` | string | yes | no | — | — |
 
 Example JSON output:
 
 ```json
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "adjustment": null,
   "certificate_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "contract": "reconciliation.private.v1",
   "draft": {
@@ -348,6 +357,7 @@ Example JSON output:
     "version": 1
   },
   "opening_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "original_difference": 0,
   "totals": {
     "beginning_balance": 1,
     "cleared_balance": 1,
@@ -385,6 +395,7 @@ Example JSON output:
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |

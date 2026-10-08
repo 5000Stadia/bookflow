@@ -15,6 +15,7 @@ import hmac
 import json
 
 from bookflow.company import reconciliation_commands_models as m
+from bookflow.company import reconciliation_discrepancies as discrepancies
 from bookflow.company import reconciliation_queries as queries
 from bookflow.core.errors import BookflowError
 from bookflow.company import reconciliation_drafts as drafts
@@ -276,7 +277,17 @@ def _finish_prepare(inp, ctx, s, ids):
     preparation.require(inp.expected_facts_fingerprint == preparation.fingerprint(snapshot, value),
                         'E_RECONCILIATION_SELECTION_STALE')
     opening_draft, totals = _totals(snapshot, value)
+    if inp.adjustment is not None:
+        # Asked for by name, refused to anyone but a person whatever the difference is.
+        discrepancies.require_person(s, ctx, totals.difference,
+                                     snapshot.source.accounts[account_id]['currency'])
+        return snapshot, value, opening_draft, totals
     return snapshot, value, opening_draft, preparation.certify(totals)
+
+
+def _adjusting(inp, totals):
+    """Whether this finish posts an adjustment: asked for, and something is left to adjust."""
+    return inp.adjustment is not None and totals.difference != 0
 
 
 reconcile_finish = command(
@@ -284,10 +295,15 @@ reconcile_finish = command(
     description='Certify a statement reconciliation whose difference is zero, storing the statement '
                 'it reconciles to and the account exactly as it stood when it was certified. Takes a '
                 'statement draft from `reconcile start`, never an opening draft: on an account\'s '
-                'first reconciliation the opening that statement follows is certified with it.',
+                'first reconciliation the opening that statement follows is certified with it. '
+                'A person whose statement genuinely will not tie may pass `adjustment` with a reason '
+                '(QuickBooks\' "Enter Adjustment"): it posts one journal for the exact remaining '
+                'difference, dated the statement date, to the Reconciliation Discrepancies expense '
+                'account (made on first use), and certifies the statement with it. Preview it with '
+                '--dry-run. An agent is refused: leave the draft open and tell the owner.',
     input_model=m.Finish, output_model=m.FinishOutput, writes={'company'}, required_role='standard',
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
-    error_codes=list(ERRORS))(
+    error_codes=list(ERRORS) + ['E_PERMISSION', 'E_PERIOD_CLOSED'])(
     lambda inp, ctx, s: _finish_planner(inp, ctx, s))
 reconcile_finish.ledger = True
 
@@ -298,13 +314,25 @@ def _finish_planner(inp, ctx, s):
     for d in (value, opening_draft):
         if d is not None:
             ids['consume'][d.id] = new_id()
+    original, adjustment = totals.difference, None
+    if _adjusting(inp, totals):
+        # Nothing is written here: the preview names the amount, the date and the account the
+        # journal would post to, and the totals as they stand once it is cleared.
+        from bookflow.company import journals
+        journals.open_dates(s, [value.header.statement_date])
+        row, created = discrepancies.account(s, ctx)
+        adjustment = discrepancies.output(row, created, draft=value, amount=original,
+                                          currency=snapshot.source.accounts[value.account_id]['currency'],
+                                          reason=inp.adjustment.reason)
+        totals = discrepancies.projected(totals, original)
     # The output shows the statement draft as the finish leaves it: consumed by this operation,
     # its content kept, so a read beside the new certificate never shows it still open.
     finished = drafts.revised(value, ids['consume'][value.id], state='consumed',
                               terminal_operation_id=ids['operation'])
     return Plan(m.FinishOutput(draft=finished, account_id=value.account_id,
                                opening_id=value.base_opening_id or ids['opening'],
-                               certificate_id=ids['certificate'], totals=totals),
+                               certificate_id=ids['certificate'], totals=totals,
+                               original_difference=original, adjustment=adjustment),
                 dict(ids=ids, input=inp))
 
 
@@ -313,6 +341,31 @@ def _finish_apply(plan, ctx, s):
     inp, ids = plan.data['input'], plan.data['ids']
     snapshot, value, opening_draft, totals = _finish_prepare(inp, ctx, s, ids)
     account_id = value.account_id
+    original, adjustment, journal_ids, created_touches = totals.difference, None, [], []
+    if _adjusting(inp, totals):
+        currency = snapshot.source.accounts[account_id]['currency']
+        expected = discrepancies.projected(totals, original)
+        header, row, created, created_touches = discrepancies.post(
+            s, ctx, value, original, inp.adjustment.reason)
+        journal_ids = [header['id']]
+        # The account again, now holding the adjusting journal's movement, which this statement
+        # clears: the certificate lists it as selected, so no later statement sees it again.
+        snapshot = _loaded(s, account_id)
+        value = _draft(snapshot, value.id)
+        added = [v for v in snapshot.current.values() if v['transaction_id'] == header['id']
+                 and v['account_id'] == account_id and v['active']]
+        preparation.require(bool(added), 'E_RECONCILIATION_MANIFEST')
+        value = m.Draft.model_validate(dict(value.model_dump(), selections=sorted(
+            [*(v.model_dump() for v in value.selections),
+             *(dict(key_id=v['key_id'], version_id=v['id'], action='mark') for v in added)],
+            key=lambda v: v['key_id'])))
+        opening_draft, totals = _totals(snapshot, value)
+        totals = preparation.certify(totals)
+        # What the dry run promised is what was certified, to the minor unit.
+        preparation.require(totals == expected, 'E_RECONCILIATION_DIFFERENCE')
+        adjustment = discrepancies.output(row, created, draft=value, amount=original,
+                                          currency=currency, reason=inp.adjustment.reason,
+                                          journal_id=header['id'], number=header['number'])
     opening_id = value.base_opening_id or ids['opening']
     certificate_id = ids['certificate']
     from bookflow.company.reconciliation_storage_validation import canonical
@@ -359,7 +412,7 @@ def _finish_apply(plan, ctx, s):
         certificate_rows, _ = persistence.certificate(
             certificate_id, snapshot, value, totals, opening_id=opening_id, covered=covered,
             prior=prior, issuer=issuer, made=made, generation=generation,
-            previous=value.base_head_id)
+            previous=value.base_head_id, original_difference=original)
         built.append(certificate_rows)
         built.append(chain_rows)
         built.append(persistence.claims(persistence.merge(*built), account_id=account_id,
@@ -375,12 +428,13 @@ def _finish_apply(plan, ctx, s):
                        for d in (value, opening_draft) if d is not None]
     _commit(s, ctx, 'reconcile finish', account_id=account_id, operation_id=ids['operation'],
             event_id=ids['event'], kind='finish',
-            summary='certified a reconciliation to ' + value.header.statement_date,
+            summary=_certified(value, adjustment),
             document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
                           effect=dict(certificate=certificate_id, opening=opening_id,
-                                      account=account_id)),
+                                      account=account_id, **({'adjustment': adjustment.model_dump(mode='json')}
+                                                             if adjustment else {}))),
             targets=_targets(account_id, drafts=consumed, openings=[opening_id],
-                             certificates=[certificate_id]),
+                             certificates=[certificate_id], transactions=journal_ids),
             rows=lambda made: persistence.merge(rows(made), *(
                 {k: v for k, v in persistence.draft(
                     d, made=made, previous_revision_id=before.current_revision_id).items()
@@ -390,11 +444,22 @@ def _finish_apply(plan, ctx, s):
                 state='consumed', terminal_operation_id=ids['operation'], version=d.version,
                 current_revision_id=d.current_revision_id) for d in consumed_values],
             touched=[Touched('reconciliation_certificate', certificate_id, 'create', None, 1,
-                             dict(account_id=account_id, statement_date=value.header.statement_date),
-                             db='company')])
+                             dict(account_id=account_id, statement_date=value.header.statement_date,
+                                  **({'adjustment_journal_id': journal_ids[0], 'original_difference': original}
+                                     if journal_ids else {})),
+                             db='company'), *created_touches])
     return Applied(m.FinishOutput(draft=consumed_values[0], account_id=account_id, opening_id=opening_id,
-                                  certificate_id=certificate_id, totals=totals), [],
-                   'certified a reconciliation to ' + value.header.statement_date, audited=True)
+                                  certificate_id=certificate_id, totals=totals,
+                                  original_difference=original, adjustment=adjustment), [],
+                   _certified(value, adjustment), audited=True)
+
+
+def _certified(value, adjustment):
+    said = 'certified a reconciliation to ' + value.header.statement_date
+    if adjustment is not None:
+        said += (' with a reconciliation adjustment of ' + adjustment.amount_decimal + ' to '
+                 + adjustment.account_name)
+    return said
 
 
 # ------------------------------------------------------------------ reading a draft

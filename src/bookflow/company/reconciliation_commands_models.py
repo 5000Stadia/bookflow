@@ -234,8 +234,16 @@ class Preview(DraftRef):
     expected_version: Version
     adjustment: Adjustment|None=None
 
+class DiscrepancyAdjustment(Model):
+    """Finish a statement that will not tie: QuickBooks' "Enter Adjustment" on Reconcile Now.
+
+    Only a person may ask for it. It posts one journal for the exact remaining difference, dated
+    the statement date, to the Reconciliation Discrepancies account; nobody chooses the account.
+    """
+    reason: str=Field(min_length=1,max_length=500,description='Why the statement is being finished with an adjustment instead of found and fixed')
+
 class Finish(PreparedChange):
-    adjustment: Adjustment|None=None
+    adjustment: DiscrepancyAdjustment|None=Field(default=None,description='Only a person: finish with a labelled adjusting journal for the remaining difference, posted to Reconciliation Discrepancies. Agents are refused.')
 
 class MemberTarget(Model):
     draft_id: ID
@@ -645,6 +653,18 @@ class DraftOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
 
+class AdjustmentOutput(Model):
+    """The adjusting journal a finish posted, or on a dry run the one it would post."""
+    journal_id: ID|None
+    number: str|None
+    date: str
+    amount: Units
+    amount_decimal: str
+    account_id: ID|None
+    account_name: str
+    account_created: bool
+    reason: str
+
 class FinishOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
@@ -652,6 +672,9 @@ class FinishOutput(Model):
     opening_id: ID
     certificate_id: ID
     totals: Totals
+    # Present only when the finish posted (or, on a dry run, would post) an adjustment.
+    original_difference: Units=0
+    adjustment: AdjustmentOutput|None=None
 
 
 # A generated documentation sample fills an unconstrained string with "value", which a

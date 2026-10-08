@@ -808,6 +808,11 @@ def variant_policies():
             'tests/test_reconciliation_browser.py::test_every_reconcile_command_has_a_page_that_answers'],
             ['the certification witnesses finish on a difference of zero and omit the adjustment; '
              'the branch that writes an adjusting entry has no executed case on any surface yet']),
+        ('anyOf', ('DiscrepancyAdjustment', 'null')): ([
+            'tests/test_reconciliation_discrepancies.py::test_a_person_finishes_with_an_adjustment_for_the_exact_difference',
+            'tests/test_reconciliation_discrepancies.py::test_an_agent_is_refused_and_the_draft_stays_open',
+            'tests/test_reconciliation_window_browser.py::test_a_person_finishes_a_statement_that_will_not_tie_with_an_adjustment'],
+            []),
         ('anyOf', ('StatementMoney', 'string')): ([
             'tests/test_reconciliation_commands.py::test_a_statement_balance_is_money_and_may_be_zero_or_negative',
             'tests/test_reconciliation_commands.py::test_an_overdrawn_statement_reconciles',
