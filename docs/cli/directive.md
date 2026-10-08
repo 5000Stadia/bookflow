@@ -94,6 +94,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `directive.deactivated_at` | string \| null | yes | yes | — | — |
 | `directive.deactivated_by` | string \| null | yes | yes | — | — |
 | `directive.deactivated_by_name` | string \| null | yes | yes | — | — |
+| `directive.person_given` | boolean | no | no | true | Recorded by a person, so it is that person's standing instruction and can stand in for an agent's reason; false for a directive an agent recorded for its principal |
 | `directive.access` | string \| null | no | yes | null | — |
 | `directive.role` | string \| null | no | yes | null | — |
 | `directive.editing_by` | array[object[string, any]] | no | no | [] | — |
@@ -116,6 +117,7 @@ Example JSON output:
     "given_by": "value",
     "given_by_name": null,
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "person_given": true,
     "recorded_by": "value",
     "recorded_by_name": null,
     "role": null,
@@ -250,6 +252,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `directive.deactivated_at` | string \| null | yes | yes | — | — |
 | `directive.deactivated_by` | string \| null | yes | yes | — | — |
 | `directive.deactivated_by_name` | string \| null | yes | yes | — | — |
+| `directive.person_given` | boolean | no | no | true | Recorded by a person, so it is that person's standing instruction and can stand in for an agent's reason; false for a directive an agent recorded for its principal |
 | `directive.access` | string \| null | no | yes | null | — |
 | `directive.role` | string \| null | no | yes | null | — |
 | `directive.editing_by` | array[object[string, any]] | no | no | [] | — |
@@ -272,6 +275,7 @@ Example JSON output:
     "given_by": "value",
     "given_by_name": null,
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "person_given": true,
     "recorded_by": "value",
     "recorded_by_name": null,
     "role": null,
@@ -392,6 +396,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].deactivated_at` | string \| null | yes | yes | — | — |
 | `items[].deactivated_by` | string \| null | yes | yes | — | — |
 | `items[].deactivated_by_name` | string \| null | yes | yes | — | — |
+| `items[].person_given` | boolean | no | no | true | Recorded by a person, so it is that person's standing instruction and can stand in for an agent's reason; false for a directive an agent recorded for its principal |
 | `items[].access` | string \| null | no | yes | null | — |
 | `items[].role` | string \| null | no | yes | null | — |
 | `items[].editing_by` | array[object[string, any]] | no | no | [] | — |
@@ -509,6 +514,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `deactivated_at` | string \| null | yes | yes | — | — |
 | `deactivated_by` | string \| null | yes | yes | — | — |
 | `deactivated_by_name` | string \| null | yes | yes | — | — |
+| `person_given` | boolean | no | no | true | Recorded by a person, so it is that person's standing instruction and can stand in for an agent's reason; false for a directive an agent recorded for its principal |
 | `access` | string \| null | no | yes | null | — |
 | `role` | string \| null | no | yes | null | — |
 | `editing_by` | array[object[string, any]] | no | no | [] | — |
@@ -530,6 +536,7 @@ Example JSON output:
   "given_by": "value",
   "given_by_name": null,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "person_given": true,
   "recorded_by": "value",
   "recorded_by_name": null,
   "role": null,

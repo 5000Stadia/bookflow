@@ -27,6 +27,21 @@ def add(db, *, text: str, given_by: str, recorded_by: str, via: str) -> tuple[di
     return row, Touched("directive", row["id"], "create", None, 1, row)
 
 
+def recorded_by_person(s, row: dict[str, Any]) -> bool:
+    """Whether a person recorded this directive: only then is it a person's standing instruction.
+
+    A directive an agent recorded is the agent's own note, made for its principal like every
+    other agent write; citing it does not stand in for an agent's reason.
+    """
+    kind = s.company.conn.execute(sa.select(c.principals.c.kind).where(c.principals.c.user_id == row["recorded_by"])).scalar()
+    if kind is None and s.actor is not None and s.actor.id == row["recorded_by"]:
+        kind = s.actor.kind
+    if kind is None and s.hub is not None:
+        from bookflow.hub import schema as h
+        kind = s.hub.conn.execute(sa.select(h.users.c.kind).where(h.users.c.id == row["recorded_by"])).scalar()
+    return kind == "human"
+
+
 def resolve(db, selector: str, *, include_inactive: bool = True) -> dict[str, Any]:
     """By id or code, case-insensitively. Raises E_DIRECTIVE_NOT_FOUND with suggestions."""
     q = sa.select(c.directives)
