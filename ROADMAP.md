@@ -125,8 +125,10 @@ Further out, and open for now: the same core grows into the rest of a small busi
 
 ## M5 — v1.6: ready for real use
 
-Kabe can keep a real company's books in Bookflow day to day without hitting a wall. Done when Kabe has
-used it on real work for a week and approves (pause for that approval); everything else here is checked by us.
+Kabe can keep a real company's books in Bookflow with their AI agent. Done when one real month has been kept
+in Bookflow alongside the old books: Kabe reconciled the bank and set the closing date, the two agree, and
+neither Kabe nor the agent had to redo the other's work (pause for Kabe's approval). Shaped by the outside
+review cb5fcd7 (gate g96052d).
 
 - [~] R161 the audit log is protected like the ledger: audit rows cannot be updated or deleted in company or hub databases (append-only enforced in storage, not only by description)
 - [~] R162 a closing date set in the future is caught: the change warns that it stops all posting until that date, and the setup screen says so
@@ -135,13 +137,17 @@ used it on real work for a week and approves (pause for that approval); everythi
 - [~] R158 reconciliation "mark all": tick every item up to the statement date in one step (company/reconciliation_queries.py has mark_all; needs a command, example, MCP mapping and a GUI witness)
 - [~] R159 a receipt applied across hundreds of invoices previews and pages quickly: at 403 invoices the invoice-correction preview takes ~25 s and each settlement page ~8 s (answers correct; each page recomputes the whole receipt)
 - [~] R160 the standard company profile's version moves when its contents change (R135 added a Credit Card payment method; version still 1)
-- [ ] R156 Scheduled backups: the host backs companies up on a schedule and keeps the last few copies
-- [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
-- [ ] R151 Restore a deleted document from its preserved history
+- [ ] R156 Scheduled backups: the host backs companies up on a schedule to a place no agent can write, keeps the last few copies, and one restore is rehearsed
+- [~] R166 move a real company in: at a period boundary the agent brings in lists, opening balances and open invoices and bills from the old books (QuickBooks Desktop exports), with a dry run, saved mappings, stable outside ids and an exception report; a tie-out shows the opening trial balance and receivable and payable agings match the old books to the cent
+- [~] R167 bank statements come in for reconciliation: import CSV, OFX and QFX statements and match them to entries (live feeds stay in R108)
+- [ ] R168 the real books are protected: the closing date and user roles are set only by a person, never by an agent; the bookkeeping agent works without admin; the real company lives apart from demo and test data; hash-linked audit checkpoints go with each backup so a rewritten history or a rollback is detected
+- [ ] R170 fit check on Kabe's real company: list the kinds of transactions in two or three months of its statements and books, each marked does it, workaround or missing; the missing ones that matter join this milestone (needs Kabe's statements)
 - [ ] R165 fixes from Kabe's live use of v1.5 and v1.6, as they arrive
 
 ## M4 — After V1.5: concepts to develop
 
+- [ ] R151 Restore a deleted document from its preserved history
+- [ ] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor.
 - [ ] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
 - [ ] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [ ] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
