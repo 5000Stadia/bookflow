@@ -15,6 +15,7 @@ from bookflow.core.registry import Plan, Applied, Touched
 from bookflow.hub.access import require_resource
 from bookflow.company import work_preferences as policy
 from bookflow.company import tax_attribution as tax_facts
+from bookflow.company.items import sold_account_types
 
 
 def dependency(problem, **details):
@@ -86,7 +87,7 @@ def _posting_eligibility(s, source, selected):
         if (item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None
                 and lf.profile.adjustment is None):
             raise _invalid('item', 'percentage charges cannot replace captured fixed-charge work')
-        defaults._account(s.company, lf.profile.income_account.id, 'income_account', {'income', 'other_income'})
+        defaults._account(s.company, lf.profile.income_account.id, 'income_account', sold_account_types(lf.profile.item_type))
         if item['income_account_id'] != lf.profile.income_account.id:
             warnings.append(f"{lf.item_id}: retaining captured income account despite current item mapping change")
         for component in lf.taxes:

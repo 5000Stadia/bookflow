@@ -8,6 +8,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [Installed MCP guide](mcp-guide.md) — three-tool discovery, shared business work, receipt files and recovery through the installed launcher.
 - [Reference year](reference-year.md) — opt-in demo reset, source journals and independent report arithmetic.
 - [Customer payments](customer-payment-workflows.md) — shared drafts, receipt corrections, recovery, active examples and control coverage.
+- [Moving a company in](cutover.md) — the old books' exports, the plan, the move-in and the tie-out.
 - [Concepts](concepts.md) — selection, context, concurrency, audit, identity, money, and error behavior.
 - [Binary transfers](transfers.md) — CLI files, Python streams, HTTP raw bodies, and verified completion.
 
@@ -43,6 +44,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`customer-refund`](cli/customer-refund.md)
 - [`customer-type`](cli/customer-type.md)
 - [`customer-type query`](cli/customer-type-query.md)
+- [`cutover`](cli/cutover.md)
 - [`demo`](cli/demo.md)
 - [`deposit`](cli/deposit.md)
 - [`directive`](cli/directive.md)

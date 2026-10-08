@@ -1,0 +1,13 @@
+!HDR	PROD	VER	REL	IIFVER	DATE	TIME	ACCNTNT	ACCNTNTSPLITTIME
+HDR	QuickBooks Pro	Version 33.0D	Release R6P	1	10/01/2026	1791158400	N	0
+!INVITEM	NAME	REFNUM	TIMESTAMP	INVITEMTYPE	DESC	PURCHASEDESC	ACCNT	ASSETACCNT	COGSACCNT	QNTY	QNTY	PRICE	COST	TAXABLE	SALESTAXCODE	PAYMETH	TAXVEND	PREFVEND	REORDERPOINT	EXTRA	CUSTFLD1	CUSTFLD2	CUSTFLD3	CUSTFLD4	CUSTFLD5	DEP_TYPE	ISPASSEDTHRU	HIDDEN	DELCOUNT
+INVITEM	Service Call	600	1715623380	SERV	Service call, first hour		Service Income			0	0	125.00	0.00	N	Non												N	N	0
+INVITEM	Labor	601	1715623380	SERV	Plumbing labor, per hour		Installation Income			0	0	95.00	0.00	N	Non												N	N	0
+INVITEM	Materials	602	1715623380	PART	Job materials	Job materials	Materials Income		Job Materials	0	0	0.00	0.00	Y	Tax			Ferguson Supply									N	N	0
+INVITEM	Water Heater 40 gal	603	1715623380	INVENTORY	40 gallon gas water heater	40 gallon gas water heater	Materials Income	Inventory Asset	Cost of Goods Sold	0	0	899.00	450.00	Y	Tax			Ferguson Supply									N	N	0
+INVITEM	PEX Pipe 100 ft	604	1715623380	INVENTORY	1/2 in PEX pipe, 100 ft coil	1/2 in PEX pipe, 100 ft coil	Materials Income	Inventory Asset	Cost of Goods Sold	0	0	65.00	32.50	Y	Tax			Ferguson Supply									N	N	0
+INVITEM	Trip Charge	605	1715623380	OTHC	Trip charge outside city limits		Service Income			0	0	45.00	0.00	N	Non												N	N	0
+INVITEM	Senior Discount	606	1715623380	DISC	Senior discount		Service Income			0	0	-10%	0.00	N	Non												N	N	0
+INVITEM	Subtotal	607	1715623380	SUBT	Subtotal					0	0	0.00	0.00	N	Non												N	N	0
+INVITEM	IL Sales Tax	608	1715623380	STAX	Illinois sales tax		Sales Tax Payable			0	0	8.25%	0.00	N	Non		Illinois Department of Revenue										N	N	0
+INVITEM	Faucet Install Kit	609	1715623380	GRP	Faucet install: labor and parts					0	0	0.00	0.00	N	Non												N	N	0
