@@ -101,6 +101,8 @@ def test_foreign_intervening_revision_reports_unknown_without_guess(client, sale
         key, blob = db.execute("SELECT id,after FROM audit_entries WHERE record_type='transaction' AND record_id=? AND version_after=2", (invoice['id'],)).fetchone()
         after = audit.decode_snapshot(blob)
         after['current_revision_id'] = foreign['revision']['id']
+        from tests.audit_tamper import disarm
+        disarm(db)
         db.execute('UPDATE audit_entries SET after=? WHERE id=?', (audit.encode_snapshot(after), key))
     changed = run(client, 'payment settlement changes', dict(guard=guard))
     assert changed['unknown_history'] and invoice['id'] in changed['unknown_record_ids']

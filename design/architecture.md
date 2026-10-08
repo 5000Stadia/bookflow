@@ -199,7 +199,7 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities), hub0014 (authority generation: a token that triggers on the eight permission input tables redraw on every row write)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities), hub0014 (authority generation: a token that triggers on the eight permission input tables redraw on every row write), hub0015 (append-only audit: BEFORE UPDATE and DELETE triggers on `audit_events` and `audit_entries`)
     company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening), co0012 (exact progress allocation proofs, fractional sales quantities and overlap guards), co0013 (company work preferences)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
@@ -5088,3 +5088,16 @@ marked `json_schema_extra={"x-bookflow-local-path": True}` absolute before dispa
 `card-credit-v1`. Browser: `adapters/workbench/backups.py` mounts `/c/{id}/company/backup` and
 `/c/{id}/company/restore` (multipart upload to a private temporary folder, removed after the
 command) ahead of the generic routes; the Company section links both.
+
+## Append-only audit storage (R161)
+
+Company migration co0065 and hub migration hub0015 add four triggers each, as co0007 does for
+ledger history: a BEFORE UPDATE and a BEFORE DELETE trigger on `audit_events` and on
+`audit_entries`, each aborting with `audit history is append-only`. They bind every connection
+and process, so the guarantee no longer rests on the code's habits. Nothing in `src/` updates or
+deletes an audit row: the only UPDATE that ever did, hub0002's numbering of `seq`, runs before
+hub0015 on any replay. Backup and restore copy the whole database file and the triggers travel
+with it; `demo reset` removes an organization's rows from other tables and appends its own events.
+A test that must damage audit history on purpose drops the triggers first
+(`tests/audit_tamper.py`), the way the ledger-guard tests already do. A future migration that
+rebuilds either audit table must recreate the triggers.

@@ -116,6 +116,7 @@ def test_source_unknown_history_never_issues_guard(root,client,world,monkeypatch
     inp,ctx,company,path,receipt=world
     first=observe(client,monkeypatch,lambda s:prepared(s,world),company)
     with writer(root) as db:
+        __import__('tests.audit_tamper',fromlist=['disarm']).disarm(db.conn)
         if damage=='missing':db.conn.execute(h.audit_entries.delete().where(h.audit_entries.c.record_type=='company',h.audit_entries.c.record_id==company))
         elif damage=='bypass':db.conn.execute(h.companies.update().where(h.companies.c.id==company).values(display_name='U2 bypassed name'))
         else:db.conn.execute(h.audit_entries.update().where(h.audit_entries.c.record_type=='company',h.audit_entries.c.record_id==company).values(after=__import__('bookflow.core.audit',fromlist=['encode_snapshot']).encode_snapshot({})))

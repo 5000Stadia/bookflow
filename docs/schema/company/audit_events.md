@@ -2,7 +2,7 @@
 
 # `company.audit_events`
 
-Append-only company command events with actor and request provenance.
+Append-only company command events with actor and request provenance; the database refuses any UPDATE or DELETE of an event.
 
 Database: `company`.
 
