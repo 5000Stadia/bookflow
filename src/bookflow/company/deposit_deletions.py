@@ -14,6 +14,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
 from bookflow.hub import access
+from bookflow.company.reconciliation_changes import held_next
 
 FAMILY, = DEPOSIT_FAMILIES
 NOUN = 'deposit'
@@ -144,7 +145,7 @@ def blockers(s, old):
             message='A bank reconciliation holds this deposit; deletion cannot detach it.',
             details={'deposit_id': old['id'], 'reconciliation_key_id': held['id'],
                      'reconciliation_claim_id': held['claim_id'],
-                     'next': 'Undo the bank reconciliation that holds this deposit before deleting it.'})
+                     'next': held_next('deposit', 'deposit void')})
 
 
 def prepare(s, ctx, inp):

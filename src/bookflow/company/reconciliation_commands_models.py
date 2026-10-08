@@ -183,7 +183,18 @@ class MarkEntry(GroupRef):
     action: Literal['mark','unmark','covered','outstanding']
 
 class Mark(DraftChange):
-    entries: tuple[MarkEntry,...]=Field(min_length=1,max_length=200)
+    # Either name the movements (entries, from `reconcile candidates`) or tick the whole list at
+    # once with `all`: every movement dated on or before the statement date that no earlier
+    # statement has cleared -- QuickBooks' "Mark All". `all_action` 'unmark' clears every tick.
+    entries: tuple[MarkEntry,...]=Field(default=(),max_length=200)
+    all: bool=False
+    all_action: Literal['mark','unmark']='mark'
+    filters: CandidateFilter=Field(default_factory=CandidateFilter)
+    @model_validator(mode='after')
+    def shape(self):
+        if self.all==bool(self.entries):raise ValueError('give entries, or all=true and no entries')
+        if not self.all and (self.all_action!='mark' or self.filters!=CandidateFilter()):raise ValueError('filters and all_action need all=true')
+        return self
 
 class MarkAll(DraftChange):
     filters: CandidateFilter
@@ -213,18 +224,23 @@ class ProposalRemove(DraftChange):
     proposal_id: ID
     expected_proposal_version: Version
 
+# The private proposal layer's forced adjustment (`reconciliation_proposals.adjustment`); no
+# public command takes it.
 class Adjustment(Dated):
     date: str
     offset_account_id: ID
     class_id: ID|None=None
     reason: str=Field(min_length=1)
 
+# A finish with a difference has no adjustment: the `adjustment` input these two once accepted
+# was never read, and advertised a caller-chosen plug account (R163). It is withdrawn until the
+# anchor's labelled discrepancy adjustment is decided; an old caller sending it is refused as an
+# unknown field. A statement that will not tie stays an open draft with a note for the owner.
 class Preview(DraftRef):
     expected_version: Version
-    adjustment: Adjustment|None=None
 
 class Finish(PreparedChange):
-    adjustment: Adjustment|None=None
+    pass
 
 class MemberTarget(Model):
     draft_id: ID
@@ -634,6 +650,23 @@ class DraftOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
 
+class StatementGap(Model):
+    """A ticked movement no line of the draft's imported statement accounts for."""
+    movement: MovementKey
+    group_fingerprint: Fingerprint
+    date: str
+    amount: Units
+    number: str
+    payees: tuple[str,...]
+    memo: str|None
+
+
+CLEARED_WITHOUT_LINE=Field(default=None,description=(
+    'Only when a statement was imported into this draft (`reconcile import`): each ticked movement '
+    'no statement line accounts for -- cleared without a statement line. Flagged, never refused; '
+    'null when nothing was imported, as for any reconciliation built by hand.'))
+
+
 class FinishOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: Draft
@@ -641,6 +674,10 @@ class FinishOutput(Model):
     opening_id: ID
     certificate_id: ID
     totals: Totals
+    cleared_without_statement_line: tuple[StatementGap,...]|None=CLEARED_WITHOUT_LINE
+    # What the owner's review would flag in what this reconciliation cleared (R163), e.g. an entry
+    # an agent posted after the reconciliation was started; the finish is not refused.
+    warnings: list[str]=Field(default_factory=list)
 
 
 # A generated documentation sample fills an unconstrained string with "value", which a
@@ -678,5 +715,7 @@ class PreviewOutput(Model):
     expected_facts_fingerprint: Fingerprint=FINGERPRINT_SAMPLE
     dependency_guard: str
     balanced: bool
-    # An opening draft is not finished by itself; this names the step that finishes it.
+    # An opening draft is not finished by itself; this names the step that finishes it. On a
+    # statement that does not tie, it says what to do instead: leave it open with a note.
     next_step: str|None=None
+    cleared_without_statement_line: tuple[StatementGap,...]|None=CLEARED_WITHOUT_LINE

@@ -340,7 +340,8 @@ PANELS: tuple[Panel, ...] = (
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
                      "report general-ledger", "report transaction-detail",
-                     "report missing-checks", "report reconciliation-discrepancy"),
+                     "report missing-checks", "report reconciliation-discrepancy",
+                     "report entries-to-review", "report prior-balances"),
                     "/_group/reports",
                 ),
             ),
@@ -569,6 +570,8 @@ SECTIONS: tuple[Section, ...] = (
             Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
             _report("Missing checks", "missing-checks"),
             _report("Reconciliation discrepancy", "reconciliation-discrepancy"),
+            _report("Entries to review", "entries-to-review"),
+            _report("Prior balances that changed", "prior-balances"),
             _report("Deposit detail", "deposit-detail"),
         ),
     ),
@@ -911,6 +914,18 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         figures.append(dict(key="income", label="Income this month", value=month["totals"]["income"],
                             note=month["totals"]["net_income"], note_label="Net income",
                             href=report("profit-and-loss", date_from=month_start, date_to=today)))
+
+    # What an owner should look at after anyone -- an agent above all -- posted (R163): entries
+    # the review flags, and reconciliations left open because they would not tie.
+    flagged = ask("report entries-to-review", {"as_of": today, "limit": ATTENTION_ROWS})
+    if flagged is not None:
+        from bookflow.adapters.workbench.transaction_detail import document_link
+        attention["review_href"] = report("entries-to-review", as_of=today)
+        attention["review"] = [dict(row, href=document_link(company_id, row) or attention["review_href"])
+                               for row in flagged["rows"]]
+        attention["review_total"] = flagged["totals"]["entries"]
+        attention["reconciliations"] = [dict(row, href=f"{base}/reconcile/mark?" + urlencode({"f:draft": row["draft_id"]}))
+                                        for row in flagged["open_reconciliations"]]
 
     events = ask("audit list", {"limit": ATTENTION_ROWS})
     activity = None if events is None else [dict(event, href=f"{base}/audit/{event['id']}") for event in events["items"]]

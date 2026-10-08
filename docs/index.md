@@ -8,6 +8,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [Installed MCP guide](mcp-guide.md) — three-tool discovery, shared business work, receipt files and recovery through the installed launcher.
 - [Reference year](reference-year.md) — opt-in demo reset, source journals and independent report arithmetic.
 - [Customer payments](customer-payment-workflows.md) — shared drafts, receipt corrections, recovery, active examples and control coverage.
+- [Moving a company in](cutover.md) — the old books' exports, the plan, the move-in and the tie-out.
 - [Concepts](concepts.md) — selection, context, concurrency, audit, identity, money, and error behavior.
 - [Binary transfers](transfers.md) — CLI files, Python streams, HTTP raw bodies, and verified completion.
 
@@ -20,6 +21,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`application`](cli/application.md)
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
+- [`backup`](cli/backup.md)
 - [`batch-invoice`](cli/batch-invoice.md)
 - [`bill`](cli/bill.md)
 - [`bill payment`](cli/bill-payment.md)
@@ -42,6 +44,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`customer-refund`](cli/customer-refund.md)
 - [`customer-type`](cli/customer-type.md)
 - [`customer-type query`](cli/customer-type-query.md)
+- [`cutover`](cli/cutover.md)
 - [`demo`](cli/demo.md)
 - [`deposit`](cli/deposit.md)
 - [`directive`](cli/directive.md)
@@ -89,6 +92,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`reconcile opening`](cli/reconcile-opening.md)
 - [`register`](cli/register.md)
 - [`report`](cli/report.md)
+- [`review`](cli/review.md)
 - [`sales-receipt`](cli/sales-receipt.md)
 - [`sales-rep`](cli/sales-rep.md)
 - [`sales-rep query`](cli/sales-rep-query.md)
@@ -309,7 +313,10 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/sequences`](schema/company/sequences.md)
 - [`company/settlement_line_keys`](schema/company/settlement_line_keys.md)
 - [`company/ship_methods`](schema/company/ship_methods.md)
+- [`company/statement_csv_mappings`](schema/company/statement_csv_mappings.md)
 - [`company/statement_effect_pending`](schema/company/statement_effect_pending.md)
+- [`company/statement_imports`](schema/company/statement_imports.md)
+- [`company/statement_lines`](schema/company/statement_lines.md)
 - [`company/terms`](schema/company/terms.md)
 - [`company/transaction_revisions`](schema/company/transaction_revisions.md)
 - [`company/transactions`](schema/company/transactions.md)

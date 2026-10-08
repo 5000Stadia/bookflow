@@ -112,6 +112,15 @@ def _commit(s, ctx, name, *, account_id, operation_id, event_id, kind, summary, 
     return audit_event_id
 
 
+def _gaps(s, snapshot, draft):
+    """Ticked movements the draft's imported statement has no line for; None when none was imported."""
+    from bookflow.company import statement_store
+    found = statement_store.gaps(s, snapshot, draft)
+    return None if found is None else tuple(m.StatementGap(
+        movement=v.ref[0], group_fingerprint=v.ref[1], date=v.date, amount=v.amount, number=v.number,
+        payees=v.payees, memo=v.memo or None) for v in found)
+
+
 def _targets(account_id, **kinds):
     found = [dict(kind='accounts', id=account_id)]
     for kind, values in kinds.items():
@@ -184,7 +193,13 @@ reconcile_start = _start_family(
     'Open a draft for one bank or credit card statement. It follows the account\'s adopted opening '
     'unless you name opening_id, or opening_draft_id for an opening not finished yet; an account '
     'with no opening needs `reconcile opening start` first. Then `reconcile candidates`, '
-    '`reconcile mark`, `reconcile preview` and `reconcile finish`.')
+    '`reconcile mark`, `reconcile preview` and `reconcile finish`. ' + preparation.STOP_RULE)
+
+
+def _marked(inp, value):
+    if inp.all and inp.all_action == 'unmark':
+        return 'cleared every mark; ' + str(len(value.selections)) + ' movements remain marked'
+    return 'marked ' + str(len(value.selections)) + ' movements on a reconciliation'
 
 
 def _mark_prepare(inp, ctx, s, ids):
@@ -204,7 +219,13 @@ def _mark_planner(inp, ctx, s):
 reconcile_mark = command(
     'reconcile mark', scope='company',
     description='Tick or untick whole movements on an open reconciliation draft; a movement is '
-                'marked in full or not at all, so its components can never be half cleared.',
+                'marked in full or not at all, so its components can never be half cleared. Name '
+                'the movements in `entries` (movement and group_fingerprint, from `reconcile '
+                'candidates`), or pass `all` to tick every movement dated on or before the '
+                'statement date that no earlier statement has cleared, in one step (QuickBooks\' '
+                '"Mark All"); `all_action: unmark` clears every tick, and `filters` narrows what '
+                '`all` touches. Preview it with --dry-run, then `reconcile preview` and `reconcile '
+                'finish`.',
     input_model=m.Mark, output_model=m.DraftOutput, writes={'company'}, required_role='standard',
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
     error_codes=list(ERRORS))(_mark_planner)
@@ -219,7 +240,7 @@ def _mark_apply(plan, ctx, s):
     table = c.reconciliation_drafts
     _commit(s, ctx, 'reconcile mark', account_id=value.account_id, operation_id=ids['operation'],
             event_id=ids['event'], kind='draft_change',
-            summary='marked ' + str(len(value.selections)) + ' movements on a reconciliation',
+            summary=_marked(inp, value),
             document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
                           effect=dict(draft=value.id, version=value.version,
                                       selected=len(value.selections))),
@@ -230,9 +251,7 @@ def _mark_apply(plan, ctx, s):
                 version=value.version, current_revision_id=value.current_revision_id)],
             touched=[Touched('reconciliation_draft', value.id, 'update', value.version - 1,
                              value.version, dict(selected=len(value.selections)), db='company')])
-    return Applied(m.DraftOutput(draft=value), [],
-                   'marked ' + str(len(value.selections)) + ' movements on a reconciliation',
-                   audited=True)
+    return Applied(m.DraftOutput(draft=value), [], _marked(inp, value), audited=True)
 
 
 def _adopting(snapshot, draft):
@@ -266,7 +285,8 @@ def _finish_prepare(inp, ctx, s, ids):
     preparation.require(inp.expected_facts_fingerprint == preparation.fingerprint(snapshot, value),
                         'E_RECONCILIATION_SELECTION_STALE')
     opening_draft, totals = _totals(snapshot, value)
-    return snapshot, value, opening_draft, preparation.certify(totals)
+    currency = snapshot.source.accounts[account_id]['currency']
+    return snapshot, value, opening_draft, preparation.certify(totals, currency)
 
 
 reconcile_finish = command(
@@ -274,7 +294,8 @@ reconcile_finish = command(
     description='Certify a statement reconciliation whose difference is zero, storing the statement '
                 'it reconciles to and the account exactly as it stood when it was certified. Takes a '
                 'statement draft from `reconcile start`, never an opening draft: on an account\'s '
-                'first reconciliation the opening that statement follows is certified with it.',
+                'first reconciliation the opening that statement follows is certified with it. '
+                + preparation.STOP_RULE,
     input_model=m.Finish, output_model=m.FinishOutput, writes={'company'}, required_role='standard',
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
     error_codes=list(ERRORS))(
@@ -294,7 +315,8 @@ def _finish_planner(inp, ctx, s):
                               terminal_operation_id=ids['operation'])
     return Plan(m.FinishOutput(draft=finished, account_id=value.account_id,
                                opening_id=value.base_opening_id or ids['opening'],
-                               certificate_id=ids['certificate'], totals=totals),
+                               certificate_id=ids['certificate'], totals=totals,
+                               cleared_without_statement_line=_gaps(s, snapshot, value)),
                 dict(ids=ids, input=inp))
 
 
@@ -302,6 +324,7 @@ def _finish_planner(inp, ctx, s):
 def _finish_apply(plan, ctx, s):
     inp, ids = plan.data['input'], plan.data['ids']
     snapshot, value, opening_draft, totals = _finish_prepare(inp, ctx, s, ids)
+    gaps = _gaps(s, snapshot, value)
     account_id = value.account_id
     opening_id = value.base_opening_id or ids['opening']
     certificate_id = ids['certificate']
@@ -368,7 +391,9 @@ def _finish_apply(plan, ctx, s):
             summary='certified a reconciliation to ' + value.header.statement_date,
             document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
                           effect=dict(certificate=certificate_id, opening=opening_id,
-                                      account=account_id)),
+                                      account=account_id, **({} if gaps is None else dict(
+                                          cleared_without_statement_line=[
+                                              v.model_dump(mode='json') for v in gaps])))),
             targets=_targets(account_id, drafts=consumed, openings=[opening_id],
                              certificates=[certificate_id]),
             rows=lambda made: persistence.merge(rows(made), *(
@@ -383,7 +408,8 @@ def _finish_apply(plan, ctx, s):
                              dict(account_id=account_id, statement_date=value.header.statement_date),
                              db='company')])
     return Applied(m.FinishOutput(draft=consumed_values[0], account_id=account_id, opening_id=opening_id,
-                                  certificate_id=certificate_id, totals=totals), [],
+                                  certificate_id=certificate_id, totals=totals,
+                                  cleared_without_statement_line=gaps), [],
                    'certified a reconciliation to ' + value.header.statement_date, audited=True)
 
 
@@ -465,15 +491,21 @@ def _preview(inp, ctx, s):
         draft=value.id, account_id=account_id,
         currency=snapshot.source.accounts[account_id]['currency'],
         kind=value.kind, version=value.version,
-        next_step=preparation.FIRST_RECONCILIATION if value.kind == 'opening' else None,
+        next_step=(preparation.FIRST_RECONCILIATION if value.kind == 'opening'
+                   else None if totals.difference == 0 else preparation.STOP_RULE),
         totals=totals, expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
-        dependency_guard=dependency_guard(value), balanced=totals.difference == 0))
+        dependency_guard=dependency_guard(value), balanced=totals.difference == 0,
+        cleared_without_statement_line=None if value.kind == 'opening' else _gaps(s, snapshot, value)))
 
 
 reconcile_preview = command(
     'reconcile preview', scope='company',
     description='Show what a reconciliation draft currently comes to, and hand back the exact '
                 'facts fingerprint and dependency guard `reconcile finish` requires. On an opening '
-                'draft, next_step says how it is finished: through its first statement.',
+                'draft, next_step says how it is finished: through its first statement; on a '
+                'statement that does not tie, it says what to do instead of forcing it. When a statement '
+                'was imported into the draft (`reconcile import`), cleared_without_statement_line lists '
+                'each ticked movement no statement line accounts for; `reconcile finish` reports and '
+                'records the same list, and refuses nothing for it.',
     input_model=m.Preview, output_model=m.PreviewOutput, required_role='member',
     capability='ledger.read', positional=['draft'], error_codes=list(ERRORS))(_preview)

@@ -28,7 +28,7 @@ import zipfile
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from bookflow.core.durability import sync_directory, sync_file
 from bookflow.core.errors import BookflowError
@@ -89,9 +89,15 @@ def check_database(path: Path, *, company_id: str | None = None, revision: str |
 
 
 def create(folder: Path, *, company_id: str, display_name: str, created_by: dict[str, Any], bookflow_version: str,
-           backup_id: str) -> dict[str, Any]:
-    """Write and verify one archive in ``folder/backups``; return its manifest plus file facts."""
-    backups = folder / "backups"
+           backup_id: str, backups_dir: Path | None = None, inspect: Callable[[Path], Any] | None = None,
+           read_only: bool = False) -> dict[str, Any]:
+    """Write and verify one archive in ``folder/backups`` (or ``backups_dir``); return its manifest plus file facts.
+
+    ``inspect`` is called with the path of the consistent database copy before it is archived,
+    and its result is returned as ``inspected`` (the checkpoint reads the backup's own copy).
+    ``read_only`` leaves the archive at mode 0444.
+    """
+    backups = folder / "backups" if backups_dir is None else backups_dir
     store = folder / "attachments"
     now = datetime.now(timezone.utc)
     name = archive_name(display_name, now)
@@ -113,6 +119,7 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
             src.backup(dst)
             dst.execute("PRAGMA journal_mode=DELETE")
         facts = check_database(snapshot, company_id=company_id)
+        inspected = inspect(snapshot) if inspect is not None else None
         with closing(sqlite3.connect(sqlite_uri(snapshot, "ro"), uri=True)) as conn:
             bodies = sorted({(r[0], r[1]) for r in conn.execute(
                 "SELECT sha256, size_bytes FROM attachments WHERE collected_at IS NULL")})
@@ -147,6 +154,8 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
                 zf.write(store / entry["name"].split("/", 1)[1], entry["name"], compress_type=zipfile.ZIP_STORED)
         sync_file(partial)
         verify(partial)
+        if read_only:
+            os.chmod(partial, 0o444)
         partial.replace(target)
         partial = None
         sync_directory(backups)
@@ -161,7 +170,8 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
         if work is not None:
             shutil.rmtree(work, ignore_errors=True)
     sha, size = _sha256_file(target)
-    return {"manifest": manifest, "path": target, "file_name": target.name, "sha256": sha, "size_bytes": size}
+    return {"manifest": manifest, "path": target, "file_name": target.name, "sha256": sha, "size_bytes": size,
+            "inspected": inspected}
 
 
 def read_manifest(archive: Path) -> dict[str, Any]:

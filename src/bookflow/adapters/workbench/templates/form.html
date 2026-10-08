@@ -244,7 +244,7 @@
 {% if noun in ('reconcile', 'reconcile opening') %}
 <link rel="stylesheet" href="{{ static_urls['reconcile.css'] }}">
 {% if verb == 'mark' %}<script src="{{ static_urls['exact-json.js'] }}" defer></script><script src="{{ static_urls['reconcile-picker.js'] }}" defer></script>
-<p class="reconcile-lede" data-reconcile-company="{{ company_id }}">Tick everything that appears on the statement. The difference tells you when you are done; save your marks, then finish.</p>{% endif %}
+<p class="reconcile-lede" data-reconcile-company="{{ company_id }}">Tick everything that appears on the statement, or use Mark all to tick every movement up to the statement date at once. The difference tells you when you are done; save your marks, then finish.</p>{% endif %}
 {% endif %}
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}

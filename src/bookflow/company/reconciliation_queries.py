@@ -51,24 +51,39 @@ def component_items(s,movement,group_hash, *, authority_transactions, limit=50,o
     require(offset<=len(values),'E_QUERY_STALE')
     return tuple(m.Selection(key_id=v['key_id'],version_id=v['id'],action='mark') for v in values[offset:offset+limit]),len(values)
 
-def mark_all(s,draft,inp, *, revision_id):
+def _mark_all(s,draft,filters,fingerprint,action,revision_id,*,skip_claimed):
     from bookflow.company.reconciliation_drafts import editable,revised
-    editable(s,draft,inp.expected_version);require(inp.draft==draft.id and draft.kind!='opening','E_RECONCILIATION_MANIFEST')
-    first=candidates(s,draft,inp.filters,authority_transactions=s.authority_transactions,limit=200,expected_fingerprint=inp.query_fingerprint)
+    first=candidates(s,draft,filters,authority_transactions=s.authority_transactions,limit=200,expected_fingerprint=fingerprint)
     result=list(first.items);offset=first.next_offset
     while offset is not None:
-        page=candidates(s,draft,inp.filters,authority_transactions=s.authority_transactions,limit=200,offset=offset,expected_fingerprint=first.fingerprint)
+        page=candidates(s,draft,filters,authority_transactions=s.authority_transactions,limit=200,offset=offset,expected_fingerprint=first.fingerprint)
         result.extend(page.items);offset=page.next_offset
     choices={v.key_id:v for v in draft.selections}
     allgroups={group_fingerprint(v):v for v in groups(s.current.values()).values()}
     for row in result:
+        if skip_claimed and (not row.eligible or (action=='mark' and row.claimed)):continue
         require(not row.stale and row.eligible,'E_RECONCILIATION_SELECTION_STALE')
-        if inp.action=='mark':require(not row.claimed,'E_RECONCILIATION_MEMBERSHIP_CONFLICT')
+        if action=='mark':require(not row.claimed,'E_RECONCILIATION_MEMBERSHIP_CONFLICT')
         for v in allgroups[row.group_fingerprint]:
             require(v['key_id'] not in choices or choices[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
-            if inp.action=='unmark':choices.pop(v['key_id'],None)
+            if action=='unmark':choices.pop(v['key_id'],None)
             else:choices[v['key_id']]=m.Selection(key_id=v['key_id'],version_id=v['id'],action='mark')
     return revised(draft,revision_id,selections=tuple(choices[k] for k in sorted(choices)))
+
+def mark_all(s,draft,inp, *, revision_id):
+    from bookflow.company.reconciliation_drafts import editable
+    editable(s,draft,inp.expected_version);require(inp.draft==draft.id and draft.kind!='opening','E_RECONCILIATION_MANIFEST')
+    return _mark_all(s,draft,inp.filters,inp.query_fingerprint,inp.action,revision_id,skip_claimed=False)
+
+def mark_everything(s,draft,inp, *, revision_id):
+    """`reconcile mark` with all=true: every eligible, not-yet-cleared movement, ticked in one step.
+
+    Movements another statement already cleared and movements after the statement date are left
+    out rather than refused -- they are not part of "everything on this statement". A movement that
+    changed since it was ticked is still refused: that one needs a person's eye."""
+    from bookflow.company.reconciliation_drafts import editable
+    editable(s,draft,inp.expected_version);require(inp.draft==draft.id and draft.kind!='opening','E_RECONCILIATION_MANIFEST')
+    return _mark_all(s,draft,inp.filters,None,inp.all_action,revision_id,skip_claimed=True)
 
 
 def _slice(values, *, limit,offset,expected_fingerprint):

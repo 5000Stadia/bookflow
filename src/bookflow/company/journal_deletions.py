@@ -24,6 +24,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
 from bookflow.hub import access
+from bookflow.company.reconciliation_changes import held_next
 
 FAMILY = PREPARED_FAMILIES[0]
 NOUN = 'journal'
@@ -140,7 +141,7 @@ def dependencies(s, identity):
     if held is not None:
         raise BookflowError('E_RECONCILIATION_DEPENDENCY', details={'journal_id': identity,
             'reconciliation_key_id': held[0],
-            'next': 'Undo the bank reconciliation that holds this entry before deleting it.'})
+            'next': held_next('journal entry', 'journal void')})
 
 
 def prepare(s, ctx, inp):

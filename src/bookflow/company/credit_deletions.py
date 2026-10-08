@@ -13,6 +13,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Plan, Applied, Touched, MatchedRecovery
 from bookflow.hub import access
+from bookflow.company.reconciliation_changes import held_next
 
 FAMILY, = CREDIT_FAMILIES
 NOUN = 'credit-memo'
@@ -136,7 +137,7 @@ def dependencies(s, old):
         statement_keys.c.transaction_id == old['id'])).first()
     if held is not None:
         raise BookflowError('E_RECONCILIATION_DEPENDENCY', details={'credit_memo_id': old['id'],
-            'next': 'Undo the bank reconciliation that holds this credit memo before deleting it.'})
+            'next': held_next('credit memo', 'credit-memo void')})
     return identifiers
 
 

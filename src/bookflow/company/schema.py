@@ -247,7 +247,7 @@ audit_events = _table(
     _column("undo_of_event_id", sa.String(26), "Original company audit event compensated by this event; null for ordinary events.", sa.ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=True),
     _column("summary", sa.String(512), "Human-readable summary of what the command did.", nullable=False),
     sa.Index("ux_co_audit_events_undo", "undo_of_event_id", unique=True, sqlite_where=sa.text("undo_of_event_id IS NOT NULL")),
-    description="Append-only company command events with actor and request provenance.",
+    description="Append-only company command events with actor and request provenance; the database refuses any UPDATE or DELETE of an event.",
 )
 
 audit_entries = _table(
@@ -263,7 +263,7 @@ audit_entries = _table(
     _column("before", sa.LargeBinary, "Encoded pre-change snapshot when recorded; otherwise null.", nullable=True),
     sa.Index("ix_co_audit_entries_record", "record_type", "record_id"),
     sa.Index("ix_co_audit_entries_event", "event_id"),
-    description="Record-level snapshots grouped under company audit events.",
+    description="Record-level snapshots grouped under company audit events; the database refuses any UPDATE or DELETE of an entry.",
 )
 
 presence = _table(
@@ -1164,3 +1164,6 @@ globals().update(_define_journal_deletions(metadata, _column, _table))
 
 from bookflow.company.discount_schema import define_tables as _define_discount_tables
 globals().update(_define_discount_tables(metadata, _column, _table))
+
+from bookflow.company.statement_schema import define_tables as _define_statement_tables
+globals().update(_define_statement_tables(metadata, _column, _table))

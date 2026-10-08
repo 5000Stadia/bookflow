@@ -112,7 +112,7 @@ def test_profile_hierarchy_uses_the_shared_slash_delimited_path(company_db):
 def test_standard_manifest_has_the_exact_versioned_seed_key_inventory():
     manifest = load_standard_profile()
     assert manifest.manifest_id == "standard"
-    assert manifest.version == 1
+    assert manifest.version == 2  # 2: R135 added Credit Card (R160)
     assert manifest.lists == [
         "term",
         "payment-method",
@@ -520,3 +520,23 @@ def test_hierarchy_rename_reprojects_descendants_without_versioning_them(company
     ).mappings().one()
     assert updated_child["full_name"] == "New:Child"
     assert updated_child["version"] == 1
+
+
+# R160: the standard profile's contents and its version move together. If this fails you changed
+# the packaged profile: raise "version" in profile_standard.json, then update both pins here.
+_STANDARD_PIN = (2, "8350fe7a9f35e0752b1d288f949d595f972a24a2cc5f8beb7365f36e440f449d")
+
+
+def test_standard_profile_contents_cannot_change_without_the_version_moving():
+    import hashlib
+    import json
+    from importlib.resources import files
+
+    raw = json.loads(files("bookflow.data").joinpath("profile_standard.json").read_text(encoding="utf-8"))
+    version = raw.pop("version")
+    digest = hashlib.sha256(
+        json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    assert (version, digest) == _STANDARD_PIN, (
+        "profile_standard.json contents changed: bump its version and update _STANDARD_PIN"
+    )

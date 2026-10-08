@@ -11,10 +11,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_audit_visibility_catalog as previous, permission_catalog as c
+from . import permission_entry_review_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '22881382ffeb09d2e438dc984b27747ae28a080e'
+SOURCE_COMMIT = 'f752ab8a317e11ff357e9f240e20fdb767c835d5'
 ADDED_COMMANDS = (
     c.CommandDescriptor('cutover apply', 'company', 'ledger.post', 'standard', (), True, None, False, False, None, None, None, None),
     c.CommandDescriptor('cutover plan', 'company', 'ledger.read', 'member', (), True, None, False, False, None, None, None, None),

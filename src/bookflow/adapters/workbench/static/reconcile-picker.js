@@ -13,7 +13,7 @@
   const money = (units, currency) => window.BookflowExactJSON.minor(units, currency);
   // `crypto.randomUUID` needs a secure context and the workbench is ordinarily served over
   // plain HTTP on a machine's own address, where it is simply not defined.
-  const key = () => 'WB-finish-' + Array.from(crypto.getRandomValues(new Uint8Array(18)),
+  const key = (what='finish') => 'WB-' + what + '-' + Array.from(crypto.getRandomValues(new Uint8Array(18)),
     b => b.toString(16).padStart(2, '0')).join('');
 
   function initialize() {
@@ -53,7 +53,11 @@
     query.setAttribute('aria-label','Find movements');
     const load=node('button','Show what can be cleared');load.type='button';
     load.setAttribute('data-reconcile-load','');
-    controls.append(query,load);
+    // "Mark all" ticks everything listed in one saved step (`reconcile mark` with `all`), the way
+    // QuickBooks' button does; "Clear all marks" is its undo. Both are previewable on the CLI.
+    const markAll=node('button','Mark all');markAll.type='button';markAll.setAttribute('data-reconcile-mark-all','');
+    const clearAll=node('button','Clear all marks');clearAll.type='button';clearAll.setAttribute('data-reconcile-clear-all','');
+    controls.append(query,load,markAll,clearAll);
     const list=node('div');list.className='reconcile-list';list.setAttribute('data-reconcile-list','');
     const actions=node('div');actions.className='reconcile-actions';
     const finish=node('button','Finish and certify');finish.type='button';finish.disabled=true;
@@ -69,14 +73,14 @@
     // A disabled button says "not yet"; a button that looks ready and does nothing when pressed
     // says the page is broken. So everything that makes the page unready goes through here.
     function working(value){
-      busy=value;load.disabled=value || finished;
+      busy=value;load.disabled=value || finished;markAll.disabled=clearAll.disabled=value || finished;
       finish.disabled=value || finished || !server || !server.balanced;
     }
 
-    async function command(name,input){
+    async function command(name,input,headers={}){
       const response=await fetch('/companies/'+encodeURIComponent(company)+'/commands/'+name.replaceAll(' ','.'),{
         method:'POST',credentials:'same-origin',
-        headers:{'Content-Type':'application/json','X-Bookflow-Workbench':'1'},
+        headers:{'Content-Type':'application/json','X-Bookflow-Workbench':'1',...headers},
         body:exact.stringify(input)});
       const result=exact.parse(await response.text());
       if(!response.ok || result.code)throw new Error(result.message || result.code || 'Unable to read this reconciliation.');
@@ -158,6 +162,24 @@
         sync();
       }catch(e){error.textContent=e.message;}finally{working(false);}
     }
+
+    async function everything(action){
+      if(busy||finished)return;working(true);error.textContent='';
+      try{
+        if(!draftField.value)throw new Error('Open this page from the statement you started.');
+        const done=await command('reconcile mark',{operation_key:key('mark-all'),draft:draftField.value,
+          expected_version:Number(versionField.value||1),all:true,all_action:action,
+          ...(query.value?{filters:{number:query.value}}:{})},
+          {'X-Bookflow-Reason':action==='mark'?'Mark all on the reconciliation':'Clear all marks on the reconciliation'});
+        // The write moved the draft on; the form's own save must start from this version, and the
+        // list must be read again so the boxes show what is now saved.
+        versionField.value=String(done.draft.version);chosen.clear();
+        await refresh();
+      }catch(e){error.textContent=e.message;working(false);return;}
+      working(false);await show();
+    }
+    markAll.addEventListener('click',()=>everything('mark'));
+    clearAll.addEventListener('click',()=>everything('unmark'));
 
     finish.addEventListener('click',async()=>{
       if(busy||finished||!server)return;working(true);error.textContent='';

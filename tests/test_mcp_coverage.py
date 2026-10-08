@@ -32,8 +32,11 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # 491 -> 492 on main before batch A (not measured here); +6 the card-credit verbs (R135).
     # +2 company backup and company restore (R133).
     # +4 agent/user deactivate and activate (R89); +1 report export (R145).
+    # +1 reconcile import (R167).
+    # +4 backup schedule, list, verify and rehearse (R156).
+    # +3 report entries-to-review, report prior-balances and review mark (R163).
     # +3 cutover plan, apply and tie-out (R166).
-    assert len(rows) == 508
+    assert len(rows) == 516
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -106,7 +109,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==26
+    assert len(mapped)==len(variant_policies())==25
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -147,7 +150,27 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # groups 25 -> 26) without adding a node; strategy is a literal, not a variant.
     # 2881 -> 2882 (V1.5 loose ends): payment query's optional `reference` (the customer's check
     # number) adds its null branch; no other routed input changed.
-    assert sum(len(group["paths"]) for group in mapped)==2882
+    # 2882 -> 2890 (R158, reconcile mark --all), measured per command on both trees: reconcile mark
+    # 1 -> 9 nodes, +8. The new `filters` (the same CandidateFilter `reconcile candidates` takes)
+    # carries eight optional fields, each adding its null branch: from_date, to_date, side,
+    # producer, number, payee, memo, amount. `all` and `all_action` are a boolean and a literal and
+    # add none; no other routed input changed. No new variant kind: filters has a default rather
+    # than being nullable, so tests/mcp_coverage.py needs no new policy and the groups stay 26.
+    # 2890 -> 2893 (merge of R167 onto R158): reconcile import adds its 3 nodes, as measured below.
+    # 2882 -> 2885 (R167): reconcile import, a new command, measured per command: 3 nodes, the
+    # null branches of its optional draft, statement_date and ending_balance. No other input moved.
+    # 2893 -> 2896 (R156, scheduled backups), measured per command on both trees: backup schedule's
+    # optional daily_at, destination and keep each add their null branch (+3); `off` is a boolean
+    # and `company` a required string, and backup list, verify and rehearse take no input (0 each).
+    # 2896 -> 2895 (R163), measured: reconcile preview and finish each lose the dormant
+    # `adjustment` input and its nullable class_id, -4 (its Adjustment|null variant group goes,
+    # 26 -> 25 groups); report entries-to-review /cursor, report prior-balances /cursor and
+    # review mark /note add one null branch each, +3.
+    # 2895 -> 2912 (R166, the move-in), measured per command on the merged tree: cutover plan and
+    # cutover apply 6 each (the null branches of a file's attachment, content, name and kind, and of
+    # clearing_account and journal_number), cutover tie-out 5 (no journal_number). No new variant
+    # kind; the groups stay 25.
+    assert sum(len(group["paths"]) for group in mapped)==2912
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

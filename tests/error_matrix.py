@@ -490,6 +490,24 @@ MATRIX['report reconciliation-discrepancy'] = {
     'E_RECORD_NOT_FOUND': 'account does not resolve',
     'E_VALIDATION': 'account names an account that is neither a bank nor a credit card account',
 }
+MATRIX['report entries-to-review'] = {
+    'E_QUERY_STALE': 'company audit changed between review pages',
+    'E_VALUE_RANGE': 'a listed entry amount exceeds signed 64-bit range',
+    'E_VALIDATION': 'as_of is not a date, or the continuation does not match',
+}
+MATRIX['report prior-balances'] = {
+    'E_QUERY_STALE': 'company audit changed between prior-balance pages',
+    'E_VALUE_RANGE': 'a reviewed or current balance exceeds signed 64-bit range',
+    'E_VALIDATION': 'as_of is not a date, or the continuation does not match',
+}
+MATRIX['review mark'] = {
+    'E_RECORD_NOT_FOUND': 'transaction does not resolve',
+    'E_PERMISSION': 'an agent tries to mark an entry reviewed; marking is a person\'s step',
+    'E_VALIDATION': 'the transaction is not on the entries-to-review list',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown directive',
+    'E_DIRECTIVE_INACTIVE': 'inactive directive',
+}
 MATRIX['report inventory-valuation'] = {
     'E_QUERY_STALE': 'a movement, posting or item display fact changed between valuation pages',
     'E_VALUE_RANGE': 'an item asset value or the valuation total exceeds signed 64-bit range',
@@ -1605,6 +1623,11 @@ _RECONCILE_ERRORS = {
 }
 for _verb in ("opening start", "start", "mark", "finish"):
     MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)
+# `reconcile import` starts and marks through the same aggregate, and reads exact money from a file.
+MATRIX["reconcile import"] = {
+    **_RECONCILE_ERRORS,
+    "E_AMOUNT_PRECISION": "a statement amount with more decimal places than the account's currency has",
+}
 
 # The two reads walk that same aggregate, so they carry the family's reasons too -- but neither
 # takes an idempotency key or a directive, and each has one page-level reason the other cannot give.
