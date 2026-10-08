@@ -130,7 +130,7 @@ in Bookflow alongside the old books: Kabe reconciled the bank and set the closin
 neither Kabe nor the agent had to redo the other's work (pause for Kabe's approval). Shaped by the outside
 review cb5fcd7 (gate g96052d).
 
-- [~] R161 the audit log is protected like the ledger: audit rows cannot be updated or deleted in company or hub databases (append-only enforced in storage, not only by description)
+- [x] R161 the audit log is protected like the ledger: audit rows cannot be updated or deleted in company or hub databases (append-only enforced in storage, not only by description)
 - [x] R162 a closing date set in the future is caught: the change warns that it stops all posting until that date, and the setup screen says so
 - [~] R163 an agent cannot quietly make the books balance: unexplained adjustments into reconciled accounts, suspense or opening-balance equity are surfaced for the owner (shaped by the R164 study)
 - [x] R164 study: how AI agents keeping books over many months go wrong (AccountingBench and newer), which of those failures Bookflow's guards already stop, and which slip through — notes/research/
