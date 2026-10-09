@@ -1139,7 +1139,8 @@ def test_filesystem_operations_release_every_affected_pooled_company(hosted):
     assert not is_pooled(cid)
 
     pool_company("555-6105")
-    reset = hosted.ok("demo.reset")
+    # The root holds a real company beside the demo, so the reset names the root (R168).
+    reset = hosted.ok("demo.reset", {"force": str(hosted.root)})
     assert reset["company_id"] != cid and not is_pooled(cid)
 
 
@@ -2065,12 +2066,13 @@ def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, r
     })
     assert refused.status_code == switched.status_code == 403
     assert refused.content == switched.content
-    assert refused.json()["details"] == {"capability": "token", "required_role": "human"}
+    assert refused.json()["details"]["capability"] == "token" and refused.json()["details"]["required_role"] == "human"
+    assert refused.json()["details"]["reason"] == "people_only"  # R168: the catalog's people-only list
     password = bot.post("/commands/user.set-password", json={"username": hosted.login, "password": PASSWORD}, headers={
         "Authorization": f"Bearer {issued['secret']}", "X-Bookflow-Reason": "trying an administrator reset",
     })
     assert password.status_code == 403
-    assert password.json()["details"] == {"capability": "user", "required_role": "human"}
+    assert password.json()["details"]["capability"] == "user" and password.json()["details"]["required_role"] == "human"
     r = bot.post(f"/companies/{hosted.company_id}/commands/company.update", json={"phone": "555-0199"},
                  headers={"Authorization": f"Bearer {issued['secret']}", "X-Bookflow-Reason": "owner asked by text"})
     assert r.status_code == 200, r.text

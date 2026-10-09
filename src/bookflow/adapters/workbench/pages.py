@@ -1226,6 +1226,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         cmd = registry.get(definition.query_command if definition is not None and company_id else f"{noun} list")
         if cmd is None:
             cmd = registry.get(f"{noun} query")
+        if cmd is not None and cmd.scope != ("company" if company_id else "hub"):
+            # The other scope's list (`backup list` is a company read; the hub's `backup` has only
+            # `backup schedule`): this page lists nothing and offers its own scope's actions.
+            cmd = None
         if cmd is not None and any(field.is_required() for field in cmd.input_model.model_fields.values()):
             # Record-scoped lists need a target, not an invalid empty invocation.
             return form_page(request, company_id, noun, cmd.verb, None)

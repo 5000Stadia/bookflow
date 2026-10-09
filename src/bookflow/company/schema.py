@@ -295,7 +295,7 @@ directives = _table(
     *_common(),
     _column("code", sa.String(16), "Company-local human-readable directive code.", nullable=False, unique=True),
     _column("text", sa.String(1000), "Standing instruction text attributed to its principal.", nullable=False),
-    _column("given_by", sa.String(26), "Human principal id that gave the instruction.", nullable=False),
+    _column("given_by", sa.String(26), "Who gave the instruction: the person who recorded it, or the agent that recorded it for its principal (then it is the agent's own note, not a person's standing instruction).", nullable=False),
     _column("recorded_by", sa.String(26), "User or agent id that recorded the instruction.", nullable=False),
     _column("active", sa.Boolean, "Whether the directive may be cited by new writes.", nullable=False, default=True),
     _column("deactivated_at", sa.String(32), "UTC timestamp when the directive was deactivated; null while active.", nullable=True),

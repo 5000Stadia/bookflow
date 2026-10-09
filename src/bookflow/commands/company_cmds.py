@@ -195,7 +195,7 @@ class CompanyUpdateInput(BaseModel):
     tax_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the tax year")
     report_basis: Literal["accrual", "cash"] | None = Field(None, description="Company default for compatible financial reports: cash or accrual. Individual reports may override it. Does not change posted transactions or sales-tax liability timing.")
     timezone: str | None = Field(None, description="IANA zone")
-    closing_date: str | None = Field(None, description="Books closed through this date, YYYY-MM-DD")
+    closing_date: str | None = Field(None, description="Books closed through this date, YYYY-MM-DD. Only a person may set, move or clear it; an agent is refused.")
     recent_activity_window_seconds: int | None = Field(None, ge=0, description="Window for the recent-activity warning")
     use_account_numbers: bool | None = Field(None, description="Show account numbers in forms, tables, and pickers")
     show_lowest_subaccount_only: bool | None = Field(None, description="Use leaf account names in pickers")
@@ -321,7 +321,8 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
 
 company_update = command("company update", scope="company", description="Update the selected company's information; versioned, blind, or merged per the concurrency rules.",
                          input_model=CompanyUpdateInput, output_model=UpdateOutput, writes={"company", "hub"}, required_role="admin", truth="company", clearable=True,
-                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"], version_source=("company show", None, "info_version"))
+                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"], version_source=("company show", None, "info_version"),
+                         authorization="company admin; changing the closing date needs a person, never an agent")
 
 
 def _future_closing_warning(closing_date: str, timezone_name: str | None, now: Any = None) -> str | None:
@@ -347,6 +348,10 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": f, "problem": "cannot be cleared; it always has a value"} for f in nulled]})
     new, fields_set = _merged_row(current, inp)
     changed = {f for f in fields_set if any(new.get(col) != current.get(col) for col in ([f] if f not in ("address", "legal_address", "ship_address") else [f"{f}_{c}" for c in ADDRESS_FIELDS]))}
+    if "closing_date" in changed:
+        # Setting, moving or clearing the closing date is a person's act (catalog human-administration-v1).
+        from bookflow.hub.people_only import require_person_for_closing_date
+        require_person_for_closing_date(s)
     if changed:
         _validate_merged(new, s, changed)
     window = current.get("recent_activity_window_seconds", 60)
@@ -427,6 +432,7 @@ class DirectiveOut(BaseModel):
     deactivated_at: str | None
     deactivated_by: str | None
     deactivated_by_name: str | None
+    person_given: bool = Field(True, description="Recorded by a person, so it is that person's standing instruction and can stand in for an agent's reason; false for a directive an agent recorded for its principal")
     access: str | None = None
     role: str | None = None
     editing_by: list[dict[str, Any]] = []
@@ -454,6 +460,7 @@ def _directive_out(s: Session, row: dict[str, Any], with_presence: bool = False)
     acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
     return DirectiveOut(**{k: (localize(s, row[k]) if k in ("created_at", "updated_at", "deactivated_at") else row[k]) for k in DirectiveOut.model_fields if k in row and k != "editing_by"},
                         given_by_name=names.get(row["given_by"]), recorded_by_name=names.get(row["recorded_by"]), deactivated_by_name=names.get(row.get("deactivated_by")), access=acc, role=role,
+                        person_given=directives.recorded_by_person(s, row),
                         editing_by=_editing_by(s, "directive", row["id"]) if with_presence else [])
 
 
@@ -463,12 +470,12 @@ directive_add = command("directive add", scope="company", description="Record a 
 
 @directive_add
 def plan_directive_add(inp: DirectiveAddInput, ctx: Context, s: Session) -> Plan:
-    if s.actor.kind == "human":
-        given_by = s.actor.id
-    elif ctx.on_behalf_of:
-        given_by = ctx.on_behalf_of
-    else:
+    # Whoever records a directive gave it. An agent's is its own note, made for its principal (the
+    # write's on-behalf-of, as for every agent write); only a person's directive is a standing
+    # instruction that stands in for an agent's reason (`person_given`).
+    if s.actor.kind != "human" and not ctx.on_behalf_of:
         raise BookflowError("E_PERMISSION", message="An agent without a principal cannot record a directive.", details={"capability": "directive", "required_role": "standard", "reason": "agent without a principal"})
+    given_by = s.actor.id
     n = s.company.conn.execute(sa.select(cschema.sequences.c.next_number).where(cschema.sequences.c.name == "directive")).scalar_one()
     row = {"id": new_id(), "code": f"SI-{n}", "text": inp.text, "given_by": given_by, "recorded_by": s.actor.id, "active": True, "deactivated_at": None, "deactivated_by": None,
            "version": 1, "created_at": now_iso(), "created_by": s.actor.id, "created_via": ctx.interface.value, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": ctx.interface.value}

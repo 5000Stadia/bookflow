@@ -167,13 +167,23 @@ def test_agent_reason_gate_and_directives(client, root):
     assert e.value.code == "E_REASON_REQUIRED" and "--reason" in e.value.message
     run("company update", {"phone": "2"}, reason="owner asked")
     out = run("directive add", {"text": "Post finished jobs"}, reason="standing order from the owner")
-    assert out["directive"]["code"] == "SI-3" and out["directive"]["given_by_name"] == "k" and out["directive"]["recorded_by_name"] == "Claude Agent"
-    run("company update", {"phone": "3"}, directive_id="si-3")
-    ev = client.audit.list(company="Demo Plumbing Co", command="company update")["items"][0]
-    assert ev["directive_code"] == "SI-3" and ev["directive_text"] == "Post finished jobs" and ev["actor_name"] == "Claude Agent" and ev["on_behalf_of_name"] == "k"
-    client.directive.deactivate(directive="SI-3", company="Demo Plumbing Co")
+    # An agent's directive is its own, made for its principal: not the person's standing instruction (R168).
+    assert out["directive"]["code"] == "SI-3" and out["directive"]["given_by_name"] == "Claude Agent" and out["directive"]["recorded_by_name"] == "Claude Agent"
+    assert out["directive"]["person_given"] is False
+    made = client.audit.list(company="Demo Plumbing Co", command="directive add")["items"][0]
+    assert made["actor_name"] == "Claude Agent" and made["on_behalf_of_name"] == "k"
     with pytest.raises(BookflowError) as e:
-        run("company update", {"phone": "4"}, directive_id="SI-3")
+        run("company update", {"phone": "3"}, directive_id="si-3")
+    assert e.value.code == "E_REASON_REQUIRED" and e.value.details["directive"] == "SI-3"
+    run("company update", {"phone": "3"}, directive_id="si-3", reason="owner asked again")
+    person = client.directive.add(text="Post finished jobs", company="Demo Plumbing Co")["directive"]
+    assert person["code"] == "SI-4" and person["person_given"] is True and person["given_by_name"] == "k"
+    run("company update", {"phone": "3b"}, directive_id="si-4")
+    ev = client.audit.list(company="Demo Plumbing Co", command="company update")["items"][0]
+    assert ev["directive_code"] == "SI-4" and ev["directive_text"] == "Post finished jobs" and ev["actor_name"] == "Claude Agent" and ev["on_behalf_of_name"] == "k"
+    client.directive.deactivate(directive="SI-4", company="Demo Plumbing Co")
+    with pytest.raises(BookflowError) as e:
+        run("company update", {"phone": "4"}, directive_id="SI-4")
     assert e.value.code == "E_DIRECTIVE_INACTIVE"
     with pytest.raises(BookflowError) as e:
         run("company update", {"phone": "4"}, directive_id="SI-99")
@@ -444,7 +454,11 @@ def test_follow_keeps_high_water(cli, root):
     from tests.conftest import BIN
     p = subprocess.Popen([str(BIN), "audit", "tail", "--follow", "--company", "Demo Plumbing Co", "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     time.sleep(3)
-    cli.json("company", "update", "--phone", "followed", "--company", "Demo Plumbing Co")
+    # Each poll holds the root for as long as its read takes (seconds on a loaded machine), so the
+    # writer waits for the lock as a real one does (the product's 5 s default, with head-room)
+    # rather than the suite's 0.2 s, which made this a race against the poll.
+    cli.json("company", "update", "--phone", "followed", "--company", "Demo Plumbing Co",
+             env={"BOOKFLOW_LOCK_TIMEOUT": "30"})
     time.sleep(3)
     p.send_signal(signal.SIGINT)
     out, _ = p.communicate(timeout=10)

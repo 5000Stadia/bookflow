@@ -18,7 +18,7 @@ Database: `company`.
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
 | `code` | VARCHAR(16) | no | — | unique | — | — | Company-local human-readable directive code. |
 | `text` | VARCHAR(1000) | no | — | — | — | — | Standing instruction text attributed to its principal. |
-| `given_by` | VARCHAR(26) | no | — | — | — | — | Human principal id that gave the instruction. |
+| `given_by` | VARCHAR(26) | no | — | — | — | — | Who gave the instruction: the person who recorded it, or the agent that recorded it for its principal (then it is the agent's own note, not a person's standing instruction). |
 | `recorded_by` | VARCHAR(26) | no | — | — | — | — | User or agent id that recorded the instruction. |
 | `active` | BOOLEAN | no | true | — | — | — | Whether the directive may be cited by new writes. |
 | `deactivated_at` | VARCHAR(32) | yes | — | — | — | — | UTC timestamp when the directive was deactivated; null while active. |

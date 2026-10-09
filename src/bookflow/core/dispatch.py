@@ -564,6 +564,14 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
         drow = resolve_directive(s.company, ctx.directive_id, include_inactive=False)
         ctx = ctx.model_copy(update={"directive_id": drow["id"]})
         s.directive_code = drow["code"]
+    if (cmd.is_write and s.actor.kind in ("agent", "system") and not ctx.reason and ctx.directive_id
+            and not _person_directive(s, ctx.directive_id)):
+        # Only a person's standing instruction stands in for a reason; one an agent recorded is its own.
+        raise BookflowError("E_REASON_REQUIRED", message=(
+            f"Directive {s.directive_code} was recorded by an agent, so it is not a person's standing instruction "
+            "and cannot stand in for a reason. " + AGENT_REASON_MESSAGE),
+            details={"required": ["reason", "directive"], "applies_to_dry_run": True,
+                     "directive": s.directive_code, "directive_problem": "recorded by an agent, not a person"})
     if cmd.is_write and s.actor.kind in ("agent", "system") and not ctx.reason and not ctx.directive_id:
         # Blueprint 5.8 requires it of every agent write and 5.5 makes a dry run the same
         # validation as the save, so a preview needs it too and says so.
@@ -572,6 +580,11 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
     if ctx.idempotency_key and not cmd.accepts_idempotency_key:
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
     return ctx
+
+
+def _person_directive(s, directive_id: str) -> bool:
+    from bookflow.company.directives import recorded_by_person, resolve as resolve_directive
+    return recorded_by_person(s, resolve_directive(s.company, directive_id))
 
 
 def _permanent_recovery(cmd, inp, ctx, s, selector, source, dry_run):

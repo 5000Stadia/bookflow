@@ -50,6 +50,7 @@ ACCEPTED = {
     'entry-review-v1': (511, '50fd1552c34eb3ab3d6e73d129491a00bbff1efd2f721a1b94c37003b719a7c0'),
     'cutover-v1': (514, 'fbea65dcc4951605c67b4bc10692006c48f7f92b5ef0f161071d8933b48fb12c'),
     'uncategorized-v1': (515, 'dced5fb01946a8346701896d5c7e41def95b64a22d211f59adba53111828a03f'),
+    'human-administration-v1': (515, '4299f7604a39a74f0e9310703eecf2014f4ec7f75ba7cbe8973d5729172727a4'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -92,6 +93,7 @@ CHAIN_ADDITIONS = {
     'entry-review-v1': {'report entries-to-review', 'report prior-balances', 'review mark'},
     'cutover-v1': {'cutover apply', 'cutover plan', 'cutover tie-out'},
     'uncategorized-v1': {'account uncategorized'},
+    'human-administration-v1': set(),
 }
 
 _ANCESTOR_EDIT = """

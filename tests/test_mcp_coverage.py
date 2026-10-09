@@ -176,7 +176,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # nothing else; nobody chooses the account it posts to), its null branch the one new node. A new
     # variant kind, ('anyOf', ('DiscrepancyAdjustment', 'null')), so the groups go 25 -> 26. Preview
     # keeps no adjustment (R163).
-    assert sum(len(group["paths"]) for group in mapped)==2913
+    # 2913 -> 2914 (R168, demo reset refuses a root holding real books): demo reset's new optional
+    # `force` (the data root's path, a nullable string) adds its null branch, +1. The closing-date
+    # rule changes only a field description; no other routed input changed. Groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2914
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
