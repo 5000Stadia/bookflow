@@ -159,3 +159,53 @@ def test_mark_all_ticks_everything_in_one_step_and_finishes(register_browser):
         raise AssertionError('finish did not certify: ' + str(b.evaluate(
             '[...document.querySelectorAll("[role=alert],[role=status]")].map(e=>e.textContent)')))
     assert STATEMENT in b.evaluate('document.querySelector(".reconcile-certificate").textContent')
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+def test_a_person_finishes_a_statement_that_will_not_tie_with_an_adjustment(register_browser, width):
+    """Two journals tick to 290.00 against a statement of 290.00; one ticked leaves 40.00.
+
+    Before anything is ticked the offer names the whole 290.00; an unsaved tick withdraws it.
+    Saving only the first leaves a 40.00 difference the person cannot find. The page offers
+    "Finish with adjustment" naming the amount and the account it posts to; with a reason it
+    certifies the statement and says which journal it posted.
+    """
+    env, b = register_browser, register_browser.browser
+    _reach_the_ticking_page(env, b, width)
+    rows = '[data-reconcile-list] .reconcile-movement input[type=checkbox]'
+    panel = '[data-reconcile-adjust]'
+    b.wait_for(f'!document.querySelector({json.dumps(panel)}).hidden')
+    assert '290.00' in b.evaluate(f'document.querySelector({json.dumps(panel)}).textContent')
+
+    # Tick only the 250.00 journal: an unsaved tick withdraws the offer, whose amount would be stale.
+    b.evaluate(f'''[...document.querySelectorAll({json.dumps(rows)})].find(e =>
+        e.closest('.reconcile-movement').textContent.includes('250.00')).click()''')
+    assert b.evaluate(f'document.querySelector({json.dumps(panel)}).hidden'), \
+        'an unsaved tick must withdraw the adjustment offer'
+    # Saved, 40.00 remains, and the offer comes back naming it.
+    _set(b, 'ctx:reason', 'Tick what the statement shows')
+    _submit(b)
+    b.wait_for(f'!!document.querySelector({json.dumps(panel)}) && !document.querySelector({json.dumps(panel)}).hidden'
+               f' && document.querySelector({json.dumps(panel)}).textContent.includes("40.00")')
+    offered = b.evaluate(f'document.querySelector({json.dumps(panel)}).textContent')
+    assert 'Finish with adjustment' in offered and '40.00' in offered, offered
+    assert 'Reconciliation Discrepancies' in offered and '2026-01-31' in offered, offered
+    assert b.evaluate('document.querySelector("[data-reconcile-adjust-finish]").disabled'), \
+        'a reason is required before the adjustment can be posted'
+    assert b.evaluate('document.querySelector("[data-reconcile-finish]").disabled')
+    _contained(b, width)
+
+    b.evaluate('''(() => {const e=document.querySelector("[data-reconcile-adjust-reason]");
+        e.value="Bank shows 40.00 we cannot trace"; e.dispatchEvent(new Event("input",{bubbles:true}));})()''')
+    b.wait_for('!document.querySelector("[data-reconcile-adjust-finish]").disabled')
+    b.evaluate('document.querySelector("[data-reconcile-adjust-finish]").click()')
+    try:
+        b.wait_for('!!document.querySelector(".reconcile-certificate:not([hidden])")')
+    except AssertionError:
+        raise AssertionError('adjusted finish did not certify: ' + str(b.evaluate(
+            '[...document.querySelectorAll("[role=alert],[role=status]")].map(e=>e.textContent)')))
+    certified = b.evaluate('document.querySelector(".reconcile-certificate").textContent')
+    assert 'with an adjustment' in certified and '40.00' in certified, certified
+    assert 'Reconciliation Discrepancies' in certified and STATEMENT in certified, certified
+    assert b.evaluate(f'document.querySelector({json.dumps(panel)}).hidden')
+    _contained(b, width)

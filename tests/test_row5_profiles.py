@@ -38,6 +38,15 @@ def company_db(tmp_path: Path):
     path = tmp_path / "company.db"
     with open_database(path, writable=True, create=True) as db:
         migrate_to_head(db, "company", None)
+        # The standard profile now seeds two accounts, and an account takes the company's
+        # home currency, so the bare database carries the company row every real one has.
+        db.conn.execute(
+            c.company_info.insert().values(
+                id=new_id(), version=1, created_at=AT, created_by=ACTOR_ID, created_via="python",
+                updated_at=AT, updated_by=ACTOR_ID, updated_via="python",
+                legal_name="Profile Test", display_name="Profile Test", home_currency="USD", timezone="UTC",
+            )
+        )
         yield db
 
 
@@ -112,13 +121,14 @@ def test_profile_hierarchy_uses_the_shared_slash_delimited_path(company_db):
 def test_standard_manifest_has_the_exact_versioned_seed_key_inventory():
     manifest = load_standard_profile()
     assert manifest.manifest_id == "standard"
-    assert manifest.version == 2  # 2: R135 added Credit Card (R160)
+    assert manifest.version == 3  # 2: R135 added Credit Card (R160); 3: the Uncategorized accounts
     assert manifest.lists == [
         "term",
         "payment-method",
         "sales-tax-code",
         "ship-method",
         "customer-message",
+        "account",
     ]
     assert {
         noun: [record["seed_key"] for record in records]
@@ -159,6 +169,7 @@ def test_standard_manifest_has_the_exact_versioned_seed_key_inventory():
             "message.prompt-payment",
             "message.remit",
         ],
+        "account": ["account.uncategorized-expense", "account.uncategorized-income"],
     }
 
 
@@ -353,6 +364,7 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
         "sales-tax-code": 2,
         "ship-method": 5,
         "customer-message": 3,
+        "account": 2,
     }
     assert first.preserved_by_list == {noun: 0 for noun in first.inserted_by_list}
 
@@ -373,6 +385,7 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
         "sales-tax-code": 0,
         "ship-method": 0,
         "customer-message": 0,
+        "account": 0,
     }
     assert second.preserved_by_list == {
         "term": 6,
@@ -380,6 +393,7 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
         "sales-tax-code": 2,
         "ship-method": 5,
         "customer-message": 3,
+        "account": 2,
     }
     edited = company_db.conn.execute(
         sa.select(c.terms).where(c.terms.c.seed_key == "term.net-30")
@@ -398,6 +412,7 @@ def test_manifest_reapply_preserves_edits_and_inactive_state_and_inserts_only_mi
         "sales-tax-code": 2,
         "ship-method": 5,
         "customer-message": 3,
+        "account": 2,
     }
 
 
@@ -409,7 +424,7 @@ def test_manifest_dry_run_writes_nothing(company_db):
         dry_run=True,
     )
     assert result.dry_run is True
-    assert sum(result.inserted_by_list.values()) == 28
+    assert sum(result.inserted_by_list.values()) == 30
     assert company_db.conn.execute(sa.select(sa.func.count()).select_from(c.terms)).scalar_one() == 0
 
 
@@ -524,7 +539,7 @@ def test_hierarchy_rename_reprojects_descendants_without_versioning_them(company
 
 # R160: the standard profile's contents and its version move together. If this fails you changed
 # the packaged profile: raise "version" in profile_standard.json, then update both pins here.
-_STANDARD_PIN = (2, "8350fe7a9f35e0752b1d288f949d595f972a24a2cc5f8beb7365f36e440f449d")
+_STANDARD_PIN = (3, "f38c3fc3e64cf8220d7efd989212f5193467e859bd66804d88f9b53ddc609be8")  # 3: Uncategorized accounts
 
 
 def test_standard_profile_contents_cannot_change_without_the_version_moving():

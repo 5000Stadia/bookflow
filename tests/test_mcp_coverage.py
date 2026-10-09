@@ -36,7 +36,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 backup schedule, list, verify and rehearse (R156).
     # +3 report entries-to-review, report prior-balances and review mark (R163).
     # +3 cutover plan, apply and tie-out (R166).
-    assert len(rows) == 516
+    # +1 account uncategorized (Ask My Accountant); its read input adds no census node.
+    assert len(rows) == 517
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -109,7 +110,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==25
+    assert len(mapped)==len(variant_policies())==26
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -170,10 +171,15 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # cutover apply 6 each (the null branches of a file's attachment, content, name and kind, and of
     # clearing_account and journal_number), cutover tie-out 5 (no journal_number). No new variant
     # kind; the groups stay 25.
-    # 2912 -> 2913 (R168, demo reset refuses a root holding real books): demo reset's new optional
+    # 2912 -> 2913 (merge of reconciliation adjustments onto R166), measured on the merged tree:
+    # reconcile finish gains the person-only `adjustment` (DiscrepancyAdjustment|null, a reason and
+    # nothing else; nobody chooses the account it posts to), its null branch the one new node. A new
+    # variant kind, ('anyOf', ('DiscrepancyAdjustment', 'null')), so the groups go 25 -> 26. Preview
+    # keeps no adjustment (R163).
+    # 2913 -> 2914 (R168, demo reset refuses a root holding real books): demo reset's new optional
     # `force` (the data root's path, a nullable string) adds its null branch, +1. The closing-date
-    # rule changes only a field description; no other routed input changed. Groups stay 25.
-    assert sum(len(group["paths"]) for group in mapped)==2913
+    # rule changes only a field description; no other routed input changed. Groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2914
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

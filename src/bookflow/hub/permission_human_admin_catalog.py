@@ -24,7 +24,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_cutover_catalog as previous, permission_catalog as c
+from . import permission_uncategorized_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'ac3de3f1318b96dd4ea4a35bfaf6795201954550'

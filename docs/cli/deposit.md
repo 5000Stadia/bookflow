@@ -612,7 +612,7 @@ Example JSON output:
 
 ## `deposit post`
 
-Bank selected undeposited customer payments and sales receipts into one bank account as one deposit, with any other money entered beside them and an optional cash-back line; credits Undeposited Funds for each receipt and debits the bank for the net total. Discover the receipts, their ids and their expected versions with `deposit sources`.
+Bank selected undeposited customer payments and sales receipts into one bank account as one deposit, with any other money entered beside them and an optional cash-back line; credits Undeposited Funds for each receipt and debits the bank for the net total. Discover the receipts, their ids and their expected versions with `deposit sources`. When you are unsure which account fits, do not guess: post the line to Uncategorized Expense (Ask My Accountant), or Uncategorized Income for money received, with a memo saying what is unclear. `account uncategorized` lists what is waiting there, and moving an entry to its account later is an ordinary update of the document.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

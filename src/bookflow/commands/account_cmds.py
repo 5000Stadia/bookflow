@@ -12,11 +12,11 @@ from bookflow.commands.list_factory import (
     ModelPair,
     register_lifecycle,
 )
-from bookflow.company import accounts
+from bookflow.company import accounts, uncategorized
 from bookflow.core import audit
 from bookflow.core.context import Context
 from bookflow.core.models import ListOutput
-from bookflow.core.registry import Applied, Plan, Touched
+from bookflow.core.registry import Applied, Plan, Touched, command
 from bookflow.core.session import Session, localize
 from bookflow.core.versioning import check_update, current_writer, history_from_entries
 
@@ -352,6 +352,27 @@ ACCOUNT_COMMANDS = register_lifecycle(
         "deactivate": ("E_RECORD_IN_USE",),
     },
 )
+
+
+@command(
+    "account uncategorized",
+    scope="company",
+    required_role="member",
+    capability="account",
+    description=(
+        "What is waiting in the Uncategorized accounts (Uncategorized Expense (Ask My Accountant) and "
+        "Uncategorized Income, which the standard profile adds to every company). When you are unsure "
+        "which account an entry belongs to, post it to one of these with a memo saying what is unclear "
+        "rather than guessing; someone who knows moves it to its account later by updating the document. "
+        "This lists every entry still in those accounts, oldest first, with each account's count and "
+        "amount. An entry that has been moved, voided or deleted is no longer counted, so each account's "
+        "amount is its balance. The accounts are found by their seed keys, so a renamed one is still read."
+    ),
+    input_model=uncategorized.UncategorizedInput,
+    output_model=uncategorized.UncategorizedOutput,
+)
+def plan_account_uncategorized(inp: uncategorized.UncategorizedInput, ctx: Context, s: Session) -> Plan:
+    return Plan(preview=uncategorized.uncategorized(inp, s))
 
 
 __all__ = [

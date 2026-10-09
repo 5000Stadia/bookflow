@@ -190,7 +190,7 @@ def posting_documents(client, company):
 # dict diff would have named the account and the amount.
 DEMO_POSITION = {
     'balances': {
-        'Checking': 657295,
+        'Checking': 653445,                # 657295 - 3850 DEMO-ASK-1
         'Accounts Receivable': 61621,
         'Inventory Asset': 36184,
         'Accounts Payable': -7810,
@@ -208,11 +208,13 @@ DEMO_POSITION = {
         'Discounts Taken': -600,
         'Payment Example Bank': -262620,   # -282220 + 49000 - 29400
         'Payment Example Income': -18000,
+        # DEMO-ASK-1: 38.50 from checking waits in Ask My Accountant for its account.
+        'Uncategorized Expense (Ask My Accountant)': 3850,
     },
     'trial_balance': 1126446,              # 1047664 + 30000 + 1000 + 47782
-    'journal_entries': 19,
-    'net_income': -42976,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140
-    'total_equity': 457024,                # 393284 + 19600 + 44140
+    'journal_entries': 20,                # + DEMO-ASK-1
+    'net_income': -46826,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1)
+    'total_equity': 453174,                # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1)
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -241,6 +243,7 @@ DEMO_ARCS = {
     'DEMO-1099-': 'a 1099 subcontractor: a bill paid by check and a bill paid on the card',
     'DEMO-DISC-': 'early-payment discounts: a receipt and a bill payment each taking 2%',
     'DEMO-LINE-KINDS': 'a subtotal, a percentage discount and a group item on one invoice',
+    'DEMO-ASK-': 'a payment waiting in Uncategorized Expense (Ask My Accountant) for its account',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`

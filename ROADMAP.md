@@ -142,6 +142,8 @@ review cb5fcd7 (gate g96052d).
 - [x] R167 bank statements come in for reconciliation: import CSV, OFX and QFX statements and match them to entries (live feeds stay in R108)
 - [~] R168 the real books are protected: the closing date and user roles are set only by a person, never by an agent; the bookkeeping agent works without admin; the real company lives apart from demo and test data; hash-linked audit checkpoints go with each backup so a rewritten history or a rollback is detected
 - [ ] R170 fit check on Kabe's real company: list the kinds of transactions in two or three months of its statements and books, each marked does it, workaround or missing; the missing ones that matter join this milestone (needs Kabe's statements)
+- [x] R173 an "Ask My Accountant" home for what the agent isn't sure about: Uncategorized Expense and Income accounts, `account uncategorized`, counted on the Overview (gate gad7a1a)
+- [x] R174 a person may finish a statement that won't tie with a labelled adjustment to Reconciliation Discrepancies; agents never can (gate gad7a1a)
 - [ ] R165 fixes from Kabe's live use of v1.5 and v1.6, as they arrive
 
 ## M4 — After V1.5: concepts to develop
