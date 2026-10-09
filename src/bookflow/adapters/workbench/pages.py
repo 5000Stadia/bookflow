@@ -23,6 +23,7 @@ from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import activity as Activity
 from bookflow.adapters.workbench import admin as Admin
 from bookflow.adapters.workbench import command_result as CommandResult
+from bookflow.adapters.workbench import statement_import as StatementImport
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
@@ -71,6 +72,8 @@ env.globals["ui_heading"] = Naming.heading
 env.globals["ui_words"] = Naming.words
 env.globals["ui_list_heading"] = Naming.list_heading
 env.filters["when"] = Naming.when
+# A statement import's lines and figures, read as money rather than minor units.
+env.globals["statement_import_view"] = StatementImport.view
 # Money and dates as a person reads them; display only, never input or export.
 env.filters.update(Display.FILTERS)
 # What an audit event did and who did it, in plain words; the stored summary is unchanged.
@@ -552,6 +555,10 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
                 {'f:account': draft['account_id'], 'f:opening_draft_id': draft['id']})
         return f"/c/{company_id}/reconcile/mark?" + urlencode(
             {'f:draft': draft['id'], 'f:expected_version': draft['version']})
+    if company_id and cmd.name == 'reconcile import':
+        # The import's answer is the line-by-line outcome; it is shown on the import page
+        # itself (from the one-time result), with a link on to the reconciliation it ticked.
+        return f"/c/{company_id}/reconcile/import"
     if Billing.is_conversion(noun, cmd.verb) and output.get('id'):
         return f"/c/{company_id}/{output['type'].replace('_', '-')}/{output['id']}"
     if noun in Work.NOUNS and output.get('kind') and output.get('id'):

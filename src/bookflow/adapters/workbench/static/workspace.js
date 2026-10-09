@@ -256,3 +256,17 @@
     }
   }
 })();
+
+// A text field that offers "choose a file": read the chosen file as text into it, so a
+// statement downloaded from the bank goes in with its line breaks and is never uploaded as a file.
+document.addEventListener('change', (event) => {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.dataset.textFileInto) return;
+  const target = document.getElementById(input.dataset.textFileInto);
+  const file = input.files && input.files[0];
+  if (!target || !file) return;
+  file.text().then((text) => {
+    target.value = text;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+});

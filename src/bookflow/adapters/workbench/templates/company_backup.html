@@ -28,9 +28,9 @@
 {% else %}<p data-backup-schedule>No backup schedule is set. An installation administrator sets one with <code>bookflow backup schedule</code>.</p>{% endif %}
 {% if listing.last_success %}<p data-backup-last-success>Last scheduled backup: {{ listing.last_success.at }}{% if listing.last_success.file_name %} ({{ listing.last_success.file_name }}){% endif %}.</p>{% endif %}
 {% if listing.last_failure %}<p class="warning" data-backup-last-failure>Last failure: {{ listing.last_failure.at }}: {{ listing.last_failure.message }}</p>{% endif %}
-{% if listing['items'] %}<table><thead><tr><th>File</th><th>Taken</th><th>Where</th><th>Size</th><th>Read-only</th><th>Checkpoint</th></tr></thead><tbody>
-{% for b in listing['items'] %}<tr data-backup-row><td>{{ b.file_name }}</td><td>{{ b.created_at or '' }}</td><td>{{ 'schedule destination' if b.location == 'scheduled' else 'company folder' }}</td><td>{{ '{:,}'.format(b.size_bytes) }} bytes</td><td>{{ 'yes' if b.read_only else 'no' }}</td><td>{{ 'yes' if b.has_checkpoint else 'no' }}</td></tr>
-{% endfor %}</tbody></table>{% else %}<p>No backups yet.</p>{% endif %}
+{% if listing['items'] %}<div class="table-wrap"><table class="list-table backup-list"><thead><tr><th>File</th><th>Taken</th><th>Where</th><th>Size</th><th>Read-only</th><th>Checkpoint</th></tr></thead><tbody>
+{% for b in listing['items'] %}<tr data-backup-row><td data-label="File">{{ b.file_name }}</td><td data-label="Taken">{{ b.created_at or '' }}</td><td data-label="Where">{{ 'schedule destination' if b.location == 'scheduled' else 'company folder' }}</td><td data-label="Size">{{ '{:,}'.format(b.size_bytes) }} bytes</td><td data-label="Read-only">{{ 'yes' if b.read_only else 'no' }}</td><td data-label="Checkpoint">{{ 'yes' if b.has_checkpoint else 'no' }}</td></tr>
+{% endfor %}</tbody></table></div>{% else %}<p>No backups yet.</p>{% endif %}
 <p>{{ listing.note }}</p>
 <div class="actions">
 <form method="post" action="/c/{{ company_id }}/company/backup/verify" hx-post="/c/{{ company_id }}/company/backup/verify" hx-target="#company-backup" hx-select="#company-backup" hx-swap="outerHTML"><button type="submit" data-backup-verify>Check for tampering</button></form>

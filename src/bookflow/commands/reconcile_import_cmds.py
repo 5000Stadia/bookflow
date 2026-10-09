@@ -49,7 +49,8 @@ class CsvMapping(m.Model):
 class ImportInput(m.Dated):
     account: m.AccountSelector
     content: str = Field(min_length=1, max_length=5_000_000,
-                         description="The statement file's text, exactly as downloaded from the bank.")
+                         description="The statement file's text, exactly as downloaded from the bank.",
+                         json_schema_extra={'multiline': True, 'text_file': '.csv,.ofx,.qfx,.txt,text/csv,text/plain'})
     format: Literal['auto', 'ofx', 'qfx', 'csv'] = Field(
         'auto', description='File format; auto tells OFX/QFX (an <OFX> element) from CSV.')
     csv_mapping: CsvMapping = Field(default_factory=CsvMapping,

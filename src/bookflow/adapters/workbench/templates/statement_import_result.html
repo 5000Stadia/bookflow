@@ -1,0 +1,27 @@
+{# What `reconcile import` found, line by line: the same view after Preview and after Submit. #}
+{% set v = statement_import_view(import_result) %}
+{% if v %}<section class="workspace-card statement-import-result" aria-label="{{ 'Statement import preview' if import_preview else 'Statement import result' }}" data-statement-import-result>
+<h2>{{ 'Preview (nothing written)' if import_preview else 'Statement imported' }}</h2>
+<dl class="result-fields">
+<div class="field"><dt>Format</dt><dd>{{ v.format }}</dd></div>
+<div class="field"><dt>Statement date</dt><dd>{{ v.statement_date|longday if v.statement_date else '—' }}</dd></div>
+<div class="field"><dt>Ending balance</dt><dd data-import-ending>{{ v.ending_balance|money(v.currency, home=math_company_currency) if v.ending_balance else '—' }}</dd></div>
+{% for c in v.counts %}<div class="field"><dt>{{ c.label }}</dt><dd>{{ c.value }}</dd></div>{% endfor %}
+</dl>
+{% if v.draft %}<p class="workflow-note">{% if import_preview %}Submitting ticks the matched lines on {{ 'a new' if v.draft_started else 'the open' }} statement reconciliation.{% else %}The matched lines are ticked on the statement reconciliation{{ ' it started' if v.draft_started else '' }}.{% endif %}
+{% if not import_preview %} <a href="/c/{{ company_id }}/reconcile/mark?f:draft={{ v.draft.id|urlencode }}&amp;f:expected_version={{ v.draft.version }}" data-import-open-draft>Open the reconciliation</a>{% endif %}</p>
+{% else %}<p class="workflow-note">Review only: nothing is ticked. Set Start (or choose a draft) to tick the matched lines on a reconciliation.</p>{% endif %}
+{% if v.counts|selectattr('key', 'equalto', 'unmatched')|map(attribute='value')|first %}<p class="muted">Enter each line not in the books as a transaction, then import the file again.</p>{% endif %}
+<div class="table-wrap"><table class="list-table statement-import-lines"><thead><tr><th scope="col">Payee</th><th scope="col">Date</th><th scope="col" class="num">Amount</th><th scope="col">Outcome</th><th scope="col">Detail</th></tr></thead><tbody>
+{% for line in v.lines %}<tr data-import-status="{{ line.status }}">
+<td data-label="Payee">{{ line.payee or line.memo or '—' }}{% if line.number %} · #{{ line.number }}{% endif %}</td>
+<td data-label="Date">{{ line.date|day }}</td>
+<td data-label="Amount" class="num">{{ line.amount|money(v.currency, home=math_company_currency) }}</td>
+<td data-label="Outcome"><strong>{{ line.status_label }}</strong>{% if line.ticked %}<br><small>{{ line.ticked }}</small>{% endif %}{% if line.previously_imported %}<br><small>Imported before</small>{% endif %}</td>
+<td data-label="Detail">{% if line.suggestions %}Could be: {% for s in line.suggestions %}{{ s.payee or s.memo or 'entry' }} · {{ s.date|day }} · {{ s.amount|money(v.currency, home=math_company_currency) }}{% if not loop.last %}; {% endif %}{% endfor %}{% elif line.status != 'matched' %}{{ line.reason }}{% endif %}</td>
+</tr>{% endfor %}
+</tbody></table></div>
+{% if v.cleared_without_line %}<h3>Ticked without a statement line</h3><p class="muted">Untick each one the bank did not show, unless you know why it is missing.</p>
+<ul>{% for s in v.cleared_without_line %}<li>{{ s.payee or s.memo or 'entry' }} · {{ s.date|day }} · {{ s.amount|money(v.currency, home=math_company_currency) }}</li>{% endfor %}</ul>{% endif %}
+<details class="technical-details"><summary>Technical result (JSON)</summary><pre>{{ json.dumps(import_result, indent=1, default=str) }}</pre></details>
+</section>{% endif %}
