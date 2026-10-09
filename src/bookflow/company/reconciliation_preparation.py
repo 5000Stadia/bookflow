@@ -188,17 +188,55 @@ def totals(beginning,ending,values):
     return m.Totals(positive_count=sum(v>0 for v in amounts),negative_count=sum(v<0 for v in amounts),
         **{k:bounded(v) for k,v in money.items()},decimal_units={k:str(v) for k,v in money.items()})
 
+def _decimal(units,places):
+    sign='-' if units<0 else '';units=abs(units)
+    return sign+(str(units) if not places else f'{units//10**places}.{units%10**places:0{places}d}')
+
+def opening_unproven(s,draft,check,eligible,covered,gl):
+    """What a caller is told when an opening draft does not prove: the books' balance at the opening
+    date, the statement opening given, what the covered movements come to, the difference, and the way on."""
+    from bookflow.core.money import minor_units_of
+    currency=s.source.accounts[draft.account_id]['currency'];places=minor_units_of(currency)
+    date=draft.header.opening_date;entered=draft.header.entered_balance
+    done=sum(statement_amount(eligible[k]) for k in covered if k in eligible)
+    book=sum(statement_amount(v) for v in eligible.values())
+    outstanding=sum(statement_amount(eligible[k]) for k in eligible if k not in covered)
+    details={'check':check,'opening_date':date,'currency':currency}
+    if check=='unplaced_movements':
+        placed={v.key_id for v in draft.selections}
+        details.update(unplaced=len([k for k in eligible if k not in placed]),
+            next='Every movement dated on or before '+date+' must be marked `covered` (the bank had cleared it by the '
+            'opening statement) or `outstanding` (it had not): `reconcile candidates` lists them, `reconcile mark` with '
+            'action covered or outstanding sets each one, then `reconcile preview` again.')
+        return details
+    difference=entered-done
+    details.update(book_balance=book,book_balance_decimal=_decimal(book,places),
+        statement_opening=entered,statement_opening_decimal=_decimal(entered,places),
+        covered_total=done,covered_total_decimal=_decimal(done,places),
+        outstanding_total=outstanding,outstanding_total_decimal=_decimal(outstanding,places),
+        difference=difference,difference_decimal=_decimal(difference,places))
+    details['next']=('The movements marked `covered` come to '+_decimal(done,places)+' and the statement opening given is '
+        +_decimal(entered,places)+' (the books held '+_decimal(book,places)+' on '+date+'), a difference of '
+        +_decimal(difference,places)+'. Start the opening from the last statement the old books reconciled and mark '
+        'every item that statement had not cleared `outstanding` (outstanding checks, deposits in transit), the rest '
+        '`covered`, until the covered movements equal the statement opening. A difference no outstanding item explains '
+        'is the owner\'s to settle with an adjustment; do not post or tick an entry to make it zero. '+STOP_RULE)
+    return details
+
 def opening(s,draft):
     validate_evidence(s,draft.evidence_references)
     require(draft.kind=='opening' and draft.state=='open','E_RECONCILIATION_DRAFT_STATE')
     values,gl=account_population(s,draft.account_id,draft.header.opening_date)
     eligible={v['key_id']:v for v in values if v['effective_date']<=draft.header.opening_date}
     selected=whole_selection(s,draft)
-    require({v['key_id'] for v in selected}==set(eligible),'E_RECONCILIATION_OPENING_UNPROVEN')
-    require(all(v.action in ('covered','outstanding') for v in draft.selections),'E_RECONCILIATION_MANIFEST')
     covered={v.key_id for v in draft.selections if v.action=='covered'}
-    require(sum(statement_amount(eligible[k]) for k in covered)==draft.header.entered_balance,'E_RECONCILIATION_OPENING_UNPROVEN')
-    require(sum(statement_amount(v) for v in eligible.values())==gl,'E_RECONCILIATION_OPENING_UNPROVEN')
+    require({v['key_id'] for v in selected}==set(eligible),'E_RECONCILIATION_OPENING_UNPROVEN',
+        lambda:opening_unproven(s,draft,'unplaced_movements',eligible,covered,gl))
+    require(all(v.action in ('covered','outstanding') for v in draft.selections),'E_RECONCILIATION_MANIFEST')
+    require(sum(statement_amount(eligible[k]) for k in covered)==draft.header.entered_balance,'E_RECONCILIATION_OPENING_UNPROVEN',
+        lambda:opening_unproven(s,draft,'covered_total',eligible,covered,gl))
+    require(sum(statement_amount(v) for v in eligible.values())==gl,'E_RECONCILIATION_OPENING_UNPROVEN',
+        lambda:opening_unproven(s,draft,'ledger_total',eligible,covered,gl))
     return totals(0,draft.header.entered_balance,[eligible[k] for k in covered])
 
 def chain(s,account):
