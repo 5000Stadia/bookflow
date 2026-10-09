@@ -202,6 +202,9 @@ class CutoverApplyOutput(CutoverPlanOutput):
     created: int = Field(description="Records this run made")
     already_in: int = Field(description="Records earlier runs had made")
     clearing_account_id: str | None = Field(description="The clearing account")
+    default_sales_tax_item: str | None = Field(None, description=(
+        "The sales tax item this run made the company's default, because it is the only one and the company had none, "
+        "so the first invoice needs no tax item named; null when it set no default"))
 
 
 class CutoverTieRow(BaseModel):

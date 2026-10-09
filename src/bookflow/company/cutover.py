@@ -215,6 +215,7 @@ def build(s, inp, *, journal_number: str | None = None, piece: bool = False) -> 
     _journal(built, inp, journal_number)
     _deactivations(built)
     _closing(built, inp)
+    _default_tax_note(built)
     return built
 
 
@@ -226,6 +227,33 @@ def _sales_tax(built: Built) -> None:
         _problem(built, "warning", "sales_tax_disabled",
                  "the old books charge sales tax but sales tax is turned off in this company: customers come in without tax codes",
                  "Turn sales tax on in the company setup before the move-in to bring the customers' tax codes.")
+
+
+TAX_TYPES = ("sales_tax_item", "sales_tax_group")
+
+
+def _sole_tax_item(built: Built) -> str | None:
+    """The name of the only active sales tax item or group the company will hold, when it has no default for them yet.
+
+    The first invoice of a company with sales tax and no default fails until a tax item is named
+    (the blind July trial), so the move-in sets the default when there is exactly one choice.
+    """
+    info = built.books.info
+    if info.get("default_sales_tax_item_id") or not info.get("sales_tax_enabled"):
+        return None
+    names = [row["full_name"] for row in built.books.items if row["type"] in TAX_TYPES and row["active"]]
+    names += [step.name for step in built.steps
+              if step.kind == "item" and step.action == "create" and step.payload.get("type") in TAX_TYPES]
+    return names[0] if len(names) == 1 else None
+
+
+def _default_tax_note(built: Built) -> None:
+    name = _sole_tax_item(built)
+    if name:
+        _problem(built, "note", "sales_tax_default",
+                 f"{name} is the only sales tax item and the company has no default one: the move-in makes it the company's "
+                 "default sales tax item, so the first invoice does not need one named",
+                 "Change it with `company update` default_sales_tax_item_id.", subject=name)
 
 
 def _file_checks(built: Built, inp) -> None:
@@ -1676,6 +1704,38 @@ def _run_step(s, ctx, step: Step, payload: dict) -> dict:
             s.company.raw.rollback()
 
 
+def _set_default_tax_item(s, ctx) -> str | None:
+    """Make the company's only sales tax item its default when it has none; the item's name, or None.
+
+    It goes through `company update`'s own plan and apply, so the version, the audit event and the
+    registry copy are the ones a person's update makes. The move-in carries the right to do it,
+    which `company update`'s admin role would not give a standard actor: it is the move-in's own
+    consequence, not a setting changed on the side.
+    """
+    from bookflow.core import registry
+    from bookflow.core.dispatch import _apply
+    info = dict(s.company.conn.execute(sa.select(c.company_info)).mappings().one())
+    if info.get("default_sales_tax_item_id") or not info.get("sales_tax_enabled"):
+        return None
+    rows = s.company.conn.execute(sa.select(c.items.c.id, c.items.c.full_name).where(
+        c.items.c.type.in_(TAX_TYPES), c.items.c.active.is_(True))).all()
+    if len(rows) != 1:
+        return None
+    command = registry.get("company update")
+    nested = ctx.model_copy(update={"idempotency_key": None, "source_ref": (SOURCE_MARK + "default-sales-tax-item")[:512],
+                                    "reason": (ctx.reason or REASON)[:140]})
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run)
+    try:
+        s.dry_run, s.hub_touched, s.company_touched = False, [], []
+        inp = command.input_model.model_validate({"default_sales_tax_item_id": rows[0].id})
+        _apply(command, command.plan(inp, nested, s), nested, s)
+        return rows[0].full_name
+    finally:
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved
+        if s.company is not None and s.company.write_transaction:
+            s.company.raw.rollback()
+
+
 def apply(plan_: Plan, ctx, s) -> Applied:
     from bookflow.core.dispatch import _upsert_principals
     built: Built = plan_.data["built"]
@@ -1725,9 +1785,13 @@ def apply(plan_: Plan, ctx, s) -> Applied:
                 built.clearing_id = record_id
             created += 1
         already = sum(1 for step in built.steps if step.action == "already_in")
+        default_tax = _set_default_tax_item(s, ctx)
+        summary = _summary(built, applied=True)
+        if default_tax:
+            summary += f"; {default_tax}, the only sales tax item, is now the company's default"
         out = plan_output(built, inp, CutoverApplyOutput, created=created, already_in=already,
-                          clearing_account_id=built.clearing_id,
-                          summary=_summary(built, applied=True))
+                          clearing_account_id=built.clearing_id, default_sales_tax_item=default_tax,
+                          summary=summary)
         if ctx.idempotency_key and plan_.data.get("input_hash"):
             from bookflow.core import idempotency
             s.company.raw.execute("BEGIN IMMEDIATE")
