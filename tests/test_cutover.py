@@ -386,3 +386,53 @@ def test_a_file_refusal_says_when_no_output_directory_is_configured():
     assert error.code == "E_PERMISSION" and error.details["configured"] is False
     assert error.message.startswith("No output directory is configured, so this MCP server saves no file.")
     assert "--output-dir DIR" in error.message and error.details["allowed_directories"] == []
+
+
+def _with_taken_number(files):
+    """The old books gain 'Shop Tools', numbered 6300: the general chart's Office Supplies has that number."""
+    accounts = text("accounts.iif")
+    row = next(line for line in accounts.split("\r\n") if line.startswith("ACCNT\tOffice Supplies"))
+    accounts = accounts.replace(row, row + "\r\n" + "ACCNT\tShop Tools\t99\t1715623380\tEXP\t0.00\t\t6300\t0\t\t\tN\t0\tN")
+    ledger = text("trial_balance.csv")
+    ledger = ledger.replace('"6300 · Office Supplies",,"1,148.72",',
+                            '"6300 · Office Supplies",,"1,048.72",\r\n"6300 · Shop Tools",,"100.00",')
+    assert accounts != text("accounts.iif") and ledger != text("trial_balance.csv")
+    swap = {"accounts.iif": accounts, "trial_balance.csv": ledger}
+    return [{"content": swap[name], "name": name} if name in swap else f
+            for name, f in zip(FILES, files)]
+
+
+def test_create_on_a_taken_number_says_so_and_still_ties_out(mover):
+    run = mover["run"]
+    files = _with_taken_number(mover["files"])
+    blocked = run("cutover plan", dict(as_of=AS_OF, files=files))
+    taken = next(e for e in blocked["exceptions"] if e["code"] == "number_taken")
+    assert taken["subject"].endswith("Shop Tools") and not blocked["ready"]
+    mapped = {"accounts": {"6300 · Shop Tools": "create"}}
+    plan = run("cutover plan", dict(as_of=AS_OF, files=files, mappings=mapped))
+    assert plan["ready"], plan["exceptions"]
+    dropped = next(e for e in plan["exceptions"] if e["code"] == "account_number_dropped")
+    for words in ("6300", "Office Supplies", "renumber", "different number", "unnumbered"):
+        assert words in dropped["problem"] + dropped["fix"], (words, dropped)
+    run("cutover apply", dict(as_of=AS_OF, files=files, mappings=mapped))
+    tie = run("cutover tie-out", dict(as_of=AS_OF, files=files, mappings=mapped))
+    assert tie["tied"], tie["summary"]
+    assert run("account show", dict(account="Shop Tools"))["balance"]["minor_units"] == 10000
+    # The same plan, read again with or without the mapping, finds the account it made.
+    assert run("cutover tie-out", dict(as_of=AS_OF, files=files))["tied"]
+    again = run("cutover plan", dict(as_of=AS_OF, files=files, mappings=mapped))
+    assert again["ready"] and not any(e["code"] == "name_taken" for e in again["exceptions"])
+
+
+def test_create_with_a_number_brings_it_in_under_that_number(mover):
+    run = mover["run"]
+    files = _with_taken_number(mover["files"])
+    taken = {"accounts": {"6300 · Shop Tools": "create 6300"}}
+    blocked = run("cutover plan", dict(as_of=AS_OF, files=files, mappings=taken))
+    assert not blocked["ready"] and any(e["code"] == "number_taken" for e in blocked["exceptions"])
+    mapped = {"accounts": {"6300 · Shop Tools": "create 6350"}}
+    plan = run("cutover plan", dict(as_of=AS_OF, files=files, mappings=mapped))
+    assert plan["ready"] and not any(e["code"] == "account_number_dropped" for e in plan["exceptions"])
+    run("cutover apply", dict(as_of=AS_OF, files=files, mappings=mapped))
+    assert run("account show", dict(account="Shop Tools"))["number"] == "6350"
+    assert run("cutover tie-out", dict(as_of=AS_OF, files=files, mappings=mapped))["tied"]

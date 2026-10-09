@@ -292,6 +292,9 @@ def _amount_text(built: Built, minor: int) -> str:
     return f"{whole}.{fraction:0{places}d}" if places else str(whole)
 
 
+_CREATE = re.compile(r"create(?:\s*[: ]\s*([0-9]{1,7}))?", re.IGNORECASE)
+
+
 def _mapped(mapping: dict[str, str], *candidates: str | None) -> str | None:
     folded = {src.key(k): v for k, v in mapping.items()}
     for candidate in candidates:
@@ -379,6 +382,9 @@ def _accounts(built: Built, inp) -> None:
         outside_id = "account:" + src.key(entry.path)
         label = entry.labels[-1] if entry.labels else entry.path
         decided = _mapped(inp.mappings.accounts, *entry.labels, entry.path, entry.number)
+        create_number = None
+        if decided is not None and (chosen := _CREATE.fullmatch(decided.strip())):
+            decided, create_number = "create", chosen.group(1)
         record = None
         if entry.type == "non_posting" and decided is None:
             skipped.append(entry.path)
@@ -389,7 +395,8 @@ def _accounts(built: Built, inp) -> None:
                 _problem(built, "blocking", "mapping_not_found", f"mappings.accounts maps {label} to {decided!r}, which is no account here",
                          "Map it to an account ID, number or full name.", file=entry.file, line=entry.line, subject=label)
                 continue
-        if record is None and decided is None:
+        if record is None and decided in (None, "create"):
+            # An account an earlier run made: found by what the run recorded, whatever number it came in under.
             linked = books.link(outside_id, "account")
             if linked:
                 record = next((a for a in books.accounts if a["id"] == linked), None)
@@ -419,7 +426,8 @@ def _accounts(built: Built, inp) -> None:
                 holder = next(a for a in books.accounts if a["number"] == entry.number)
                 _problem(built, "blocking", "number_taken",
                          f"number {entry.number} is {holder['full_name']} here and {entry.path} in the old books",
-                         f"Map it to {holder['number']} (or another account) with mappings.accounts, or give `create` to make it without the number.",
+                         f"Map it to {holder['number']} (or another account) with mappings.accounts, renumber {holder['full_name']} here with `account update`, "
+                         "give `create` to make it without the number, or give `create <number>` to make it under another number.",
                          file=entry.file, line=entry.line, subject=label)
                 continue
         if record is not None and entry.type is not None and record["type"] != entry.type:
@@ -473,9 +481,30 @@ def _accounts(built: Built, inp) -> None:
                          "Map the parent to an account of the same type.", file=entry.file, line=entry.line, subject=label)
                 continue
         number = entry.number
-        if number and (not re.fullmatch(r"[0-9]{1,7}", number) or number in taken_numbers):
+        if create_number:
+            if create_number in taken_numbers:
+                holder = next(a for a in books.accounts if a["number"] == create_number)
+                _problem(built, "blocking", "number_taken",
+                         f"{label} is to be made as number {create_number}, which is {holder['full_name']} here",
+                         "Give `create` with another number, or plain `create` to make it without one.",
+                         file=entry.file, line=entry.line, subject=label)
+                continue
+            number = create_number
+            if entry.number and entry.number != number:
+                _problem(built, "note", "account_number_changed",
+                         f"{label} comes in as number {number}; the old books number it {entry.number}", file=entry.file,
+                         line=entry.line, subject=label)
+        elif number and (not re.fullmatch(r"[0-9]{1,7}", number) or number in taken_numbers):
+            if re.fullmatch(r"[0-9]{1,7}", number):
+                holder = next((a for a in books.accounts if a["number"] == number), None)
+                why = f"{number} is {holder['full_name']} here" if holder else "the number is taken"
+                fix = (f"To keep the number, first renumber {holder['full_name']} here with `account update` and plan again. "
+                       if holder else "") + ("Or give `create <number>` in mappings.accounts to bring it in under a different number, "
+                       "or leave it as it is to bring it in unnumbered.")
+            else:
+                why, fix = "Bookflow numbers are one to seven digits", None
             _problem(built, "warning", "account_number_dropped",
-                     f"{label} comes in without its number {number}: " + ("Bookflow numbers are one to seven digits" if not re.fullmatch(r"[0-9]{1,7}", number) else "the number is taken"),
+                     f"{label} comes in without its number {number}: {why}", fix,
                      file=entry.file, line=entry.line, subject=label)
             number = None
         if number:

@@ -171,20 +171,45 @@ def _opening_draft(snapshot, account_id):
     return rc._draft(snapshot, found[0]['id'])
 
 
-def candidates(snapshot, account_id, cutoff, draft):
+def check_numbers(conn, revision_ids):
+    """The number each of these revisions was written on a check with, keyed by revision.
+
+    A check, a bill payment by check, a refund check and a sales tax payment by check each carry the
+    number on the paper apart from the document reference Bookflow gives the entry; the bank prints
+    the first, so that is the one a statement line is paired on.
+    """
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    found = {}
+    ids = sorted(revision_ids)
+    for table in (c.check_instrument_revisions, c.customer_refund_profiles, c.ap_payment_profiles,
+                  c.sales_tax_payment_profiles):
+        for start in range(0, len(ids), 400):
+            chunk = ids[start:start + 400]
+            for row in conn.execute(sa.select(table.c.revision_id, table.c.check_number)
+                                    .where(table.c.revision_id.in_(chunk))).mappings():
+                if row['check_number'] and row['revision_id'] not in found:
+                    found[row['revision_id']] = row['check_number']
+    return found
+
+
+def candidates(snapshot, account_id, cutoff, draft, conn=None):
     """Each whole movement on the account as a match candidate, in reconciliation sign."""
     values, _ = account_population(snapshot, account_id, cutoff)
     selected = {v.key_id for v in draft.selections} if draft is not None else set()
     claims = claimed(snapshot)
     result = []
-    for group in groups(values).values():
+    grouped = list(groups(values).values())
+    movements = [m.MovementKey.model_validate_json(g[0]['movement_snapshot']) for g in grouped]
+    written = check_numbers(conn, {v.revision_id for v in movements}) if conn is not None else {}
+    for group, movement in zip(grouped, movements):
         first = group[0]
         display = json.loads(first['display_snapshot'])
         keys = {v['key_id'] for v in group}
-        movement = m.MovementKey.model_validate_json(first['movement_snapshot'])
         result.append(files.Candidate(
             ref=(movement, group_fingerprint(group)), date=first['effective_date'],
-            amount=sum(statement_amount(v) for v in group), number=display['number'] or '',
+            amount=sum(statement_amount(v) for v in group),
+            number=written.get(movement.revision_id) or display['number'] or '',
             payees=tuple(display['payees']), memo=display['memo'] or '',
             selected=bool(keys & selected), reconciled=bool(keys & set(claims)),
             eligible=first['effective_date'] <= cutoff))
@@ -250,7 +275,7 @@ def _prepare(inp, ctx, s, ids):
         raise files.invalid('content', 'the file has no transactions')
 
     lines = [files.Line(**{**v.__dict__, 'amount': sign * v.amount}) for v in parsed.lines]
-    population = candidates(snapshot, account_id, cutoff, draft)
+    population = candidates(snapshot, account_id, cutoff, draft, s.company.conn)
     results = files.match(lines, population, match_days=inp.match_days, suggest_days=inp.suggest_days)
     known = store.known_line_ids(s.company.conn, account_id)
 

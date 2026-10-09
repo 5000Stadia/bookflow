@@ -465,6 +465,16 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
                              + (', and already cleared by a certified statement' if options[0].reconciled else ''))
         else:
             result.reason = 'no entry in the books has this amount near this date; enter it, then import again'
+            ours = _digits(result.line.number)
+            near = [x for j, x in enumerate(candidates)
+                    if ours and x.amount == result.line.amount and _digits(x.number)
+                    and _digits(x.number) != ours and j not in taken_movement
+                    and _days(result.line.date, x.date) <= suggest_days]
+            if near:
+                near.sort(key=lambda x: _days(result.line.date, x.date))
+                named = ', '.join(f'{x.number} on {x.date}' for x in near[:3])
+                result.reason = (f'possibly already entered as {named}, which has the same amount but a different '
+                                 f'number (the statement says {result.line.number}); check before entering it again')
     return results
 
 

@@ -321,3 +321,31 @@ def test_a_saved_csv_mapping_is_used_by_name(client):
     with pytest.raises(BookflowError) as raised:
         run(client, 'reconcile import', dict(account='Checking', content=content, mapping_name='Other'))
     assert raised.value.to_dict()['code'] == 'E_VALIDATION'
+
+
+def test_a_check_pairs_on_the_number_it_was_written_with(client):
+    """The statement's check number is the paper's, not Bookflow's document reference.
+
+    A check written as 4481 is entered under an internal reference of its own ('11' or the like). The bank
+    prints 4481, so the line pairs; a line printed 4499 for the same amount is not paired, and it says the
+    entry may already be there instead of advising to enter it.
+    """
+    posted = run(client, 'check post', dict(account='Checking', number='4481', date='2026-09-05', amount='77.00',
+                                            expenses=[dict(account='Bank Fees', amount='77.00')]))
+    csv = ('Date,Description,Amount,Check\n'
+           '2026-09-08,CHECK 4481,-77.00,4481\n')
+    document = run(client, 'reconcile import', dict(account='Checking', content=csv))
+    line, = [v for v in document['lines'] if v['amount'] == -7700]
+    assert line['status'] == 'matched' and line['reason'] == 'same amount and check number'
+    other = run(client, 'reconcile import', dict(account='Checking', content=csv.replace('4481', '4499')))
+    line, = [v for v in other['lines'] if v['amount'] == -7700]
+    assert line['status'] == 'unmatched'
+    assert 'possibly already entered as 4481' in line['reason'] and 'enter it, then' not in line['reason']
+
+
+def test_a_number_mismatch_names_the_entry_it_may_duplicate():
+    books = [files.Candidate(ref='x', date='2026-07-05', amount=-115000, number='4481')]
+    result, = files.match([files.Line('l', '2026-07-08', -115000, number='4482')], books)
+    assert result.status == 'unmatched' and 'possibly already entered as 4481 on 2026-07-05' in result.reason
+    far, = files.match([files.Line('l', '2026-09-08', -115000, number='4482')], books)
+    assert 'enter it' in far.reason and 'possibly' not in far.reason
