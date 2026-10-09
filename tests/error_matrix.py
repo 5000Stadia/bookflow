@@ -1692,3 +1692,21 @@ for _name, _face in (('invoice delete', 'invoice'), ('sales-receipt delete', 'sa
     }
 for _name in ('invoice delete', 'sales-receipt delete'):
     MATRIX[_name]['E_SOURCE_CORRECTION_CONFLICT'] = 'a credit memo line claimed from this sale prevents its cancellation'
+
+# Moving a company in (R166): plan and tie-out read the export files; apply writes through the
+# ordinary commands and stops at the first failure with what it made kept in.
+_CUTOVER_FILE = "an attachment id in `files` that names no attachment"
+MATRIX["cutover plan"] = {"E_RECORD_NOT_FOUND": _CUTOVER_FILE}
+MATRIX["cutover tie-out"] = {"E_RECORD_NOT_FOUND": _CUTOVER_FILE,
+                             "E_QUERY_STALE": "a continuation cursor whose tie-out no longer matches the books"}
+MATRIX["cutover apply"] = {
+    "E_RECORD_NOT_FOUND": _CUTOVER_FILE,
+    "E_CUTOVER_BLOCKED": "the plan still has blocking exceptions (unmapped account, clearing not 0.00, missing inventory file)",
+    "E_CUTOVER_INCOMPLETE": "a write failed part way; what was made stays and a re-run continues",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+# R174: a person may finish with a labelled adjustment; an agent may not, and the adjustment
+# journal is dated the statement date, so a closed period refuses it.
+MATRIX["reconcile finish"]["E_PERMISSION"] = "an agent asking for the discrepancy adjustment (a person's step)"
+MATRIX["reconcile finish"]["E_PERIOD_CLOSED"] = "the adjustment journal's statement date is on or before the closing date"
