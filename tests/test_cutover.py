@@ -78,7 +78,22 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
                              "item": (10, 0, 0), "invoice": (10, 0, 0), "credit_memo": (2, 0, 0), "bill": (6, 0, 0),
                              "vendor_credit": (1, 0, 0), "inventory_adjustment": (2, 0, 0), "journal": (1, 0, 0),
                              "deactivation": (1, 0, 0)}
-    assert {e["code"] for e in plan["exceptions"]} == {"non_posting_accounts", "item_skipped", "sales_tax_payable"}
+    assert {(e["severity"], e["code"]) for e in plan["exceptions"]} == {
+        ("warning", "non_posting_accounts"), ("warning", "item_skipped"), ("warning", "sales_tax_payable"),
+        ("note", "account_number_differs")}
+    tax = next(e for e in plan["exceptions"] if e["code"] == "sales_tax_payable")
+    assert "1,036.59" in tax["problem"] and "not tied to a tax agency" in tax["problem"]
+    assert tax["fix"] == "Pay it to Illinois Department of Revenue with a check (or a journal entry) whose account is Sales Tax Payable."
+    number = next(e for e in plan["exceptions"] if e["code"] == "account_number_differs")
+    assert number["subject"] == "3900 · Retained Earnings" and "3100" in number["problem"]
+    # The run at a glance comes first, totals by kind: invoices and credits net to AR, bills and
+    # the vendor credit to AP, stock to Inventory Asset.
+    assert list(plan)[:8] == ["dry_run", "warnings", "as_of", "ready", "source", "summary", "counts", "exceptions"]
+    totals = {row["kind"]: row["amount"]["minor_units"] for row in plan["counts"] if row["amount"]}
+    assert totals["invoice"] - totals["credit_memo"] == 2509905
+    assert totals["bill"] - totals["vendor_credit"] == 984590
+    assert totals["inventory_adjustment"] == 167500
+    assert {f["name"]: (f["decided_by"], bool(f["attachment"])) for f in plan["files"]}["accounts.iif"] == ("headings", True)
     journal = plan["journal"]
     assert not {line["description"] for line in journal["lines"]} & {
         "1100 · Accounts Receivable", "2000 · Accounts Payable", "1300 · Inventory Asset"}
@@ -94,6 +109,12 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     assert tie["receivables"]["source"] == "A/R Aging Summary"
     assert (tie["receivables"]["source_total"]["minor_units"], tie["receivables"]["books_total"]["minor_units"]) == (2509905, 2509905)
     assert (tie["payables"]["source_total"]["minor_units"], tie["payables"]["books_total"]["minor_units"]) == (984590, 984590)
+    assert (tie["inventory"]["source_total"]["minor_units"], tie["inventory"]["books_total"]["minor_units"]) == (167500, 167500)
+    # Every list record compared matches; the differences by design are notes.
+    assert (tie["lists"]["compared"], tie["lists"]["differences"]) == (74, 0)
+    assert {(n["list"], n["name"], n["field"], n["source"], n["books"]) for n in tie["lists"]["notes"]} == {
+        ("account", "Retained Earnings", "number", "3900", "3100"),
+        ("item", "Faucet Install Kit", "missing", "in the old books", None)}
 
     # Balances on each account's normal side, as `account show` reports them.
     balance = lambda name: run("account show", dict(account=name))["balance"]["minor_units"]
@@ -113,7 +134,10 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     assert invoice["revision"]["profile"]["customer"]["label"] == "Harbor View Apartments:Boiler Replacement"
     # Every write names its outside id.
     events = run("audit list", dict(limit=200))["items"]
-    assert len([e for e in events if (e["source_ref"] or "").startswith("cutover:")]) == 75
+    moved = [e for e in events if (e["source_ref"] or "").startswith("cutover:")]
+    # One event per record made, and one per export given as text, kept as an attachment.
+    assert len(moved) == 75 + 8
+    assert sorted(e["command"] for e in moved if e["source_ref"].startswith("cutover:file:")) == ["attachment add"] * 8
     assert run("customer show", dict(customer="Patel, Anita"))["active"] is False
 
 
@@ -123,11 +147,22 @@ def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
     before = _balances(run)
     retry = run("cutover apply", dict(as_of=AS_OF, files=files), idempotency_key="move-in-1")
     assert retry["idempotent_replay"] is True and retry["created"] == first["created"] == 75
-    again = run("cutover apply", dict(as_of=AS_OF, files=files))
+    # The eight files given as text were kept as attachments; every later call passes ids.
+    kept = {f["name"]: f["attachment"] for f in first["files"]}
+    assert len(kept) == 10 and all(kept.values())
+    attachments = {a["attachment"]["original_filename"] for a in run("attachment list", dict(
+        record_type="company_info", record_id=run("company show")["company_id"], limit=50))["items"]}
+    assert set(FILES) <= attachments
+    by_id = [{"attachment": kept[name]} for name in FILES]
+    plan = run("cutover plan", dict(as_of=AS_OF, files=by_id))
+    assert plan["ready"] and {f["name"]: f["attachment"] for f in plan["files"]} == kept
+    again = run("cutover apply", dict(as_of=AS_OF, files=by_id))
     assert (again["created"], again["already_in"]) == (0, 75)
     assert all(step["action"] == "already_in" for step in again["steps"])
+    text_again = run("cutover plan", dict(as_of=AS_OF, files=files))
+    assert {f["name"]: f["attachment"] for f in text_again["files"]} == kept  # text an earlier run kept shows its id
     assert _balances(run) == before
-    assert run("cutover tie-out", dict(as_of=AS_OF, files=files))["tied"]
+    assert run("cutover tie-out", dict(as_of=AS_OF, files=by_id))["tied"]
 
 
 def test_a_double_count_is_caught(mover):
@@ -184,3 +219,72 @@ def test_the_exception_report_lists_unmapped_accounts(mover):
     run("cutover apply", dict(as_of=AS_OF, files=files, mappings=mapped))
     assert run("cutover tie-out", dict(as_of=AS_OF, files=files, mappings=mapped))["tied"]
     assert run("account show", dict(account="Office Supplies"))["balance"]["minor_units"] == 114872
+
+
+def _shift(name, who, old, new):
+    """The export with one row retyped: `old` replaced by `new` inside the row that starts with `who`."""
+    original = text(name)
+    line = next(line for line in original.split("\r\n") if line.startswith(who))
+    assert old in line
+    return original.replace(line, line.replace(old, new, 1))
+
+
+def test_a_retyped_list_row_with_a_tab_too_many_or_too_few_is_refused(mover):
+    run = mover["run"]
+    others = [f for name, f in zip(FILES, mover["files"]) if name not in ("customers.iif", "items.iif")]
+    # The blind trial's mistake: one tab too many in a run of empty fields moved Anita Patel's
+    # HIDDEN Y into DELCOUNT, and one too few moved a job's status out of JOBSTATUS.
+    extra = _shift("customers.iif", "CUST\tPatel, Anita", "\t\t\t", "\t\t\t\t")
+    dropped = _shift("items.iif", "INVITEM\tLabor", "\t\t", "\t")
+    plan = run("cutover plan", dict(as_of=AS_OF, files=others + [
+        {"content": extra, "name": "customers.iif"}, {"content": dropped, "name": "items.iif"}]))
+    assert not plan["ready"]
+    refused = {(e["code"], e["file"], e["line"], e["subject"]) for e in plan["exceptions"] if e["severity"] == "blocking"}
+    assert ("row_width", "customers.iif", 13, "Patel, Anita") in refused
+    shifted = next(e for e in plan["exceptions"] if e["code"] == "row_shifted")
+    assert (shifted["file"], shifted["line"], shifted["subject"]) == ("items.iif", 5, "Labor")
+    assert "HIDDEN" in shifted["problem"] and "Export the list again" in shifted["fix"]
+    with pytest.raises(BookflowError) as caught:
+        run("cutover apply", dict(as_of=AS_OF, files=others + [{"content": extra, "name": "customers.iif"}]))
+    assert caught.value.code == "E_CUTOVER_BLOCKED"
+
+
+def test_a_term_here_that_means_something_else_is_caught(mover):
+    run, files = mover["run"], mover["files"]
+    net30 = run("term show", dict(term="Net 30"))
+    run("term update", dict(term=net30["id"], expected_version=net30["version"], due_days=25))
+    plan = run("cutover plan", dict(as_of=AS_OF, files=files))
+    differ = [e for e in plan["exceptions"] if e["code"] == "term_settings_differ"]
+    assert [(e["severity"], e["subject"]) for e in differ] == [("blocking", "Net 30")]
+    assert "due in days 25 here, 30 in the old books" in differ[0]["problem"]
+
+
+def test_the_tie_out_lists_list_fields_and_stock_that_do_not_match(mover):
+    run, files = mover["run"], mover["files"]
+    applied = run("cutover apply", dict(as_of=AS_OF, files=files))
+    patel = run("customer show", dict(customer="Patel, Anita"))
+    run("customer activate", dict(customer=patel["id"], expected_version=patel["version"]))
+    boiler = run("customer show", dict(customer="Harbor View Apartments:Boiler Replacement"))
+    run("customer update", dict(customer=boiler["id"], expected_version=boiler["version"], job_status="in_progress"))
+    clearing = applied["clearing_account_id"]
+    run("inventory adjust", dict(item="Water Heater 40 gal", date=AS_OF, adjustment_account=clearing,
+                                 quantity_change="1", value_change="450.00"))
+    tie = run("cutover tie-out", dict(as_of=AS_OF, files=files))
+    assert not tie["tied"]
+    assert {(r["list"], r["name"], r["field"], r["source"], r["books"]) for r in tie["lists"]["rows"]} == {
+        ("customer", "Patel, Anita", "active", "no", "yes"),
+        ("customer", "Harbor View Apartments:Boiler Replacement", "job_status", "closed", "in_progress")}
+    assert tie["inventory"]["differences"] == 1
+    heater = tie["inventory"]["rows"][0]
+    assert (heater["name"], heater["source_quantity"], heater["books_quantity"]) == ("Water Heater 40 gal", "3", "4")
+    assert (heater["source_value"]["minor_units"], heater["books_value"]["minor_units"]) == (135000, 180000)
+    assert "1 stock difference" in tie["summary"] and "2 list differences" in tie["summary"]
+
+
+def test_the_essentials_survive_an_mcp_result_cut_to_size(mover):
+    from bookflow.adapters.mcp import budget
+    plan = mover["run"]("cutover plan", dict(as_of=AS_OF, files=mover["files"]))
+    cut = budget.fit(plan)
+    assert "result_compacted" in cut and len(cut["steps"]) < len(plan["steps"])
+    assert cut["counts"] == plan["counts"] and cut["exceptions"] == plan["exceptions"]
+    assert {row["kind"] for row in cut["counts"]} >= {"invoice", "credit_memo", "bill", "inventory_adjustment", "journal"}

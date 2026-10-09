@@ -24,7 +24,9 @@ The cutover date is `as_of`: the date of the old books' trial balance. The openi
 
 Each report is exported to a comma separated values file (Excel > Create New Worksheet > Create a comma separated values (.csv) file). The kind of each file is read from its own headings; `kind` names it when it cannot be.
 
-Each file is given in `files` as an attachment (`attachment add company_info <company id> FILE`, then `{"attachment": "<id>"}`) or as its text (`{"content": "...", "name": "trial_balance.csv"}`). An attachment keeps the export in the company with the books it produced.
+Attach each export once and pass its id on every call: `attachment add company_info <company id> FILE` (over MCP the file goes in `transport.input_file`), then `{"attachment": "<id>"}` in `files`. A file can also be given as its text (`{"content": "...", "name": "trial_balance.csv"}`); `cutover apply` keeps each text file as an attachment on the company and returns its id in `files[].attachment`, and `cutover plan` shows that id on later runs, so tie-out and reruns pass ids rather than the text. `files[].sha256` identifies each file's content and `files[].decided_by` says whether its kind was given or read from its headings.
+
+Every row of an IIF list must have the fields its `!` header names: a row with a field more, or more than one field fewer (an export may leave out an empty last field), is refused as `row_width`, and a row whose Y/N or whole-number columns hold anything else is refused as `row_shifted`, because a tab added or dropped moves every later field into the wrong column. A report CSV row with more or fewer cells than its column headings is refused the same way. Export the lists and reports again rather than retyping them.
 
 ```sh
 bookflow attachment add company_info "$company_id" trial_balance.csv --company "Riverbend Plumbing" --reason "Old books export" --json
@@ -41,7 +43,8 @@ Reads the files and returns, writing nothing:
 - `steps`: every write in order: accounts, terms, customers and jobs, vendors, items, the clearing account and the `Opening balance` item, invoices and credit memos, bills and vendor credits, opening stock, the opening journal, then deactivating what was inactive in the old books. Each step names its outside id.
 - `journal`: the opening journal's lines.
 - `checks`: the trial balance's debits against its credits, its receivables against the open invoices and credits, its payables against the unpaid bills and credits, its inventory against the items' asset values.
-- `exceptions`: every problem, `blocking` first. `cutover apply` refuses with `E_CUTOVER_BLOCKED` while any blocking exception stands.
+- `counts`, first: records and totals by kind (invoices, credit memos, bills, vendor credits, stock and the journal carry their total amount), so the whole run reads at a glance even when the step list is long.
+- `exceptions`: every problem, `blocking` first, then `warning` and `note`. `cutover apply` refuses with `E_CUTOVER_BLOCKED` while any blocking exception stands. A record matched to one here is compared with the old books: a term whose days or discount differ is blocking; an account matched to one that keeps another number, such as Retained Earnings, is a note.
 
 `mappings` in the input decides what the plan cannot: an old-books name to a Bookflow ID, number or full name, or `create`. Passing back the plan's own `mappings` pins every target.
 
@@ -69,9 +72,11 @@ Compares the books as of `as_of` with the old books:
 - `trial_balance`: every account's balance, debit positive, against the trial balance file.
 - `receivables`: every customer and job's aging, total and each column (current, 1-30, 31-60, 61-90, over 90), against the A/R Aging Summary file, or the open invoices when no aging file is given.
 - `payables`: every vendor's aging against the A/P Aging Summary file, or the unpaid bills.
+- `inventory`: every item's quantity on hand and asset value against the Inventory Valuation Summary.
+- `lists`: what came in against the IIF lists, field by field: active or inactive, account type and number, job status and description, customer and vendor terms and credit limit, 1099 eligibility, item type, price and cost, and terms days and discount. Differences by design (an account matched to one here that keeps its own number, an item the move-in skips) are `notes`.
 - `clearing`: the clearing account's balance.
 
-`tied` is true when every compared figure matches to the cent and the clearing account is 0.00. With `detail` `differences` (the default) only rows that do not match are listed; `all` lists every compared row.
+`tied` is true when every compared figure matches to the cent, every list field compared matches and the clearing account is 0.00. With `detail` `differences` (the default) only rows that do not match are listed; `all` lists every compared row.
 
 ## Exceptions
 
@@ -94,6 +99,11 @@ Compares the books as of `as_of` with the old books:
 | `account_number_dropped` | warning | An account comes in without its number |
 | `unknown_terms`, `unknown_class` | warning | A terms or class name is not in this company's lists; the document keeps its due date |
 | `item_skipped` | warning | A group, assembly, payment or sales tax group item, or an item whose account Bookflow does not allow, is not brought in |
-| `undeposited_funds`, `sales_tax_payable` | warning | The balance comes in as one opening amount |
+| `undeposited_funds` | warning | The balance comes in as one opening amount that Make Deposits cannot pick |
+| `sales_tax_payable` | warning | The opening sales tax owed comes in as one amount not tied to a tax agency, so `sales-tax pay` cannot pay it; pay it with a check or journal entry against Sales Tax Payable |
+| `row_width`, `row_shifted` | blocking | A list or report row has a field more or fewer than its headings, or a field in the wrong column |
+| `term_settings_differ` | blocking | A term here has other days or discount than the old books' term of that name |
+| `item_settings_differ` | warning | An item here has another price or cost than the old books' item of that name |
+| `account_number_differs` | note | An account matched to one here keeps its own number |
 | `open_balance_changed` | warning | A document brought in earlier now shows another open balance in the old books |
 | `sales_tax_disabled` | warning | The old books charge sales tax and this company has it turned off |

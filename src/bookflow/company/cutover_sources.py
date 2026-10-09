@@ -324,6 +324,28 @@ def _index(row: list[str], name: str) -> int:
 # ---------------------------------------------------------------- IIF lists
 
 _LISTS = {"ACCNT": "account", "CUST": "customer", "VEND": "vendor", "INVITEM": "item", "TERMS": "term"}
+# Columns with a fixed form in every list. A row whose tabs were added or dropped puts the wrong
+# value in them, which is how a shifted row is caught even when its width still looks right.
+_YES_NO = frozenset({"HIDDEN", "TAXABLE", "1099", "USEID", "ISPASSEDTHRU"})
+_WHOLE = frozenset({"REFNUM", "TIMESTAMP", "DELCOUNT"})
+_FIX = "Export the list again from the old books rather than retyping it; a retyped file needs exactly one tab between fields, empty ones included."
+
+
+def _iif_cells(line: str) -> list[str]:
+    """One IIF line's cells. A quoted field may hold tabs; the quotes are not part of the value."""
+    return next(csv.reader([line], delimiter="\t", quotechar='"', doublequote=True, strict=False), [])
+
+
+def _shifted(header: list[str], cells: list[str]) -> list[str]:
+    """The fixed-form columns whose values cannot be right, as `COLUMN 'value'` phrases."""
+    found = []
+    for column, value in zip(header[1:], cells[1:]):
+        value = value.strip()
+        if column in _YES_NO and value.upper() not in ("", "Y", "N"):
+            found.append(f"{column} {value!r} (Y or N)")
+        elif column in _WHOLE and value and not value.isdigit():
+            found.append(f"{column} {value!r} (a whole number)")
+    return found
 
 
 def read_iif(source: SourceFile, out: Sources) -> None:
@@ -332,8 +354,9 @@ def read_iif(source: SourceFile, out: Sources) -> None:
     for number, raw in enumerate(source.text.splitlines(), start=1):
         if not raw.strip():
             continue
-        cells = [cell.strip().strip('"') if cell.strip().startswith('"') and cell.strip().endswith('"') else cell
-                 for cell in raw.split("\t")]
+        cells = _iif_cells(raw)
+        if not cells:
+            continue
         word = cells[0].strip()
         if word.startswith("!"):
             headers[word[1:]] = [cell.strip() for cell in cells]
@@ -344,6 +367,25 @@ def read_iif(source: SourceFile, out: Sources) -> None:
                 f"line {number} starts with {word!r} but no !{word} header row came before it; the row is skipped",
                 file=source.name, line=number))
             continue
+        name = cells[1].strip() if len(cells) > 1 else ""
+        if word in _LISTS:
+            # A genuine export may leave out an empty last field (one cell, always trailing); any
+            # other difference is a tab added or dropped, which moves every field after it.
+            width, expected = len(cells), len(header)
+            if width > expected or width < expected - 1:
+                out.problems.append(Problem("blocking", "row_width",
+                    f"the {word} row {name!r} has {width} fields but its !{word} header names {expected}: a tab was "
+                    "added or dropped, so every field after it would land in the wrong column", _FIX,
+                    file=source.name, line=number, subject=name or None))
+                continue
+            cells = cells + [""] * (expected - width)
+            wrong = _shifted(header, cells)
+            if wrong:
+                out.problems.append(Problem("blocking", "row_shifted",
+                    f"the {word} row {name!r} has " + ", ".join(wrong) + ": a tab was added or dropped earlier in "
+                    "the row, so its fields are in the wrong columns", _FIX,
+                    file=source.name, line=number, subject=name or None))
+                continue
         fields: dict[str, str] = {}
         for column, value in zip(header[1:], cells[1:]):
             if column and column not in fields:  # the item list really does name QNTY twice; the first wins
@@ -378,6 +420,30 @@ def _header(rows: list[list[str]], required: set[str]) -> int:
     return -1
 
 
+def _widths(source: SourceFile, out: Sources, rows: list[list[str]], start: int) -> bool:
+    """Every row from the column headings through TOTAL has as many cells as the headings.
+
+    A comma added or dropped moves every cell after it into the wrong column, so the report is
+    refused rather than read. Blank lines are not rows.
+    """
+    expected = len(rows[start])
+    clean = True
+    for line, row in enumerate(rows[start + 1:], start=start + 2):
+        if not any(cell for cell in row):
+            continue
+        if len(row) != expected:
+            label = next((cell for cell in row if cell), "")
+            out.problems.append(Problem("blocking", "row_width",
+                f"the row {label!r} has {len(row)} cells but the column headings have {expected}: a comma was added "
+                "or dropped, so every cell after it would land in the wrong column",
+                "Export the report again from the old books rather than retyping it.",
+                file=source.name, line=line, subject=label or None))
+            clean = False
+        if row and row[0].strip().upper() == "TOTAL":
+            break
+    return clean
+
+
 def _title_facts(rows: list[list[str]], until: int) -> tuple[str | None, str | None]:
     basis = as_of = None
     for row in rows[:max(until, 0)]:
@@ -407,6 +473,8 @@ def read_trial_balance(source: SourceFile, out: Sources, places: int) -> None:
     if start < 0:
         out.problems.append(Problem("blocking", "unreadable_report", "no row with Debit and Credit column headings",
                                     "Export the Trial Balance report to CSV.", file=source.name))
+        return
+    if not _widths(source, out, rows, start):
         return
     debit_at, credit_at = _index(rows[start], "debit"), _index(rows[start], "credit")
     basis, as_of = _title_facts(rows, start)
@@ -479,6 +547,8 @@ def read_documents(source: SourceFile, out: Sources, side: str, places: int) -> 
         out.problems.append(Problem("blocking", "unreadable_report", "no row with Type and Open Balance column headings",
             "Export the Open Invoices or Unpaid Bills Detail report to CSV.", file=source.name))
         return
+    if not _widths(source, out, rows, start):
+        return
     columns = {_DOCUMENT_COLUMNS[_norm(cell)]: index for index, cell in enumerate(rows[start]) if _norm(cell) in _DOCUMENT_COLUMNS}
     first_data = min(columns.values())
     cell = lambda row, name: row[columns[name]].strip() if name in columns and columns[name] < len(row) else ""
@@ -543,6 +613,8 @@ def read_aging(source: SourceFile, out: Sources, side: str, places: int) -> None
         out.problems.append(Problem("blocking", "unreadable_report", "no row with Current and TOTAL column headings",
                                     "Export the A/R or A/P Aging Summary report to CSV.", file=source.name))
         return
+    if not _widths(source, out, rows, start):
+        return
     columns = {_AGING_COLUMNS[_norm(cell)]: index for index, cell in enumerate(rows[start]) if _norm(cell) in _AGING_COLUMNS}
     first_data = min(columns.values())
     target = out.ar_aging if side == "receivable" else out.ap_aging
@@ -567,6 +639,8 @@ def read_stock(source: SourceFile, out: Sources, places: int) -> None:
     if start < 0:
         out.problems.append(Problem("blocking", "unreadable_report", "no row with On Hand and Asset Value column headings",
                                     "Export the Inventory Valuation Summary report to CSV.", file=source.name))
+        return
+    if not _widths(source, out, rows, start):
         return
     hand_at, value_at = _index(rows[start], "on hand"), _index(rows[start], "asset value")
     first_data = min(hand_at, value_at)
