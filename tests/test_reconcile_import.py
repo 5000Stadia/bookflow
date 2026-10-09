@@ -191,6 +191,28 @@ def test_refusals_are_named(client):
     assert raised.value.to_dict()['code'] == 'E_VALIDATION'
 
 
+def test_a_statement_kept_as_an_attachment_reads_like_the_same_text(client):
+    """The statement from the input folder: attached once, imported by its id."""
+    from bookflow import BookflowError
+    company_id = run(client, 'company show', {})['company_id']
+    for name in ('checking-2026-09.ofx', 'checking-2026-09.csv'):
+        with open(SAMPLES / name, 'rb') as body:
+            added = run(client, 'attachment add', dict(record_type='company_info', record_id=company_id,
+                                                       original_filename=name, media_type='text/plain',
+                                                       caption='Bank statement'), input_stream=body)
+        by_text = run(client, 'reconcile import', dict(account='Checking', content=sample(name)))
+        by_id = run(client, 'reconcile import', dict(account='Checking', attachment=added['attachment']['id']))
+        assert by_id['counts'] == by_text['counts'] and by_id['lines'] == by_text['lines'], name
+    for given in (dict(), dict(content=sample('checking-2026-09.csv'), attachment=added['attachment']['id'])):
+        with pytest.raises(BookflowError) as raised:
+            run(client, 'reconcile import', dict(account='Checking', **given))
+        assert 'content or attachment' in str(raised.value.to_dict())
+    with pytest.raises(BookflowError) as raised:
+        run(client, 'reconcile import', dict(account='Checking', attachment=new_id()))
+    assert raised.value.to_dict()['code'] == 'E_RECORD_NOT_FOUND'
+    assert raised.value.to_dict()['details']['field'] == 'attachment'
+
+
 @pytest.mark.timeout(900)
 def test_the_same_import_through_python_cli_http_and_mcp(root, tmp_path):
     """One statement imported with `start` on four copies of the demo, one per surface."""
@@ -208,6 +230,12 @@ def test_the_same_import_through_python_cli_http_and_mcp(root, tmp_path):
             for surface in SURFACES:
                 results[surface] = await matrix.call(surface, 'reconcile import', dict(
                     account='Checking', content=content, start=True))
+            # A file named in transport.input_file is refused with the way to give it, not a bare usage error.
+            refused = await matrix.mcp.call_tool('bookflow_run', dict(
+                command='reconcile import', input=dict(account='Checking'), company=matrix.company,
+                reason='statement from the input folder', transport=dict(input_file=str(tmp_path / 'statement.ofx'))))
+            assert refused.is_error and refused.structured_content['code'] == 'E_USAGE', refused
+            assert 'attachment add' in refused.structured_content['message'], refused.structured_content
             return results
         finally:
             await matrix.close()

@@ -715,13 +715,24 @@ class Replay:
                                                  ending_balance=ending, opening_draft_id=opening["id"]))["draft"]
         return draft
 
-    def reconcile(self, account: str, content: str, statement: str, ending: str, june: str,
+    def statement_file(self, name: str, *, attached: bool) -> dict:
+        """The July statement as `reconcile import` takes it: its text, or the id of an attachment holding it."""
+        if not attached:
+            return dict(content=(JULY / name).read_text())
+        company_id = self.run("company show")["company_id"]
+        with open(JULY / name, "rb") as body:
+            added = self.run("attachment add", dict(record_type="company_info", record_id=company_id,
+                                                    original_filename=name, media_type="application/x-ofx",
+                                                    caption="Bank statement"), input_stream=body)
+        return dict(attachment=added["attachment"]["id"])
+
+    def reconcile(self, account: str, content: dict, statement: str, ending: str, june: str,
                   csv_mapping: dict | None = None) -> dict:
         """Reconcile `account` to one statement file: import, tick by hand what the import cannot pair, enter what
         only the statement knows, import again, and finish once the difference is zero."""
         draft = self.open_reconciliation(account, statement, ending, june)
         extra = {"csv_mapping": csv_mapping} if csv_mapping else {}
-        first = self.run("reconcile import", dict(account=account, content=content, draft=draft["id"], **extra))
+        first = self.run("reconcile import", dict(account=account, **content, draft=draft["id"], **extra))
         self.imports = [first]
         statement_only = [ev for ev in self.events if ev["kind"] in STATEMENT_ONLY and ev["account"] == account
                           and ev["date"] <= statement]
@@ -734,7 +745,7 @@ class Replay:
             if ev is not None:
                 self.statement_only(ev)
                 entered.append(ev)
-        again = self.run("reconcile import", dict(account=account, content=content, draft=draft["id"], **extra))
+        again = self.run("reconcile import", dict(account=account, **content, draft=draft["id"], **extra))
         self.imports.append(again)
         draft = again["draft"]
         # what the import could not pair or only suggested: the person finds each in the candidate list and ticks it
@@ -778,7 +789,7 @@ class Replay:
                                        ("Savings", "savings-2026-07.csv", None),
                                        ("Visa Business Card", "visa-2026-07.csv", None)):
             rec = k[account]
-            results[account] = self.reconcile(account, (JULY / name).read_text(), rec["statement_date"],
+            results[account] = self.reconcile(account, self.statement_file(name, attached=account == "Checking"), rec["statement_date"],
                                               rec["ending_balance"], fakeco_data_june(account), mapping)
         self.reconciliation_notes(results)
         ten99 = self.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
@@ -833,6 +844,7 @@ class Replay:
     def reconciliation_notes(self, results: dict):
         checking = results["Checking"]
         self.note("Bank statement imported for reconciliation (OFX)", "does", ["reconcile import"],
+                  f"the file is kept with attachment add and read by its attachment id; "
                   f"{checking['first']['counts']['matched']} of {checking['first']['counts']['lines']} July lines "
                   "paired and ticked on the first import, including deposits, ACH debits, transfers, payroll's two "
                   "debits from one journal and the returned check")

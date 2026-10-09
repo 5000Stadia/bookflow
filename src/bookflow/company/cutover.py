@@ -181,17 +181,8 @@ def _file_id(file: src.SourceFile) -> str:
 
 
 def _attachment_text(s, selector: str) -> tuple[dict, str]:
-    from bookflow.company import attachment_store as store
-    row = s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.id == selector)).mappings().first()
-    if row is None:
-        raise BookflowError("E_RECORD_NOT_FOUND", details={"record_type": "attachment", "selector": selector, "field": "files.attachment"})
-    if row["collected_at"] is not None:
-        raise BookflowError("E_IO", "Attachment body has been collected.", {"check": "collected_body", "attachment": selector})
-    if s.company.conn.execute(sa.select(c.attachment_collection.c.id).limit(1)).first():
-        raise BookflowError("E_DB_BUSY", "Attachment collection requires recovery.")
-    folder = s.company.path.parent / "attachments"
-    with store.open_verified(folder, store.BodyInfo(row["sha256"], row["size_bytes"])) as body:
-        return dict(row), src.decode(body.read())
+    from bookflow.company.attachment_text import attachment_text
+    return attachment_text(s, selector, "files.attachment")
 
 
 # ------------------------------------------------------------------ planning
