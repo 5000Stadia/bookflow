@@ -6,7 +6,10 @@ characters) and the R80 register page (53,833) were both refused, so the agent n
 write or its warnings. A result whose rendered JSON is within BUDGET passes unchanged. A larger one
 keeps its warnings and errors first and every scalar (identity and headline figures: id, number,
 status, totals, counts); it leaves out its largest nested lists, largest first, until it fits, and a
-query page keeps the leading rows that fit. `result_compacted` names each list left out with its
+query page keeps the leading rows that fit. A `blocking` list (one compact line per problem that stops
+the command, as `cutover plan` gives it) leads the result and is never left out, and an `exceptions`
+list is left out only after every other list: the cutover trial's full plan said "14 blocking
+exceptions" and its list was the first thing cut. `result_compacted` names each list left out with its
 item count and says how to read the full record. Python, CLI and HTTP results are unchanged: only
 the MCP adapter carries this budget, because only its client refuses large results.
 """
@@ -16,7 +19,8 @@ import json
 
 BUDGET = 20_000       # characters of rendered result JSON the agent receives
 NOTE_ROOM = 1_000     # reserved for result_compacted itself
-FIRST = ("code", "message", "warnings", "errors", "error", "details")
+FIRST = ("blocking", "code", "message", "warnings", "errors", "error", "details")
+LAST = ("exceptions",)  # left out only once every other list is gone
 
 
 def size(value):
@@ -47,7 +51,7 @@ def _slim(row):
             if key not in _AUDIT and value is not None and value != [] and value != {}}
 
 
-def fit(document, *, show=None, paging=None, budget=BUDGET):
+def fit(document, *, show=None, paging=None, budget=BUDGET, result_files=True):
     """Return the document unchanged when it fits; otherwise its compact form, which says so."""
     if not isinstance(document, dict):
         return document
@@ -63,7 +67,7 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
     target = budget - NOTE_ROOM
     # Leave out the largest nested lists first; warnings and errors are never left out.
     candidates = sorted(((size(items), path, len(items)) for path, items in _lists(result)
-                         if path[0] not in FIRST), key=lambda entry: -entry[0])
+                         if path[0] not in FIRST), key=lambda entry: (entry[1][0] in LAST, -entry[0]))
     current = size(result)
     for cost, path, count in candidates:
         if current <= target:
@@ -117,8 +121,12 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
                            f"them all at once and takes no limit." + (f" For the rest, {' or '.join(ways)}." if ways else ""))
     if show:
         how.append(f"Read the full record with bookflow_run {show}.")
-    how.append("Or add transport.result_file (an absolute path) to receive the complete JSON as a file, "
-               "and page it with bookflow_run action inspect.")
+    if result_files:
+        how.append("Or add transport.result_file (an absolute path) to receive the complete JSON as a file, "
+                   "and page it with bookflow_run action inspect.")
+    else:
+        how.append("transport.result_file cannot save the complete JSON as a file: no output directory is configured. "
+                   "The MCP server saves files only when started with --output-dir DIR.")
     note = {"reason": "size_budget", "full_characters": full, "budget_characters": budget,
             "omitted": omitted, "full_result": " ".join(how)}
     if showing:
@@ -131,7 +139,7 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
         # Still too large (large scalars or strings): keep warnings, errors and identity only.
         keep = {key: result[key] for key in FIRST if key in result}
         keep.update((key, result[key]) for key in ("id", "number", "status", "version", "count", "next_cursor",
-                                                   "dry_run", "changed") if key in result and size(result[key]) <= 200)
+                                                   "dry_run", "changed", "ready", "summary") if key in result and size(result[key]) <= 200)
         omitted.append({"field": "*", "reason": "every other field left out to fit"})
         result = {**keep, "result_compacted": note}
     return result

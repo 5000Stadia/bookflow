@@ -150,6 +150,24 @@ class CutoverCheck(BaseModel):
     difference: MoneyOutput = Field(description="source less compared; 0.00 ties")
 
 
+class CutoverClearingPart(BaseModel):
+    part: Literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock",
+                  "opening_sales_tax"] = Field(description=(
+        "`opening_journal`: the journal's balancing line; `invoices_and_credit_memos` and `bills_and_vendor_credits`: "
+        "the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` "
+        "that brings the agency's balance in"))
+    amount: MoneyOutput = Field(description="What this part posts to the clearing account, debit positive")
+    records: int = Field(description="The records that carry it, made or already in")
+
+
+class CutoverClearing(BaseModel):
+    account: str = Field(description="The clearing account")
+    account_id: str | None = Field(description="Its ID; null when this run makes it")
+    parts: list[CutoverClearingPart] = Field(description=(
+        "Everything that posts to it, by part; the same parts in plan and apply, so the two reconcile line by line"))
+    net: MoneyOutput = Field(description="The parts added up, debit positive: 0.00 once everything ties")
+
+
 class CutoverMappingsOutput(BaseModel):
     accounts: dict[str, str] = Field(description="Every old-books account to its Bookflow account ID, or `create`")
     customers: dict[str, str] = Field(description="Every old-books customer and job to its Bookflow ID, or `create`")
@@ -165,9 +183,15 @@ class CutoverPlanOutput(BaseModel):
     ready: bool = Field(description="True when nothing blocks `cutover apply`")
     source: str | None = Field(description="The product and version the IIF files name, when they do")
     summary: str = Field(description="One line: what the run makes and what blocks it")
+    blocking: list[str] = Field(description=(
+        "Each blocking exception as one compact line, `FILE line N: code: problem`; empty when nothing blocks. "
+        "It leads the result so that an MCP result compacted to fit keeps it; `exceptions` has each one whole"))
     counts: list[CutoverCount] = Field(description="Records and totals by kind: the whole run at a glance")
     exceptions: list[CutoverException] = Field(description="Every problem found, blocking first, then warnings and notes")
     checks: list[CutoverCheck] = Field(description="The tie checks the plan can make before anything is written")
+    clearing: CutoverClearing | None = Field(description=(
+        "The clearing account's parts: the opening journal's balancing line, the open documents, the opening stock "
+        "and the opening sales tax, with their net; null when nothing posts to it"))
     files: list[CutoverFileOutput] = Field(description="Each file read, with its attachment id and SHA-256 to reuse")
     journal: CutoverJournal | None = Field(description="The opening journal; null when the trial balance carries only document-owned accounts")
     steps: list[CutoverStep] = Field(description="Every write in order, with what each one makes")

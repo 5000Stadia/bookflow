@@ -86,13 +86,21 @@ class Directories:
     def outside(self, field=None, **extra):
         """The refusal for a local path no configured directory holds, saying which ones do."""
         allowed = ["/" + "/".join(root[0]) for root in self.roots]
-        where = (f"inside {', '.join(allowed)}" if allowed else
-                 "inside a directory this MCP server was started with" + (f" ({self.flag} DIR)" if self.flag else ""))
         details = {"stage": "local_file", "reason": "outside_allowed_directory", "allowed_directories": allowed, **extra}
         if field:
             details["field"] = field
-        return BookflowError("E_PERMISSION", message=f"That local file path is not allowed: it must be {where}. "
-                             "This is a refusal of the file, not of the command.", details=details)
+        if allowed:
+            message = f"That local file path is not allowed: it must be inside {', '.join(allowed)}."
+        else:
+            # The cutover trial's agent asked to save a result to a file and was told only where it
+            # must be; nothing said that no directory was configured at all (v1.6 fix batch).
+            which, does = {"--input-dir": ("input", "reads no local file")}.get(self.flag, ("output", "saves no file"))
+            details["configured"] = False
+            message = (f"No {which} directory is configured, so this MCP server {does}. Whoever starts it can allow "
+                       f"one by adding {self.flag or '--output-dir'} DIR (an absolute directory; repeatable) to the "
+                       "`bookflow mcp` launcher command.")
+        return BookflowError("E_PERMISSION", message=message + " This is a refusal of the file, not of the command.",
+                             details=details)
 
     def check(self, value, field):
         """Refuse a path outside every configured directory before anything is submitted."""

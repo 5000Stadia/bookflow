@@ -89,7 +89,7 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     assert number["subject"] == "3900 · Retained Earnings" and "3100" in number["problem"]
     # The run at a glance comes first, totals by kind: invoices and credits net to AR, bills and
     # the vendor credit to AP, stock to Inventory Asset.
-    assert list(plan)[:8] == ["dry_run", "warnings", "as_of", "ready", "source", "summary", "counts", "exceptions"]
+    assert list(plan)[:9] == ["dry_run", "warnings", "as_of", "ready", "source", "summary", "blocking", "counts", "exceptions"]
     totals = {row["kind"]: row["amount"]["minor_units"] for row in plan["counts"] if row["amount"]}
     assert totals["invoice"] - totals["credit_memo"] == 2509905
     assert totals["bill"] - totals["vendor_credit"] == 984590
@@ -101,9 +101,16 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     # The clearing line is what the documents, stock and opening sales tax carry: AR less AP plus
     # inventory, less the sales tax the adjustment credits to the agency.
     assert journal["clearing"]["minor_units"] == 2509905 - 984590 + 167500 - 103659
+    # v1.6: the clearing account's parts, in plan and apply alike, net to 0.00.
+    parts = {"opening_journal": (2509905 - 984590 + 167500 - 103659, 1), "invoices_and_credit_memos": (-2509905, 12),
+             "bills_and_vendor_credits": (984590, 7), "opening_stock": (-167500, 2), "opening_sales_tax": (103659, 1)}
+    clearing_parts = lambda result: {p["part"]: (p["amount"]["minor_units"], p["records"]) for p in result["clearing"]["parts"]}
+    assert clearing_parts(plan) == parts and plan["clearing"]["net"]["minor_units"] == 0
+    assert plan["clearing"]["account"] == "Cutover Clearing" and plan["blocking"] == []
 
     applied = run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from QuickBooks")
     assert (applied["created"], applied["already_in"]) == (76, 0)
+    assert clearing_parts(applied) == parts and applied["clearing"]["account_id"] == applied["clearing_account_id"]
     tie = run("cutover tie-out", dict(as_of=AS_OF, files=files))
     assert tie["tied"], tie
     assert tie["clearing"]["minor_units"] == 0
@@ -177,6 +184,10 @@ def test_two_agencies_keep_the_opening_sales_tax_in_the_journal_with_a_warning(m
     assert tax["fix"] == "Pay it to the agency with a check (or a journal entry) whose account is Sales Tax Payable."
     assert "Sales Tax Payable" in {line["account"] for line in plan["journal"]["lines"]}
     assert plan["journal"]["clearing"]["minor_units"] == 2509905 - 984590 + 167500
+    # The sales tax is in the journal's part, and no opening_sales_tax part: still nets to 0.00.
+    assert [p["part"] for p in plan["clearing"]["parts"]] == [
+        "opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock"]
+    assert plan["clearing"]["net"]["minor_units"] == 0
 
 
 def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
@@ -279,6 +290,9 @@ def test_a_retyped_list_row_with_a_tab_too_many_or_too_few_is_refused(mover):
     assert not plan["ready"]
     refused = {(e["code"], e["file"], e["line"], e["subject"]) for e in plan["exceptions"] if e["severity"] == "blocking"}
     assert ("row_width", "customers.iif", 13, "Patel, Anita") in refused
+    # Each blocking exception is also one compact line naming file, line and problem, leading the plan.
+    assert len(plan["blocking"]) == len(refused)
+    assert any(line.startswith("customers.iif line 13: row_width: ") and "Patel, Anita" in line for line in plan["blocking"])
     shifted = next(e for e in plan["exceptions"] if e["code"] == "row_shifted")
     assert (shifted["file"], shifted["line"], shifted["subject"]) == ("items.iif", 5, "Labor")
     assert "HIDDEN" in shifted["problem"] and "Export the list again" in shifted["fix"]
@@ -326,3 +340,49 @@ def test_the_essentials_survive_an_mcp_result_cut_to_size(mover):
     assert "result_compacted" in cut and len(cut["steps"]) < len(plan["steps"])
     assert cut["counts"] == plan["counts"] and cut["exceptions"] == plan["exceptions"]
     assert {row["kind"] for row in cut["counts"]} >= {"invoice", "credit_memo", "bill", "inventory_adjustment", "journal"}
+
+
+def test_files_planned_in_pieces_get_one_note_for_the_trial_balance_and_one_for_the_account_list(mover):
+    """v1.6, the cutover trial's third run: a partial plan blocked on the missing trial balance every
+    time, and the item list alone said each item's account "is not an account that comes in"."""
+    run = mover["run"]
+    plan = run("cutover plan", dict(as_of=AS_OF, files=[{"content": text("items.iif"), "name": "items.iif"},
+                                                         {"content": text("vendors.iif"), "name": "vendors.iif"}]))
+    assert not plan["ready"] and plan["blocking"] == []
+    assert plan["summary"] == "checked 2 files on their own: nothing in them blocks; `cutover apply` needs the trial balance with all the files"
+    codes = [(e["severity"], e["code"]) for e in plan["exceptions"]]
+    assert ("note", "no_trial_balance") in codes and ("warning", "no_account_list") in codes
+    assert not any("is not an account that comes in" in e["problem"] for e in plan["exceptions"])
+    missing, = [e for e in plan["exceptions"] if e["code"] == "no_account_list"]
+    assert "no chart of accounts" in missing["problem"] and "'Service Income'" in missing["problem"]
+    # With the chart of accounts the items come in, and apply still needs the trial balance.
+    pieces = [{"content": text(name), "name": name} for name in ("accounts.iif", "items.iif", "vendors.iif")]
+    plan = run("cutover plan", dict(as_of=AS_OF, files=pieces))
+    assert "no_account_list" not in {e["code"] for e in plan["exceptions"]}
+    with pytest.raises(BookflowError) as refused:
+        run("cutover apply", dict(as_of=AS_OF, files=pieces))
+    assert refused.value.code == "E_CUTOVER_BLOCKED"
+    assert [e["code"] for e in refused.value.details["exceptions"]] == ["no_trial_balance"]
+
+
+def test_blocking_lines_lead_and_exceptions_outlast_steps_when_a_result_is_cut():
+    from bookflow.adapters.mcp.budget import BUDGET, fit, size
+    exceptions = [{"severity": "blocking", "code": "row_width", "problem": "x" * 300, "file": "customers.iif", "line": n}
+                  for n in range(14)]
+    document = {"dry_run": False, "warnings": [], "ready": False, "summary": "14 blocking exceptions",
+                "blocking": [f"customers.iif line {n}: row_width: the row is wrong" for n in range(14)],
+                "counts": [], "exceptions": exceptions, "checks": [{"name": "x", "rows": ["y" * 40] * 10}],
+                "steps": [{"order": n, "name": "z" * 400} for n in range(66)]}
+    cut = fit(document, result_files=False)
+    assert size(cut) <= BUDGET and list(cut)[0] == "blocking" and cut["blocking"] == document["blocking"]
+    assert cut["exceptions"] == exceptions and 0 < len(cut["steps"]) < 66
+    assert "no output directory is configured" in cut["result_compacted"]["full_result"]
+    assert "--output-dir DIR" in cut["result_compacted"]["full_result"]
+
+
+def test_a_file_refusal_says_when_no_output_directory_is_configured():
+    from bookflow.adapters.mcp.files import Directories
+    error = Directories([], flag="--output-dir").outside("transport.result_file", outcome="not_submitted")
+    assert error.code == "E_PERMISSION" and error.details["configured"] is False
+    assert error.message.startswith("No output directory is configured, so this MCP server saves no file.")
+    assert "--output-dir DIR" in error.message and error.details["allowed_directories"] == []

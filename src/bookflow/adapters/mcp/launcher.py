@@ -100,7 +100,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                                 paging["alternative"] = other
             except Exception:
                 paging = None  # without it the page advice is the paged one
-            return fit(document, show=show, paging=paging)
+            return fit(document, show=show, paging=paging, result_files=bool(outputs.roots))
 
         async def call_tool(_ctx, params):
             submitted = False

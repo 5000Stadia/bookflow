@@ -35,7 +35,7 @@ import sqlalchemy as sa
 from bookflow.company import cutover_sources as src
 from bookflow.company import schema as c
 from bookflow.company.cutover_models import (
-    CutoverApplyOutput, CutoverCheck, CutoverCount, CutoverException, CutoverFileOutput, CutoverJournal,
+    CutoverApplyOutput, CutoverCheck, CutoverClearing, CutoverClearingPart, CutoverCount, CutoverException, CutoverFileOutput, CutoverJournal,
     CutoverJournalLine, CutoverListRow, CutoverListSection, CutoverMappingsOutput, CutoverPlanOutput, CutoverStep,
     CutoverStockRow, CutoverStockSection, CutoverTieOutOutput, CutoverTieRow, CutoverTieSection,
 )
@@ -153,6 +153,8 @@ class Built:
     clearing_ref: str | None = None
     clearing_id: str | None = None
     tb_by_target: dict[str, int] = field(default_factory=dict)
+    piece: bool = False  # `cutover plan`: the files may be checked in pieces, without the trial balance
+    no_account_list: list[tuple[str, str]] = field(default_factory=list)  # (item, account) skipped for want of the account list
 
 
 def _problem(built: Built, severity: str, code: str, problem: str, fix: str | None = None, *, file=None, line=None, subject=None):
@@ -194,14 +196,14 @@ def _attachment_text(s, selector: str) -> tuple[dict, str]:
 
 # ------------------------------------------------------------------ planning
 
-def build(s, inp, *, journal_number: str | None = None) -> Built:
+def build(s, inp, *, journal_number: str | None = None, piece: bool = False) -> Built:
     files = _files(s, inp)
     books = Books(s, inp.as_of)
     for file in files:
         if file.attachment is None:
             file.attachment = books.link(_file_id(file), "attachment")
     sources = src.read(files, books.places)
-    built = Built(sources, books)
+    built = Built(sources, books, piece=piece)
     built.exceptions.extend(sources.problems)
     _file_checks(built, inp)
     if not {"accounts_receivable", "accounts_payable", "opening_balance_equity", "undeposited_funds",
@@ -215,6 +217,7 @@ def build(s, inp, *, journal_number: str | None = None) -> Built:
     _parties(built, inp, "customer")
     _parties(built, inp, "vendor")
     _items(built, inp)
+    _no_account_list(built)
     _clearing(built, inp)
     _documents(built, inp)
     _stock(built, inp)
@@ -242,7 +245,13 @@ def _file_checks(built: Built, inp) -> None:
             _problem(built, "blocking", "duplicate_file", f"{file.name} is the same file as {seen[file.sha256]}",
                      "Give each export once.", file=file.name)
         seen.setdefault(file.sha256, file.name)
-    if not sources.trial_balances:
+    if not sources.trial_balances and built.piece:
+        # Files checked in pieces: one note, not a blocking exception on every partial check.
+        _problem(built, "note", "no_trial_balance",
+                 "no trial balance file was given, so these files were checked on their own; `cutover apply` needs "
+                 "the trial balance with all the files",
+                 "Give the Trial Balance export (accrual basis, as of the cutover date, to CSV) with the rest before applying.")
+    elif not sources.trial_balances:
         _problem(built, "blocking", "no_trial_balance", "no trial balance file was given",
                  "Export the Trial Balance report, accrual basis, as of the cutover date, to CSV.")
     elif len(sources.trial_balances) > 1:
@@ -900,6 +909,25 @@ def _items(built: Built, inp) -> None:
         built.mappings["items"][row.path] = "create"
 
 
+def _no_account_list(built: Built) -> None:
+    """Items whose accounts are neither here nor in the files, because no chart of accounts was given: said once.
+
+    A plan of the item list alone said "'Service Income' is not an account that comes in" for each
+    item, when the cause was the missing chart of accounts export (the cutover trial, third run).
+    """
+    if not built.sources.lists["item"] or not built.no_account_list:
+        return
+    named = sorted({account for _, account in built.no_account_list})
+    items = [path for path, _ in built.no_account_list]
+    shown = ", ".join(items[:8]) + (f" and {len(items) - 8} more" if len(items) > 8 else "")
+    _problem(built, "warning", "no_account_list",
+             f"no chart of accounts (an IIF file with !ACCNT rows) was given, so {len(items)} item{'s' if len(items) != 1 else ''} "
+             f"whose account{'s are' if len(named) != 1 else ' is'} not already here cannot be planned: {shown} "
+             f"(account{'s' if len(named) != 1 else ''} {', '.join(repr(n) for n in named[:8])}"
+             f"{f' and {len(named) - 8} more' if len(named) > 8 else ''})",
+             "Give the chart of accounts IIF export with the item list; those items then come in with their accounts.")
+
+
 def _source_money(built: Built, text: str) -> int | None:
     """An amount column as minor units, or None when it is blank, a percent or unreadable."""
     if not text or text.strip().endswith("%"):
@@ -924,7 +952,9 @@ def _item_differences(built: Built, row: src.ListRow, record: dict[str, Any]) ->
 def _item_account(built: Built, row: src.ListRow, column: str, allowed: set[str], what: str):
     target = _account_for(built, row.get(column))
     if target is None:
-        if row.get(column):
+        if row.get(column) and not built.sources.lists["account"]:
+            built.no_account_list.append((row.path, row.get(column)))
+        elif row.get(column):
             _problem(built, "warning", "item_skipped", f"item {row.path}'s {what} {row.get(column)!r} is not an account that comes in",
                      file=row.file, line=row.line, subject=row.path)
         return False
@@ -964,6 +994,9 @@ def _item_payload(built: Built, row: src.ListRow, kind: str) -> dict | None:
     if kind == "discount":
         account = _account_for(built, row.get("ACCNT"))
         price = row.get("PRICE")
+        if account is None and row.get("ACCNT") and not built.sources.lists["account"]:
+            built.no_account_list.append((row.path, row.get("ACCNT")))
+            return None
         if account is None or account["type"] not in ("income", "other_income", "expense", "other_expense"):
             _problem(built, "warning", "item_skipped", f"discount item {row.path} needs an income or expense account",
                      file=row.file, line=row.line, subject=row.path)
@@ -1202,6 +1235,8 @@ def _control(built: Built, role: str):
 def _tie_check(built: Built, name: str, account_type: str, documents: int, given: bool, export: str) -> None:
     sign = 1 if account_type == "accounts_receivable" else -1
     trial = sign * sum(t.get("balance", 0) for t in built.targets.values() if t["type"] == account_type)
+    if not built.sources.trial_balances:
+        return  # nothing to tie to; the trial balance's own exception says so
     built.checks.append((name, trial, documents))
     if trial and not given:
         what = "Open Invoices" if export == "open_invoices" else "Unpaid Bills Detail (Dates: All)"
@@ -1221,13 +1256,14 @@ def _tie_check(built: Built, name: str, account_type: str, documents: int, given
 def _stock(built: Built, inp) -> None:
     trial = sum(t.get("balance", 0) for t in built.targets.values() if t.get("role") == "inventory_asset")
     total = sum(row.value for row in built.sources.stock)
-    built.checks.append(("inventory", trial, total))
+    if built.sources.trial_balances:
+        built.checks.append(("inventory", trial, total))
     if trial and not built.sources.stock_files:
         _problem(built, "blocking", "missing_inventory_valuation",
                  f"the trial balance carries Inventory Asset of {_show(built, trial)} and no Inventory Valuation Summary was given",
                  "Export the Inventory Valuation Summary as of the cutover date to CSV; each item's stock comes in by item.")
         return
-    if trial != total:
+    if trial != total and built.sources.trial_balances:
         _problem(built, "blocking", "inventory_does_not_tie",
                  f"the items' asset values add up to {_show(built, total)} but the trial balance carries Inventory Asset of {_show(built, trial)}",
                  "Export both reports as of the cutover date.")
@@ -1433,14 +1469,80 @@ def _step_out(built: Built, order: int, step: Step) -> CutoverStep:
                        date=step.date, detail=step.detail)
 
 
+def _blocking_lines(built: Built, limit: int = 40) -> list[str]:
+    """Each blocking exception in one line naming its file, line and problem.
+
+    They lead the output, so an MCP result compacted to fit its client still carries them: the
+    cutover trial's full plan said "14 blocking exceptions" and compaction dropped the list.
+    """
+    lines = []
+    for p in built.exceptions:
+        if p.severity != "blocking":
+            continue
+        where = (p.file or "") + (f" line {p.line}" if p.line else "")
+        lines.append(f"{where + ': ' if where else ''}{p.code}: {p.problem}")
+    if len(lines) > limit:
+        lines = lines[:limit] + [f"and {len(lines) - limit} more; `exceptions` lists them all"]
+    return lines
+
+
+def _whole_set(built: Built) -> bool:
+    """A full set of files: `cutover apply` reads the trial balance with them."""
+    return bool(built.sources.trial_balances)
+
+
 def _summary(built: Built, *, applied: bool = False) -> str:
     blocking = sum(1 for p in built.exceptions if p.severity == "blocking")
     create = sum(1 for s in built.steps if s.action in ("create", "deactivate"))
     already = sum(1 for s in built.steps if s.action == "already_in")
+    if built.piece and not _whole_set(built):
+        files = len(built.sources.files)
+        found = (f"{blocking} blocking exception{'s' if blocking != 1 else ''} in them, listed in `blocking`" if blocking
+                 else "nothing in them blocks")
+        return (f"checked {files} file{'s' if files != 1 else ''} on their own: {found}; `cutover apply` needs the "
+                "trial balance with all the files")
     if blocking and not applied:
         return f"{blocking} blocking exception{'s' if blocking != 1 else ''}; nothing can be brought in until they are fixed or mapped"
     verb = "made" if applied else "would make"
     return f"{verb} {create} record{'s' if create != 1 else ''}" + (f"; {already} already in from an earlier run" if already else "")
+
+
+CLEARING_PARTS = {"invoice": ("invoices_and_credit_memos", -1), "credit_memo": ("invoices_and_credit_memos", 1),
+                  "bill": ("bills_and_vendor_credits", 1), "vendor_credit": ("bills_and_vendor_credits", -1),
+                  "inventory_adjustment": ("opening_stock", -1)}
+
+
+def _clearing_out(built: Built) -> CutoverClearing | None:
+    """What posts to the clearing account, by part, debit positive; the parts net to 0.00 once everything ties.
+
+    Plan and apply build it the same way, so a clearing line that differs between them (the cutover
+    trial's plan and apply differed by the opening sales tax) is explained part by part.
+    """
+    parts: dict[str, list[int]] = {}
+    if built.journal and built.journal["clearing"]:
+        parts["opening_journal"] = [built.journal["clearing"], sum(1 for s in built.steps if s.kind == "journal")]
+    for step in built.steps:
+        if step.action not in ("create", "already_in") or step.amount is None:
+            continue
+        if step.kind == "sales_tax_adjustment":
+            name, sign = "opening_sales_tax", 1 if step.payload.get("direction", "increase") == "increase" else -1
+        elif step.kind in CLEARING_PARTS:
+            name, sign = CLEARING_PARTS[step.kind]
+        else:
+            continue
+        entry = parts.setdefault(name, [0, 0])
+        entry[0] += sign * step.amount
+        entry[1] += 1
+    if not parts:
+        return None
+    order = ("opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax")
+    currency = built.books.currency
+    return CutoverClearing(
+        account=CLEARING_NAME if built.clearing_ref or not built.clearing_id else _account_name(built, built.clearing_id),
+        account_id=built.clearing_id,
+        parts=[CutoverClearingPart(part=name, amount=money(parts[name][0], currency), records=parts[name][1])
+               for name in order if name in parts],
+        net=money(sum(value for value, _ in parts.values()), currency))
 
 
 def plan_output(built: Built, inp, model=CutoverPlanOutput, **extra) -> Any:
@@ -1454,15 +1556,16 @@ def plan_output(built: Built, inp, model=CutoverPlanOutput, **extra) -> Any:
     files = [CutoverFileOutput(name=f.name, kind=f.kind, attachment=f.attachment, sha256=f.sha256, rows=f.rows,
                                decided_by=("headings" if f.detected else "given") if f.kind else None)
              for f in built.sources.files]
-    return model(as_of=inp.as_of, ready=not any(p.severity == "blocking" for p in built.exceptions),
-                 source=built.sources.product, summary=extra.pop("summary", None) or _summary(built), files=files,
-                 counts=_counts(built), exceptions=_exceptions(built), checks=checks,
+    ready = _whole_set(built) and not any(p.severity == "blocking" for p in built.exceptions)
+    return model(as_of=inp.as_of, ready=ready, source=built.sources.product,
+                 summary=extra.pop("summary", None) or _summary(built), blocking=_blocking_lines(built), files=files,
+                 counts=_counts(built), exceptions=_exceptions(built), checks=checks, clearing=_clearing_out(built),
                  mappings=CutoverMappingsOutput(**built.mappings), journal=journal,
                  steps=[_step_out(built, n, step) for n, step in enumerate(built.steps, start=1)], **extra)
 
 
 def plan(s, ctx, inp) -> Plan:
-    built = build(s, inp, journal_number=getattr(inp, "journal_number", None))
+    built = build(s, inp, journal_number=getattr(inp, "journal_number", None), piece=True)
     return Plan(plan_output(built, inp))
 
 
