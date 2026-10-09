@@ -782,7 +782,7 @@ class Replay:
                                               rec["ending_balance"], fakeco_data_june(account), mapping)
         self.reconciliation_notes(results)
         ten99 = self.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
-        paid = {row["display_vendor_label"]: row["payments"]["amount"] for row in ten99["rows"]}
+        paid = "; ".join(f"{row['display_vendor_label']} {row['payments']['amount']}" for row in ten99["rows"])
         self.note("1099 subcontractor paid by bill and check", "does", ["bill post", "bill pay",
                                                                          "report vendor-1099-summary"],
                   f"the move-in keeps the vendor's 1099 flag; the summary shows his July payments ({paid})")
@@ -792,7 +792,8 @@ class Replay:
                   "added by hand at filing", "the whole year is in one file, so the 1099 summary is the year's")
         closed = self.close("2026-07-31")
         self.note("Closing date set by the person after the month is reconciled", "does", ["company update"],
-                  "closing_date 2026-07-31 through the person's own client; an agent asking is refused")
+                  "closing_date 2026-07-31 through the person's own client; an entry dated in July is refused "
+                  "afterwards with E_PERIOD_CLOSED")
         return dict(reconciliations=results, closed=closed)
 
     def cutover_notes(self):
