@@ -130,24 +130,75 @@ def _registry_digest(contract):
     return hashlib.sha256(json.dumps(schemas, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-# Everyday words for command nouns whose registered names do not contain them.
+# Everyday words for command nouns whose registered names do not contain them. Each phrase lists
+# the commands it means, most useful first; they lead a search page ahead of plain word matches.
+_MOVE_IN = ("cutover plan", "cutover apply", "cutover tie-out")
 KEYWORDS = {
     "credit card": ("card-charge", "card-credit"), "cc": ("card-charge", "card-credit"),
     "tax": ("sales-tax", "sales-tax-code", "report income-tax-summary"),
     "vat": ("sales-tax", "sales-tax-code"), "gst": ("sales-tax", "sales-tax-code"),
+    **dict.fromkeys(("import", "migrate", "migration", "move in", "move-in", "moving in", "switch from",
+                     "convert", "conversion", "iif", "quickbooks", "quickbooks desktop", "qb", "qbd",
+                     "opening balance", "opening balances", "old books", "set up from", "setup from",
+                     "bring over"), _MOVE_IN),
 }
+
+
+def _words(text):
+    return " ".join(text.replace("-", " ").replace("_", " ").lower().split())
+
+
+def _keyword_rank(query, name):
+    """The position of name among the commands a keyword in the query means, or None.
+
+    A keyword counts when it is the whole query, appears in it as whole words ("import from
+    quickbooks"), or the query is the start of a keyword of four or more letters ("migrat").
+    """
+    wanted = _words(query)
+    if not wanted:
+        return None
+    padded = f" {wanted} "
+    best = None
+    for phrase, nouns in KEYWORDS.items():
+        words = _words(phrase)
+        if not (wanted == words or f" {words} " in padded or (len(wanted) >= 4 and words.startswith(wanted))):
+            continue
+        for rank, noun in enumerate(nouns):
+            if name == noun or name.startswith(noun + " "):
+                best = rank if best is None else min(best, rank)
+    return best
 
 
 def keyword_match(query, name):
     """True when every word of the query starts a word of the name, or a keyword names its noun."""
-    wanted = " ".join(query.replace("-", " ").replace("_", " ").lower().split())
+    wanted = _words(query)
     if not wanted:
         return False
-    for phrase, nouns in KEYWORDS.items():
-        if wanted == phrase and any(name == noun or name.startswith(noun + " ") for noun in nouns):
-            return True
+    if _keyword_rank(query, name) is not None:
+        return True
     parts = name.replace("-", " ").split(" ")
     return all(any(part.startswith(word) for part in parts) for word in wanted.split(" "))
+
+
+# A listed description is its opening, cut at a sentence; bookflow_help has the whole text.
+LISTED_DESCRIPTION = 600
+_DEFAULTS = {"local_only": False, "standalone": False, "protocol_stdout": False, "follow": False,
+             "clearable": False, "transfer": None}
+
+
+def listed_row(row):
+    """A catalog row as a list page carries it: the opening of its description and only the flags that
+    differ from the usual; `context` and the rest are in bookflow_help."""
+    text = row["description"]
+    if len(text) > LISTED_DESCRIPTION:
+        cut = max(text.rfind(". ", 0, LISTED_DESCRIPTION), text.rfind("; ", 0, LISTED_DESCRIPTION))
+        if cut < LISTED_DESCRIPTION // 3:
+            cut = text.rfind(" ", 0, LISTED_DESCRIPTION)
+        text = text[:cut + 1].rstrip() + " …"
+    out = {"name": row["name"], "description": text, "scope": row["scope"], "kind": row["kind"],
+           "authorization": row["authorization"]}
+    out.update((key, row[key]) for key, usual in _DEFAULTS.items() if row[key] != usual)
+    return out
 
 
 def list_commands(*, prefix=None, limit=20, cursor=None):
@@ -174,20 +225,43 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
     searched = False
     if prefix and not matched:
         # A prefix that names no command is read as words: "tax" finds the sales-tax nouns,
-        # "credit card" or "cc" finds card charges. Deterministic, so cursors still hold.
-        matched = [row for row in rows if keyword_match(prefix, row["name"])]
+        # "credit card" or "cc" finds card charges, "import" or "quickbooks" the move-in. Commands a
+        # keyword means come first, in its order. Deterministic, so cursors still hold.
+        found = [row for row in rows if keyword_match(prefix, row["name"])]
+        ranks = {row["name"]: _keyword_rank(prefix, row["name"]) for row in found}
+        matched = sorted(found, key=lambda row: (ranks[row["name"]] is None, ranks[row["name"]] or 0))
         searched = bool(matched)
     rows = matched
     if offset > len(rows):
         raise BookflowError("E_VALIDATION", details={"reason": "malformed_cursor"})
-    end = offset + limit
-    next_cursor = None
-    if end < len(rows):
-        next_cursor = base64.urlsafe_b64encode(json.dumps({"digest": digest, "prefix": prefix, "offset": end}).encode()).decode()
-    page = {"commands": rows[offset:end], "next_cursor": next_cursor,
+
+    def cursor_at(position):
+        if position >= len(rows):
+            return None
+        return base64.urlsafe_b64encode(json.dumps({"digest": digest, "prefix": prefix, "offset": position}).encode()).decode()
+
+    from .budget import BUDGET, NOTE_ROOM, size
+    listed = [listed_row(row) for row in rows[offset:offset + limit]]
+    page = {"commands": listed, "total": len(rows), "next_cursor": cursor_at(offset + limit),
             "registry_digest": digest, "bridge_version": BRIDGE_VERSION}
     if searched:
         page["match"] = "keywords"
+    # A page always fits the MCP result budget: it ends at the last command that fits, and its
+    # cursor continues from there, so paging reaches every command.
+    room = BUDGET - NOTE_ROOM - size({**page, "commands": [], "next_cursor": "x" * 200})
+    kept = 0
+    for row in listed:
+        room -= size(row) + 2
+        if room < 0:
+            break
+        kept += 1
+    if kept < len(listed):
+        kept = max(kept, 1)
+        page["commands"] = listed[:kept]
+        page["next_cursor"] = cursor_at(offset + kept)
+        page["page_note"] = (f"This page shows {kept} of the {len(listed)} commands asked for (commands "
+                             f"{offset + 1}-{offset + kept} of {len(rows)}) to stay within the result size budget. "
+                             "Follow next_cursor with the same prefix for the rest, or narrow with a prefix.")
     if prefix and not rows:
         # A prefix that names nothing (a synonym, a plural, a typo) is answered with the
         # nearest real command names rather than a bare empty page.

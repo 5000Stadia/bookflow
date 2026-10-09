@@ -658,7 +658,14 @@ def _validate_profile(parsed: ItemInput, supplied: set[str]) -> None:
             {"field": field, "problem": problem} for field, problem in missing_fields.items()
         ]})
     if not purchase and (parsed.preferred_vendor_id is not None or parsed.vendor_profiles):
-        raise _validation("vendor_profiles", "requires an enabled purchase profile")
+        given = "preferred_vendor_id" if parsed.preferred_vendor_id is not None else "vendor_profiles"
+        if item_type in sided_types:
+            # The fix is the purchase side, not the vendor field: name the switch and what it needs.
+            needs = "cogs_account_id" if item_type in {"inventory_part", "inventory_assembly"} else "expense_account_id"
+            raise _validation("purchase_enabled", f"set purchase_enabled to true to give {given}; the purchase "
+                              f"side also needs purchase_description, cost and {needs}. Or leave out {given}.",
+                              given=given)
+        raise _validation(given, f"a {item_type} item has no purchase side, so it takes no {given}; leave it out")
     if item_type == "other_charge" and parsed.charge_percent is not None:
         if parsed.price is not None or parsed.cost is not None:
             raise _validation("charge_percent", "is mutually exclusive with fixed price and cost")

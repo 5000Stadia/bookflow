@@ -299,14 +299,32 @@ def _discounts(s, inp, targets, currency, context_):
     return targets
 
 
+def _method_names(s):
+    """The active payment methods by name, for an error that has to say which ones there are."""
+    table = c.payment_methods
+    return [row.name for row in s.company.conn.execute(
+        sa.select(table.c.name).where(table.c.active.is_(True)).order_by(table.c.name))]
+
+
 def _profile(s, inp, context_):
     payer = defaults._row(s.company, 'customer', context_['customer_id'])
     from bookflow.company.parties import project_party_record
     projected = project_party_record(s.company, 'customer', payer, custom_values=())
     method = inp.payment_method or projected.get('effective_preferred_payment_method_id')
     if method is None:
-        raise _invalid('payment_method', 'select a payment method or set an effective customer default')
-    method = defaults._row(s.company, 'payment_method', method)
+        names = _method_names(s)
+        error = _invalid('payment_method', 'give payment_method, one of: ' + ', '.join(names)
+                         + ' (`payment-method list` shows them), or set a preferred payment method on the customer')
+        error.details['allowed'] = names
+        raise error
+    try:
+        method = defaults._row(s.company, 'payment_method', method)
+    except BookflowError as exc:
+        if exc.code in {'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_AMBIGUOUS_REFERENCE', 'E_VALIDATION'}:
+            exc.details.setdefault('field', 'payment_method')
+            exc.details['allowed'] = _method_names(s)
+            exc.details['hint'] = 'payment_method is one of allowed, by name or id; `payment-method list` shows them.'
+        raise
     info = defaults._info(s.company)
     destination = inp.deposit_to
     if destination is None and info['use_undeposited_funds_for_payments']:

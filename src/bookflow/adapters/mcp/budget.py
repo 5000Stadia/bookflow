@@ -39,6 +39,14 @@ def _page_field(document):
     return max(lists)[1] if lists else None
 
 
+_AUDIT = ("created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via")
+
+
+def _slim(row):
+    return {key: value for key, value in row.items()
+            if key not in _AUDIT and value is not None and value != [] and value != {}}
+
+
 def fit(document, *, show=None, paging=None, budget=BUDGET):
     """Return the document unchanged when it fits; otherwise its compact form, which says so."""
     if not isinstance(document, dict):
@@ -51,6 +59,7 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
     page = _page_field(result)
     rows = result.pop(page) if page is not None else None
     omitted = []
+    showing = None
     target = budget - NOTE_ROOM
     # Leave out the largest nested lists first; warnings and errors are never left out.
     candidates = sorted(((size(items), path, len(items)) for path, items in _lists(result)
@@ -68,6 +77,12 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
         omitted.append({"field": ".".join(path), "items": count})
         current = size(result)
     how = []
+    slimmed = False
+    if page is not None and sum(size(row) + 2 for row in rows) > target - current:
+        # Before any row is left out, each row sheds what carries nothing: null or empty fields
+        # and its audit stamps. A chart of accounts then arrives whole far more often (R166).
+        rows = [_slim(row) for row in rows]
+        slimmed = True
     if page is not None:
         kept, room = [], target - current
         for row in rows:
@@ -77,8 +92,12 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
             kept.append(row)
             room -= cost
         result[page] = kept
+        if slimmed:
+            how.append(f"Each of the {page} leaves out its null or empty fields and its created_/updated_ audit "
+                       "stamps; a show command reads one whole.")
         if len(kept) < len(rows):
             omitted.insert(0, {"field": page, "items": len(rows), "kept": len(kept)})
+            showing = f"showing {len(kept)} of {len(rows)} {page}"
             if result.get("next_cursor") is not None:
                 # It continues after the last row the full page held, so it would skip the rows
                 # left out here; a rerun with the smaller limit gets a cursor that does not.
@@ -102,7 +121,12 @@ def fit(document, *, show=None, paging=None, budget=BUDGET):
                "and page it with bookflow_run action inspect.")
     note = {"reason": "size_budget", "full_characters": full, "budget_characters": budget,
             "omitted": omitted, "full_result": " ".join(how)}
-    result["result_compacted"] = note
+    if showing:
+        note = {"showing": showing, **note}
+        note["full_result"] = f"Not every row is here: {showing}. " + note["full_result"]
+    # The note leads, right after warnings and errors, so a cut list is never read as complete.
+    lead = {key: result.pop(key) for key in FIRST if key in result}
+    result = {**lead, "result_compacted": note, **result}
     if size(result) > budget:
         # Still too large (large scalars or strings): keep warnings, errors and identity only.
         keep = {key: result[key] for key in FIRST if key in result}
