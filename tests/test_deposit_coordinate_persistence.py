@@ -48,6 +48,10 @@ def test_n2_full_source_deposit_rows(client,sale,driver,n2):
         client.run('payment update',dict(payment=payment['id'],expected_version=2,amount='120',operation_key='ordinary-blocked',
             invoice_versions=[dict(invoice=invoice['id'],expected_version=2)]),company=COMPANY,reason=ctx.reason)
     assert caught.value.code=='E_DEPOSIT_DEPENDENCY'
+    # The way on is a command that exists: take the receipt off its deposit by deleting the deposit.
+    from bookflow.core import registry
+    assert caught.value.details['next']=='deposit delete' and registry.get('deposit delete') is not None
+    assert 'Undeposited' in caught.value.details['reason']
     before=driver.dump()
     with driver.session() as s:
         p=prepare(s,ctx,inp)
