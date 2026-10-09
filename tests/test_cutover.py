@@ -373,6 +373,24 @@ def test_files_planned_in_pieces_get_one_note_for_the_trial_balance_and_one_for_
     assert [e["code"] for e in refused.value.details["exceptions"]] == ["no_trial_balance"]
 
 
+def test_vendors_and_customers_that_look_like_one_party_are_flagged_and_nothing_else(mover):
+    """The blind July trial's old books held Midland Electric Supply and Midland Elec. Supply, and nothing said so."""
+    run = mover["run"]
+    header = "\n".join(text("vendors.iif").splitlines()[:3])
+    pad = "\t" * (text("vendors.iif").splitlines()[2].count("\t") - 1)
+    vendors = header + "\n" + "\n".join(f"VEND\t{name}{pad}0" for name in (
+        "Midland Electric Supply", "Midland Elec. Supply", "Route 59 Auto", "Route 69 Auto", "Ferguson Supply", "Ferguson Supply Inc.")) + "\n"
+    plan = run("cutover plan", dict(as_of=AS_OF, files=[{"content": vendors, "name": "vendors.iif"}]))
+    flagged = [e for e in plan["exceptions"] if e["code"] == "possible_duplicate_vendor"]
+    assert all(e["severity"] == "warning" for e in flagged) and plan["blocking"] == []
+    pairs = {e["problem"].split(" look like")[0] for e in flagged}
+    assert pairs == {"vendor 'Midland Elec. Supply' and 'Midland Electric Supply'", "vendor 'Ferguson Supply' and 'Ferguson Supply Inc.'"}
+    assert all("owner" in e["fix"] for e in flagged)
+    # Route 59 and Route 69 are two vendors, and a job under a customer is not a second customer.
+    plan = run("cutover plan", dict(as_of=AS_OF, files=[{"content": text("customers.iif"), "name": "customers.iif"}]))
+    assert not [e for e in plan["exceptions"] if e["code"].startswith("possible_duplicate")]
+
+
 def test_blocking_lines_lead_and_exceptions_outlast_steps_when_a_result_is_cut():
     from bookflow.adapters.mcp.budget import BUDGET, fit, size
     exceptions = [{"severity": "blocking", "code": "row_width", "problem": "x" * 300, "file": "customers.iif", "line": n}

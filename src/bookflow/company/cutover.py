@@ -781,10 +781,76 @@ def _parties(built: Built, inp, kind: str) -> None:
         _target(built, outside_id, record_id=None, ref=outside_id, record_type=kind, name=path,
                 extra={"hidden": bool(row and row.get("HIDDEN").upper() == "Y"), "active": True, "made": True})
         built.mappings[plural][path] = "create"
+    _look_alikes(built, kind, [path for path, *_ in paths.values()], table, name_field, built.mappings[plural])
     if name_only:
         _problem(built, "warning", f"{kind}s_by_name_only",
                  f"{len(name_only)} {plural} come in with their names only, because no {kind} list IIF was given: " + ", ".join(name_only[:8]) + ("…" if len(name_only) > 8 else ""),
                  f"Give the {kind} list IIF export to bring addresses, contacts and terms.")
+
+
+_FILLER = frozenset(("the", "inc", "incorporated", "llc", "ltd", "co", "corp", "corporation", "company", "and"))
+MAX_LOOKALIKES = 25
+
+
+def _name_tokens(name: str) -> list[str]:
+    import re
+    import unicodedata
+    plain = unicodedata.normalize("NFKD", name.lower().replace("&", " and ")).encode("ascii", "ignore").decode()
+    return [word for word in re.findall(r"[a-z0-9]+", plain) if word not in _FILLER]
+
+
+def _one_edit(a: str, b: str) -> bool:
+    if abs(len(a) - len(b)) > 1 or a == b:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    short, long_ = sorted((a, b), key=len)
+    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
+
+
+def alike_names(first: str, second: str) -> bool:
+    """Two different names that probably mean one party: the same words, or an abbreviation or typo of them.
+
+    `Midland Electric Supply` and `Midland Elec. Supply` (the blind July trial's old books held both)
+    are alike; `Route 59 Auto` and `Route 69 Auto` are not, because a number must match exactly.
+    """
+    a, b = _name_tokens(first), _name_tokens(second)
+    if not a or not b:
+        return False
+    if a == b or "".join(a) == "".join(b):
+        return True
+    if len(a) != len(b) or len(a) < 2:
+        return False
+    differs = 0
+    for x, y in zip(a, b):
+        if x == y:
+            continue
+        differs += 1
+        if any(ch.isdigit() for ch in x + y):
+            return False
+        short, long_ = sorted((x, y), key=len)
+        if not ((len(short) >= 3 and long_.startswith(short)) or (len(short) >= 5 and _one_edit(x, y))):
+            return False
+    return differs > 0
+
+
+def _look_alikes(built: Built, kind: str, names: list[str], table: list[dict], name_field: str, ids: dict[str, str]) -> None:
+    """Flag top-level names of this move-in that look like another one's, or like a record the company already holds."""
+    held = [row[name_field] for row in table if ":" not in row[name_field]]
+    coming = sorted({name for name in names if ":" not in name}, key=str.lower)
+    known = {src.key(name) for name in coming}
+    pairs = []
+    for n, first in enumerate(coming):
+        for second in coming[n + 1:] + [h for h in held if src.key(h) not in known]:
+            if alike_names(first, second) and (ids.get(first) in (None, "create") or ids.get(first) != ids.get(second)):
+                pairs.append((first, second))
+    for first, second in pairs[:MAX_LOOKALIKES]:
+        _problem(built, "warning", f"possible_duplicate_{kind}",
+                 f"{kind} {first!r} and {second!r} look like the same {kind}; both stay as they are, so each carries its own balance and history",
+                 f"Ask the owner whether they are one {kind}; this move-in does not merge or drop either.", subject=first)
+    if len(pairs) > MAX_LOOKALIKES:
+        _problem(built, "warning", f"possible_duplicate_{kind}",
+                 f"{len(pairs) - MAX_LOOKALIKES} more pairs of {kind}s look alike; only the first {MAX_LOOKALIKES} are listed")
 
 
 def _money_text(built: Built, row: src.ListRow, column: str) -> str | None:
