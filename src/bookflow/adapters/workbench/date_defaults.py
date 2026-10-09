@@ -13,7 +13,7 @@ TRANSACTIONS = {
         'card-charge post', 'card-credit post', 'transfer post', 'journal post', 'register post',
         'credit-memo post', 'customer-refund post', 'vendor-credit post',
         'item-receipt post', 'purchase-order post', 'inventory adjust',
-        'statement-charge post', 'sales-tax pay', 'batch-invoice post',
+        'statement-charge post', 'sales-tax pay', 'sales-tax adjust', 'batch-invoice post',
         'estimate create', 'proposal create', 'work-order create',
         'time-activity create', 'payment receive', 'bill pay',
     )},

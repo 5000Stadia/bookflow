@@ -427,7 +427,8 @@
       // Rows with no page of their own here still read as words, never as a stored type name.
       const TYPE_LABELS = {bill_payment: 'Bill payment', bill: 'Bill', payment: 'Payment', deposit: 'Deposit',
         credit_memo: 'Credit memo', customer_refund: 'Refund', vendor_credit: 'Vendor credit',
-        sales_tax_payment: 'Sales tax payment', statement_charge: 'Statement charge'};
+        sales_tax_payment: 'Sales tax payment', statement_charge: 'Statement charge',
+        sales_tax_adjustment: 'Sales tax adjustment'};
       const document = purchase || {
         journal_entry: {noun: 'journal', label: 'Journal'},
         invoice: {noun: 'invoice', label: 'Invoice'},

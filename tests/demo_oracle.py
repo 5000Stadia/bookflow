@@ -194,7 +194,7 @@ DEMO_POSITION = {
         'Accounts Receivable': 61621,
         'Inventory Asset': 36184,
         'Accounts Payable': -7810,
-        'Sales Tax Payable': -7646,
+        'Sales Tax Payable': -7856,         # -7646 - 210 DEMO-STADJ-1
         'Opening Balance Equity': -500000,
         # Early-payment discounts: +500.00 invoiced, 490.00 received plus a 10.00 discount;
         # a 300.00 bill paid with 294.00 plus a 6.00 discount, both through the example bank.
@@ -210,11 +210,13 @@ DEMO_POSITION = {
         'Payment Example Income': -18000,
         # DEMO-ASK-1: 38.50 from checking waits in Ask My Accountant for its account.
         'Uncategorized Expense (Ask My Accountant)': 3850,
+        # DEMO-STADJ-1 (R175): a 2.10 penalty added to the State Revenue Office's sales tax due.
+        'Other Expense': 210,
     },
-    'trial_balance': 1126446,              # 1047664 + 30000 + 1000 + 47782
+    'trial_balance': 1126656,              # 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1)
     'journal_entries': 20,                # + DEMO-ASK-1
-    'net_income': -46826,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1)
-    'total_equity': 453174,                # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1)
+    'net_income': -47036,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1)
+    'total_equity': 452964,                # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1)
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -244,6 +246,7 @@ DEMO_ARCS = {
     'DEMO-DISC-': 'early-payment discounts: a receipt and a bill payment each taking 2%',
     'DEMO-LINE-KINDS': 'a subtotal, a percentage discount and a group item on one invoice',
     'DEMO-ASK-': 'a payment waiting in Uncategorized Expense (Ask My Accountant) for its account',
+    'DEMO-STADJ-': 'a sales tax adjustment: a penalty added to what one agency is owed',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`

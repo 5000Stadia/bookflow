@@ -501,10 +501,12 @@ SECTIONS: tuple[Section, ...] = (
             _list("Item receipts", "item-receipt query", "/item-receipt"),
             _list("Vendor credits", "vendor-credit query", "/vendor-credit"),
             _list("Sales tax payments", "sales-tax payment query", "/sales-tax-payment"),
+            _list("Sales tax adjustments", "sales-tax adjustment query", "/sales-tax-adjustment"),
         ),
         tasks=(
             Action("Pay bills", WRITE, ("bill pay",), "/pay-bills"),
             Action("Pay sales tax", WRITE, ("sales-tax pay",), "/sales-tax/pay"),
+            Action("Adjust sales tax due", WRITE, ("sales-tax adjust",), "/sales-tax/adjust"),
             Action("Sales tax owed", READ, ("sales-tax liability",), "/sales-tax/liability"),
             _report("A/P aging summary", "ap-aging"),
             _report("Unpaid bills", "unpaid-bills"),
@@ -674,7 +676,8 @@ NOUN_SECTION = {
         "sales-tax-code", "class", "custom-field", "profile", "chart")},
     **{noun: "banking" for noun in (
         "register", "deposit", "reconcile", "reconcile opening", "transfer", "rate")},
-    **{noun: "vendors" for noun in ("purchase-order", "item-receipt", "sales-tax", "sales-tax payment")},
+    **{noun: "vendors" for noun in ("purchase-order", "item-receipt", "sales-tax", "sales-tax payment",
+                                                "sales-tax adjustment")},
     **{noun: "customers" for noun in (
         "payment operation", "payment preview", "payment recovery", "payment selection", "payment settlement")},
     "report": "reports", "undo": "settings",

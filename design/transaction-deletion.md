@@ -71,6 +71,9 @@ Deferred, with the reason:
   charge with `E_HAS_APPLICATIONS`, on `ledger_schema.SETTLEABLE_RECEIVABLE_TYPES`
   rather than on a type name, so the lifecycle is whole; a wrong charge is voided
   and re-entered, which is what a sixty-dollar document is worth.
+- `sales_tax_adjustment` — like the remittance, nothing settles against it; its void's
+  own reversal returns the agency to what it was owed, and a wrong one is voided and
+  entered again.
 
 ## What a journal entry is, before it is deleted
 

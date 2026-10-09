@@ -6,25 +6,28 @@ dated on or before the as-of date, signed so that what is owed is positive -- cr
 debit, because a tax liability is credit-normal -- and then asks each effect which agency it
 belongs to.
 
-**Three attributions, one rule.** A sale's tax leg names its ``sales_tax_components`` row
+**Four attributions, one rule.** A sale's tax leg names its ``sales_tax_components`` row
 through ``posting_line_sources.tax_component_id``; a credit memo's tax leg is named by
 ``credit_tax_components.posting_source_id``; a remittance's liability leg is named by
-``sales_tax_payment_profiles.liability_posting_source_id``. Each of those names an agency, and
-a reversal is resolved by following ``posting_line_sources.reversed_source_id`` back to the
-attribution it inverts -- which is why voiding an invoice, a credit memo or a remittance moves
-this report by exactly what the document moved and by nothing else.
+``sales_tax_payment_profiles.liability_posting_source_id``; a sales tax adjustment's liability
+leg is named by ``sales_tax_adjustment_profiles.liability_posting_source_id`` and lands in the
+agency's ``adjusted`` column, signed so that an increase is positive. Each of those names an
+agency, and a reversal is resolved by following ``posting_line_sources.reversed_source_id``
+back to the attribution it inverts -- which is why voiding an invoice, a credit memo, a
+remittance or an adjustment moves this report by exactly what the document moved and by
+nothing else.
 
 **Nothing is dropped.** An effect on a sales-tax-payable account that no attribution claims --
-a journal entry posted straight at the liability, which is how a sales tax adjustment would be
-entered today -- is reported on its own row with no agency rather than left out. That is what
+a journal entry posted straight at the liability rather than through ``sales-tax adjust`` -- is
+reported on its own row with no agency rather than left out. That is what
 makes the report's total the account's own balance for the same date: every posting is in
 exactly one row, and the columns of a row add up to its balance. Both identities are checked
 in Python on every row, where an integer is exact and unbounded.
 
-**A period, the way the anchor's report takes a date range.** With ``date_from`` the four
+**A period, the way the anchor's report takes a date range.** With ``date_from`` the five
 activity columns count only effects dated inside ``date_from..date_to`` and everything before
 it lands in ``beginning_balance``, so a row still adds up: beginning balance plus the period's
-charges and adjustments, less its credits and remittances, is the balance at ``date_to``.
+charges, adjustments and unattributed effects, less its credits and remittances, is the balance at ``date_to``.
 
 **Accrual only, and deliberately.** ``company_info.sales_tax_liability_basis`` has two
 settings. On ``invoice_date`` the liability is recorded when the invoice is, which is what
@@ -48,7 +51,7 @@ from bookflow.core.errors import BookflowError
 
 NO_AGENCY = "Not attributed to an agency"
 
-COLUMNS = ("beginning_balance", "tax_charged", "tax_credited", "remitted", "unattributed", "balance")
+COLUMNS = ("beginning_balance", "tax_charged", "tax_credited", "remitted", "adjusted", "unattributed", "balance")
 
 
 # An optional accounting date, validated as every report date is. The validator sits on the
@@ -86,6 +89,7 @@ class SalesTaxLiabilityTotals(StrictModel):
     tax_charged: MoneyOutput
     tax_credited: MoneyOutput
     remitted: MoneyOutput
+    adjusted: MoneyOutput
     unattributed: MoneyOutput
     balance: MoneyOutput
 
@@ -100,6 +104,7 @@ class SalesTaxLiabilityRow(StrictModel):
     tax_charged: MoneyOutput
     tax_credited: MoneyOutput
     remitted: MoneyOutput
+    adjusted: MoneyOutput
     unattributed: MoneyOutput
     balance: MoneyOutput
 
@@ -135,17 +140,22 @@ WITH liability AS (
  SELECT ps.posting_line_id, pp.agency_id, 'remitted'
  FROM posting_line_sources ps JOIN sales_tax_payment_profiles pp
       ON pp.liability_posting_source_id=coalesce(ps.reversed_source_id, ps.id)
+ UNION ALL
+ SELECT ps.posting_line_id, ap.agency_id, 'adjusted'
+ FROM posting_line_sources ps JOIN sales_tax_adjustment_profiles ap
+      ON ap.liability_posting_source_id=coalesce(ps.reversed_source_id, ps.id)
 ), cells AS (
  SELECT n.agency AS party,
         CASE WHEN l.in_period THEN 0 ELSE l.credit-l.debit END AS beginning_balance,
         CASE WHEN l.in_period AND n.origin='charged' THEN l.credit-l.debit ELSE 0 END AS tax_charged,
         CASE WHEN l.in_period AND n.origin='credited' THEN l.debit-l.credit ELSE 0 END AS tax_credited,
         CASE WHEN l.in_period AND n.origin='remitted' THEN l.debit-l.credit ELSE 0 END AS remitted,
+        CASE WHEN l.in_period AND n.origin='adjusted' THEN l.credit-l.debit ELSE 0 END AS adjusted,
         0 AS unattributed,
         l.credit-l.debit AS balance
  FROM liability l JOIN attributed n ON n.line=l.line
  UNION ALL
- SELECT NULL, CASE WHEN l.in_period THEN 0 ELSE l.credit-l.debit END, 0, 0, 0,
+ SELECT NULL, CASE WHEN l.in_period THEN 0 ELSE l.credit-l.debit END, 0, 0, 0, 0,
         CASE WHEN l.in_period THEN l.credit-l.debit ELSE 0 END, l.credit-l.debit
  FROM liability l WHERE NOT EXISTS (SELECT 1 FROM attributed n WHERE n.line=l.line)
 ), agency_columns AS (
@@ -153,6 +163,7 @@ WITH liability AS (
         bookflow_sum_int(tax_charged) AS tax_charged,
         bookflow_sum_int(tax_credited) AS tax_credited,
         bookflow_sum_int(remitted) AS remitted,
+        bookflow_sum_int(adjusted) AS adjusted,
         bookflow_sum_int(unattributed) AS unattributed,
         bookflow_sum_int(balance) AS balance
  FROM cells GROUP BY party
@@ -258,6 +269,6 @@ def _cell(value, name, inp, currency):
 
 def _check(values):
     if (values["beginning_balance"] + values["tax_charged"] - values["tax_credited"] - values["remitted"]
-            + values["unattributed"] != values["balance"]):
+            + values["adjusted"] + values["unattributed"] != values["balance"]):
         raise BookflowError("E_INTERNAL",
                             message="A sales tax balance is not its beginning balance plus its charges less its credits and remittances")

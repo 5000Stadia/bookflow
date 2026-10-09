@@ -231,9 +231,9 @@ def _amount(inp, currency, owed, agency):
             'field': 'amount', 'agency_id': agency.id, 'agency_name': agency.label,
             'requested_minor_units': amount, 'available_minor_units': owed,
             'requested': Money(amount, currency).to_dict(), 'available': Money(owed, currency).to_dict(),
-            'next': 'Remit at most what this agency is owed through that date; paying an agency '
-                    'more than the books owe it is a sales tax adjustment, which is a separate '
-                    'document.'})
+            'next': 'Remit at most what this agency is owed through that date; when the agency '
+                    'is owed more than the books recorded, record the difference first with '
+                    'sales-tax adjust (direction increase) and then pay it.'})
     return amount
 
 

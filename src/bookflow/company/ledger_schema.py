@@ -10,7 +10,7 @@ import sqlalchemy as sa
 # cover five of eleven types.
 TRANSACTION_TYPES = ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill',
                      'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund',
-                     'vendor_credit', 'statement_charge')
+                     'vendor_credit', 'statement_charge', 'sales_tax_adjustment')
 TRANSACTION_TYPE_PROSE = ', '.join(TRANSACTION_TYPES[:-1]) + ' or ' + TRANSACTION_TYPES[-1]
 TRANSACTION_TYPE_CHECK = 'type IN (' + ', '.join("'" + name + "'" for name in TRANSACTION_TYPES) + ')'
 POSTED, VOIDED = TRANSACTION_STATUSES = ('posted', 'voided')
@@ -144,7 +144,7 @@ def define_tables(metadata, column, table, common):
         identifier('revision_id', 'Immutable document revision containing this line.'),
         identifier('line_id', 'Stable line identity carried across revisions.'),
         integer('position', 'One-based entered line position within the revision.'),
-        text('kind', 'Entered line kind: journal, sale, payment, deposit, purchase, bill_payment, credit, sales_tax_payment or refund.', size=16),
+        text('kind', 'Entered line kind: journal, sale, payment, deposit, purchase, bill_payment, credit, sales_tax_payment, refund or tax_adjustment.', size=16),
         C('account_id', sa.String(26), 'Posting account selected for a journal; null for a sale.', sa.ForeignKey('accounts.id'), nullable=True),
         text('side', 'Journal side: debit or credit; null for a sale.', True, size=6),
         integer('amount_minor_units', 'Positive journal amount; null for a sale.', True),
@@ -161,7 +161,7 @@ def define_tables(metadata, column, table, common):
             "(kind = 'journal' AND account_id IS NOT NULL AND side IS NOT NULL AND side IN ('debit', 'credit') "
             "AND typeof(amount_minor_units) = 'integer' AND amount_minor_units > 0 "
             "AND account_snapshot IS NOT NULL AND json_valid(account_snapshot) AND json_type(account_snapshot) = 'object') OR "
-            "(kind IN ('sale', 'payment', 'deposit', 'purchase', 'bill_payment', 'credit', 'sales_tax_payment', 'refund') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
+            "(kind IN ('sale', 'payment', 'deposit', 'purchase', 'bill_payment', 'credit', 'sales_tax_payment', 'refund', 'tax_adjustment') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
             "AND original_minor_units IS NULL AND original_currency IS NULL AND rate_used IS NULL AND rate_source IS NULL)",
             name='ck_document_line_kind_side'),
         description='Immutable ordered journal or sale envelopes, dimensions and original journal currency facts.')

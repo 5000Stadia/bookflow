@@ -277,7 +277,7 @@ def _funding(g, header):
 def _offbank(g, header):
     """A producer that posts no statement line of its own, checked rather than assumed.
 
-    A bill, a credit memo, a vendor credit and a statement charge reach this graph through what
+    A bill, a credit memo, a vendor credit, a statement charge and a sales tax adjustment reach this graph through what
     settles them, not through a bank account: they post to payables, receivables, income and
     expense, and the
     account rules of their own writers refuse anything else. Reading their legs and refusing a
@@ -338,7 +338,7 @@ REGISTRY = MappingProxyType({'journal_entry': _commercial, 'payment': _commercia
     'sales_receipt': _commercial, 'invoice': _commercial, 'deposit': _deposit,
     'bill_payment': _funding, 'customer_refund': _funding, 'sales_tax_payment': _funding,
     'bill': _offbank, 'credit_memo': _offbank, 'vendor_credit': _offbank,
-    'statement_charge': _offbank})
+    'statement_charge': _offbank, 'sales_tax_adjustment': _offbank})
 UNCOVERED_PRODUCERS = tuple(name for name in TRANSACTION_TYPES if name not in REGISTRY)
 
 

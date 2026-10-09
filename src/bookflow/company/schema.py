@@ -1167,3 +1167,6 @@ globals().update(_define_discount_tables(metadata, _column, _table))
 
 from bookflow.company.statement_schema import define_tables as _define_statement_tables
 globals().update(_define_statement_tables(metadata, _column, _table))
+
+from bookflow.company.sales_tax_adjustment_schema import define_tables as _define_sales_tax_adjustment_tables
+globals().update(_define_sales_tax_adjustment_tables(metadata, _column, _table))

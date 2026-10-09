@@ -80,7 +80,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `cutoff` | string | yes | no | — | — |
 | `items` | array[object] | yes | no | — | — |
 | `items[].movement` | object | yes | no | — | — |
-| `items[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `items[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `items[].movement.transaction_id` | string | yes | no | — | — |
 | `items[].movement.revision_id` | string | yes | no | — | — |
 | `items[].movement.account_id` | string | yes | no | — | — |
@@ -297,7 +297,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.decimal_units` | object[string, string] | yes | no | — | — |
 | `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
 | `cleared_without_statement_line[].movement` | object | yes | no | — | — |
-| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `cleared_without_statement_line[].movement.transaction_id` | string | yes | no | — | — |
 | `cleared_without_statement_line[].movement.revision_id` | string | yes | no | — | — |
 | `cleared_without_statement_line[].movement.account_id` | string | yes | no | — | — |
@@ -594,7 +594,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].status` | literal["matched", "suggested", "unmatched", "reconciled", "duplicate"] | yes | no | — | — |
 | `lines[].reason` | string | yes | no | — | — |
 | `lines[].movement` | object \| null | no | yes | null | — |
-| `lines[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `lines[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `lines[].movement.transaction_id` | string | yes | no | — | — |
 | `lines[].movement.revision_id` | string | yes | no | — | — |
 | `lines[].movement.account_id` | string | yes | no | — | — |
@@ -605,7 +605,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].marked` | boolean | no | no | false | This import ticks the matched movement on the draft. |
 | `lines[].suggestions` | array[object] | no | no | [] | — |
 | `lines[].suggestions[].movement` | object | yes | no | — | — |
-| `lines[].suggestions[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `lines[].suggestions[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `lines[].suggestions[].movement.transaction_id` | string | yes | no | — | — |
 | `lines[].suggestions[].movement.revision_id` | string | yes | no | — | — |
 | `lines[].suggestions[].movement.account_id` | string | yes | no | — | — |
@@ -620,7 +620,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].previously_imported` | boolean | no | no | false | This line (by FITID, or by its hash) was imported for this account before. |
 | `cleared_without_line` | array[object] | yes | no | — | Movements ticked on the draft that no line of this statement accounts for: cleared without a statement line. Flagged, never refused; check each before finishing. |
 | `cleared_without_line[].movement` | object | yes | no | — | — |
-| `cleared_without_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `cleared_without_line[].movement.transaction_id` | string | yes | no | — | — |
 | `cleared_without_line[].movement.revision_id` | string | yes | no | — | — |
 | `cleared_without_line[].movement.account_id` | string | yes | no | — | — |
@@ -743,7 +743,7 @@ The same example as complete `bookflow_run` arguments:
 | `draft` | `DRAFT` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
 | `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
-| `entries[].movement.producer` | inside `--entries` JSON array | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `entries[].movement.producer` | inside `--entries` JSON array | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `entries[].movement.transaction_id` | inside `--entries` JSON array | string | yes | no | — | — |
 | `entries[].movement.revision_id` | inside `--entries` JSON array | string | yes | no | — | — |
 | `entries[].movement.account_id` | inside `--entries` JSON array | string | yes | no | — | — |
@@ -1018,7 +1018,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `next_step` | string \| null | no | yes | null | — |
 | `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
 | `cleared_without_statement_line[].movement` | object | yes | no | — | — |
-| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `cleared_without_statement_line[].movement.transaction_id` | string | yes | no | — | — |
 | `cleared_without_statement_line[].movement.revision_id` | string | yes | no | — | — |
 | `cleared_without_statement_line[].movement.account_id` | string | yes | no | — | — |

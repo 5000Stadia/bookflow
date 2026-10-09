@@ -454,6 +454,10 @@ sales-rep list
 sales-rep query
 sales-rep show
 sales-rep update
+sales-tax adjust
+sales-tax adjustment query
+sales-tax adjustment show
+sales-tax adjustment void
 sales-tax liability
 sales-tax pay
 sales-tax payment query
@@ -606,6 +610,7 @@ def execution_map():
     from tests.test_purchase_order import COMMANDS as PURCHASE_ORDER_COMMANDS
     from tests.test_statement_charge import COMMANDS as STATEMENT_CHARGE_COMMANDS
     from tests.test_sales_tax_remittance import COMMANDS as SALES_TAX_COMMANDS
+    from tests.test_sales_tax_adjustment import COMMANDS as SALES_TAX_ADJUSTMENT_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
     from tests.test_memorized_transactions import COMMANDS as MEMORIZED_COMMANDS
@@ -659,6 +664,7 @@ def execution_map():
                    'tests/test_customer_refund_history_surfaces.py::test_retained_refund_history_on_four_actual_surfaces' if cmd.name in REFUND_HISTORY_COMMANDS else
                    'tests/test_customer_refund.py::test_the_same_refund_through_python_cli_http_and_mcp' if cmd.name in REFUND_COMMANDS else
                    'tests/test_sales_tax_remittance.py::test_the_same_sales_tax_remittance_through_python_cli_http_and_mcp' if cmd.name in SALES_TAX_COMMANDS else
+                   'tests/test_sales_tax_adjustment.py::test_the_same_sales_tax_adjustment_through_python_cli_http_and_mcp' if cmd.name in SALES_TAX_ADJUSTMENT_COMMANDS else  # all four
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
                    'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else
                    'tests/test_memorized_transactions.py::test_the_same_memorized_transaction_through_python_cli_http_and_mcp' if cmd.name in MEMORIZED_COMMANDS else

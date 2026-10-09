@@ -1284,6 +1284,35 @@ MATRIX["sales-tax payment void"] = {
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
 MATRIX["sales-tax payment show"] = {"E_RECORD_NOT_FOUND": "unknown remittance"}
+MATRIX["sales-tax adjust"] = {
+    "E_RECORD_NOT_FOUND": "unknown agency, adjustment account or class, or no sales tax payable account in the chart",
+    "E_INACTIVE_REFERENCE": "deactivated agency, adjustment account, class or liability account",
+    "E_VALIDATION": "a vendor that is not a flagged tax agency, an adjustment account that is the sales tax payable account, a bank, a credit card, receivable, payable, inventory or non-posting account",
+    "E_VALUE_RANGE": "an amount of zero, or an exhausted adjustment number sequence",
+    "E_AMOUNT_PRECISION": "an amount with more precision than the currency has",
+    "E_PERIOD_CLOSED": "adjustment date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit number already occupied by another adjustment",
+    "E_TAX_BASIS_UNSUPPORTED": "the company's sales tax liability basis is payment_receipt",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["sales-tax adjustment void"] = {
+    "E_RECORD_NOT_FOUND": "unknown adjustment",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters",
+    "E_REASON_REQUIRED": "void without a reason",
+    "E_PERIOD_CLOSED": "adjustment date on or before the closing date",
+    "E_APPLICATION_INACTIVE": "an already voided adjustment",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["sales-tax adjustment show"] = {"E_RECORD_NOT_FOUND": "unknown adjustment"}
+MATRIX["sales-tax adjustment query"] = {
+    "E_RECORD_NOT_FOUND": "unknown agency or adjustment account filter",
+    "E_QUERY_STALE": "company audit changed between adjustment pages",
+}
 MATRIX["sales-tax payment query"] = {
     "E_RECORD_NOT_FOUND": "unknown agency, funding account or method filter",
     "E_QUERY_STALE": "company audit changed between remittance pages",

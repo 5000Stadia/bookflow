@@ -1199,7 +1199,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entries[].account_id` | string | yes | no | — | — |
 | `entries[].posting_line_id` | string | yes | no | — | — |
 | `entries[].transaction_id` | string | yes | no | — | — |
-| `entries[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] | yes | no | — | — |
+| `entries[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
 | `entries[].money_out_kind` | literal["check", "card_charge", "card_credit", "transfer"] \| null | no | yes | null | — |
 | `entries[].number` | string | yes | no | — | — |
 | `entries[].date` | string | yes | no | — | — |

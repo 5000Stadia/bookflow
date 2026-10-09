@@ -118,7 +118,7 @@ def test_the_widened_shapes_admit_the_remittance_and_refuse_anything_else(tmp_pa
                            " created_via, updated_at, updated_by, updated_via, type, number,"
                            " current_revision_id, status, voided_at, voided_by, void_reason,"
                            " void_posting_batch_id) VALUES ('T9', 1, 'now', 'U', 'cli', 'now',"
-                           " 'U', 'cli', 'sales_tax_adjustment', 'X-1', NULL, 'posted', NULL,"
+                           " 'U', 'cli', 'sales_tax_rebate', 'X-1', NULL, 'posted', NULL,"
                            " NULL, NULL, NULL)")
         except sqlite3.IntegrityError:
             pass

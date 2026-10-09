@@ -10,6 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
+from bookflow.hub import permission_sales_tax_adjustment_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -19,7 +20,8 @@ REASON = {"X-Bookflow-Reason": "people-only witness"}
 def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_changes_who_can_do_what():
     registry.load_all()
     tip = runtime.current_catalog()
-    assert tip is layer and tip.CATALOG.version == "human-administration-v1"
+    # The tip has since moved to sales-tax-adjustment-v1, which carries these admin actions unchanged.
+    assert tip is tip_layer and tip.CATALOG.admin_actions == layer.CATALOG.admin_actions
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS)
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.

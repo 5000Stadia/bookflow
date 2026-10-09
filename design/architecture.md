@@ -4537,8 +4537,8 @@ voiding an invoice, a credit memo or a remittance moves the report by exactly wh
 moved. An effect no attribution claims — a journal entry posted straight at the liability — is
 reported on its own row with no agency rather than dropped. That is what makes the report's total
 the account's own balance for the same date, and both the per-row identity
-(`tax_charged − tax_credited − remitted + unattributed = balance`) and the totals are checked in
-Python, where an integer is exact and unbounded.
+(`tax_charged − tax_credited − remitted + adjusted + unattributed = balance`, plus
+`beginning_balance` for a period) and the totals are checked in Python, where an integer is exact and unbounded.
 
 **Accrual only, and why that is the honest answer.** `company_info.sales_tax_liability_basis` has
 two settings, and `sales_defaults.resolve_line` refuses to post a taxable sale at all unless it is
@@ -4572,10 +4572,26 @@ of the document is also what lets `liability_posting_source_id` name one posting
 ever rather than one per revision, and a history walk over a document that can only ever have one
 revision would report nothing the `show` does not.
 
-**What this increment deliberately does not do.** There is no sales tax adjustment document, so an
-agency's balance can only be changed by a sale, a credit memo, a remittance or a hand journal
-entry — and a hand journal entry lands in the unattributed row rather than on an agency. There is
-no browser page, no multi-agency remittance, and no demo seed extension. `company_info`'s
+**Adjusting what an agency is owed (R175).** `sales-tax adjust` is the anchor's Adjust Sales Tax
+Due: agency, date, entry number, adjustment account, `direction` (`increase` or `reduce`), amount
+and memo. Its document type is `sales_tax_adjustment` (envelope kind `tax_adjustment`, co0067);
+`sales_tax_adjustment_profiles` is its one-to-one header (agency, liability account, adjustment
+account, direction, amount, the liability leg's attribution row, and a snapshot that captures what
+the agency was owed on the date before and after). The ledger effect is two legs: an increase
+credits the liability and debits the adjustment account, a reduction the reverse. The liability
+read attributes the liability leg to the agency through
+`sales_tax_adjustment_profiles.liability_posting_source_id` into a fifth activity column,
+`adjusted`, signed so an increase is positive; the row identity becomes
+`beginning + charged − credited − remitted + adjusted + unattributed = balance`. Because
+`agency_balances` is the same derivation, `sales-tax pay` may pay an adjusted balance. The
+adjustment account may not be the liability itself, a bank or credit card (a payment to the agency
+is a remittance), accounts receivable or payable, the inventory asset or a non-posting account;
+the reconciliation adapter is therefore `_offbank`. Like the remittance it refuses the
+`payment_receipt` basis, is immutable, has no `update` and is voided by an exact reversal at its own
+date (`sales-tax adjustment void`); `show` and `query` read it. A hand journal at the liability
+still lands in the unattributed row.
+
+**What this does not do.** There is no multi-agency remittance. `company_info`'s
 `sales_tax_remittance_frequency` is captured at company creation and read by nothing here: the
 period a remittance answers is `through_date`, supplied per document.
 

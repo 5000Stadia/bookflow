@@ -1650,8 +1650,9 @@ SOURCE_TABLES = ('transaction_revisions', 'posting_batches', 'posting_lines', 'p
 DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_identities', 'deposit_row_keys', 'document_lines', 'deposit_component_keys', 'deposit_components', 'posting_batches', 'posting_lines', 'posting_line_sources', 'deposit_cash_cells', 'deposit_memberships', 'bank_effect_keys', 'bank_effect_versions', 'deposit_current_memberships', 'deposit_operations')
 # CoordinateOutput re-pinned for early-payment discounts: the receipt request gained optional
 # `discounts`/`discount_account` (a discount row may carry expected_version) and the payment effect
-# optional discount fields (omitted when absent).
-CODECS = {'CoordinateOutput': '8e7a84cd8349c66c241f17b713c71b3ef630a2b84e5a968ad5536bbb844713d2', 'Effect': '2459fecc3964de9d19380152bfdf4f0732a8e8a1055884ab347d1b7e23b3a06d', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'bbf9b0d895d08daf1e24611d334d7bd8d41fe87bcbf33b935cd92dafab8f34fd', 'Manifest': '8753528651e3ddaa96582656f34eae8e8f1641120603eb4e34f074a7395508dd', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# optional discount fields (omitted when absent). Re-pinned again for R175: its producer literal is
+# ledger_schema.TRANSACTION_TYPES, which gained sales_tax_adjustment.
+CODECS = {'CoordinateOutput': 'e77e2f023b4b6e11a0f35f1df6d19c6b102fe54a56bf4e038a2fa8b21067125a', 'Effect': '2459fecc3964de9d19380152bfdf4f0732a8e8a1055884ab347d1b7e23b3a06d', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'bbf9b0d895d08daf1e24611d334d7bd8d41fe87bcbf33b935cd92dafab8f34fd', 'Manifest': '8753528651e3ddaa96582656f34eae8e8f1641120603eb4e34f074a7395508dd', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

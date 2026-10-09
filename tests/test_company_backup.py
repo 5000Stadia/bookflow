@@ -157,24 +157,42 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     assert _registered(client) == {company} and set(org_folder.iterdir()) == folders
 
     # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 only added tables; putting the old CHECK back
-    # and dropping the index, triggers and tables is the exact co0062 file.
+    # and dropping the index, triggers and tables is the exact co0062 file. co0067 widened two CHECKs and one trigger
+    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. The demo holds a sales tax
+    # adjustment (DEMO-STADJ-1), which no co0062 file can, so the older archive is made from a company without one.
+    client.organization.new(name="Older Books Organization")
+    company = client.company.new(legal_name="Older Books", home_currency="USD", timezone="UTC",
+                                 organization="Older Books Organization", chart="general")["company_id"]
+    client.run("journal post", {"date": "2026-06-30", "memo": "Owner investment", "lines": [
+        {"account": "Checking", "side": "debit", "amount": "1500.00"},
+        {"account": "Opening Balance Equity", "side": "credit", "amount": "1500.00"}]},
+        company=company, reason="Something to restore")
+    archive = Path(client.run("company backup", {}, company=company)["path"])
     import importlib
     co0063 = importlib.import_module("bookflow.storage.company_migrations.versions.0063_card_credits")
+    co0067 = importlib.import_module("bookflow.storage.company_migrations.versions.0067_sales_tax_adjustments")
 
     def older(conn):
         conn.execute("PRAGMA writable_schema=ON")
         conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'money_out_documents'", (co0063.NEW, co0063.OLD))
+        for table, pairs in co0067.REPLACEMENTS.items():
+            for old_text, new_text in pairs:
+                conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = ?", (new_text, old_text, table))
+        conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'document_lines_type_insert'",
+                     (co0067.GUARD_REPLACEMENT, co0067.GUARD_TARGET))
         conn.execute("PRAGMA writable_schema=OFF")
         conn.execute("DROP INDEX ix_work_billing_allocation_transaction")
         for trigger in ("audit_events_no_update", "audit_events_no_delete", "audit_entries_no_update", "audit_entries_no_delete"):
             conn.execute(f"DROP TRIGGER {trigger}")  # co0065's
         for table in ("statement_csv_mappings", "statement_lines", "statement_imports"):
             conn.execute(f"DROP TABLE {table}")  # co0066's, with their triggers
+        conn.execute("DROP TABLE sales_tax_adjustment_profiles")  # co0067's, with its triggers
         conn.execute("UPDATE alembic_version SET version_num = 'co0062'")
 
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
-    restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0066"
+    restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
+                                              "organization": "Older Books Organization"})
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0067"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

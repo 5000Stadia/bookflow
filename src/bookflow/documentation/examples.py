@@ -778,6 +778,27 @@ EXAMPLES.update({
         f'bookflow sales-tax payment void {ID} --expected-version 1 --company "Demo Plumbing Co"'
         ' --reason "Remitted from the wrong bank account" --json',
         {"payment": ID, "expected_version": 1}),
+    # Adjust Sales Tax Due: the agency charged a late-filing penalty the sales never recorded.
+    "sales-tax adjust": Example(
+        'bookflow sales-tax adjust --agency "State Board of Equalization" --date 2026-04-20'
+        ' --adjustment-account "Penalties" --direction increase --amount 25.00'
+        ' --memo "Late-filing penalty, Q1" --company "Demo Plumbing Co"'
+        ' --reason "Record the penalty the agency assessed" --json',
+        {"agency": "State Board of Equalization", "date": "2026-04-20",
+         "adjustment_account": "Penalties", "direction": "increase", "amount": "25.00",
+         "memo": "Late-filing penalty, Q1"}),
+    "sales-tax adjustment show": Example(
+        f'bookflow sales-tax adjustment show {ID} --company "Demo Plumbing Co" --json',
+        {"adjustment": ID}),
+    "sales-tax adjustment query": Example(
+        'bookflow sales-tax adjustment query --agency "State Board of Equalization"'
+        ' --date-from 2026-01-01 --status posted --limit 25 --company "Demo Plumbing Co" --json',
+        {"agency": "State Board of Equalization", "date_from": "2026-01-01",
+         "status": "posted", "limit": 25}),
+    "sales-tax adjustment void": Example(
+        f'bookflow sales-tax adjustment void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Entered against the wrong agency" --json',
+        {"adjustment": ID, "expected_version": 1}),
 })
 
 

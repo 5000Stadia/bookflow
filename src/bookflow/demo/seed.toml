@@ -2437,3 +2437,12 @@ command = "journal post"
 capture = "demo_ask_accountant"
 reason = "Record a payment whose account is unclear, for the accountant to place"
 input = { date = "2026-12-09", number = "DEMO-ASK-1", memo = "Hardware store, no itemised receipt: tools (equipment) or job supplies?", lines = [{ account = "Uncategorized Expense (Ask My Accountant)", side = "debit", amount = "38.50" }, { account = "Checking", side = "credit", amount = "38.50" }] }
+
+# Adjust Sales Tax Due (R175): the State Revenue Office assessed a 2.10 late-filing penalty that
+# no sale recorded. It is added to what that agency is owed, against Other Expense, so the
+# liability report shows it under the agency (adjusted column) and Pay Sales Tax includes it.
+[[commands]]
+command = "sales-tax adjust"
+capture = "demo_sales_tax_adjustment"
+reason = "Record the late-filing penalty the agency assessed"
+input = { agency = "${tax_agency.id}", date = "2026-12-12", number = "DEMO-STADJ-1", adjustment_account = "Other Expense", direction = "increase", amount = "2.10", memo = "Late-filing penalty assessed by the agency" }
