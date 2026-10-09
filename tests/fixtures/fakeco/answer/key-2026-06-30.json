@@ -1,0 +1,858 @@
+{
+ "company": "Harbor Electric LLC",
+ "as_of": "2026-06-30",
+ "conventions": [
+  "Accrual basis. Trial balance amounts are signed, debit positive; accounts with a zero balance are left out.",
+  "Account names are the old books' full names (Parent:Child); numbers are the old books' numbers.",
+  "Sales tax: one Illinois Department of Revenue rate of 8.75%, figured once per document on the sum of its taxable lines (taxable item for a taxable customer) and rounded half up to the cent; owed from the document date; a credit memo takes back its own tax.",
+  "A percentage discount item takes its percent of the line just above it, rounded half up.",
+  "Inventory is weighted-average cost: a sale takes value x quantity / quantity on hand, rounded half to even, and the last unit out takes whatever value is left; a purchase adds its cost; stock returned to a vendor comes off at the credited amount; stock a customer returns comes back at what its sale took.",
+  "Early-payment discounts are the terms' percent of the open balance, rounded half up, to Sales Discounts (customers) or Purchase Discounts (vendors); sales tax is not adjusted for them.",
+  "A bounced customer check is recorded as the anchor's Record Bounced Check does: the invoice it paid is open again, the returned amount and the bank's fee come out of checking (fee to Bank Service Charges), and the customer is invoiced the returned-check fee (Returned Check Charges).",
+  "A bad debt is written off with a zero receipt whose discount goes to Bad Debt.",
+  "Agings are by due date for invoices and bills and by document date for credits, in the columns Current, 1-30, 31-60, 61-90 and over 90 days past due, by customer:job and vendor.",
+  "Reconciliations: an item is cleared on the day the bank or card company posted it; the statement's beginning balance is the previous statement's ending balance; outstanding items are entries dated on or before the statement date that the statement does not show."
+ ],
+ "trial_balance": {
+  "rows": [
+   {
+    "number": "1000",
+    "account": "Checking",
+    "balance": "20004.49"
+   },
+   {
+    "number": "1010",
+    "account": "Savings",
+    "balance": "18512.63"
+   },
+   {
+    "number": "1020",
+    "account": "Petty Cash",
+    "balance": "200.00"
+   },
+   {
+    "number": "1100",
+    "account": "Accounts Receivable",
+    "balance": "32485.43"
+   },
+   {
+    "number": "1200",
+    "account": "Undeposited Funds",
+    "balance": "1662.00"
+   },
+   {
+    "number": "1300",
+    "account": "Inventory Asset",
+    "balance": "5340.25"
+   },
+   {
+    "number": "1510",
+    "account": "Vehicles:Cost",
+    "balance": "61450.00"
+   },
+   {
+    "number": "1520",
+    "account": "Vehicles:Accumulated Depreciation",
+    "balance": "-24580.00"
+   },
+   {
+    "number": "1610",
+    "account": "Tools and Equipment:Cost",
+    "balance": "14236.80"
+   },
+   {
+    "number": "1620",
+    "account": "Tools and Equipment:Accumulated Depreciation",
+    "balance": "-8960.00"
+   },
+   {
+    "number": "1800",
+    "account": "Security Deposit",
+    "balance": "2450.00"
+   },
+   {
+    "number": "2000",
+    "account": "Accounts Payable",
+    "balance": "-7868.81"
+   },
+   {
+    "number": "2050",
+    "account": "Visa Business Card",
+    "balance": "-2573.85"
+   },
+   {
+    "number": "2100",
+    "account": "Sales Tax Payable",
+    "balance": "-1187.34"
+   },
+   {
+    "number": "2700",
+    "account": "Van Loan",
+    "balance": "-27486.19"
+   },
+   {
+    "number": "3200",
+    "account": "Owner's Equity",
+    "balance": "-15000.00"
+   },
+   {
+    "number": "3300",
+    "account": "Owner's Draw",
+    "balance": "24000.00"
+   },
+   {
+    "number": "3900",
+    "account": "Retained Earnings",
+    "balance": "-28489.41"
+   },
+   {
+    "number": "4100",
+    "account": "Service Income",
+    "balance": "-58417.50"
+   },
+   {
+    "number": "4200",
+    "account": "Installation Income",
+    "balance": "-151236.40"
+   },
+   {
+    "number": "4300",
+    "account": "Materials Income",
+    "balance": "-38915.27"
+   },
+   {
+    "number": "4400",
+    "account": "Permit Income",
+    "balance": "-1965.00"
+   },
+   {
+    "number": "4900",
+    "account": "Sales Discounts",
+    "balance": "1284.36"
+   },
+   {
+    "number": "5000",
+    "account": "Cost of Goods Sold",
+    "balance": "21843.12"
+   },
+   {
+    "number": "5050",
+    "account": "Inventory Adjustments",
+    "balance": "112.40"
+   },
+   {
+    "number": "5100",
+    "account": "Job Materials",
+    "balance": "36507.84"
+   },
+   {
+    "number": "5200",
+    "account": "Subcontractors",
+    "balance": "9850.00"
+   },
+   {
+    "number": "5300",
+    "account": "Equipment Rental",
+    "balance": "2215.60"
+   },
+   {
+    "number": "5400",
+    "account": "Permits",
+    "balance": "1965.00"
+   },
+   {
+    "number": "5900",
+    "account": "Purchase Discounts",
+    "balance": "-1163.27"
+   },
+   {
+    "number": "6000",
+    "account": "Advertising",
+    "balance": "2947.35"
+   },
+   {
+    "number": "6100",
+    "account": "Bank Service Charges",
+    "balance": "104.50"
+   },
+   {
+    "number": "6150",
+    "account": "Dues and Subscriptions",
+    "balance": "1062.00"
+   },
+   {
+    "number": "6210",
+    "account": "Insurance:General Liability",
+    "balance": "5412.00"
+   },
+   {
+    "number": "6220",
+    "account": "Insurance:Workers Compensation",
+    "balance": "6330.00"
+   },
+   {
+    "number": "6300",
+    "account": "Office Supplies",
+    "balance": "812.47"
+   },
+   {
+    "number": "6400",
+    "account": "Professional Fees",
+    "balance": "1850.00"
+   },
+   {
+    "number": "6500",
+    "account": "Rent",
+    "balance": "14700.00"
+   },
+   {
+    "number": "6600",
+    "account": "Repairs and Maintenance",
+    "balance": "643.18"
+   },
+   {
+    "number": "6650",
+    "account": "Small Tools and Equipment",
+    "balance": "2318.66"
+   },
+   {
+    "number": "6710",
+    "account": "Utilities:Gas and Electric",
+    "balance": "2148.33"
+   },
+   {
+    "number": "6720",
+    "account": "Utilities:Telephone and Internet",
+    "balance": "1139.94"
+   },
+   {
+    "number": "6810",
+    "account": "Payroll Expenses:Wages",
+    "balance": "58353.75"
+   },
+   {
+    "number": "6820",
+    "account": "Payroll Expenses:Payroll Taxes",
+    "balance": "5480.66"
+   },
+   {
+    "number": "6830",
+    "account": "Payroll Expenses:Payroll Service Fees",
+    "balance": "591.00"
+   },
+   {
+    "number": "6910",
+    "account": "Vehicle Expense:Fuel",
+    "balance": "6215.40"
+   },
+   {
+    "number": "6920",
+    "account": "Vehicle Expense:Repairs",
+    "balance": "1873.25"
+   },
+   {
+    "number": "6950",
+    "account": "Meals",
+    "balance": "486.20"
+   },
+   {
+    "number": "6960",
+    "account": "Uniforms",
+    "balance": "674.16"
+   },
+   {
+    "number": "8100",
+    "account": "Interest Income",
+    "balance": "-32.61"
+   },
+   {
+    "number": "9100",
+    "account": "Interest Expense",
+    "balance": "612.88"
+   }
+  ],
+  "debits": "367875.65",
+  "credits": "367875.65"
+ },
+ "receivables": {
+  "rows": [
+   {
+    "name": "Abernathy, Ruth",
+    "current": "0.00",
+    "1-30": "274.05",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "274.05"
+   },
+   {
+    "name": "Bauer, Dennis",
+    "current": "0.00",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "186.40",
+    "over_90": "0.00",
+    "total": "186.40"
+   },
+   {
+    "name": "Cedar Ridge Family Dental",
+    "current": "0.00",
+    "1-30": "1486.25",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "1486.25"
+   },
+   {
+    "name": "Hendricks, Tom",
+    "current": "0.00",
+    "1-30": "486.93",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "486.93"
+   },
+   {
+    "name": "Kaminski, Ted",
+    "current": "0.00",
+    "1-30": "0.00",
+    "31-60": "-150.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "-150.00"
+   },
+   {
+    "name": "Kowalski, Janet",
+    "current": "0.00",
+    "1-30": "318.27",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "318.27"
+   },
+   {
+    "name": "Lakeview Property Management:Cass Street Apartments",
+    "current": "2148.60",
+    "1-30": "3875.12",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "6023.72"
+   },
+   {
+    "name": "Lakeview Property Management:Hickory Creek Townhomes",
+    "current": "2630.44",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "2630.44"
+   },
+   {
+    "name": "Lock & Key Brewing",
+    "current": "4212.80",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "4212.80"
+   },
+   {
+    "name": "Morales, Ana",
+    "current": "1186.42",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "1186.42"
+   },
+   {
+    "name": "Prairie Grain Co-op",
+    "current": "0.00",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "1241.37",
+    "over_90": "0.00",
+    "total": "1241.37"
+   },
+   {
+    "name": "Ridgeline Realty Management:205 N Chicago St",
+    "current": "5318.75",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "5318.75"
+   },
+   {
+    "name": "Ridgeline Realty Management:Unit Turnovers",
+    "current": "742.53",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "742.53"
+   },
+   {
+    "name": "St. Casimir Parish",
+    "current": "1962.50",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "1962.50"
+   },
+   {
+    "name": "Van Dyke Construction:Lot 14 Prairie Crossing",
+    "current": "0.00",
+    "1-30": "6420.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "6420.00"
+   },
+   {
+    "name": "Washington, Darnell",
+    "current": "0.00",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "145.00",
+    "total": "145.00"
+   }
+  ],
+  "current": "18202.04",
+  "1-30": "12860.62",
+  "31-60": "-150.00",
+  "61-90": "1427.77",
+  "over_90": "145.00",
+  "total": "32485.43",
+  "documents": [
+   {
+    "kind": "invoice",
+    "number": "2384",
+    "name": "Abernathy, Ruth",
+    "date": "2026-06-29",
+    "due": "2026-06-29",
+    "open": "274.05"
+   },
+   {
+    "kind": "invoice",
+    "number": "2318",
+    "name": "Bauer, Dennis",
+    "date": "2026-04-16",
+    "due": "2026-04-16",
+    "open": "186.40"
+   },
+   {
+    "kind": "invoice",
+    "number": "2361",
+    "name": "Cedar Ridge Family Dental",
+    "date": "2026-05-29",
+    "due": "2026-06-28",
+    "open": "1486.25"
+   },
+   {
+    "kind": "invoice",
+    "number": "2379",
+    "name": "Hendricks, Tom",
+    "date": "2026-06-22",
+    "due": "2026-06-22",
+    "open": "486.93"
+   },
+   {
+    "kind": "credit_memo",
+    "number": "2350",
+    "name": "Kaminski, Ted",
+    "date": "2026-05-14",
+    "due": null,
+    "open": "-150.00"
+   },
+   {
+    "kind": "invoice",
+    "number": "2370",
+    "name": "Kowalski, Janet",
+    "date": "2026-06-10",
+    "due": "2026-06-25",
+    "open": "318.27"
+   },
+   {
+    "kind": "invoice",
+    "number": "2342",
+    "name": "Lakeview Property Management:Cass Street Apartments",
+    "date": "2026-05-08",
+    "due": "2026-06-07",
+    "open": "3875.12"
+   },
+   {
+    "kind": "invoice",
+    "number": "2386",
+    "name": "Lakeview Property Management:Cass Street Apartments",
+    "date": "2026-06-30",
+    "due": "2026-07-30",
+    "open": "2148.60"
+   },
+   {
+    "kind": "invoice",
+    "number": "2377",
+    "name": "Lakeview Property Management:Hickory Creek Townhomes",
+    "date": "2026-06-19",
+    "due": "2026-07-19",
+    "open": "2630.44"
+   },
+   {
+    "kind": "invoice",
+    "number": "2373",
+    "name": "Lock & Key Brewing",
+    "date": "2026-06-15",
+    "due": "2026-07-15",
+    "open": "4212.80"
+   },
+   {
+    "kind": "invoice",
+    "number": "2385",
+    "name": "Morales, Ana",
+    "date": "2026-06-30",
+    "due": "2026-07-15",
+    "open": "1186.42"
+   },
+   {
+    "kind": "invoice",
+    "number": "2291",
+    "name": "Prairie Grain Co-op",
+    "date": "2026-03-12",
+    "due": "2026-04-11",
+    "open": "1241.37"
+   },
+   {
+    "kind": "invoice",
+    "number": "2383",
+    "name": "Ridgeline Realty Management:205 N Chicago St",
+    "date": "2026-06-26",
+    "due": "2026-07-26",
+    "open": "5318.75"
+   },
+   {
+    "kind": "invoice",
+    "number": "2366",
+    "name": "Ridgeline Realty Management:Unit Turnovers",
+    "date": "2026-06-04",
+    "due": "2026-07-04",
+    "open": "742.53"
+   },
+   {
+    "kind": "invoice",
+    "number": "2381",
+    "name": "St. Casimir Parish",
+    "date": "2026-06-24",
+    "due": "2026-07-24",
+    "open": "1962.50"
+   },
+   {
+    "kind": "invoice",
+    "number": "2355",
+    "name": "Van Dyke Construction:Lot 14 Prairie Crossing",
+    "date": "2026-05-21",
+    "due": "2026-06-20",
+    "open": "6420.00"
+   },
+   {
+    "kind": "invoice",
+    "number": "2264",
+    "name": "Washington, Darnell",
+    "date": "2026-02-18",
+    "due": "2026-02-18",
+    "open": "145.00"
+   }
+  ]
+ },
+ "payables": {
+  "rows": [
+   {
+    "name": "Delgado, Ray",
+    "current": "1400.00",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "1400.00"
+   },
+   {
+    "name": "Illinois Valley Gas & Electric",
+    "current": "386.21",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "386.21"
+   },
+   {
+    "name": "Lund & Ostrowski CPAs",
+    "current": "0.00",
+    "1-30": "0.00",
+    "31-60": "650.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "650.00"
+   },
+   {
+    "name": "Midland Electric Supply",
+    "current": "3961.31",
+    "1-30": "-214.60",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "3746.71"
+   },
+   {
+    "name": "Prairie Fleet Card",
+    "current": "1108.53",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "1108.53"
+   },
+   {
+    "name": "Prairie Uniform Service",
+    "current": "112.36",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "112.36"
+   },
+   {
+    "name": "Will County Equipment Rental",
+    "current": "465.00",
+    "1-30": "0.00",
+    "31-60": "0.00",
+    "61-90": "0.00",
+    "over_90": "0.00",
+    "total": "465.00"
+   }
+  ],
+  "current": "7433.41",
+  "1-30": "-214.60",
+  "31-60": "650.00",
+  "61-90": "0.00",
+  "over_90": "0.00",
+  "total": "7868.81",
+  "documents": [
+   {
+    "kind": "bill",
+    "number": "0627",
+    "name": "Delgado, Ray",
+    "date": "2026-06-27",
+    "due": "2026-07-12",
+    "open": "1400.00"
+   },
+   {
+    "kind": "bill",
+    "number": "6619-0442 JUN",
+    "name": "Illinois Valley Gas & Electric",
+    "date": "2026-06-19",
+    "due": "2026-07-10",
+    "open": "386.21"
+   },
+   {
+    "kind": "bill",
+    "number": "2026-0418",
+    "name": "Lund & Ostrowski CPAs",
+    "date": "2026-04-30",
+    "due": "2026-05-30",
+    "open": "650.00"
+   },
+   {
+    "kind": "bill",
+    "number": "S1187420.001",
+    "name": "Midland Electric Supply",
+    "date": "2026-06-12",
+    "due": "2026-07-12",
+    "open": "2318.44"
+   },
+   {
+    "kind": "credit",
+    "number": "CM S1186990",
+    "name": "Midland Electric Supply",
+    "date": "2026-06-18",
+    "due": null,
+    "open": "-214.60"
+   },
+   {
+    "kind": "bill",
+    "number": "S1188105.001",
+    "name": "Midland Electric Supply",
+    "date": "2026-06-22",
+    "due": "2026-07-22",
+    "open": "1642.87"
+   },
+   {
+    "kind": "bill",
+    "number": "0630-7741",
+    "name": "Prairie Fleet Card",
+    "date": "2026-06-30",
+    "due": "2026-07-15",
+    "open": "1108.53"
+   },
+   {
+    "kind": "bill",
+    "number": "U-88412",
+    "name": "Prairie Uniform Service",
+    "date": "2026-06-26",
+    "due": "2026-07-26",
+    "open": "112.36"
+   },
+   {
+    "kind": "bill",
+    "number": "R-55120",
+    "name": "Will County Equipment Rental",
+    "date": "2026-06-05",
+    "due": "2026-07-05",
+    "open": "465.00"
+   }
+  ]
+ },
+ "sales_tax": [
+  {
+   "agency": "Illinois Department of Revenue",
+   "owed": "1187.34"
+  }
+ ],
+ "inventory": {
+  "rows": [
+   {
+    "item": "Breaker 20A 1P",
+    "on_hand": "42",
+    "value": "353.47"
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "on_hand": "18",
+    "value": "741.24"
+   },
+   {
+    "item": "EV Charger 48A",
+    "on_hand": "2",
+    "value": "1148.00"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "on_hand": "36",
+    "value": "643.11"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "on_hand": "48",
+    "value": "557.28"
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "on_hand": "14",
+    "value": "543.06"
+   },
+   {
+    "item": "Surge Protector",
+    "on_hand": "5",
+    "value": "641.95"
+   },
+   {
+    "item": "Wire 12/2 NM 250ft",
+    "on_hand": "6",
+    "value": "712.14"
+   }
+  ],
+  "value": "5340.25"
+ },
+ "reconciliations": {
+  "Checking": {
+   "statement_date": "2026-06-30",
+   "beginning_balance": null,
+   "ending_balance": "21604.12",
+   "cleared": null,
+   "outstanding": [
+    {
+     "date": "2026-06-25",
+     "posted": "2026-07-02",
+     "amount": "-2906.33",
+     "kind": "check",
+     "number": "4471",
+     "name": "Midland Electric Supply",
+     "description": "CHECK 4471",
+     "event": "cutover"
+    },
+    {
+     "date": "2026-06-29",
+     "posted": "2026-07-06",
+     "amount": "-900.00",
+     "kind": "check",
+     "number": "4472",
+     "name": "Delgado, Ray",
+     "description": "CHECK 4472",
+     "event": "cutover"
+    },
+    {
+     "date": "2026-06-30",
+     "posted": "2026-07-08",
+     "amount": "-108.90",
+     "kind": "check",
+     "number": "4473",
+     "name": "Prairie Uniform Service",
+     "description": "CHECK 4473",
+     "event": "cutover"
+    },
+    {
+     "date": "2026-06-30",
+     "posted": "2026-07-01",
+     "amount": "2315.60",
+     "kind": "deposit",
+     "number": "",
+     "name": "",
+     "description": "DEPOSIT",
+     "event": "cutover"
+    }
+   ],
+   "book_balance": "20004.49",
+   "sign": "amounts are money in: a deposit is positive"
+  },
+  "Savings": {
+   "statement_date": "2026-06-30",
+   "beginning_balance": null,
+   "ending_balance": "18512.63",
+   "cleared": null,
+   "outstanding": [],
+   "book_balance": "18512.63",
+   "sign": "amounts are money in: a deposit is positive"
+  },
+  "Visa Business Card": {
+   "statement_date": "2026-06-30",
+   "beginning_balance": null,
+   "ending_balance": "2486.17",
+   "cleared": null,
+   "outstanding": [
+    {
+     "date": "2026-06-29",
+     "posted": "2026-07-01",
+     "amount": "64.18",
+     "kind": "charge",
+     "number": "",
+     "name": "Plainfield Hardware & Lumber",
+     "description": "PLAINFIELD HARDWARE & LUMBER",
+     "event": "cutover"
+    },
+    {
+     "date": "2026-06-30",
+     "posted": "2026-07-01",
+     "amount": "23.50",
+     "kind": "charge",
+     "number": "",
+     "name": "",
+     "description": "JOLIET DINER",
+     "event": "cutover"
+    }
+   ],
+   "book_balance": "2573.85",
+   "sign": "amounts are what is owed: a charge is positive"
+  }
+ }
+}

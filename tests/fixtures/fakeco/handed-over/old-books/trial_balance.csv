@@ -1,0 +1,58 @@
+"Harbor Electric LLC"
+"Trial Balance"
+"Accrual Basis"
+"As of June 30, 2026"
+,,"Jun 30, 26"
+,,"Debit","Credit"
+"1000 · Checking",,"20,004.49",
+"1010 · Savings",,"18,512.63",
+"1020 · Petty Cash",,"200.00",
+"1100 · Accounts Receivable",,"32,485.43",
+"1200 · Undeposited Funds",,"1,662.00",
+"1300 · Inventory Asset",,"5,340.25",
+"1500 · Vehicles:1510 · Cost",,"61,450.00",
+"1500 · Vehicles:1520 · Accumulated Depreciation",,,"24,580.00"
+"1600 · Tools and Equipment:1610 · Cost",,"14,236.80",
+"1600 · Tools and Equipment:1620 · Accumulated Depreciation",,,"8,960.00"
+"1800 · Security Deposit",,"2,450.00",
+"2000 · Accounts Payable",,,"7,868.81"
+"2050 · Visa Business Card",,,"2,573.85"
+"2100 · Sales Tax Payable",,,"1,187.34"
+"2700 · Van Loan",,,"27,486.19"
+"3200 · Owner's Equity",,,"15,000.00"
+"3300 · Owner's Draw",,"24,000.00",
+"3900 · Retained Earnings",,,"28,489.41"
+"4100 · Service Income",,,"58,417.50"
+"4200 · Installation Income",,,"151,236.40"
+"4300 · Materials Income",,,"38,915.27"
+"4400 · Permit Income",,,"1,965.00"
+"4900 · Sales Discounts",,"1,284.36",
+"5000 · Cost of Goods Sold",,"21,843.12",
+"5050 · Inventory Adjustments",,"112.40",
+"5100 · Job Materials",,"36,507.84",
+"5200 · Subcontractors",,"9,850.00",
+"5300 · Equipment Rental",,"2,215.60",
+"5400 · Permits",,"1,965.00",
+"5900 · Purchase Discounts",,,"1,163.27"
+"6000 · Advertising",,"2,947.35",
+"6100 · Bank Service Charges",,"104.50",
+"6150 · Dues and Subscriptions",,"1,062.00",
+"6200 · Insurance:6210 · General Liability",,"5,412.00",
+"6200 · Insurance:6220 · Workers Compensation",,"6,330.00",
+"6300 · Office Supplies",,"812.47",
+"6400 · Professional Fees",,"1,850.00",
+"6500 · Rent",,"14,700.00",
+"6600 · Repairs and Maintenance",,"643.18",
+"6650 · Small Tools and Equipment",,"2,318.66",
+"6700 · Utilities:6710 · Gas and Electric",,"2,148.33",
+"6700 · Utilities:6720 · Telephone and Internet",,"1,139.94",
+"6800 · Payroll Expenses:6810 · Wages",,"58,353.75",
+"6800 · Payroll Expenses:6820 · Payroll Taxes",,"5,480.66",
+"6800 · Payroll Expenses:6830 · Payroll Service Fees",,"591.00",
+"6900 · Vehicle Expense:6910 · Fuel",,"6,215.40",
+"6900 · Vehicle Expense:6920 · Repairs",,"1,873.25",
+"6950 · Meals",,"486.20",
+"6960 · Uniforms",,"674.16",
+"8100 · Interest Income",,,"32.61"
+"9100 · Interest Expense",,"612.88",
+"TOTAL",,"367,875.65","367,875.65"

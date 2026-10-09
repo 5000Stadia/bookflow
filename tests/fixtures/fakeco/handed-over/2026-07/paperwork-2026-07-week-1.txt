@@ -1,0 +1,66 @@
+Harbor Electric paperwork, week 1: Jul 1 - Jul 5, 2026
+======================================================
+From Mike. Everything from July 1 to July 5: invoices, checks, bills, card receipts. Card receipts are on the Visa unless I say otherwise.
+
+We stopped using QuickBooks on June 30. The exports and the June reconciliation reports are in the old-books folder. The June statements ended at: checking $21,604.12, savings $18,512.63, Visa $2,486.17.
+
+INVOICES AND SALES
+- Invoice 2387, Wed 7/1, Ridgeline Realty Management:Unit Turnovers (Net 30, due 7/31)
+    Labor 3 hr @ 105.00 = 315.00  Unit 3B make-ready
+    LED Wafer Light 6in 6 @ 28.00 = 168.00
+    GFCI Receptacle 20A 2 @ 32.50 = 65.00
+    Smoke/CO Detector 2 @ 69.00 = 138.00
+    Sales tax 8.75% on 371.00 = 32.46
+    Total 718.46
+    Unit 3B turnover for Ridgeline: 3 hrs, 6 wafer lights, 2 GFCIs, 2 smoke/COs from stock.
+- Invoice 2388, Thu 7/2, Okafor, Chidi (Due on receipt)
+    Service Call 1 @ 145.00 = 145.00  Dead outlets, kitchen
+    Additional Hour 1 hr @ 95.00 = 95.00
+    GFCI Receptacle 20A 3 @ 32.50 = 97.50
+    Sales tax 8.75% on 97.50 = 8.53
+    Total 346.03
+    Okafor service call, paid on the spot.
+- Invoice 2389, Thu 7/2, Dubois, Marc (Net 15, due 7/17)
+    Labor 4 hr @ 105.00 = 420.00  Basement circuits
+    Materials = 136.42  Box, cable, fittings
+    Breaker 20A 1P 2 @ 14.95 = 29.90
+    Sales tax 8.75% on 166.32 = 14.55
+    Total 600.87
+    Marc Dubois, basement circuits (Net 15).
+- Invoice 2390, Fri 7/3, Lindqvist, Erik (Due on receipt)
+    EV Charger 48A 1 @ 899.00 = 899.00  Charger only; install to be scheduled
+    Sales tax 8.75% on 899.00 = 78.66
+    Total 977.66
+    Erik Lindqvist paid for an EV charger up front so we'd hold one for him; install to be scheduled.
+
+MONEY IN
+- Wed 7/1: Hendricks, Tom, check #1182, $486.93 for 2379. Tom Hendricks paid invoice 2379.
+- Wed 7/1: Kowalski, Janet, check #3317, $318.27 for 2370. Janet Kowalski paid 2370.
+- Thu 7/2: Okafor, Chidi, check #208, $346.03 for 2388. Chidi Okafor paid by check on site.
+
+DEPOSITS
+- Wed 7/1: deposited Schultz, Gary #2207 412.87, Nguyen, Linh #1043 1,249.13. Deposit total $1,662.00. Deposited the two checks that came in Tuesday after the bank closed (Gary Schultz #2207 and Linh Nguyen #1043). Both were already entered in QuickBooks before the switch.
+- Thu 7/2: deposited Hendricks, Tom #1182 486.93, Kowalski, Janet #3317 318.27. Deposit total $805.20. Deposited Hendricks and Kowalski.
+
+BILLS THAT CAME IN
+- Midland Electric Supply bill S1189377.001, dated 7/2, 2% 10 Net 30, due 8/1: $2,964.18
+    Breaker 20A 1P 24 @ 8.62 = 206.88
+    Breaker 20A AFCI 12 @ 42.10 = 505.20
+    GFCI Receptacle 20A 24 @ 18.15 = 435.60
+    EV Charger 48A 2 @ 579.00 = 1,158.00
+    Wire 12/2 NM 250ft 4 @ 121.45 = 485.80
+    Boxes, connectors, staples: 172.70  (job: Van Dyke Construction:Lot 14 Prairie Crossing)
+    Midland stock order plus a few things for Lot 14.
+
+PAID (checks, online and autopay)
+- Wed 7/1: check 4474 to Joliet Industrial Partners LLC $2,450.00 (July rent, 1840 Plainfield Rd). July rent check to Joliet Industrial Partners.
+- Wed 7/1: paid Midland Electric Supply $3,713.85 by check 4475: S1187420.001 2,103.84, S1188105.001 1,610.01 (took the 32.86 discount). Paid Midland: S1187420.001 (less the credit) and S1188105.001, taking the 2% on that one since it's inside 10 days.
+- Thu 7/2: paid Delgado, Ray $1,400.00 by check 4476: 0627 1,400.00. Paid Ray for the Lot 14 work (his invoice 0627).
+
+VISA CARD
+- Wed 7/1: SearchLocal Ads $250.00 - July search ads. SearchLocal ads, monthly.
+- Thu 7/2: Plainfield Hardware & Lumber $47.83 - Fittings, Dubois job. Plainfield Hardware, fittings for the Dubois job.
+- Fri 7/3: FieldPro Software $89.00 - FieldPro monthly. FieldPro subscription.
+
+OTHER
+- Wed 7/1: Used the Midland credit for the returned breakers (CM S1186990) against S1187420.001.

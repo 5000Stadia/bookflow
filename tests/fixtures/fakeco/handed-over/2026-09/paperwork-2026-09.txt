@@ -1,0 +1,214 @@
+Harbor Electric paperwork, September 2026
+=========================================
+From Mike. The whole month in one go this time, shorter. Same as always: card receipts are on the Visa.
+
+INVOICES AND SALES
+- Invoice 2420, Wed 9/2, Prairie Grain Co-op (Net 30, due 10/2)
+    Labor 4 hr @ 105.00 = 420.00  Ceiling fan install
+    Materials = 151.69  Conduit and fittings
+    Sales tax 8.75% on 151.69 = 13.27
+    Total 584.96
+    Invoiced Prairie Grain Co-op.
+- Invoice 2421, Thu 9/3, Morales, Ana (Net 15, due 9/18)
+    Labor 3 hr @ 105.00 = 315.00  Add a circuit
+    Breaker 20A 1P 2 @ 14.95 = 29.90
+    Materials = 90.71  Conduit and fittings
+    Sales tax 8.75% on 120.61 = 10.55
+    Total 446.16
+    Invoiced Ana Morales.
+- Invoice 2422, Fri 9/4, Lindqvist, Erik (Due on receipt)
+    Labor 8 hr @ 105.00 = 840.00  Unit make-ready
+    Apprentice Labor 8 hr @ 65.00 = 520.00
+    LED Wafer Light 6in 6 @ 28.00 = 168.00
+    Materials = 68.22  Wire, boxes, fittings
+    Sales tax 8.75% on 236.22 = 20.67
+    Total 1,616.89
+    Invoiced Erik Lindqvist.
+- Invoice 2423, Wed 9/9, Nguyen, Linh (Due on receipt)
+    Labor 8 hr @ 105.00 = 840.00  Subpanel install
+    Apprentice Labor 8 hr @ 65.00 = 520.00
+    LED Wafer Light 6in 6 @ 28.00 = 168.00
+    Materials = 517.24  Fixtures and trim
+    Sales tax 8.75% on 685.24 = 59.96
+    Total 2,105.20
+    Invoiced Linh Nguyen.
+- Invoice 2424, Thu 9/10, Lindqvist, Erik (Due on receipt)
+    Labor 12 hr @ 105.00 = 1,260.00  Lighting retrofit
+    Apprentice Labor 12 hr @ 65.00 = 780.00
+    LED Wafer Light 6in 4 @ 28.00 = 112.00
+    Materials = 103.23  Conduit and fittings
+    Sales tax 8.75% on 215.23 = 18.83
+    Total 2,274.06
+    Invoiced Erik Lindqvist.
+- Invoice 2425, Fri 9/11, Mendoza, Rosa (Due on receipt)
+    Service Call 1 @ 145.00 = 145.00  Flickering lights
+    Breaker 20A 1P 2 @ 14.95 = 29.90
+    Breaker 20A AFCI 4 @ 64.00 = 256.00
+    Materials = 551.20  Devices and plates
+    Sales tax 8.75% on 837.10 = 73.25
+    Total 1,055.35
+    Invoiced Rosa Mendoza.
+- Invoice 2426, Tue 9/15, Lakeview Property Management:Cass Street Apartments (1% 10 Net 30, due 10/15)
+    Labor 3 hr @ 105.00 = 315.00  Fixture swap
+    GFCI Receptacle 20A 4 @ 32.50 = 130.00
+    LED Wafer Light 6in 3 @ 28.00 = 84.00
+    Materials = 213.69  Devices and plates
+    Sales tax 8.75% on 427.69 = 37.42
+    Total 780.11
+    Invoiced Lakeview Property Management (Cass Street Apartments).
+- Invoice 2427, Wed 9/16, Thompson, Greg (Net 15, due 10/1)
+    Service Call 1 @ 145.00 = 145.00  Bathroom fan wiring
+    Additional Hour 2 hr @ 95.00 = 190.00
+    Surge Protector 1 @ 245.00 = 245.00
+    Sales tax 8.75% on 245.00 = 21.44
+    Total 601.44
+    Invoiced Greg Thompson.
+- Invoice 2428, Thu 9/17, Van Dyke Construction:Lot 14 Prairie Crossing (Net 30, due 10/17)  (no sales tax: contractor work)
+    Labor 2 hr @ 105.00 = 210.00  Fixture swap
+    Breaker 20A 1P 6 @ 14.95 = 89.70
+    Materials = 86.99  Fixtures and trim
+    Total 386.69
+    Invoiced Van Dyke Construction (Lot 14 Prairie Crossing).
+- Invoice 2429, Fri 9/18, Mendoza, Rosa (Due on receipt)
+    Service Call 1 @ 145.00 = 145.00  Doorbell transformer
+    Additional Hour 2 hr @ 95.00 = 190.00
+    Total 335.00
+    Invoiced Rosa Mendoza.
+- Invoice 2430, Tue 9/22, Okafor, Chidi (Due on receipt)
+    Service Call 1 @ 145.00 = 145.00  No power to garage
+    GFCI Receptacle 20A 3 @ 32.50 = 97.50
+    LED Wafer Light 6in 2 @ 28.00 = 56.00
+    Materials = 112.17  Wire, boxes, fittings
+    Sales tax 8.75% on 265.67 = 23.25
+    Total 433.92
+    Invoiced Chidi Okafor.
+- Invoice 2431, Wed 9/23, Abernathy, Ruth (Due on receipt)
+    Labor 6 hr @ 105.00 = 630.00  Kitchen remodel circuits
+    Apprentice Labor 6 hr @ 65.00 = 390.00
+    Materials = 574.59  Devices and plates
+    Sales tax 8.75% on 574.59 = 50.28
+    Total 1,644.87
+    Invoiced Ruth Abernathy.
+- Invoice 2432, Thu 9/24, Lakeview Property Management:Cass Street Apartments (1% 10 Net 30, due 10/24)
+    Labor 4 hr @ 105.00 = 420.00  Add a circuit
+    Breaker 20A AFCI 6 @ 64.00 = 384.00
+    Materials = 312.42  Fixtures and trim
+    Sales tax 8.75% on 696.42 = 60.94
+    Total 1,177.36
+    Invoiced Lakeview Property Management (Cass Street Apartments).
+- Invoice 2433, Mon 9/28, St. Casimir Parish (Net 30, due 10/28)  (no sales tax: exempt, E9921-4410-06)
+    Labor 3 hr @ 105.00 = 315.00  Ceiling fan install
+    Materials = 510.57  Devices and plates
+    Total 825.57
+    Invoiced St. Casimir Parish.
+- Invoice 2434, Tue 9/29, Bella Notte Trattoria (Net 30, due 10/29)
+    Labor 16 hr @ 105.00 = 1,680.00  Basement finish wiring
+    Apprentice Labor 16 hr @ 65.00 = 1,040.00
+    Total 2,720.00
+    Invoiced Bella Notte Trattoria.
+- Invoice 2435, Wed 9/30, Bella Notte Trattoria (Net 30, due 10/30)
+    Labor 2 hr @ 105.00 = 210.00  Exterior outlet
+    LED Wafer Light 6in 2 @ 28.00 = 56.00
+    Materials = 530.62  Fixtures and trim
+    Sales tax 8.75% on 586.62 = 51.33
+    Total 847.95
+    Invoiced Bella Notte Trattoria.
+
+MONEY IN
+- Fri 9/4: Lindqvist, Erik, check #7833, $1,616.89 for 2422. Erik Lindqvist paid 2422.
+- Mon 9/14: Prairie Grain Co-op, check #24059, $420.00 for 2410. Prairie Grain Co-op paid 2410.
+- Mon 9/14: Cedar Ridge Family Dental, check #19519, $1,176.16 for 2411. Cedar Ridge Family Dental paid 2411.
+- Mon 9/14: Heritage Medical Suites, check #29543, $1,639.49 for 2414. Heritage Medical Suites paid 2414.
+- Mon 9/14: Lindqvist, Erik, check #3102, $2,274.06 for 2424. Erik Lindqvist paid 2424.
+- Mon 9/14: Mendoza, Rosa, check #7050, $1,055.35 for 2425. Rosa Mendoza paid 2425.
+- Tue 9/15: Nguyen, Linh, check #15694, $2,105.20 for 2423. Linh Nguyen paid 2423.
+- Wed 9/16: Route 59 Auto Care, check #32630, $1,125.58 for 2412. Route 59 Auto Care paid 2412.
+- Thu 9/17: Morales, Ana, check #26440, $446.16 for 2421. Ana Morales paid 2421.
+- Mon 9/21: Van Dyke Construction, check #20782, $4,740.00 for 2417. Van Dyke Construction paid 2417.
+- Mon 9/21: Mendoza, Rosa, check #17937, $335.00 for 2429. Rosa Mendoza paid 2429.
+- Tue 9/22: Bella Notte Trattoria, check #38269, $916.45 for 2416. Bella Notte Trattoria paid 2416.
+- Wed 9/23: Okafor, Chidi, check #12464, $433.92 for 2430. Chidi Okafor paid 2430.
+- Mon 9/28: Thompson, Greg, check #15816, $601.44 for 2427. Greg Thompson paid 2427.
+- Mon 9/28: Abernathy, Ruth, check #37897, $1,644.87 for 2431. Ruth Abernathy paid 2431.
+
+DEPOSITS
+- Fri 9/4: deposited Lindqvist, Erik #7833 1,616.89. Deposit total $1,616.89. Deposited the checks.
+- Tue 9/15: deposited Prairie Grain Co-op #24059 420.00, Cedar Ridge Family Dental #19519 1,176.16, Heritage Medical Suites #29543 1,639.49, Lindqvist, Erik #3102 2,274.06, Mendoza, Rosa #7050 1,055.35, Nguyen, Linh #15694 2,105.20. Deposit total $8,670.26. Deposited the checks.
+- Fri 9/18: deposited Route 59 Auto Care #32630 1,125.58, Morales, Ana #26440 446.16. Deposit total $1,571.74. Deposited the checks.
+- Tue 9/22: deposited Van Dyke Construction #20782 4,740.00, Mendoza, Rosa #17937 335.00, Bella Notte Trattoria #38269 916.45. Deposit total $5,991.45. Deposited the checks.
+- Fri 9/25: deposited Okafor, Chidi #12464 433.92. Deposit total $433.92. Deposited the checks.
+- Tue 9/29: deposited Thompson, Greg #15816 601.44, Abernathy, Ruth #37897 1,644.87. Deposit total $2,246.31. Deposited the checks.
+
+BILLS THAT CAME IN
+- Midland Electric Supply bill S1201007.001, dated 9/1, 2% 10 Net 30, due 10/1: $1,845.73
+    Breaker 20A AFCI 16 @ 42.10 = 673.60
+    LED Wafer Light 6in 48 @ 11.85 = 568.80
+    Job materials: 603.33  (job: Lakeview Property Management:Hickory Creek Townhomes)
+    Midland bill (stock order and job materials).
+- Midland Electric Supply bill S1201056.001, dated 9/8, 2% 10 Net 30, due 10/8: $1,259.79
+    Job materials: 1,259.79  (job: Lakeview Property Management:Cass Street Apartments)
+    Midland bill.
+- Delgado, Ray bill 0911, dated 9/11, Net 15, due 9/26: $980.00
+    Trenching, Hickory Creek pole lights: 980.00  (job: Lakeview Property Management:Hickory Creek Townhomes)
+    Ray's invoice 0911.
+- Lund & Ostrowski CPAs bill 2026-0815, dated 9/15, Net 30, due 10/15: $425.00
+    Q3 estimate and bookkeeping review: 425.00
+    Lund & Ostrowski bill.
+- Midland Electric Supply bill S1201105.001, dated 9/15, 2% 10 Net 30, due 10/15: $782.51
+    Job materials: 782.51  (job: Ridgeline Realty Management:205 N Chicago St)
+    Midland bill.
+- Illinois Valley Gas & Electric bill 6619-0442 SEP, dated 9/21, Net 21, due 10/12: $441.28
+    Shop, September: 441.28
+    Gas & electric bill.
+- Midland Electric Supply bill S1201154.001, dated 9/22, 2% 10 Net 30, due 10/22: $245.18
+    Job materials: 245.18  (job: Ridgeline Realty Management:205 N Chicago St)
+    Midland bill.
+- Prairie Uniform Service bill U-90529, dated 9/24, Net 30, due 10/24: $112.36
+    September service: 112.36
+    Uniform bill.
+- Midland Electric Supply bill S1201203.001, dated 9/29, 2% 10 Net 30, due 10/29: $1,080.51
+    Job materials: 1,080.51  (job: Lakeview Property Management:Cass Street Apartments)
+    Midland bill.
+- Prairie Fleet Card bill 0930-7741, dated 9/30, Net 15, due 10/15: $1,294.84
+    September fuel: 1,294.84
+    Fleet card statement for September fuel.
+
+PAID (checks, online and autopay)
+- Tue 9/1: paid Midland Electric Supply $1,834.92 by check 4491: S1200028.001 1,834.92. Paid Midland Electric Supply S1200028.001.
+- Tue 9/1: check 4492 to Joliet Industrial Partners LLC $2,450.00 (September rent). September rent check.
+- Thu 9/3: paid Delgado, Ray $1,325.00 by check 4493: 0812 1,325.00. Paid Delgado, Ray 0812.
+- Tue 9/8: paid Midland Electric Supply $631.56 by check 4494: S1200077.001 631.56. Paid Midland Electric Supply S1200077.001.
+- Tue 9/8: Midwest Trades Insurance Agency $1,957.00 came out of checking. Insurance installment (general liability 902.00, workers comp 1,055.00).
+- Wed 9/9: paid Illinois Valley Gas & Electric $428.97 by online/autopay: 6619-0442 AUG 428.97. Gas & electric autopay took 6619-0442 AUG.
+- Fri 9/11: paid Prairie Fleet Card $1,148.95 by online/autopay: 0831-7741 1,148.95. Paid the fuel card bill 0831-7741 online.
+- Mon 9/14: paid Midland Electric Supply $162.39 by check 4495: S1200126.001 162.39. Paid Midland Electric Supply S1200126.001.
+- Mon 9/14: Harbor, Mike $2,000.00 came out of checking (Draw). $2,000 to my personal account.
+- Tue 9/15: Cedar Prairie Bank $689.52 came out of checking. Van loan payment 689.52 (principal 595.49, interest 94.03).
+- Mon 9/21: paid Prairie Uniform Service $112.36 by check 4496: U-89818 112.36. Paid Prairie Uniform Service U-89818.
+- Mon 9/21: paid Midland Electric Supply $743.19 by check 4497: S1200175.001 743.19. Paid Midland Electric Supply S1200175.001.
+- Mon 9/21: Paywell Payroll Services $98.50 came out of checking (September service fee). Paywell's monthly fee.
+- Mon 9/21: Filed and paid August's sales tax, 354.49.
+- Thu 9/24: Paid the August Visa statement in full, 1061.43. ($1,061.43, Checking to Visa Business Card)
+- Wed 9/30: Harbor, Mike $2,000.00 came out of checking (Draw). $2,000 to my personal account.
+
+VISA CARD
+- Tue 9/1: SearchLocal Ads $250.00 - September search ads. SearchLocal ads.
+- Wed 9/2: Plainfield Hardware & Lumber $82.10 - Job Materials. Card: Plainfield Hardware & Lumber, job materials.
+- Thu 9/3: FieldPro Software $89.00 - FieldPro monthly. FieldPro subscription.
+- Tue 9/8: Prairie Office Supply $74.06 - Office Supplies. Card: Prairie Office Supply, office supplies.
+- Fri 9/11: Joliet Diner $42.58 - Meals. Card: Joliet Diner, meals.
+- Sat 9/12: Valley Broadband $189.99 - Internet and phones, September. Valley Broadband autopay on the card.
+- Wed 9/16: Prairie Office Supply $37.97 - Office Supplies. Card: Prairie Office Supply, office supplies.
+- Mon 9/21: Prairie Office Supply $41.71 - Office Supplies. Card: Prairie Office Supply, office supplies.
+- Thu 9/24: Prairie Office Supply $64.61 - Office Supplies. Card: Prairie Office Supply, office supplies.
+- Tue 9/29: Prairie Office Supply $28.46 - Office Supplies. Card: Prairie Office Supply, office supplies.
+
+PAYROLL
+- Paywell payroll for pay date 9/4, taken from checking Thu 9/3: gross wages 4,375.50, employee taxes withheld 915.77, employer taxes 334.72. Two debits: net pay 3,459.73 and taxes 1,250.49.
+    Luis Ortega: 80 hrs + 2 OT, gross 2,863.50, net 2,252.89
+    Kayla Brandt: 72 hrs, gross 1,512.00, net 1,206.84
+    Payroll for Friday 09/04.
+- Paywell payroll for pay date 9/18, taken from checking Thu 9/17: gross wages 4,750.50, employee taxes withheld 1,000.53, employer taxes 363.41. Two debits: net pay 3,749.97 and taxes 1,363.94.
+    Luis Ortega: 80 hrs + 6 OT, gross 3,070.50, net 2,413.11
+    Kayla Brandt: 80 hrs, gross 1,680.00, net 1,336.86
+    Payroll for Friday 09/18.

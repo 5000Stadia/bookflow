@@ -1,0 +1,7180 @@
+[
+ {
+  "id": "J01",
+  "kind": "deposit",
+  "date": "2026-07-01",
+  "cleared": "2026-07-01",
+  "undeposited": [
+   "Schultz, Gary",
+   "Nguyen, Linh"
+  ],
+  "note": "Deposited the two checks that came in Tuesday after the bank closed (Gary Schultz #2207 and Linh Nguyen #1043). Both were already entered in QuickBooks before the switch.",
+  "total": "1662.00",
+  "items": [
+   {
+    "source": "uf:Schultz, Gary",
+    "amount": "412.87"
+   },
+   {
+    "source": "uf:Nguyen, Linh",
+    "amount": "1249.13"
+   }
+  ]
+ },
+ {
+  "id": "J02",
+  "kind": "check",
+  "date": "2026-07-01",
+  "number": "4474",
+  "payee": "Joliet Industrial Partners LLC",
+  "lines": [
+   [
+    "Rent",
+    "2450.00",
+    "July rent, 1840 Plainfield Rd"
+   ]
+  ],
+  "cleared": "2026-07-06",
+  "note": "July rent check to Joliet Industrial Partners.",
+  "total": "2450.00"
+ },
+ {
+  "id": "J03",
+  "kind": "vendor_credit_apply",
+  "date": "2026-07-01",
+  "vendor": "Midland Electric Supply",
+  "credit": "CM S1186990",
+  "bill": "S1187420.001",
+  "amount": "214.60",
+  "note": "Used the Midland credit for the returned breakers (CM S1186990) against S1187420.001."
+ },
+ {
+  "id": "J04",
+  "kind": "bill_payment",
+  "date": "2026-07-01",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4475",
+  "bills": [
+   {
+    "bill": "S1187420.001",
+    "amount": "2103.84",
+    "discount": "0.00"
+   },
+   {
+    "bill": "S1188105.001",
+    "amount": "1610.01",
+    "discount": "32.86"
+   }
+  ],
+  "cleared": "2026-07-07",
+  "note": "Paid Midland: S1187420.001 (less the credit) and S1188105.001, taking the 2% on that one since it's inside 10 days.",
+  "total": "3713.85",
+  "discount": "32.86"
+ },
+ {
+  "id": "J05",
+  "kind": "card_charge",
+  "date": "2026-07-01",
+  "payee": "SearchLocal Ads",
+  "lines": [
+   [
+    "Advertising",
+    "250.00",
+    "July search ads"
+   ]
+  ],
+  "cleared": "2026-07-02",
+  "desc": "SEARCHLOCAL ADS",
+  "category": "Professional Services",
+  "note": "SearchLocal ads, monthly.",
+  "total": "250.00"
+ },
+ {
+  "id": "J06",
+  "kind": "payment",
+  "date": "2026-07-01",
+  "customer": "Hendricks, Tom",
+  "ref": "1182",
+  "method": "Check",
+  "apply": [
+   [
+    "2379",
+    null
+   ]
+  ],
+  "note": "Tom Hendricks paid invoice 2379.",
+  "amount": "486.93",
+  "applied": [
+   {
+    "invoice": "2379",
+    "amount": "486.93",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J07",
+  "kind": "payment",
+  "date": "2026-07-01",
+  "customer": "Kowalski, Janet",
+  "ref": "3317",
+  "method": "Check",
+  "apply": [
+   [
+    "2370",
+    null
+   ]
+  ],
+  "note": "Janet Kowalski paid 2370.",
+  "amount": "318.27",
+  "applied": [
+   {
+    "invoice": "2370",
+    "amount": "318.27",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J08",
+  "kind": "invoice",
+  "date": "2026-07-01",
+  "number": "2387",
+  "customer": "Ridgeline Realty Management:Unit Turnovers",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Unit 3B make-ready",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "6",
+    "rate": "28.00",
+    "amount": "168.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "69.66"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "2",
+    "rate": "32.50",
+    "amount": "65.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.73"
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "2",
+    "rate": "69.00",
+    "amount": "138.00",
+    "desc": "Hardwired smoke/CO combination alarm",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "77.58"
+   }
+  ],
+  "note": "Unit 3B turnover for Ridgeline: 3 hrs, 6 wafer lights, 2 GFCIs, 2 smoke/COs from stock.",
+  "taxable": "371.00",
+  "tax": "32.46",
+  "total": "718.46",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "6",
+    "69.66"
+   ],
+   "GFCI Receptacle 20A": [
+    "2",
+    "35.73"
+   ],
+   "Smoke/CO Detector": [
+    "2",
+    "77.58"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-07-31"
+ },
+ {
+  "id": "J09",
+  "kind": "deposit",
+  "date": "2026-07-02",
+  "cleared": "2026-07-02",
+  "payments": [
+   "J06",
+   "J07"
+  ],
+  "note": "Deposited Hendricks and Kowalski.",
+  "total": "805.20",
+  "items": [
+   {
+    "source": "J06",
+    "amount": "486.93"
+   },
+   {
+    "source": "J07",
+    "amount": "318.27"
+   }
+  ]
+ },
+ {
+  "id": "J10",
+  "kind": "bill_payment",
+  "date": "2026-07-02",
+  "vendor": "Delgado, Ray",
+  "method": "Check",
+  "number": "4476",
+  "bills": [
+   {
+    "bill": "0627",
+    "amount": "1400.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-08",
+  "note": "Paid Ray for the Lot 14 work (his invoice 0627).",
+  "total": "1400.00",
+  "discount": "0.00"
+ },
+ {
+  "id": "J11",
+  "kind": "bill",
+  "date": "2026-07-02",
+  "vendor": "Midland Electric Supply",
+  "number": "S1189377.001",
+  "items": [
+   [
+    "Breaker 20A 1P",
+    "24",
+    "8.62",
+    null
+   ],
+   [
+    "Breaker 20A AFCI",
+    "12",
+    "42.10",
+    null
+   ],
+   [
+    "GFCI Receptacle 20A",
+    "24",
+    "18.15",
+    null
+   ],
+   [
+    "EV Charger 48A",
+    "2",
+    "579.00",
+    null
+   ],
+   [
+    "Wire 12/2 NM 250ft",
+    "4",
+    "121.45",
+    null
+   ]
+  ],
+  "expenses": [
+   [
+    "Job Materials",
+    "172.70",
+    "Boxes, connectors, staples",
+    "Van Dyke Construction:Lot 14 Prairie Crossing"
+   ]
+  ],
+  "note": "Midland stock order plus a few things for Lot 14.",
+  "total": "2964.18",
+  "terms": "2% 10 Net 30",
+  "due": "2026-08-01",
+  "lines": [
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "24",
+    "cost": "8.62",
+    "amount": "206.88",
+    "job": null
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "12",
+    "cost": "42.10",
+    "amount": "505.20",
+    "job": null
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "24",
+    "cost": "18.15",
+    "amount": "435.60",
+    "job": null
+   },
+   {
+    "item": "EV Charger 48A",
+    "quantity": "2",
+    "cost": "579.00",
+    "amount": "1158.00",
+    "job": null
+   },
+   {
+    "item": "Wire 12/2 NM 250ft",
+    "quantity": "4",
+    "cost": "121.45",
+    "amount": "485.80",
+    "job": null
+   },
+   {
+    "account": "Job Materials",
+    "amount": "172.70",
+    "memo": "Boxes, connectors, staples",
+    "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
+   }
+  ]
+ },
+ {
+  "id": "J12",
+  "kind": "card_charge",
+  "date": "2026-07-02",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Job Materials",
+    "47.83",
+    "Fittings, Dubois job"
+   ]
+  ],
+  "cleared": "2026-07-03",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Plainfield Hardware, fittings for the Dubois job.",
+  "total": "47.83"
+ },
+ {
+  "id": "J13",
+  "kind": "invoice",
+  "date": "2026-07-02",
+  "number": "2388",
+  "customer": "Okafor, Chidi",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Dead outlets, kitchen",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "3",
+    "rate": "32.50",
+    "amount": "97.50",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "53.95"
+   }
+  ],
+  "note": "Okafor service call, paid on the spot.",
+  "taxable": "97.50",
+  "tax": "8.53",
+  "total": "346.03",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "3",
+    "53.95"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-02"
+ },
+ {
+  "id": "J14",
+  "kind": "payment",
+  "date": "2026-07-02",
+  "customer": "Okafor, Chidi",
+  "ref": "208",
+  "method": "Check",
+  "apply": [
+   [
+    "2388",
+    null
+   ]
+  ],
+  "note": "Chidi Okafor paid by check on site.",
+  "amount": "346.03",
+  "applied": [
+   {
+    "invoice": "2388",
+    "amount": "346.03",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J15",
+  "kind": "invoice",
+  "date": "2026-07-02",
+  "number": "2389",
+  "customer": "Dubois, Marc",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "4",
+    "rate": "105.00",
+    "amount": "420.00",
+    "desc": "Basement circuits",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "136.42",
+    "amount": "136.42",
+    "desc": "Box, cable, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "2",
+    "rate": "14.95",
+    "amount": "29.90",
+    "desc": "20 amp single-pole breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "16.98"
+   }
+  ],
+  "note": "Marc Dubois, basement circuits (Net 15).",
+  "taxable": "166.32",
+  "tax": "14.55",
+  "total": "600.87",
+  "issued": {
+   "Breaker 20A 1P": [
+    "2",
+    "16.98"
+   ]
+  },
+  "terms": "Net 15",
+  "due": "2026-07-17"
+ },
+ {
+  "id": "J16",
+  "kind": "invoice",
+  "date": "2026-07-03",
+  "number": "2390",
+  "customer": "Lindqvist, Erik",
+  "lines": [
+   {
+    "item": "EV Charger 48A",
+    "quantity": "1",
+    "rate": "899.00",
+    "amount": "899.00",
+    "desc": "Charger only; install to be scheduled",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "576.50"
+   }
+  ],
+  "note": "Erik Lindqvist paid for an EV charger up front so we'd hold one for him; install to be scheduled.",
+  "taxable": "899.00",
+  "tax": "78.66",
+  "total": "977.66",
+  "issued": {
+   "EV Charger 48A": [
+    "1",
+    "576.50"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-03"
+ },
+ {
+  "id": "J17",
+  "kind": "card_charge",
+  "date": "2026-07-03",
+  "payee": "FieldPro Software",
+  "lines": [
+   [
+    "Dues and Subscriptions",
+    "89.00",
+    "FieldPro monthly"
+   ]
+  ],
+  "cleared": "2026-07-06",
+  "desc": "FIELDPRO SOFTWARE",
+  "category": "Bills & Utilities",
+  "note": "FieldPro subscription.",
+  "total": "89.00"
+ },
+ {
+  "id": "J18",
+  "kind": "payment",
+  "date": "2026-07-06",
+  "customer": "Lindqvist, Erik",
+  "ref": "4410",
+  "method": "Check",
+  "apply": [
+   [
+    "2390",
+    null
+   ]
+  ],
+  "note": "Erik Lindqvist's check for the charger.",
+  "amount": "977.66",
+  "applied": [
+   {
+    "invoice": "2390",
+    "amount": "977.66",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J19",
+  "kind": "payment",
+  "date": "2026-07-06",
+  "customer": "Abernathy, Ruth",
+  "ref": "771",
+  "method": "Check",
+  "apply": [
+   [
+    "2384",
+    null
+   ]
+  ],
+  "note": "Ruth Abernathy mailed a check for 2384.",
+  "amount": "274.05",
+  "applied": [
+   {
+    "invoice": "2384",
+    "amount": "274.05",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J20",
+  "kind": "deposit",
+  "date": "2026-07-06",
+  "cleared": "2026-07-06",
+  "payments": [
+   "J14",
+   "J18",
+   "J19"
+  ],
+  "note": "Deposited Okafor, Lindqvist and Abernathy.",
+  "total": "1597.74",
+  "items": [
+   {
+    "source": "J14",
+    "amount": "346.03"
+   },
+   {
+    "source": "J18",
+    "amount": "977.66"
+   },
+   {
+    "source": "J19",
+    "amount": "274.05"
+   }
+  ]
+ },
+ {
+  "id": "J21",
+  "kind": "check",
+  "date": "2026-07-06",
+  "number": "ACH",
+  "payee": "Midwest Trades Insurance Agency",
+  "lines": [
+   [
+    "Insurance:General Liability",
+    "902.00",
+    "July installment"
+   ],
+   [
+    "Insurance:Workers Compensation",
+    "1055.00",
+    "July installment"
+   ]
+  ],
+  "cleared": "2026-07-06",
+  "desc": "MIDWEST TRADES INS",
+  "memo": "PREMIUM 070626",
+  "trntype": "DEBIT",
+  "note": "Insurance came out (general liability 902.00 and workers comp 1,055.00).",
+  "total": "1957.00"
+ },
+ {
+  "id": "J22",
+  "kind": "card_charge",
+  "date": "2026-07-06",
+  "payee": "City of Joliet",
+  "lines": [
+   [
+    "Permits",
+    "95.00",
+    "Permit, 412 Hickory St panel"
+   ]
+  ],
+  "cleared": "2026-07-07",
+  "desc": "CITY OF JOLIET PERMITS",
+  "category": "Professional Services",
+  "note": "Paid the Kowalski panel permit online with the card, $95.",
+  "total": "95.00"
+ },
+ {
+  "id": "J23",
+  "kind": "bill_payment",
+  "date": "2026-07-07",
+  "vendor": "Will County Equipment Rental",
+  "method": "Check",
+  "number": "4477",
+  "bills": [
+   {
+    "bill": "R-55120",
+    "amount": "465.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-13",
+  "note": "Paid the June lift rental.",
+  "total": "465.00",
+  "discount": "0.00"
+ },
+ {
+  "id": "J24",
+  "kind": "invoice",
+  "date": "2026-07-07",
+  "number": "2391",
+  "customer": "Kowalski, Janet",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "12",
+    "rate": "105.00",
+    "amount": "1260.00",
+    "desc": "200A panel upgrade, 412 Hickory St",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "12",
+    "rate": "65.00",
+    "amount": "780.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "1385.40",
+    "amount": "1385.40",
+    "desc": "200A panel, main breaker, meter hub, grounding",
+    "taxable": true,
+    "account": "Materials Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "8",
+    "rate": "14.95",
+    "amount": "119.60",
+    "desc": "20 amp single-pole breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "67.92"
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "4",
+    "rate": "64.00",
+    "amount": "256.00",
+    "desc": "20 amp combination AFCI breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "166.19"
+   },
+   {
+    "item": "Permit Fee",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "City of Joliet permit",
+    "taxable": false,
+    "account": "Permit Income"
+   }
+  ],
+  "note": "Janet Kowalski's panel upgrade (Net 15).",
+  "taxable": "1761.00",
+  "tax": "154.09",
+  "total": "4050.09",
+  "issued": {
+   "Breaker 20A 1P": [
+    "8",
+    "67.92"
+   ],
+   "Breaker 20A AFCI": [
+    "4",
+    "166.19"
+   ]
+  },
+  "terms": "Net 15",
+  "due": "2026-07-22"
+ },
+ {
+  "id": "J25",
+  "kind": "invoice",
+  "date": "2026-07-07",
+  "number": "2392",
+  "customer": "Route 59 Auto Care",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Shop lighting circuit",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Electrician labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Trip Charge",
+    "quantity": "1",
+    "rate": "49.00",
+    "amount": "49.00",
+    "desc": "Trip charge, outside service area",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "312.60",
+    "amount": "312.60",
+    "desc": "Fixtures, conduit, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   },
+   {
+    "item": "Surge Protector",
+    "quantity": "1",
+    "rate": "245.00",
+    "amount": "245.00",
+    "desc": "Whole-home surge protective device",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "128.39"
+   }
+  ],
+  "note": "Route 59 Auto Care, shop lighting circuit and a surge protector.",
+  "taxable": "557.60",
+  "tax": "48.79",
+  "total": "1115.39",
+  "issued": {
+   "Surge Protector": [
+    "1",
+    "128.39"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-08-06"
+ },
+ {
+  "id": "J26",
+  "kind": "payment",
+  "date": "2026-07-08",
+  "customer": "Lakeview Property Management",
+  "ref": "10442",
+  "method": "Check",
+  "apply": [
+   [
+    "2386",
+    null
+   ],
+   [
+    "2342",
+    null
+   ],
+   [
+    "2377",
+    null
+   ]
+  ],
+  "discounts": [
+   [
+    "2386",
+    "terms"
+   ]
+  ],
+  "note": "Lakeview sent one check for 2386, 2342 and 2377 and took their 1% on 2386.",
+  "amount": "8632.67",
+  "applied": [
+   {
+    "invoice": "2386",
+    "amount": "2127.11",
+    "discount": "21.49"
+   },
+   {
+    "invoice": "2342",
+    "amount": "3875.12",
+    "discount": "0.00"
+   },
+   {
+    "invoice": "2377",
+    "amount": "2630.44",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "21.49"
+ },
+ {
+  "id": "J27",
+  "kind": "bill_payment",
+  "date": "2026-07-08",
+  "vendor": "Lund & Ostrowski CPAs",
+  "method": "Check",
+  "number": "4478",
+  "bills": [
+   {
+    "bill": "2026-0418",
+    "amount": "650.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-13",
+  "note": "Finally paid Lund & Ostrowski's April bill.",
+  "total": "650.00",
+  "discount": "0.00"
+ },
+ {
+  "id": "J28",
+  "kind": "payment",
+  "date": "2026-07-09",
+  "customer": "Van Dyke Construction",
+  "ref": "8840",
+  "method": "Check",
+  "apply": [
+   [
+    "2355",
+    null
+   ]
+  ],
+  "note": "Van Dyke paid the Lot 14 rough-in invoice.",
+  "amount": "6420.00",
+  "applied": [
+   {
+    "invoice": "2355",
+    "amount": "6420.00",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J29",
+  "kind": "deposit",
+  "date": "2026-07-09",
+  "cleared": "2026-07-09",
+  "payments": [
+   "J26",
+   "J28"
+  ],
+  "note": "Deposited Lakeview and Van Dyke.",
+  "total": "15052.67",
+  "items": [
+   {
+    "source": "J26",
+    "amount": "8632.67"
+   },
+   {
+    "source": "J28",
+    "amount": "6420.00"
+   }
+  ]
+ },
+ {
+  "id": "J30",
+  "kind": "payroll",
+  "date": "2026-07-09",
+  "period_end": "2026-07-04",
+  "pay_date": "2026-07-10",
+  "hours": {
+   "Ortega, Luis": [
+    "80",
+    "0"
+   ],
+   "Brandt, Kayla": [
+    "80",
+    "0"
+   ]
+  },
+  "cleared": "2026-07-09",
+  "note": "Payroll for Friday 7/10 (Paywell takes it out Thursday).",
+  "employees": [
+   {
+    "employee": "Ortega, Luis",
+    "regular": "80",
+    "overtime": "0",
+    "gross": "2760.00",
+    "federal": "239.46",
+    "social_security": "171.12",
+    "medicare": "40.02",
+    "state": "136.62",
+    "net": "2172.78",
+    "employer_taxes": "211.14"
+   },
+   {
+    "employee": "Brandt, Kayla",
+    "regular": "80",
+    "overtime": "0",
+    "gross": "1680.00",
+    "federal": "131.46",
+    "social_security": "104.16",
+    "medicare": "24.36",
+    "state": "83.16",
+    "net": "1336.86",
+    "employer_taxes": "128.52"
+   }
+  ],
+  "gross": "4440.00",
+  "employee_taxes": "930.36",
+  "employer_taxes": "339.66",
+  "net": "3509.64",
+  "tax_debit": "1270.02"
+ },
+ {
+  "id": "J31",
+  "kind": "bounced_check",
+  "date": "2026-07-09",
+  "payment": "J06",
+  "bank_fee": "12.00",
+  "customer_fee": "35.00",
+  "fee_number": "2393",
+  "cleared": "2026-07-09",
+  "note": "Bank called: Tom Hendricks' check #1182 bounced. They charged us $12. Called Tom - he'll bring cash plus our $35 returned check fee.",
+  "amount": "486.93",
+  "customer": "Hendricks, Tom",
+  "ref": "1182"
+ },
+ {
+  "id": "J32",
+  "kind": "bill",
+  "date": "2026-07-09",
+  "vendor": "Midland Electric Supply",
+  "number": "S1190012.001",
+  "expenses": [
+   [
+    "Job Materials",
+    "1318.62",
+    "Wire, boxes, fittings",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Midland bill for the 205 N Chicago St job.",
+  "total": "1318.62",
+  "terms": "2% 10 Net 30",
+  "due": "2026-08-08",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "1318.62",
+    "memo": "Wire, boxes, fittings",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
+ },
+ {
+  "id": "J33",
+  "kind": "card_charge",
+  "date": "2026-07-09",
+  "payee": null,
+  "lines": [
+   [
+    "Meals",
+    "38.40",
+    "Lunch with Luis, 205 N Chicago"
+   ]
+  ],
+  "cleared": "2026-07-10",
+  "desc": "JOLIET DINER",
+  "category": "Food & Drink",
+  "note": "Lunch with Luis at the diner.",
+  "total": "38.40"
+ },
+ {
+  "id": "J34",
+  "kind": "bill_payment",
+  "date": "2026-07-10",
+  "vendor": "Illinois Valley Gas & Electric",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "6619-0442 JUN",
+    "amount": "386.21",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-10",
+  "desc": "IL VALLEY G&E AUTOPAY",
+  "note": "Gas & electric autopay took the June bill.",
+  "total": "386.21",
+  "discount": "0.00"
+ },
+ {
+  "id": "J35",
+  "kind": "bill_payment",
+  "date": "2026-07-10",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4479",
+  "bills": [
+   {
+    "bill": "S1189377.001",
+    "amount": "2904.90",
+    "discount": "59.28"
+   }
+  ],
+  "cleared": "2026-07-16",
+  "note": "Paid the Midland stock order inside 10 days, 2% off.",
+  "total": "2904.90",
+  "discount": "59.28"
+ },
+ {
+  "id": "J36",
+  "kind": "invoice",
+  "date": "2026-07-10",
+  "number": "2394",
+  "customer": "Ridgeline Realty Management:205 N Chicago St",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "24",
+    "rate": "105.00",
+    "amount": "2520.00",
+    "desc": "Second floor fit-out, progress",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "24",
+    "rate": "65.00",
+    "amount": "1560.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "1582.34",
+    "amount": "1582.34",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Progress bill to Ridgeline for 205 N Chicago.",
+  "taxable": "1582.34",
+  "tax": "138.45",
+  "total": "5800.79",
+  "issued": {},
+  "terms": "Net 30",
+  "due": "2026-08-09"
+ },
+ {
+  "id": "J37",
+  "kind": "sales_receipt",
+  "date": "2026-07-10",
+  "number": "512",
+  "customer": "Cash Customer",
+  "lines": [
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "2",
+    "rate": "69.00",
+    "amount": "138.00",
+    "desc": "Hardwired smoke/CO combination alarm",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "77.58"
+   }
+  ],
+  "method": "Cash",
+  "note": "Neighbor at the Reyes job bought two smoke/CO alarms, paid cash.",
+  "taxable": "138.00",
+  "tax": "12.08",
+  "total": "150.08",
+  "issued": {
+   "Smoke/CO Detector": [
+    "2",
+    "77.58"
+   ]
+  }
+ },
+ {
+  "id": "J101",
+  "kind": "card_charge",
+  "date": "2026-07-12",
+  "payee": "Valley Broadband",
+  "lines": [
+   [
+    "Utilities:Telephone and Internet",
+    "189.99",
+    "Internet and phones, July"
+   ]
+  ],
+  "cleared": "2026-07-13",
+  "desc": "VALLEY BROADBAND",
+  "category": "Bills & Utilities",
+  "note": "Valley Broadband autopay on the card.",
+  "total": "189.99"
+ },
+ {
+  "id": "J38",
+  "kind": "payment",
+  "date": "2026-07-13",
+  "customer": "Morales, Ana",
+  "ref": "1415",
+  "method": "Check",
+  "apply": [
+   [
+    "2385",
+    null
+   ]
+  ],
+  "note": "Ana Morales paid 2385.",
+  "amount": "1186.42",
+  "applied": [
+   {
+    "invoice": "2385",
+    "amount": "1186.42",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J39",
+  "kind": "bill",
+  "date": "2026-07-13",
+  "vendor": "Will County Equipment Rental",
+  "number": "R-56031",
+  "expenses": [
+   [
+    "Equipment Rental",
+    "585.00",
+    "Scissor lift, one week",
+    "Heritage Medical Suites"
+   ]
+  ],
+  "note": "Scissor lift for the Heritage Medical job, one week.",
+  "total": "585.00",
+  "terms": "Net 30",
+  "due": "2026-08-12",
+  "lines": [
+   {
+    "account": "Equipment Rental",
+    "amount": "585.00",
+    "memo": "Scissor lift, one week",
+    "job": "Heritage Medical Suites"
+   }
+  ]
+ },
+ {
+  "id": "J40",
+  "kind": "invoice",
+  "date": "2026-07-13",
+  "number": "2395",
+  "customer": "Heritage Medical Suites",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "16",
+    "rate": "105.00",
+    "amount": "1680.00",
+    "desc": "Suite B LED retrofit",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "16",
+    "rate": "65.00",
+    "amount": "1040.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "36",
+    "rate": "28.00",
+    "amount": "1008.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "417.96"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "486.73",
+    "amount": "486.73",
+    "desc": "Drivers, trim, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Heritage Medical Suites LED retrofit.",
+  "taxable": "1494.73",
+  "tax": "130.79",
+  "total": "4345.52",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "36",
+    "417.96"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-08-12"
+ },
+ {
+  "id": "J41",
+  "kind": "payment",
+  "date": "2026-07-14",
+  "customer": "Lock & Key Brewing",
+  "ref": "5092",
+  "method": "Check",
+  "apply": [
+   [
+    "2373",
+    null
+   ]
+  ],
+  "note": "Lock & Key paid 2373.",
+  "amount": "4212.80",
+  "applied": [
+   {
+    "invoice": "2373",
+    "amount": "4212.80",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J42",
+  "kind": "deposit",
+  "date": "2026-07-14",
+  "cleared": "2026-07-14",
+  "payments": [
+   "J38",
+   "J41"
+  ],
+  "note": "Deposited Morales and Lock & Key.",
+  "total": "5399.22",
+  "items": [
+   {
+    "source": "J38",
+    "amount": "1186.42"
+   },
+   {
+    "source": "J41",
+    "amount": "4212.80"
+   }
+  ]
+ },
+ {
+  "id": "J43",
+  "kind": "bill_payment",
+  "date": "2026-07-14",
+  "vendor": "Prairie Fleet Card",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "0630-7741",
+    "amount": "1108.53",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-14",
+  "desc": "PRAIRIE FLEET CARD PMT",
+  "note": "Paid the June fuel card bill online.",
+  "total": "1108.53",
+  "discount": "0.00"
+ },
+ {
+  "id": "J44",
+  "kind": "card_charge",
+  "date": "2026-07-14",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "112.64",
+    "Fish tape, hole saw kit"
+   ]
+  ],
+  "cleared": "2026-07-15",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Plainfield Hardware, fish tape and a hole saw kit.",
+  "total": "112.64"
+ },
+ {
+  "id": "J45",
+  "kind": "invoice",
+  "date": "2026-07-14",
+  "number": "2396",
+  "customer": "O'Brien, Kathleen",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Tripping bathroom circuit",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "2",
+    "rate": "32.50",
+    "amount": "65.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.96"
+   }
+  ],
+  "note": "Kathleen O'Brien service call - she said she'd mail a check.",
+  "taxable": "65.00",
+  "tax": "5.69",
+  "total": "310.69",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "2",
+    "35.96"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-14"
+ },
+ {
+  "id": "J46",
+  "kind": "check",
+  "date": "2026-07-15",
+  "number": "ACH",
+  "payee": "Cedar Prairie Bank",
+  "lines": [
+   [
+    "Van Loan",
+    "591.26",
+    "Principal"
+   ],
+   [
+    "Interest Expense",
+    "98.26",
+    "Interest"
+   ]
+  ],
+  "cleared": "2026-07-15",
+  "desc": "LOAN PAYMENT 88231",
+  "memo": "AUTO DEBIT",
+  "trntype": "PAYMENT",
+  "note": "Van loan payment: 689.52 (principal 591.26, interest 98.26 per the loan notice).",
+  "total": "689.52"
+ },
+ {
+  "id": "J47",
+  "kind": "check",
+  "date": "2026-07-15",
+  "number": "ACH",
+  "payee": "Harbor, Mike",
+  "payee_kind": "other_name",
+  "lines": [
+   [
+    "Owner's Draw",
+    "2000.00",
+    "Draw"
+   ]
+  ],
+  "cleared": "2026-07-15",
+  "desc": "ONLINE TRANSFER TO CHK X5531",
+  "memo": "HARBOR M",
+  "trntype": "XFER",
+  "note": "Moved $2,000 to my personal account.",
+  "total": "2000.00"
+ },
+ {
+  "id": "J48",
+  "kind": "invoice",
+  "date": "2026-07-15",
+  "number": "2397",
+  "customer": "Kaminski, Ted",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Garage outlet",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "1",
+    "rate": "32.50",
+    "amount": "32.50",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "17.98"
+   }
+  ],
+  "note": "Ted Kaminski service call. He still had the $150 credit from May - used it on this one.",
+  "taxable": "32.50",
+  "tax": "2.84",
+  "total": "180.34",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "1",
+    "17.98"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-15"
+ },
+ {
+  "id": "J49",
+  "kind": "credit_apply",
+  "date": "2026-07-15",
+  "credit": "2350",
+  "invoice": "2397",
+  "amount": "150.00",
+  "note": "Applied Ted Kaminski's credit memo 2350 to 2397."
+ },
+ {
+  "id": "J50",
+  "kind": "bill",
+  "date": "2026-07-15",
+  "vendor": "Lund & Ostrowski CPAs",
+  "number": "2026-0611",
+  "expenses": [
+   [
+    "Professional Fees",
+    "425.00",
+    "Q2 bookkeeping review",
+    null
+   ]
+  ],
+  "note": "Lund & Ostrowski bill for the Q2 review.",
+  "total": "425.00",
+  "terms": "Net 30",
+  "due": "2026-08-14",
+  "lines": [
+   {
+    "account": "Professional Fees",
+    "amount": "425.00",
+    "memo": "Q2 bookkeeping review",
+    "job": null
+   }
+  ]
+ },
+ {
+  "id": "J51",
+  "kind": "payment",
+  "date": "2026-07-16",
+  "customer": "Cedar Ridge Family Dental",
+  "ref": "20871",
+  "method": "Check",
+  "apply": [
+   [
+    "2361",
+    null
+   ]
+  ],
+  "note": "Cedar Ridge Dental paid the rest of 2361.",
+  "amount": "1486.25",
+  "applied": [
+   {
+    "invoice": "2361",
+    "amount": "1486.25",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J52",
+  "kind": "payment",
+  "date": "2026-07-16",
+  "customer": "Hendricks, Tom",
+  "ref": "cash",
+  "method": "Cash",
+  "apply": [
+   [
+    "2379",
+    null
+   ],
+   [
+    "2393",
+    null
+   ]
+  ],
+  "note": "Tom Hendricks paid cash: the bounced 486.93 plus the $35 fee.",
+  "amount": "521.93",
+  "applied": [
+   {
+    "invoice": "2379",
+    "amount": "486.93",
+    "discount": "0.00"
+   },
+   {
+    "invoice": "2393",
+    "amount": "35.00",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J53",
+  "kind": "deposit",
+  "date": "2026-07-16",
+  "cleared": "2026-07-16",
+  "payments": [
+   "J51",
+   "J52",
+   "J37"
+  ],
+  "note": "Deposited Cedar Ridge, Tom's cash and the smoke alarm cash.",
+  "total": "2158.26",
+  "items": [
+   {
+    "source": "J51",
+    "amount": "1486.25"
+   },
+   {
+    "source": "J52",
+    "amount": "521.93"
+   },
+   {
+    "source": "J37",
+    "amount": "150.08"
+   }
+  ]
+ },
+ {
+  "id": "J54",
+  "kind": "bill",
+  "date": "2026-07-16",
+  "vendor": "Midland Electric Supply",
+  "number": "S1190655.001",
+  "items": [
+   [
+    "LED Wafer Light 6in",
+    "24",
+    "11.85",
+    null
+   ],
+   [
+    "Surge Protector",
+    "4",
+    "131.20",
+    null
+   ],
+   [
+    "Smoke/CO Detector",
+    "12",
+    "39.10",
+    null
+   ]
+  ],
+  "note": "Midland restock: wafers, surge protectors, smoke/COs.",
+  "total": "1278.40",
+  "terms": "2% 10 Net 30",
+  "due": "2026-08-15",
+  "lines": [
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "24",
+    "cost": "11.85",
+    "amount": "284.40",
+    "job": null
+   },
+   {
+    "item": "Surge Protector",
+    "quantity": "4",
+    "cost": "131.20",
+    "amount": "524.80",
+    "job": null
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "12",
+    "cost": "39.10",
+    "amount": "469.20",
+    "job": null
+   }
+  ]
+ },
+ {
+  "id": "J55",
+  "kind": "card_charge",
+  "date": "2026-07-16",
+  "payee": "Prairie Office Supply",
+  "lines": [
+   [
+    "Office Supplies",
+    "74.18",
+    "Printer ink, folders"
+   ]
+  ],
+  "cleared": "2026-07-17",
+  "desc": "PRAIRIE OFFICE SUPPLY",
+  "category": "Shopping",
+  "note": "Office supplies.",
+  "total": "74.18"
+ },
+ {
+  "id": "J56",
+  "kind": "card_charge",
+  "date": "2026-07-17",
+  "payee": "Midland Elec. Supply",
+  "lines": [
+   [
+    "Job Materials",
+    "36.48",
+    "Wire connectors, Okafor follow-up"
+   ]
+  ],
+  "cleared": "2026-07-20",
+  "desc": "MIDLAND ELEC SUPPLY #2",
+  "category": "Home",
+  "note": "Midland counter, wire connectors for the Okafor follow-up, on the card.",
+  "total": "36.48"
+ },
+ {
+  "id": "J57",
+  "kind": "invoice",
+  "date": "2026-07-17",
+  "number": "2398",
+  "customer": "Van Dyke Construction:Lot 14 Prairie Crossing",
+  "terms": "Net 30",
+  "po": "VDC-14-03",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "1",
+    "rate": "7440.00",
+    "amount": "7440.00",
+    "desc": "Trim-out, 40% of $18,600 contract",
+    "taxable": false,
+    "account": "Installation Income"
+   }
+  ],
+  "note": "Lot 14 trim-out billing, 40% of the contract.",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "7440.00",
+  "issued": {},
+  "due": "2026-08-16"
+ },
+ {
+  "id": "J58",
+  "kind": "payment",
+  "date": "2026-07-20",
+  "customer": "Prairie Grain Co-op",
+  "ref": "3381",
+  "method": "Check",
+  "apply": [
+   [
+    "2291",
+    null
+   ]
+  ],
+  "note": "Prairie Grain finally paid the March invoice.",
+  "amount": "1241.37",
+  "applied": [
+   {
+    "invoice": "2291",
+    "amount": "1241.37",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J59",
+  "kind": "sales_tax_payment",
+  "date": "2026-07-20",
+  "agency": "Illinois Department of Revenue",
+  "through": "2026-06-30",
+  "amount": "1187.34",
+  "cleared": "2026-07-20",
+  "desc": "IL DEPT OF REVENUE EFT",
+  "note": "Filed and paid the June sales tax online, 1,187.34."
+ },
+ {
+  "id": "J60",
+  "kind": "credit_memo",
+  "date": "2026-07-20",
+  "number": "2399",
+  "customer": "Lindqvist, Erik",
+  "source_invoice": "2390",
+  "lines": [
+   {
+    "item": "EV Charger 48A",
+    "quantity": "1",
+    "rate": "899.00",
+    "amount": "899.00",
+    "desc": "Returned unopened",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "576.50"
+   }
+  ],
+  "note": "Erik Lindqvist's HOA said no to the charger. He brought it back unopened; it's back on the shelf.",
+  "taxable": "899.00",
+  "tax": "78.66",
+  "total": "977.66"
+ },
+ {
+  "id": "J61",
+  "kind": "customer_refund",
+  "date": "2026-07-20",
+  "customer": "Lindqvist, Erik",
+  "credit": "2399",
+  "number": "4480",
+  "cleared": "2026-07-24",
+  "note": "Refund check to Erik for the charger.",
+  "amount": "977.66"
+ },
+ {
+  "id": "J62",
+  "kind": "bill",
+  "date": "2026-07-20",
+  "vendor": "Illinois Valley Gas & Electric",
+  "number": "6619-0442 JUL",
+  "terms": "Net 21",
+  "expenses": [
+   [
+    "Utilities:Gas and Electric",
+    "412.67",
+    "Shop, July",
+    null
+   ]
+  ],
+  "note": "Gas & electric bill for July (autopay on the due date).",
+  "total": "412.67",
+  "due": "2026-08-10",
+  "lines": [
+   {
+    "account": "Utilities:Gas and Electric",
+    "amount": "412.67",
+    "memo": "Shop, July",
+    "job": null
+   }
+  ]
+ },
+ {
+  "id": "J63",
+  "kind": "payment",
+  "date": "2026-07-21",
+  "customer": "Route 59 Auto Care",
+  "ref": "7716",
+  "method": "Check",
+  "amount": "1066.39",
+  "apply": [
+   [
+    "2392",
+    "1066.39"
+   ]
+  ],
+  "note": "Route 59 Auto Care paid 2392 short by the $49 trip charge - Dave says we're too close to charge a trip. Leave it open, I'll talk to him.",
+  "applied": [
+   {
+    "invoice": "2392",
+    "amount": "1066.39",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J64",
+  "kind": "deposit",
+  "date": "2026-07-21",
+  "cleared": "2026-07-21",
+  "payments": [
+   "J58",
+   "J63"
+  ],
+  "note": "Deposited Prairie Grain and Route 59.",
+  "total": "2307.76",
+  "items": [
+   {
+    "source": "J58",
+    "amount": "1241.37"
+   },
+   {
+    "source": "J63",
+    "amount": "1066.39"
+   }
+  ]
+ },
+ {
+  "id": "J65",
+  "kind": "card_charge",
+  "date": "2026-07-21",
+  "payee": "Ruiz Auto & Fleet",
+  "lines": [
+   [
+    "Vehicle Expense:Repairs",
+    "438.17",
+    "Van brakes, front"
+   ]
+  ],
+  "cleared": "2026-07-22",
+  "desc": "RUIZ AUTO & FLEET",
+  "category": "Automotive",
+  "note": "Front brakes on the van at Ruiz (new shop).",
+  "total": "438.17"
+ },
+ {
+  "id": "J66",
+  "kind": "payment",
+  "date": "2026-07-22",
+  "customer": "St. Casimir Parish",
+  "ref": "12077",
+  "method": "Check",
+  "apply": [
+   [
+    "2381",
+    null
+   ]
+  ],
+  "note": "St. Casimir paid 2381.",
+  "amount": "1962.50",
+  "applied": [
+   {
+    "invoice": "2381",
+    "amount": "1962.50",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J67",
+  "kind": "card_credit",
+  "date": "2026-07-22",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "38.97",
+    "Returned hole saw kit"
+   ]
+  ],
+  "cleared": "2026-07-23",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Returned the hole saw kit to Plainfield Hardware, credit back on the card.",
+  "total": "38.97"
+ },
+ {
+  "id": "J68",
+  "kind": "deposit",
+  "date": "2026-07-23",
+  "cleared": "2026-07-23",
+  "payments": [
+   "J66"
+  ],
+  "note": "Deposited St. Casimir.",
+  "total": "1962.50",
+  "items": [
+   {
+    "source": "J66",
+    "amount": "1962.50"
+   }
+  ]
+ },
+ {
+  "id": "J69",
+  "kind": "bill",
+  "date": "2026-07-23",
+  "vendor": "Midland Electric Supply",
+  "number": "S1191388.001",
+  "expenses": [
+   [
+    "Job Materials",
+    "2207.40",
+    "Devices, plates, fixtures for trim",
+    "Van Dyke Construction:Lot 14 Prairie Crossing"
+   ]
+  ],
+  "note": "Midland bill, trim material for Lot 14.",
+  "total": "2207.40",
+  "terms": "2% 10 Net 30",
+  "due": "2026-08-22",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "2207.40",
+    "memo": "Devices, plates, fixtures for trim",
+    "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
+   }
+  ]
+ },
+ {
+  "id": "J70",
+  "kind": "payroll",
+  "date": "2026-07-23",
+  "period_end": "2026-07-18",
+  "pay_date": "2026-07-24",
+  "hours": {
+   "Ortega, Luis": [
+    "80",
+    "6"
+   ],
+   "Brandt, Kayla": [
+    "76",
+    "0"
+   ]
+  },
+  "cleared": "2026-07-23",
+  "note": "Payroll for Friday 7/24. Luis had 6 hours overtime; Kayla took 4 hours unpaid.",
+  "employees": [
+   {
+    "employee": "Ortega, Luis",
+    "regular": "80",
+    "overtime": "6",
+    "gross": "3070.50",
+    "federal": "270.51",
+    "social_security": "190.37",
+    "medicare": "44.52",
+    "state": "151.99",
+    "net": "2413.11",
+    "employer_taxes": "234.89"
+   },
+   {
+    "employee": "Brandt, Kayla",
+    "regular": "76",
+    "overtime": "0",
+    "gross": "1596.00",
+    "federal": "123.06",
+    "social_security": "98.95",
+    "medicare": "23.14",
+    "state": "79.00",
+    "net": "1271.85",
+    "employer_taxes": "122.09"
+   }
+  ],
+  "gross": "4666.50",
+  "employee_taxes": "981.54",
+  "employer_taxes": "356.98",
+  "net": "3684.96",
+  "tax_debit": "1338.52"
+ },
+ {
+  "id": "J71",
+  "kind": "card_charge",
+  "date": "2026-07-23",
+  "payee": null,
+  "lines": [
+   [
+    "Meals",
+    "61.25",
+    "Lunch, Lot 14 crew"
+   ]
+  ],
+  "cleared": "2026-07-24",
+  "desc": "TAQUERIA EL SOL",
+  "category": "Food & Drink",
+  "note": "Crew lunch at Lot 14.",
+  "total": "61.25"
+ },
+ {
+  "id": "J72",
+  "kind": "transfer",
+  "date": "2026-07-24",
+  "from_account": "Checking",
+  "to_account": "Visa Business Card",
+  "amount": "2486.17",
+  "cleared": "2026-07-24",
+  "desc": "CEDAR PRAIRIE VISA PMT",
+  "trntype": "PAYMENT",
+  "card_desc": "PAYMENT THANK YOU",
+  "note": "Paid the June Visa statement in full."
+ },
+ {
+  "id": "J73",
+  "kind": "check",
+  "date": "2026-07-24",
+  "number": "ACH",
+  "payee": "Paywell Payroll Services",
+  "lines": [
+   [
+    "Payroll Expenses:Payroll Service Fees",
+    "98.50",
+    "July service fee"
+   ]
+  ],
+  "cleared": "2026-07-24",
+  "desc": "PAYWELL PAYROLL FEE",
+  "memo": "JUL",
+  "trntype": "DEBIT",
+  "note": "Paywell's monthly fee.",
+  "total": "98.50"
+ },
+ {
+  "id": "J74",
+  "kind": "payment",
+  "date": "2026-07-24",
+  "customer": "Ridgeline Realty Management",
+  "ref": "30118",
+  "method": "Check",
+  "apply": [
+   [
+    "2366",
+    null
+   ],
+   [
+    "2383",
+    null
+   ],
+   [
+    "2387",
+    null
+   ]
+  ],
+  "note": "Ridgeline paid 2366, 2383 and 2387 with one check.",
+  "amount": "6779.74",
+  "applied": [
+   {
+    "invoice": "2366",
+    "amount": "742.53",
+    "discount": "0.00"
+   },
+   {
+    "invoice": "2383",
+    "amount": "5318.75",
+    "discount": "0.00"
+   },
+   {
+    "invoice": "2387",
+    "amount": "718.46",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J75",
+  "kind": "deposit",
+  "date": "2026-07-24",
+  "cleared": "2026-07-24",
+  "payments": [
+   "J74"
+  ],
+  "note": "Deposited Ridgeline.",
+  "total": "6779.74",
+  "items": [
+   {
+    "source": "J74",
+    "amount": "6779.74"
+   }
+  ]
+ },
+ {
+  "id": "J76",
+  "kind": "bill",
+  "date": "2026-07-24",
+  "vendor": "Delgado, Ray",
+  "number": "0724",
+  "expenses": [
+   [
+    "Subcontractors",
+    "1150.00",
+    "Trenching and conduit, Lot 14",
+    "Van Dyke Construction:Lot 14 Prairie Crossing"
+   ]
+  ],
+  "note": "Ray's invoice 0724 for trenching at Lot 14.",
+  "total": "1150.00",
+  "terms": "Net 15",
+  "due": "2026-08-08",
+  "lines": [
+   {
+    "account": "Subcontractors",
+    "amount": "1150.00",
+    "memo": "Trenching and conduit, Lot 14",
+    "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
+   }
+  ]
+ },
+ {
+  "id": "J77",
+  "kind": "bill",
+  "date": "2026-07-24",
+  "vendor": "Prairie Uniform Service",
+  "number": "U-89107",
+  "expenses": [
+   [
+    "Uniforms",
+    "112.36",
+    "July service",
+    null
+   ]
+  ],
+  "note": "Uniform bill (haven't paid June's yet).",
+  "total": "112.36",
+  "terms": "Net 30",
+  "due": "2026-08-23",
+  "lines": [
+   {
+    "account": "Uniforms",
+    "amount": "112.36",
+    "memo": "July service",
+    "job": null
+   }
+  ]
+ },
+ {
+  "id": "J78",
+  "kind": "invoice",
+  "date": "2026-07-24",
+  "number": "2400",
+  "customer": "Abernathy, Ruth",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Hall and bedroom alarms",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Labor",
+    "quantity": "1.5",
+    "rate": "105.00",
+    "amount": "157.50",
+    "desc": "Electrician labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Senior Discount",
+    "quantity": null,
+    "rate": "-10%",
+    "amount": "-15.75",
+    "desc": "Senior discount 10% on labor",
+    "taxable": false,
+    "account": "Sales Discounts"
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "3",
+    "rate": "69.00",
+    "amount": "207.00",
+    "desc": "Hardwired smoke/CO combination alarm",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "116.88"
+   }
+  ],
+  "note": "Ruth Abernathy: replaced three alarms. Gave her the senior discount on the labor.",
+  "taxable": "207.00",
+  "tax": "18.11",
+  "total": "511.86",
+  "issued": {
+   "Smoke/CO Detector": [
+    "3",
+    "116.88"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-24"
+ },
+ {
+  "id": "J79",
+  "kind": "payment",
+  "date": "2026-07-27",
+  "customer": "Kowalski, Janet",
+  "ref": "3342",
+  "method": "Check",
+  "apply": [
+   [
+    "2391",
+    null
+   ]
+  ],
+  "note": "Janet Kowalski paid the panel invoice.",
+  "amount": "4050.09",
+  "applied": [
+   {
+    "invoice": "2391",
+    "amount": "4050.09",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J80",
+  "kind": "payment",
+  "date": "2026-07-27",
+  "customer": "Abernathy, Ruth",
+  "ref": "779",
+  "method": "Check",
+  "apply": [
+   [
+    "2400",
+    null
+   ]
+  ],
+  "note": "Ruth Abernathy paid 2400.",
+  "amount": "511.86",
+  "applied": [
+   {
+    "invoice": "2400",
+    "amount": "511.86",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J81",
+  "kind": "transfer",
+  "date": "2026-07-27",
+  "from_account": "Checking",
+  "to_account": "Savings",
+  "amount": "3000.00",
+  "cleared": "2026-07-27",
+  "desc": "ONLINE TRANSFER TO SAV X4489",
+  "trntype": "XFER",
+  "savings_desc": "ONLINE TRANSFER FROM CHK X4471",
+  "note": "Moved $3,000 to savings."
+ },
+ {
+  "id": "J82",
+  "kind": "invoice",
+  "date": "2026-07-27",
+  "number": "2401",
+  "customer": "Fitzgerald, Sean",
+  "new_customer": true,
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Ceiling fan, family room",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "46.12",
+    "amount": "46.12",
+    "desc": "Fan brace box, wire",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "New customer: Sean Fitzgerald, 10 Ashley Ct, Mokena. Ceiling fan install.",
+  "taxable": "46.12",
+  "tax": "4.04",
+  "total": "260.16",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-07-27"
+ },
+ {
+  "id": "J83",
+  "kind": "payment",
+  "date": "2026-07-28",
+  "customer": "Kaminski, Ted",
+  "ref": "1650",
+  "method": "Check",
+  "apply": [
+   [
+    "2397",
+    null
+   ]
+  ],
+  "note": "Ted Kaminski paid the rest of 2397.",
+  "amount": "30.34",
+  "applied": [
+   {
+    "invoice": "2397",
+    "amount": "30.34",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J84",
+  "kind": "deposit",
+  "date": "2026-07-28",
+  "cleared": "2026-07-28",
+  "payments": [
+   "J79",
+   "J80",
+   "J83"
+  ],
+  "note": "Deposited Kowalski, Abernathy and Kaminski.",
+  "total": "4592.29",
+  "items": [
+   {
+    "source": "J79",
+    "amount": "4050.09"
+   },
+   {
+    "source": "J80",
+    "amount": "511.86"
+   },
+   {
+    "source": "J83",
+    "amount": "30.34"
+   }
+  ]
+ },
+ {
+  "id": "J85",
+  "kind": "vendor_credit",
+  "date": "2026-07-28",
+  "vendor": "Midland Electric Supply",
+  "number": "CM S1191012",
+  "items": [
+   [
+    "Breaker 20A AFCI",
+    "4",
+    "42.10",
+    null
+   ]
+  ],
+  "note": "Took 4 AFCI breakers back to Midland (wrong style). Credit memo CM S1191012.",
+  "total": "168.40",
+  "lines": [
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "4",
+    "cost": "42.10",
+    "amount": "168.40",
+    "job": null
+   }
+  ]
+ },
+ {
+  "id": "J86",
+  "kind": "invoice",
+  "date": "2026-07-29",
+  "number": "2402",
+  "customer": "Lakeview Property Management:Hickory Creek Townhomes",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "8",
+    "rate": "105.00",
+    "amount": "840.00",
+    "desc": "Pole light repairs",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "233.18",
+    "amount": "233.18",
+    "desc": "Photocells, lamps, fuses",
+    "taxable": true,
+    "account": "Materials Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "6",
+    "rate": "32.50",
+    "amount": "195.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "107.90"
+   }
+  ],
+  "note": "Lakeview, Hickory Creek pole lights.",
+  "taxable": "428.18",
+  "tax": "37.47",
+  "total": "1305.65",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "6",
+    "107.90"
+   ]
+  },
+  "terms": "1% 10 Net 30",
+  "due": "2026-08-28"
+ },
+ {
+  "id": "J87",
+  "kind": "invoice",
+  "date": "2026-07-29",
+  "number": "2403",
+  "customer": "Thompson, Greg",
+  "new_customer": true,
+  "lines": [
+   {
+    "item": "Emergency Call",
+    "quantity": "1",
+    "rate": "225.00",
+    "amount": "225.00",
+    "desc": "Sunday night, no power to kitchen",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Electrician labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "2",
+    "rate": "14.95",
+    "amount": "29.90",
+    "desc": "20 amp single-pole breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "16.98"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "64.37",
+    "amount": "64.37",
+    "desc": "Wire, connectors",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "New customer: Greg Thompson, 2731 Mound Rd, Joliet (Net 15). Emergency call Sunday night.",
+  "taxable": "94.27",
+  "tax": "8.25",
+  "total": "537.52",
+  "issued": {
+   "Breaker 20A 1P": [
+    "2",
+    "16.98"
+   ]
+  },
+  "terms": "Net 15",
+  "due": "2026-08-13"
+ },
+ {
+  "id": "J88",
+  "kind": "inventory_adjust",
+  "date": "2026-07-30",
+  "item": "LED Wafer Light 6in",
+  "quantity": "-2",
+  "account": "Inventory Adjustments",
+  "note": "Two wafer lights damaged in the van - toss them.",
+  "value": "-23.60"
+ },
+ {
+  "id": "J89",
+  "kind": "invoice",
+  "date": "2026-07-30",
+  "number": "2404",
+  "customer": "Cedar Ridge Family Dental",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Operatory lights",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Electrician labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "4",
+    "rate": "28.00",
+    "amount": "112.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "47.21"
+   }
+  ],
+  "note": "Cedar Ridge Dental, operatory lights.",
+  "taxable": "112.00",
+  "tax": "9.80",
+  "total": "476.80",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "4",
+    "47.21"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-08-29"
+ },
+ {
+  "id": "J90",
+  "kind": "card_charge",
+  "date": "2026-07-30",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Job Materials",
+    "29.84",
+    "Anchors and straps, Thompson"
+   ]
+  ],
+  "cleared": "2026-08-03",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Plainfield Hardware, anchors and straps.",
+  "total": "29.84"
+ },
+ {
+  "id": "J91",
+  "kind": "payment",
+  "date": "2026-07-31",
+  "customer": "Fitzgerald, Sean",
+  "ref": "2215",
+  "method": "Check",
+  "apply": [
+   [
+    "2401",
+    null
+   ]
+  ],
+  "note": "Sean Fitzgerald paid 2401.",
+  "amount": "260.16",
+  "applied": [
+   {
+    "invoice": "2401",
+    "amount": "260.16",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J92",
+  "kind": "deposit",
+  "date": "2026-07-31",
+  "cleared": "2026-08-03",
+  "payments": [
+   "J91"
+  ],
+  "note": "Dropped Fitzgerald's check at the bank after closing.",
+  "total": "260.16",
+  "items": [
+   {
+    "source": "J91",
+    "amount": "260.16"
+   }
+  ]
+ },
+ {
+  "id": "J93",
+  "kind": "check",
+  "date": "2026-07-31",
+  "number": "ACH",
+  "payee": "Harbor, Mike",
+  "payee_kind": "other_name",
+  "lines": [
+   [
+    "Owner's Draw",
+    "2000.00",
+    "Draw"
+   ]
+  ],
+  "cleared": "2026-07-31",
+  "desc": "ONLINE TRANSFER TO CHK X5531",
+  "memo": "HARBOR M",
+  "trntype": "XFER",
+  "note": "Another $2,000 to my personal account.",
+  "total": "2000.00"
+ },
+ {
+  "id": "J94",
+  "kind": "bill_payment",
+  "date": "2026-07-31",
+  "vendor": "Delgado, Ray",
+  "method": "Check",
+  "number": "4481",
+  "bills": [
+   {
+    "bill": "0724",
+    "amount": "1150.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-04",
+  "note": "Paid Ray's 0724 invoice.",
+  "total": "1150.00",
+  "discount": "0.00"
+ },
+ {
+  "id": "J95",
+  "kind": "check",
+  "date": "2026-07-31",
+  "number": "4482",
+  "payee": "City of Joliet",
+  "lines": [
+   [
+    "Permits",
+    "150.00",
+    "Permit, Heritage Medical Suite C"
+   ]
+  ],
+  "cleared": "2026-08-05",
+  "note": "Permit for Heritage Medical Suite C at the counter, check 4482.",
+  "total": "150.00"
+ },
+ {
+  "id": "J96",
+  "kind": "bill",
+  "date": "2026-07-31",
+  "vendor": "Prairie Fleet Card",
+  "number": "0731-7741",
+  "expenses": [
+   [
+    "Vehicle Expense:Fuel",
+    "1236.84",
+    "July fuel",
+    null
+   ]
+  ],
+  "note": "Fleet card statement for July fuel.",
+  "total": "1236.84",
+  "terms": "Net 15",
+  "due": "2026-08-15",
+  "lines": [
+   {
+    "account": "Vehicle Expense:Fuel",
+    "amount": "1236.84",
+    "memo": "July fuel",
+    "job": null
+   }
+  ]
+ },
+ {
+  "id": "J97",
+  "kind": "write_off",
+  "date": "2026-07-31",
+  "customer": "Bauer, Dennis",
+  "invoice": "2318",
+  "account": "Bad Debt",
+  "note": "Giving up on Dennis Bauer's $186.40 from April - he moved away. Write it off.",
+  "amount": "186.40"
+ },
+ {
+  "id": "J98",
+  "kind": "bank_charge",
+  "date": "2026-07-31",
+  "account": "Checking",
+  "amount": "15.00",
+  "cleared": "2026-07-31",
+  "desc": "MONTHLY MAINTENANCE FEE",
+  "expense": "Bank Service Charges"
+ },
+ {
+  "id": "J99",
+  "kind": "bank_interest",
+  "date": "2026-07-31",
+  "account": "Checking",
+  "amount": "0.83",
+  "cleared": "2026-07-31",
+  "desc": "INTEREST PAYMENT",
+  "income": "Interest Income"
+ },
+ {
+  "id": "J100",
+  "kind": "bank_interest",
+  "date": "2026-07-31",
+  "account": "Savings",
+  "amount": "4.71",
+  "cleared": "2026-07-31",
+  "desc": "INTEREST PAYMENT",
+  "income": "Interest Income"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-03",
+  "customer": "Dubois, Marc",
+  "ref": "26537",
+  "method": "Check",
+  "apply": [
+   [
+    "2389",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Marc Dubois paid 2389.",
+  "id": "A01",
+  "amount": "600.87",
+  "applied": [
+   {
+    "invoice": "2389",
+    "amount": "600.87",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-03",
+  "vendor": "Prairie Uniform Service",
+  "method": "Check",
+  "number": "4483",
+  "bills": [
+   {
+    "bill": "U-88412",
+    "amount": "112.36",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-06",
+  "note": "Paid Prairie Uniform Service U-88412.",
+  "id": "A02",
+  "total": "112.36",
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-08-03",
+  "number": "4484",
+  "payee": "Joliet Industrial Partners LLC",
+  "lines": [
+   [
+    "Rent",
+    "2450.00",
+    "August rent"
+   ]
+  ],
+  "cleared": "2026-08-06",
+  "note": "August rent check.",
+  "id": "A03",
+  "total": "2450.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-03",
+  "payee": "SearchLocal Ads",
+  "lines": [
+   [
+    "Advertising",
+    "250.00",
+    "August search ads"
+   ]
+  ],
+  "cleared": "2026-08-04",
+  "desc": "SEARCHLOCAL ADS",
+  "category": "Professional Services",
+  "note": "SearchLocal ads.",
+  "id": "A04",
+  "total": "250.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-03",
+  "payee": "FieldPro Software",
+  "lines": [
+   [
+    "Dues and Subscriptions",
+    "89.00",
+    "FieldPro monthly"
+   ]
+  ],
+  "cleared": "2026-08-04",
+  "desc": "FIELDPRO SOFTWARE",
+  "category": "Bills & Utilities",
+  "note": "FieldPro subscription.",
+  "id": "A05",
+  "total": "89.00"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-04",
+  "vendor": "Midland Electric Supply",
+  "number": "S1200028.001",
+  "items": [
+   [
+    "LED Wafer Light 6in",
+    "48",
+    "11.85",
+    null
+   ]
+  ],
+  "expenses": [
+   [
+    "Job Materials",
+    "1266.12",
+    "Job materials",
+    "Lakeview Property Management:Hickory Creek Townhomes"
+   ]
+  ],
+  "note": "Midland bill (stock order and job materials).",
+  "id": "A06",
+  "total": "1834.92",
+  "terms": "2% 10 Net 30",
+  "due": "2026-09-03",
+  "lines": [
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "48",
+    "cost": "11.85",
+    "amount": "568.80",
+    "job": null
+   },
+   {
+    "account": "Job Materials",
+    "amount": "1266.12",
+    "memo": "Job materials",
+    "job": "Lakeview Property Management:Hickory Creek Townhomes"
+   }
+  ]
+ },
+ {
+  "kind": "vendor_credit_apply",
+  "date": "2026-08-04",
+  "vendor": "Midland Electric Supply",
+  "credit": "CM S1191012",
+  "bill": "S1190012.001",
+  "amount": "168.40",
+  "note": "Used Midland credit CM S1191012 on S1190012.001.",
+  "id": "A07"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-04",
+  "number": "2405",
+  "customer": "O'Brien, Kathleen",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Outlet repair",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "48.33",
+    "amount": "48.33",
+    "desc": "Fixtures and trim",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Kathleen O'Brien.",
+  "id": "A08",
+  "taxable": "48.33",
+  "tax": "4.23",
+  "total": "197.56",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-08-04"
+ },
+ {
+  "kind": "write_off",
+  "date": "2026-08-04",
+  "customer": "Route 59 Auto Care",
+  "invoice": "2392",
+  "account": "Sales Discounts",
+  "note": "Talked to Dave at Route 59 - we'll waive the $49 trip charge on 2392. Clear it off.",
+  "id": "A09",
+  "amount": "49.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-04",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4485",
+  "bills": [
+   {
+    "bill": "S1190012.001",
+    "amount": "1150.22",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-07",
+  "note": "Paid Midland Electric Supply S1190012.001.",
+  "id": "A10",
+  "total": "1150.22",
+  "discount": "0.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-04",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "102.95",
+    "Small Tools and Equipment"
+   ]
+  ],
+  "cleared": "2026-08-05",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, small tools and equipment.",
+  "id": "A11",
+  "total": "102.95"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-04",
+  "cleared": "2026-08-04",
+  "payments": [
+   "A01"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A12",
+  "total": "600.87",
+  "items": [
+   {
+    "source": "A01",
+    "amount": "600.87"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-05",
+  "number": "2406",
+  "customer": "Lakeview Property Management:Cass Street Apartments",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Exterior outlet",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "484.02",
+    "amount": "484.02",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Lakeview Property Management (Cass Street Apartments).",
+  "id": "A13",
+  "taxable": "484.02",
+  "tax": "42.35",
+  "total": "736.37",
+  "issued": {},
+  "terms": "1% 10 Net 30",
+  "due": "2026-09-04"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-05",
+  "customer": "Ridgeline Realty Management",
+  "ref": "38866",
+  "method": "Check",
+  "apply": [
+   [
+    "2394",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Ridgeline Realty Management paid 2394.",
+  "id": "A14",
+  "amount": "5800.79",
+  "applied": [
+   {
+    "invoice": "2394",
+    "amount": "5800.79",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-08-05",
+  "number": "ACH",
+  "payee": "Midwest Trades Insurance Agency",
+  "lines": [
+   [
+    "Insurance:General Liability",
+    "902.00",
+    "August installment"
+   ],
+   [
+    "Insurance:Workers Compensation",
+    "1055.00",
+    "August installment"
+   ]
+  ],
+  "cleared": "2026-08-05",
+  "desc": "MIDWEST TRADES INS",
+  "memo": "PREMIUM 080526",
+  "trntype": "DEBIT",
+  "note": "Insurance installment (general liability 902.00, workers comp 1,055.00).",
+  "id": "A15",
+  "total": "1957.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-06",
+  "customer": "O'Brien, Kathleen",
+  "ref": "17184",
+  "method": "Check",
+  "apply": [
+   [
+    "2396",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Kathleen O'Brien paid 2396.",
+  "id": "A16",
+  "amount": "310.69",
+  "applied": [
+   {
+    "invoice": "2396",
+    "amount": "310.69",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payroll",
+  "date": "2026-08-06",
+  "period_end": "2026-08-01",
+  "pay_date": "2026-08-07",
+  "hours": {
+   "Ortega, Luis": [
+    "80",
+    "2"
+   ],
+   "Brandt, Kayla": [
+    "76",
+    "0"
+   ]
+  },
+  "cleared": "2026-08-06",
+  "note": "Payroll for Friday 08/07.",
+  "id": "A17",
+  "employees": [
+   {
+    "employee": "Ortega, Luis",
+    "regular": "80",
+    "overtime": "2",
+    "gross": "2863.50",
+    "federal": "249.81",
+    "social_security": "177.54",
+    "medicare": "41.52",
+    "state": "141.74",
+    "net": "2252.89",
+    "employer_taxes": "219.06"
+   },
+   {
+    "employee": "Brandt, Kayla",
+    "regular": "76",
+    "overtime": "0",
+    "gross": "1596.00",
+    "federal": "123.06",
+    "social_security": "98.95",
+    "medicare": "23.14",
+    "state": "79.00",
+    "net": "1271.85",
+    "employer_taxes": "122.09"
+   }
+  ],
+  "gross": "4459.50",
+  "employee_taxes": "934.76",
+  "employer_taxes": "341.15",
+  "net": "3524.74",
+  "tax_debit": "1275.91"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-07",
+  "number": "2407",
+  "customer": "O'Brien, Kathleen",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Flickering lights",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "2",
+    "rate": "28.00",
+    "amount": "56.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "23.67"
+   }
+  ],
+  "note": "Invoiced Kathleen O'Brien.",
+  "id": "A18",
+  "taxable": "56.00",
+  "tax": "4.90",
+  "total": "300.90",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "2",
+    "23.67"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-08-07"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-07",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "64.56",
+    "Small Tools and Equipment"
+   ]
+  ],
+  "cleared": "2026-08-10",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, small tools and equipment.",
+  "id": "A19",
+  "total": "64.56"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-07",
+  "cleared": "2026-08-07",
+  "payments": [
+   "A14",
+   "A16"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A20",
+  "total": "6111.48",
+  "items": [
+   {
+    "source": "A14",
+    "amount": "5800.79"
+   },
+   {
+    "source": "A16",
+    "amount": "310.69"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-10",
+  "number": "2408",
+  "customer": "Nguyen, Linh",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Smoke alarm wiring",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "52.73",
+    "amount": "52.73",
+    "desc": "Devices and plates",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Linh Nguyen.",
+  "id": "A21",
+  "taxable": "52.73",
+  "tax": "4.61",
+  "total": "267.34",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-08-10"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-10",
+  "customer": "Heritage Medical Suites",
+  "ref": "34923",
+  "method": "Check",
+  "apply": [
+   [
+    "2395",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Heritage Medical Suites paid 2395.",
+  "id": "A22",
+  "amount": "4345.52",
+  "applied": [
+   {
+    "invoice": "2395",
+    "amount": "4345.52",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-10",
+  "customer": "Thompson, Greg",
+  "ref": "12394",
+  "method": "Check",
+  "apply": [
+   [
+    "2403",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Greg Thompson paid 2403.",
+  "id": "A23",
+  "amount": "537.52",
+  "applied": [
+   {
+    "invoice": "2403",
+    "amount": "537.52",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-10",
+  "customer": "O'Brien, Kathleen",
+  "ref": "1970",
+  "method": "Check",
+  "apply": [
+   [
+    "2405",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Kathleen O'Brien paid 2405.",
+  "id": "A24",
+  "amount": "197.56",
+  "applied": [
+   {
+    "invoice": "2405",
+    "amount": "197.56",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-10",
+  "customer": "O'Brien, Kathleen",
+  "ref": "7635",
+  "method": "Check",
+  "apply": [
+   [
+    "2407",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Kathleen O'Brien paid 2407.",
+  "id": "A25",
+  "amount": "300.90",
+  "applied": [
+   {
+    "invoice": "2407",
+    "amount": "300.90",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-10",
+  "vendor": "Illinois Valley Gas & Electric",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "6619-0442 JUL",
+    "amount": "412.67",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-10",
+  "desc": "IL VALLEY G&E AUTOPAY",
+  "note": "Gas & electric autopay took 6619-0442 JUL.",
+  "id": "A26",
+  "total": "412.67",
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-10",
+  "vendor": "Will County Equipment Rental",
+  "method": "Check",
+  "number": "4486",
+  "bills": [
+   {
+    "bill": "R-56031",
+    "amount": "585.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-14",
+  "note": "Paid Will County Equipment Rental R-56031.",
+  "id": "A27",
+  "total": "585.00",
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-10",
+  "vendor": "Lund & Ostrowski CPAs",
+  "method": "Check",
+  "number": "4487",
+  "bills": [
+   {
+    "bill": "2026-0611",
+    "amount": "425.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-14",
+  "note": "Paid Lund & Ostrowski CPAs 2026-0611.",
+  "id": "A28",
+  "total": "425.00",
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-11",
+  "vendor": "Midland Electric Supply",
+  "number": "S1200077.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "631.56",
+    "Job materials",
+    "Van Dyke Construction:Lot 14 Prairie Crossing"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "A29",
+  "total": "631.56",
+  "terms": "2% 10 Net 30",
+  "due": "2026-09-10",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "631.56",
+    "memo": "Job materials",
+    "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
+   }
+  ]
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-11",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4488",
+  "bills": [
+   {
+    "bill": "S1190655.001",
+    "amount": "1278.40",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-17",
+  "note": "Paid Midland Electric Supply S1190655.001.",
+  "id": "A30",
+  "total": "1278.40",
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-11",
+  "vendor": "Prairie Fleet Card",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "0731-7741",
+    "amount": "1236.84",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-11",
+  "desc": "PRAIRIE FLEET CARD PMT",
+  "note": "Paid the fuel card bill 0731-7741 online.",
+  "id": "A31",
+  "total": "1236.84",
+  "discount": "0.00"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-11",
+  "cleared": "2026-08-11",
+  "payments": [
+   "A22",
+   "A23",
+   "A24",
+   "A25"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A32",
+  "total": "5381.50",
+  "items": [
+   {
+    "source": "A22",
+    "amount": "4345.52"
+   },
+   {
+    "source": "A23",
+    "amount": "537.52"
+   },
+   {
+    "source": "A24",
+    "amount": "197.56"
+   },
+   {
+    "source": "A25",
+    "amount": "300.90"
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-12",
+  "vendor": "Delgado, Ray",
+  "number": "0812",
+  "expenses": [
+   [
+    "Subcontractors",
+    "1325.00",
+    "Pulling feeders, 205 N Chicago",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Ray's invoice 0812.",
+  "id": "A33",
+  "total": "1325.00",
+  "terms": "Net 15",
+  "due": "2026-08-27",
+  "lines": [
+   {
+    "account": "Subcontractors",
+    "amount": "1325.00",
+    "memo": "Pulling feeders, 205 N Chicago",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-12",
+  "number": "2409",
+  "customer": "Okafor, Chidi",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Smoke alarm wiring",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "403.53",
+    "amount": "403.53",
+    "desc": "Fixtures and trim",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Chidi Okafor.",
+  "id": "A34",
+  "taxable": "403.53",
+  "tax": "35.31",
+  "total": "648.84",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-08-12"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-12",
+  "customer": "Lakeview Property Management",
+  "ref": "37487",
+  "method": "Check",
+  "apply": [
+   [
+    "2406",
+    null
+   ]
+  ],
+  "discounts": [
+   [
+    "2406",
+    "terms"
+   ]
+  ],
+  "note": "Lakeview Property Management paid 2406, less their 1%.",
+  "id": "A35",
+  "amount": "729.01",
+  "applied": [
+   {
+    "invoice": "2406",
+    "amount": "729.01",
+    "discount": "7.36"
+   }
+  ],
+  "discount": "7.36"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-12",
+  "payee": "Valley Broadband",
+  "lines": [
+   [
+    "Utilities:Telephone and Internet",
+    "189.99",
+    "Internet and phones, August"
+   ]
+  ],
+  "cleared": "2026-08-13",
+  "desc": "VALLEY BROADBAND",
+  "category": "Bills & Utilities",
+  "note": "Valley Broadband autopay on the card.",
+  "id": "A36",
+  "total": "189.99"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-12",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "48.52",
+    "Small Tools and Equipment"
+   ]
+  ],
+  "cleared": "2026-08-13",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, small tools and equipment.",
+  "id": "A37",
+  "total": "48.52"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-13",
+  "number": "2410",
+  "customer": "Prairie Grain Co-op",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "4",
+    "rate": "105.00",
+    "amount": "420.00",
+    "desc": "Exterior outlet",
+    "taxable": false,
+    "account": "Installation Income"
+   }
+  ],
+  "note": "Invoiced Prairie Grain Co-op.",
+  "id": "A38",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "420.00",
+  "issued": {},
+  "terms": "Net 30",
+  "due": "2026-09-12"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-13",
+  "customer": "Okafor, Chidi",
+  "ref": "9414",
+  "method": "Check",
+  "apply": [
+   [
+    "2409",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Chidi Okafor paid 2409.",
+  "id": "A39",
+  "amount": "648.84",
+  "applied": [
+   {
+    "invoice": "2409",
+    "amount": "648.84",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-08-14",
+  "number": "ACH",
+  "payee": "Harbor, Mike",
+  "payee_kind": "other_name",
+  "lines": [
+   [
+    "Owner's Draw",
+    "2000.00",
+    "Draw"
+   ]
+  ],
+  "cleared": "2026-08-14",
+  "desc": "ONLINE TRANSFER TO CHK X5531",
+  "memo": "HARBOR M",
+  "trntype": "XFER",
+  "note": "$2,000 to my personal account.",
+  "id": "A40",
+  "total": "2000.00"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-14",
+  "cleared": "2026-08-14",
+  "payments": [
+   "A35",
+   "A39"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A41",
+  "total": "1377.85",
+  "items": [
+   {
+    "source": "A35",
+    "amount": "729.01"
+   },
+   {
+    "source": "A39",
+    "amount": "648.84"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-17",
+  "number": "2411",
+  "customer": "Cedar Ridge Family Dental",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "4",
+    "rate": "105.00",
+    "amount": "420.00",
+    "desc": "Ceiling fan install",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "4",
+    "rate": "32.50",
+    "amount": "130.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "71.93"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "565.32",
+    "amount": "565.32",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Cedar Ridge Family Dental.",
+  "id": "A42",
+  "taxable": "695.32",
+  "tax": "60.84",
+  "total": "1176.16",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "4",
+    "71.93"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-09-16"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-17",
+  "customer": "Van Dyke Construction",
+  "ref": "31136",
+  "method": "Check",
+  "apply": [
+   [
+    "2398",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Van Dyke Construction paid 2398.",
+  "id": "A43",
+  "amount": "7440.00",
+  "applied": [
+   {
+    "invoice": "2398",
+    "amount": "7440.00",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-17",
+  "customer": "Nguyen, Linh",
+  "ref": "5210",
+  "method": "Check",
+  "apply": [
+   [
+    "2408",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Linh Nguyen paid 2408.",
+  "id": "A44",
+  "amount": "267.34",
+  "applied": [
+   {
+    "invoice": "2408",
+    "amount": "267.34",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-08-17",
+  "number": "ACH",
+  "payee": "Cedar Prairie Bank",
+  "lines": [
+   [
+    "Van Loan",
+    "593.37",
+    "Principal"
+   ],
+   [
+    "Interest Expense",
+    "96.15",
+    "Interest"
+   ]
+  ],
+  "cleared": "2026-08-17",
+  "desc": "LOAN PAYMENT 88231",
+  "memo": "AUTO DEBIT",
+  "trntype": "PAYMENT",
+  "note": "Van loan payment 689.52 (principal 593.37, interest 96.15).",
+  "id": "A45",
+  "total": "689.52"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-17",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "119.24",
+    "Small Tools and Equipment"
+   ]
+  ],
+  "cleared": "2026-08-18",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, small tools and equipment.",
+  "id": "A46",
+  "total": "119.24"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-18",
+  "vendor": "Midland Electric Supply",
+  "number": "S1200126.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "162.39",
+    "Job materials",
+    "Ridgeline Realty Management:Unit Turnovers"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "A47",
+  "total": "162.39",
+  "terms": "2% 10 Net 30",
+  "due": "2026-09-17",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "162.39",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:Unit Turnovers"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-18",
+  "number": "2412",
+  "customer": "Route 59 Auto Care",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Exterior outlet",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Surge Protector",
+    "quantity": "1",
+    "rate": "245.00",
+    "amount": "245.00",
+    "desc": "Whole-home surge protective device",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "129.80"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "4",
+    "rate": "28.00",
+    "amount": "112.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "47.34"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "388.36",
+    "amount": "388.36",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Route 59 Auto Care.",
+  "id": "A48",
+  "taxable": "745.36",
+  "tax": "65.22",
+  "total": "1125.58",
+  "issued": {
+   "Surge Protector": [
+    "1",
+    "129.80"
+   ],
+   "LED Wafer Light 6in": [
+    "4",
+    "47.34"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-09-17"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-18",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4489",
+  "bills": [
+   {
+    "bill": "S1191388.001",
+    "amount": "2207.40",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-21",
+  "note": "Paid Midland Electric Supply S1191388.001.",
+  "id": "A49",
+  "total": "2207.40",
+  "discount": "0.00"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-18",
+  "cleared": "2026-08-18",
+  "payments": [
+   "A43",
+   "A44"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A50",
+  "total": "7707.34",
+  "items": [
+   {
+    "source": "A43",
+    "amount": "7440.00"
+   },
+   {
+    "source": "A44",
+    "amount": "267.34"
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-19",
+  "vendor": "Illinois Valley Gas & Electric",
+  "number": "6619-0442 AUG",
+  "terms": "Net 21",
+  "expenses": [
+   [
+    "Utilities:Gas and Electric",
+    "428.97",
+    "Shop, August",
+    null
+   ]
+  ],
+  "note": "Gas & electric bill.",
+  "id": "A51",
+  "total": "428.97",
+  "due": "2026-09-09",
+  "lines": [
+   {
+    "account": "Utilities:Gas and Electric",
+    "amount": "428.97",
+    "memo": "Shop, August",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-08-19",
+  "vendor": "Prairie Uniform Service",
+  "method": "Check",
+  "number": "4490",
+  "bills": [
+   {
+    "bill": "U-89107",
+    "amount": "112.36",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-08-24",
+  "note": "Paid Prairie Uniform Service U-89107.",
+  "id": "A52",
+  "total": "112.36",
+  "discount": "0.00"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-20",
+  "number": "2413",
+  "customer": "Horvath, Ilona",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Tripping breaker",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "1",
+    "rate": "69.00",
+    "amount": "69.00",
+    "desc": "Hardwired smoke/CO combination alarm",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "38.96"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "107.66",
+    "amount": "107.66",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Ilona Horvath.",
+  "id": "A53",
+  "taxable": "176.66",
+  "tax": "15.46",
+  "total": "337.12",
+  "issued": {
+   "Smoke/CO Detector": [
+    "1",
+    "38.96"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-08-20"
+ },
+ {
+  "kind": "payroll",
+  "date": "2026-08-20",
+  "period_end": "2026-08-15",
+  "pay_date": "2026-08-21",
+  "hours": {
+   "Ortega, Luis": [
+    "80",
+    "2"
+   ],
+   "Brandt, Kayla": [
+    "80",
+    "0"
+   ]
+  },
+  "cleared": "2026-08-20",
+  "note": "Payroll for Friday 08/21.",
+  "id": "A54",
+  "employees": [
+   {
+    "employee": "Ortega, Luis",
+    "regular": "80",
+    "overtime": "2",
+    "gross": "2863.50",
+    "federal": "249.81",
+    "social_security": "177.54",
+    "medicare": "41.52",
+    "state": "141.74",
+    "net": "2252.89",
+    "employer_taxes": "219.06"
+   },
+   {
+    "employee": "Brandt, Kayla",
+    "regular": "80",
+    "overtime": "0",
+    "gross": "1680.00",
+    "federal": "131.46",
+    "social_security": "104.16",
+    "medicare": "24.36",
+    "state": "83.16",
+    "net": "1336.86",
+    "employer_taxes": "128.52"
+   }
+  ],
+  "gross": "4543.50",
+  "employee_taxes": "953.75",
+  "employer_taxes": "347.58",
+  "net": "3589.75",
+  "tax_debit": "1301.33"
+ },
+ {
+  "kind": "sales_tax_payment",
+  "date": "2026-08-20",
+  "agency": "Illinois Department of Revenue",
+  "through": "2026-07-31",
+  "amount": "625.94",
+  "cleared": "2026-08-20",
+  "desc": "IL DEPT OF REVENUE EFT",
+  "note": "Filed and paid July's sales tax, 625.94.",
+  "id": "A55"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-20",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Job Materials",
+    "42.89",
+    "Job Materials"
+   ]
+  ],
+  "cleared": "2026-08-21",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, job materials.",
+  "id": "A56",
+  "total": "42.89"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-21",
+  "number": "2414",
+  "customer": "Heritage Medical Suites",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "8",
+    "rate": "105.00",
+    "amount": "840.00",
+    "desc": "Subpanel install",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "8",
+    "rate": "65.00",
+    "amount": "520.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "2",
+    "rate": "32.50",
+    "amount": "65.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.96"
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "3",
+    "rate": "64.00",
+    "amount": "192.00",
+    "desc": "20 amp combination AFCI breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "124.34"
+   }
+  ],
+  "note": "Invoiced Heritage Medical Suites.",
+  "id": "A57",
+  "taxable": "257.00",
+  "tax": "22.49",
+  "total": "1639.49",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "2",
+    "35.96"
+   ],
+   "Breaker 20A AFCI": [
+    "3",
+    "124.34"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-09-20"
+ },
+ {
+  "kind": "check",
+  "date": "2026-08-21",
+  "number": "ACH",
+  "payee": "Paywell Payroll Services",
+  "lines": [
+   [
+    "Payroll Expenses:Payroll Service Fees",
+    "98.50",
+    "August service fee"
+   ]
+  ],
+  "cleared": "2026-08-21",
+  "desc": "PAYWELL PAYROLL FEE",
+  "memo": "AUG",
+  "trntype": "DEBIT",
+  "note": "Paywell's monthly fee.",
+  "id": "A58",
+  "total": "98.50"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-24",
+  "vendor": "Prairie Uniform Service",
+  "number": "U-89818",
+  "expenses": [
+   [
+    "Uniforms",
+    "112.36",
+    "August service",
+    null
+   ]
+  ],
+  "note": "Uniform bill.",
+  "id": "A59",
+  "total": "112.36",
+  "terms": "Net 30",
+  "due": "2026-09-23",
+  "lines": [
+   {
+    "account": "Uniforms",
+    "amount": "112.36",
+    "memo": "August service",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-24",
+  "customer": "Horvath, Ilona",
+  "ref": "35115",
+  "method": "Check",
+  "apply": [
+   [
+    "2413",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Ilona Horvath paid 2413.",
+  "id": "A60",
+  "amount": "337.12",
+  "applied": [
+   {
+    "invoice": "2413",
+    "amount": "337.12",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "transfer",
+  "date": "2026-08-24",
+  "from_account": "Checking",
+  "to_account": "Visa Business Card",
+  "amount": "1481.65",
+  "cleared": "2026-08-24",
+  "desc": "CEDAR PRAIRIE VISA PMT",
+  "trntype": "PAYMENT",
+  "card_desc": "PAYMENT THANK YOU",
+  "note": "Paid the July Visa statement in full, 1481.65.",
+  "id": "A61"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-25",
+  "vendor": "Midland Electric Supply",
+  "number": "S1200175.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "743.19",
+    "Job materials",
+    "Ridgeline Realty Management:Unit Turnovers"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "A62",
+  "total": "743.19",
+  "terms": "2% 10 Net 30",
+  "due": "2026-09-24",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "743.19",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:Unit Turnovers"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-25",
+  "number": "2415",
+  "customer": "Okafor, Chidi",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Tripping breaker",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "2",
+    "rate": "28.00",
+    "amount": "56.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "23.67"
+   }
+  ],
+  "note": "Invoiced Chidi Okafor.",
+  "id": "A63",
+  "taxable": "56.00",
+  "tax": "4.90",
+  "total": "205.90",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "2",
+    "23.67"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-08-25"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-25",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Job Materials",
+    "65.65",
+    "Job Materials"
+   ]
+  ],
+  "cleared": "2026-08-26",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, job materials.",
+  "id": "A64",
+  "total": "65.65"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-25",
+  "cleared": "2026-08-25",
+  "payments": [
+   "A60"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A65",
+  "total": "337.12",
+  "items": [
+   {
+    "source": "A60",
+    "amount": "337.12"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-26",
+  "number": "2416",
+  "customer": "Bella Notte Trattoria",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Fixture swap",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "2",
+    "rate": "64.00",
+    "amount": "128.00",
+    "desc": "20 amp combination AFCI breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "82.90"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "1",
+    "rate": "32.50",
+    "amount": "32.50",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "17.98"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "392.56",
+    "amount": "392.56",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Bella Notte Trattoria.",
+  "id": "A66",
+  "taxable": "553.06",
+  "tax": "48.39",
+  "total": "916.45",
+  "issued": {
+   "Breaker 20A AFCI": [
+    "2",
+    "82.90"
+   ],
+   "GFCI Receptacle 20A": [
+    "1",
+    "17.98"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-09-25"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-26",
+  "number": "2417",
+  "customer": "Van Dyke Construction:Lot 14 Prairie Crossing",
+  "po": "VDC-14-04",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "1",
+    "rate": "4740.00",
+    "amount": "4740.00",
+    "desc": "Final, balance of $18,600 contract",
+    "taxable": false,
+    "account": "Installation Income"
+   }
+  ],
+  "note": "Lot 14 final billing, the rest of the contract.",
+  "id": "A67",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "4740.00",
+  "issued": {},
+  "terms": "Net 30",
+  "due": "2026-09-25"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-26",
+  "customer": "Lakeview Property Management",
+  "ref": "31409",
+  "method": "Check",
+  "apply": [
+   [
+    "2402",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Lakeview Property Management paid 2402.",
+  "id": "A68",
+  "amount": "1305.65",
+  "applied": [
+   {
+    "invoice": "2402",
+    "amount": "1305.65",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-27",
+  "customer": "Cedar Ridge Family Dental",
+  "ref": "30017",
+  "method": "Check",
+  "apply": [
+   [
+    "2404",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Cedar Ridge Family Dental paid 2404.",
+  "id": "A69",
+  "amount": "476.80",
+  "applied": [
+   {
+    "invoice": "2404",
+    "amount": "476.80",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-27",
+  "customer": "Okafor, Chidi",
+  "ref": "24493",
+  "method": "Check",
+  "apply": [
+   [
+    "2415",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Chidi Okafor paid 2415.",
+  "id": "A70",
+  "amount": "205.90",
+  "applied": [
+   {
+    "invoice": "2415",
+    "amount": "205.90",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-28",
+  "number": "2418",
+  "customer": "Abernathy, Ruth",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "No power to garage",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "2",
+    "rate": "14.95",
+    "amount": "29.90",
+    "desc": "20 amp single-pole breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "16.98"
+   }
+  ],
+  "note": "Invoiced Ruth Abernathy.",
+  "id": "A71",
+  "taxable": "29.90",
+  "tax": "2.62",
+  "total": "272.52",
+  "issued": {
+   "Breaker 20A 1P": [
+    "2",
+    "16.98"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-08-28"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-08-28",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Small Tools and Equipment",
+    "58.79",
+    "Small Tools and Equipment"
+   ]
+  ],
+  "cleared": "2026-08-31",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, small tools and equipment.",
+  "id": "A72",
+  "total": "58.79"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-28",
+  "cleared": "2026-08-28",
+  "payments": [
+   "A68",
+   "A69",
+   "A70"
+  ],
+  "note": "Deposited the checks.",
+  "id": "A73",
+  "total": "1988.35",
+  "items": [
+   {
+    "source": "A68",
+    "amount": "1305.65"
+   },
+   {
+    "source": "A69",
+    "amount": "476.80"
+   },
+   {
+    "source": "A70",
+    "amount": "205.90"
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-31",
+  "vendor": "Prairie Fleet Card",
+  "number": "0831-7741",
+  "expenses": [
+   [
+    "Vehicle Expense:Fuel",
+    "1148.95",
+    "August fuel",
+    null
+   ]
+  ],
+  "note": "Fleet card statement for August fuel.",
+  "id": "A74",
+  "total": "1148.95",
+  "terms": "Net 15",
+  "due": "2026-09-15",
+  "lines": [
+   {
+    "account": "Vehicle Expense:Fuel",
+    "amount": "1148.95",
+    "memo": "August fuel",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-08-31",
+  "number": "2419",
+  "customer": "Lindqvist, Erik",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "No power to garage",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "6",
+    "rate": "28.00",
+    "amount": "168.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "71.00"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "1",
+    "rate": "32.50",
+    "amount": "32.50",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "17.98"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "292.87",
+    "amount": "292.87",
+    "desc": "Conduit and fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Erik Lindqvist.",
+  "id": "A75",
+  "taxable": "493.37",
+  "tax": "43.17",
+  "total": "681.54",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "6",
+    "71.00"
+   ],
+   "GFCI Receptacle 20A": [
+    "1",
+    "17.98"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-08-31"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-31",
+  "customer": "Abernathy, Ruth",
+  "ref": "14544",
+  "method": "Check",
+  "apply": [
+   [
+    "2418",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Ruth Abernathy paid 2418.",
+  "id": "A76",
+  "amount": "272.52",
+  "applied": [
+   {
+    "invoice": "2418",
+    "amount": "272.52",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-08-31",
+  "customer": "Lindqvist, Erik",
+  "ref": "25375",
+  "method": "Check",
+  "apply": [
+   [
+    "2419",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Erik Lindqvist paid 2419.",
+  "id": "A77",
+  "amount": "681.54",
+  "applied": [
+   {
+    "invoice": "2419",
+    "amount": "681.54",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-08-31",
+  "number": "ACH",
+  "payee": "Harbor, Mike",
+  "payee_kind": "other_name",
+  "lines": [
+   [
+    "Owner's Draw",
+    "2000.00",
+    "Draw"
+   ]
+  ],
+  "cleared": "2026-08-31",
+  "desc": "ONLINE TRANSFER TO CHK X5531",
+  "memo": "HARBOR M",
+  "trntype": "XFER",
+  "note": "$2,000 to my personal account.",
+  "id": "A78",
+  "total": "2000.00"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-08-31",
+  "cleared": "2026-09-01",
+  "payments": [
+   "A76",
+   "A77"
+  ],
+  "note": "Dropped the last checks at the bank after closing.",
+  "id": "A79",
+  "total": "954.06",
+  "items": [
+   {
+    "source": "A76",
+    "amount": "272.52"
+   },
+   {
+    "source": "A77",
+    "amount": "681.54"
+   }
+  ]
+ },
+ {
+  "kind": "bank_charge",
+  "date": "2026-08-31",
+  "account": "Checking",
+  "amount": "15.00",
+  "cleared": "2026-08-31",
+  "desc": "MONTHLY MAINTENANCE FEE",
+  "expense": "Bank Service Charges",
+  "id": "A80"
+ },
+ {
+  "kind": "bank_interest",
+  "date": "2026-08-31",
+  "account": "Checking",
+  "amount": "0.91",
+  "cleared": "2026-08-31",
+  "desc": "INTEREST PAYMENT",
+  "income": "Interest Income",
+  "id": "A81"
+ },
+ {
+  "kind": "bank_interest",
+  "date": "2026-08-31",
+  "account": "Savings",
+  "amount": "4.72",
+  "cleared": "2026-08-31",
+  "desc": "INTEREST PAYMENT",
+  "income": "Interest Income",
+  "id": "A82"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-01",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201007.001",
+  "items": [
+   [
+    "Breaker 20A AFCI",
+    "16",
+    "42.10",
+    null
+   ],
+   [
+    "LED Wafer Light 6in",
+    "48",
+    "11.85",
+    null
+   ]
+  ],
+  "expenses": [
+   [
+    "Job Materials",
+    "603.33",
+    "Job materials",
+    "Lakeview Property Management:Hickory Creek Townhomes"
+   ]
+  ],
+  "note": "Midland bill (stock order and job materials).",
+  "id": "S01",
+  "total": "1845.73",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-01",
+  "lines": [
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "16",
+    "cost": "42.10",
+    "amount": "673.60",
+    "job": null
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "48",
+    "cost": "11.85",
+    "amount": "568.80",
+    "job": null
+   },
+   {
+    "account": "Job Materials",
+    "amount": "603.33",
+    "memo": "Job materials",
+    "job": "Lakeview Property Management:Hickory Creek Townhomes"
+   }
+  ]
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-01",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4491",
+  "bills": [
+   {
+    "bill": "S1200028.001",
+    "amount": "1834.92",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-08",
+  "note": "Paid Midland Electric Supply S1200028.001.",
+  "id": "S02",
+  "total": "1834.92",
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-09-01",
+  "number": "4492",
+  "payee": "Joliet Industrial Partners LLC",
+  "lines": [
+   [
+    "Rent",
+    "2450.00",
+    "September rent"
+   ]
+  ],
+  "cleared": "2026-09-04",
+  "note": "September rent check.",
+  "id": "S03",
+  "total": "2450.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-01",
+  "payee": "SearchLocal Ads",
+  "lines": [
+   [
+    "Advertising",
+    "250.00",
+    "September search ads"
+   ]
+  ],
+  "cleared": "2026-09-02",
+  "desc": "SEARCHLOCAL ADS",
+  "category": "Professional Services",
+  "note": "SearchLocal ads.",
+  "id": "S04",
+  "total": "250.00"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-02",
+  "number": "2420",
+  "customer": "Prairie Grain Co-op",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "4",
+    "rate": "105.00",
+    "amount": "420.00",
+    "desc": "Ceiling fan install",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "151.69",
+    "amount": "151.69",
+    "desc": "Conduit and fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Prairie Grain Co-op.",
+  "id": "S05",
+  "taxable": "151.69",
+  "tax": "13.27",
+  "total": "584.96",
+  "issued": {},
+  "terms": "Net 30",
+  "due": "2026-10-02"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-02",
+  "payee": "Plainfield Hardware & Lumber",
+  "lines": [
+   [
+    "Job Materials",
+    "82.10",
+    "Job Materials"
+   ]
+  ],
+  "cleared": "2026-09-03",
+  "desc": "PLAINFIELD HARDWARE & LUMBER",
+  "category": "Home",
+  "note": "Card: Plainfield Hardware & Lumber, job materials.",
+  "id": "S06",
+  "total": "82.10"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-03",
+  "number": "2421",
+  "customer": "Morales, Ana",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Add a circuit",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "2",
+    "rate": "14.95",
+    "amount": "29.90",
+    "desc": "20 amp single-pole breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "16.98"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "90.71",
+    "amount": "90.71",
+    "desc": "Conduit and fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Ana Morales.",
+  "id": "S07",
+  "taxable": "120.61",
+  "tax": "10.55",
+  "total": "446.16",
+  "issued": {
+   "Breaker 20A 1P": [
+    "2",
+    "16.98"
+   ]
+  },
+  "terms": "Net 15",
+  "due": "2026-09-18"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-03",
+  "vendor": "Delgado, Ray",
+  "method": "Check",
+  "number": "4493",
+  "bills": [
+   {
+    "bill": "0812",
+    "amount": "1325.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-08",
+  "note": "Paid Delgado, Ray 0812.",
+  "id": "S08",
+  "total": "1325.00",
+  "discount": "0.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-03",
+  "payee": "FieldPro Software",
+  "lines": [
+   [
+    "Dues and Subscriptions",
+    "89.00",
+    "FieldPro monthly"
+   ]
+  ],
+  "cleared": "2026-09-04",
+  "desc": "FIELDPRO SOFTWARE",
+  "category": "Bills & Utilities",
+  "note": "FieldPro subscription.",
+  "id": "S09",
+  "total": "89.00"
+ },
+ {
+  "kind": "payroll",
+  "date": "2026-09-03",
+  "period_end": "2026-08-29",
+  "pay_date": "2026-09-04",
+  "hours": {
+   "Ortega, Luis": [
+    "80",
+    "2"
+   ],
+   "Brandt, Kayla": [
+    "72",
+    "0"
+   ]
+  },
+  "cleared": "2026-09-03",
+  "note": "Payroll for Friday 09/04.",
+  "id": "S10",
+  "employees": [
+   {
+    "employee": "Ortega, Luis",
+    "regular": "80",
+    "overtime": "2",
+    "gross": "2863.50",
+    "federal": "249.81",
+    "social_security": "177.54",
+    "medicare": "41.52",
+    "state": "141.74",
+    "net": "2252.89",
+    "employer_taxes": "219.06"
+   },
+   {
+    "employee": "Brandt, Kayla",
+    "regular": "72",
+    "overtime": "0",
+    "gross": "1512.00",
+    "federal": "114.66",
+    "social_security": "93.74",
+    "medicare": "21.92",
+    "state": "74.84",
+    "net": "1206.84",
+    "employer_taxes": "115.66"
+   }
+  ],
+  "gross": "4375.50",
+  "employee_taxes": "915.77",
+  "employer_taxes": "334.72",
+  "net": "3459.73",
+  "tax_debit": "1250.49"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-04",
+  "number": "2422",
+  "customer": "Lindqvist, Erik",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "8",
+    "rate": "105.00",
+    "amount": "840.00",
+    "desc": "Unit make-ready",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "8",
+    "rate": "65.00",
+    "amount": "520.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "6",
+    "rate": "28.00",
+    "amount": "168.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "71.05"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "68.22",
+    "amount": "68.22",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Erik Lindqvist.",
+  "id": "S11",
+  "taxable": "236.22",
+  "tax": "20.67",
+  "total": "1616.89",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "6",
+    "71.05"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-09-04"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-04",
+  "customer": "Lindqvist, Erik",
+  "ref": "7833",
+  "method": "Check",
+  "apply": [
+   [
+    "2422",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Erik Lindqvist paid 2422.",
+  "id": "S12",
+  "amount": "1616.89",
+  "applied": [
+   {
+    "invoice": "2422",
+    "amount": "1616.89",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-09-04",
+  "cleared": "2026-09-04",
+  "payments": [
+   "S12"
+  ],
+  "note": "Deposited the checks.",
+  "id": "S13",
+  "total": "1616.89",
+  "items": [
+   {
+    "source": "S12",
+    "amount": "1616.89"
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-08",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201056.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "1259.79",
+    "Job materials",
+    "Lakeview Property Management:Cass Street Apartments"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "S14",
+  "total": "1259.79",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-08",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "1259.79",
+    "memo": "Job materials",
+    "job": "Lakeview Property Management:Cass Street Apartments"
+   }
+  ]
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-08",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4494",
+  "bills": [
+   {
+    "bill": "S1200077.001",
+    "amount": "631.56",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-14",
+  "note": "Paid Midland Electric Supply S1200077.001.",
+  "id": "S15",
+  "total": "631.56",
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-09-08",
+  "number": "ACH",
+  "payee": "Midwest Trades Insurance Agency",
+  "lines": [
+   [
+    "Insurance:General Liability",
+    "902.00",
+    "September installment"
+   ],
+   [
+    "Insurance:Workers Compensation",
+    "1055.00",
+    "September installment"
+   ]
+  ],
+  "cleared": "2026-09-08",
+  "desc": "MIDWEST TRADES INS",
+  "memo": "PREMIUM 090826",
+  "trntype": "DEBIT",
+  "note": "Insurance installment (general liability 902.00, workers comp 1,055.00).",
+  "id": "S16",
+  "total": "1957.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-08",
+  "payee": "Prairie Office Supply",
+  "lines": [
+   [
+    "Office Supplies",
+    "74.06",
+    "Office Supplies"
+   ]
+  ],
+  "cleared": "2026-09-09",
+  "desc": "PRAIRIE OFFICE SUPPLY",
+  "category": "Shopping",
+  "note": "Card: Prairie Office Supply, office supplies.",
+  "id": "S17",
+  "total": "74.06"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-09",
+  "number": "2423",
+  "customer": "Nguyen, Linh",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "8",
+    "rate": "105.00",
+    "amount": "840.00",
+    "desc": "Subpanel install",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "8",
+    "rate": "65.00",
+    "amount": "520.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "6",
+    "rate": "28.00",
+    "amount": "168.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "71.05"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "517.24",
+    "amount": "517.24",
+    "desc": "Fixtures and trim",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Linh Nguyen.",
+  "id": "S18",
+  "taxable": "685.24",
+  "tax": "59.96",
+  "total": "2105.20",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "6",
+    "71.05"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-09-09"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-09",
+  "vendor": "Illinois Valley Gas & Electric",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "6619-0442 AUG",
+    "amount": "428.97",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-09",
+  "desc": "IL VALLEY G&E AUTOPAY",
+  "note": "Gas & electric autopay took 6619-0442 AUG.",
+  "id": "S19",
+  "total": "428.97",
+  "discount": "0.00"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-10",
+  "number": "2424",
+  "customer": "Lindqvist, Erik",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "12",
+    "rate": "105.00",
+    "amount": "1260.00",
+    "desc": "Lighting retrofit",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "12",
+    "rate": "65.00",
+    "amount": "780.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "4",
+    "rate": "28.00",
+    "amount": "112.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "47.36"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "103.23",
+    "amount": "103.23",
+    "desc": "Conduit and fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Erik Lindqvist.",
+  "id": "S20",
+  "taxable": "215.23",
+  "tax": "18.83",
+  "total": "2274.06",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "4",
+    "47.36"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-09-10"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-11",
+  "vendor": "Delgado, Ray",
+  "number": "0911",
+  "expenses": [
+   [
+    "Subcontractors",
+    "980.00",
+    "Trenching, Hickory Creek pole lights",
+    "Lakeview Property Management:Hickory Creek Townhomes"
+   ]
+  ],
+  "note": "Ray's invoice 0911.",
+  "id": "S21",
+  "total": "980.00",
+  "terms": "Net 15",
+  "due": "2026-09-26",
+  "lines": [
+   {
+    "account": "Subcontractors",
+    "amount": "980.00",
+    "memo": "Trenching, Hickory Creek pole lights",
+    "job": "Lakeview Property Management:Hickory Creek Townhomes"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-11",
+  "number": "2425",
+  "customer": "Mendoza, Rosa",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Flickering lights",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "2",
+    "rate": "14.95",
+    "amount": "29.90",
+    "desc": "20 amp single-pole breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "16.98"
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "4",
+    "rate": "64.00",
+    "amount": "256.00",
+    "desc": "20 amp combination AFCI breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "167.06"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "551.20",
+    "amount": "551.20",
+    "desc": "Devices and plates",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Rosa Mendoza.",
+  "id": "S22",
+  "taxable": "837.10",
+  "tax": "73.25",
+  "total": "1055.35",
+  "issued": {
+   "Breaker 20A 1P": [
+    "2",
+    "16.98"
+   ],
+   "Breaker 20A AFCI": [
+    "4",
+    "167.06"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-09-11"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-11",
+  "vendor": "Prairie Fleet Card",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "0831-7741",
+    "amount": "1148.95",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-11",
+  "desc": "PRAIRIE FLEET CARD PMT",
+  "note": "Paid the fuel card bill 0831-7741 online.",
+  "id": "S23",
+  "total": "1148.95",
+  "discount": "0.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-11",
+  "payee": null,
+  "lines": [
+   [
+    "Meals",
+    "42.58",
+    "Meals"
+   ]
+  ],
+  "cleared": "2026-09-14",
+  "desc": "JOLIET DINER",
+  "category": "Food & Drink",
+  "note": "Card: Joliet Diner, meals.",
+  "id": "S24",
+  "total": "42.58"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-12",
+  "payee": "Valley Broadband",
+  "lines": [
+   [
+    "Utilities:Telephone and Internet",
+    "189.99",
+    "Internet and phones, September"
+   ]
+  ],
+  "cleared": "2026-09-14",
+  "desc": "VALLEY BROADBAND",
+  "category": "Bills & Utilities",
+  "note": "Valley Broadband autopay on the card.",
+  "id": "S25",
+  "total": "189.99"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-14",
+  "customer": "Prairie Grain Co-op",
+  "ref": "24059",
+  "method": "Check",
+  "apply": [
+   [
+    "2410",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Prairie Grain Co-op paid 2410.",
+  "id": "S26",
+  "amount": "420.00",
+  "applied": [
+   {
+    "invoice": "2410",
+    "amount": "420.00",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-14",
+  "customer": "Cedar Ridge Family Dental",
+  "ref": "19519",
+  "method": "Check",
+  "apply": [
+   [
+    "2411",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Cedar Ridge Family Dental paid 2411.",
+  "id": "S27",
+  "amount": "1176.16",
+  "applied": [
+   {
+    "invoice": "2411",
+    "amount": "1176.16",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-14",
+  "customer": "Heritage Medical Suites",
+  "ref": "29543",
+  "method": "Check",
+  "apply": [
+   [
+    "2414",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Heritage Medical Suites paid 2414.",
+  "id": "S28",
+  "amount": "1639.49",
+  "applied": [
+   {
+    "invoice": "2414",
+    "amount": "1639.49",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-14",
+  "customer": "Lindqvist, Erik",
+  "ref": "3102",
+  "method": "Check",
+  "apply": [
+   [
+    "2424",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Erik Lindqvist paid 2424.",
+  "id": "S29",
+  "amount": "2274.06",
+  "applied": [
+   {
+    "invoice": "2424",
+    "amount": "2274.06",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-14",
+  "customer": "Mendoza, Rosa",
+  "ref": "7050",
+  "method": "Check",
+  "apply": [
+   [
+    "2425",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Rosa Mendoza paid 2425.",
+  "id": "S30",
+  "amount": "1055.35",
+  "applied": [
+   {
+    "invoice": "2425",
+    "amount": "1055.35",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-14",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4495",
+  "bills": [
+   {
+    "bill": "S1200126.001",
+    "amount": "162.39",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-21",
+  "note": "Paid Midland Electric Supply S1200126.001.",
+  "id": "S31",
+  "total": "162.39",
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-09-14",
+  "number": "ACH",
+  "payee": "Harbor, Mike",
+  "payee_kind": "other_name",
+  "lines": [
+   [
+    "Owner's Draw",
+    "2000.00",
+    "Draw"
+   ]
+  ],
+  "cleared": "2026-09-14",
+  "desc": "ONLINE TRANSFER TO CHK X5531",
+  "memo": "HARBOR M",
+  "trntype": "XFER",
+  "note": "$2,000 to my personal account.",
+  "id": "S32",
+  "total": "2000.00"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-15",
+  "vendor": "Lund & Ostrowski CPAs",
+  "number": "2026-0815",
+  "expenses": [
+   [
+    "Professional Fees",
+    "425.00",
+    "Q3 estimate and bookkeeping review",
+    null
+   ]
+  ],
+  "note": "Lund & Ostrowski bill.",
+  "id": "S33",
+  "total": "425.00",
+  "terms": "Net 30",
+  "due": "2026-10-15",
+  "lines": [
+   {
+    "account": "Professional Fees",
+    "amount": "425.00",
+    "memo": "Q3 estimate and bookkeeping review",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-15",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201105.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "782.51",
+    "Job materials",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "S34",
+  "total": "782.51",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-15",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "782.51",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-15",
+  "number": "2426",
+  "customer": "Lakeview Property Management:Cass Street Apartments",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Fixture swap",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "4",
+    "rate": "32.50",
+    "amount": "130.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "71.93"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "3",
+    "rate": "28.00",
+    "amount": "84.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.52"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "213.69",
+    "amount": "213.69",
+    "desc": "Devices and plates",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Lakeview Property Management (Cass Street Apartments).",
+  "id": "S35",
+  "taxable": "427.69",
+  "tax": "37.42",
+  "total": "780.11",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "4",
+    "71.93"
+   ],
+   "LED Wafer Light 6in": [
+    "3",
+    "35.52"
+   ]
+  },
+  "terms": "1% 10 Net 30",
+  "due": "2026-10-15"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-15",
+  "customer": "Nguyen, Linh",
+  "ref": "15694",
+  "method": "Check",
+  "apply": [
+   [
+    "2423",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Linh Nguyen paid 2423.",
+  "id": "S36",
+  "amount": "2105.20",
+  "applied": [
+   {
+    "invoice": "2423",
+    "amount": "2105.20",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-09-15",
+  "number": "ACH",
+  "payee": "Cedar Prairie Bank",
+  "lines": [
+   [
+    "Van Loan",
+    "595.49",
+    "Principal"
+   ],
+   [
+    "Interest Expense",
+    "94.03",
+    "Interest"
+   ]
+  ],
+  "cleared": "2026-09-15",
+  "desc": "LOAN PAYMENT 88231",
+  "memo": "AUTO DEBIT",
+  "trntype": "PAYMENT",
+  "note": "Van loan payment 689.52 (principal 595.49, interest 94.03).",
+  "id": "S37",
+  "total": "689.52"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-09-15",
+  "cleared": "2026-09-15",
+  "payments": [
+   "S26",
+   "S27",
+   "S28",
+   "S29",
+   "S30",
+   "S36"
+  ],
+  "note": "Deposited the checks.",
+  "id": "S38",
+  "total": "8670.26",
+  "items": [
+   {
+    "source": "S26",
+    "amount": "420.00"
+   },
+   {
+    "source": "S27",
+    "amount": "1176.16"
+   },
+   {
+    "source": "S28",
+    "amount": "1639.49"
+   },
+   {
+    "source": "S29",
+    "amount": "2274.06"
+   },
+   {
+    "source": "S30",
+    "amount": "1055.35"
+   },
+   {
+    "source": "S36",
+    "amount": "2105.20"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-16",
+  "number": "2427",
+  "customer": "Thompson, Greg",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Bathroom fan wiring",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "2",
+    "rate": "95.00",
+    "amount": "190.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Surge Protector",
+    "quantity": "1",
+    "rate": "245.00",
+    "amount": "245.00",
+    "desc": "Whole-home surge protective device",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "129.79"
+   }
+  ],
+  "note": "Invoiced Greg Thompson.",
+  "id": "S39",
+  "taxable": "245.00",
+  "tax": "21.44",
+  "total": "601.44",
+  "issued": {
+   "Surge Protector": [
+    "1",
+    "129.79"
+   ]
+  },
+  "terms": "Net 15",
+  "due": "2026-10-01"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-16",
+  "customer": "Route 59 Auto Care",
+  "ref": "32630",
+  "method": "Check",
+  "apply": [
+   [
+    "2412",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Route 59 Auto Care paid 2412.",
+  "id": "S40",
+  "amount": "1125.58",
+  "applied": [
+   {
+    "invoice": "2412",
+    "amount": "1125.58",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-16",
+  "payee": "Prairie Office Supply",
+  "lines": [
+   [
+    "Office Supplies",
+    "37.97",
+    "Office Supplies"
+   ]
+  ],
+  "cleared": "2026-09-17",
+  "desc": "PRAIRIE OFFICE SUPPLY",
+  "category": "Shopping",
+  "note": "Card: Prairie Office Supply, office supplies.",
+  "id": "S41",
+  "total": "37.97"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-17",
+  "number": "2428",
+  "customer": "Van Dyke Construction:Lot 14 Prairie Crossing",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Fixture swap",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Breaker 20A 1P",
+    "quantity": "6",
+    "rate": "14.95",
+    "amount": "89.70",
+    "desc": "20 amp single-pole breaker",
+    "taxable": false,
+    "account": "Materials Income",
+    "cost": "50.94"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "86.99",
+    "amount": "86.99",
+    "desc": "Fixtures and trim",
+    "taxable": false,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Van Dyke Construction (Lot 14 Prairie Crossing).",
+  "id": "S42",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "386.69",
+  "issued": {
+   "Breaker 20A 1P": [
+    "6",
+    "50.94"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-10-17"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-17",
+  "customer": "Morales, Ana",
+  "ref": "26440",
+  "method": "Check",
+  "apply": [
+   [
+    "2421",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Ana Morales paid 2421.",
+  "id": "S43",
+  "amount": "446.16",
+  "applied": [
+   {
+    "invoice": "2421",
+    "amount": "446.16",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payroll",
+  "date": "2026-09-17",
+  "period_end": "2026-09-12",
+  "pay_date": "2026-09-18",
+  "hours": {
+   "Ortega, Luis": [
+    "80",
+    "6"
+   ],
+   "Brandt, Kayla": [
+    "80",
+    "0"
+   ]
+  },
+  "cleared": "2026-09-17",
+  "note": "Payroll for Friday 09/18.",
+  "id": "S44",
+  "employees": [
+   {
+    "employee": "Ortega, Luis",
+    "regular": "80",
+    "overtime": "6",
+    "gross": "3070.50",
+    "federal": "270.51",
+    "social_security": "190.37",
+    "medicare": "44.52",
+    "state": "151.99",
+    "net": "2413.11",
+    "employer_taxes": "234.89"
+   },
+   {
+    "employee": "Brandt, Kayla",
+    "regular": "80",
+    "overtime": "0",
+    "gross": "1680.00",
+    "federal": "131.46",
+    "social_security": "104.16",
+    "medicare": "24.36",
+    "state": "83.16",
+    "net": "1336.86",
+    "employer_taxes": "128.52"
+   }
+  ],
+  "gross": "4750.50",
+  "employee_taxes": "1000.53",
+  "employer_taxes": "363.41",
+  "net": "3749.97",
+  "tax_debit": "1363.94"
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-18",
+  "number": "2429",
+  "customer": "Mendoza, Rosa",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Doorbell transformer",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "2",
+    "rate": "95.00",
+    "amount": "190.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   }
+  ],
+  "note": "Invoiced Rosa Mendoza.",
+  "id": "S45",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "335.00",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-09-18"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-09-18",
+  "cleared": "2026-09-18",
+  "payments": [
+   "S40",
+   "S43"
+  ],
+  "note": "Deposited the checks.",
+  "id": "S46",
+  "total": "1571.74",
+  "items": [
+   {
+    "source": "S40",
+    "amount": "1125.58"
+   },
+   {
+    "source": "S43",
+    "amount": "446.16"
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-21",
+  "vendor": "Illinois Valley Gas & Electric",
+  "number": "6619-0442 SEP",
+  "terms": "Net 21",
+  "expenses": [
+   [
+    "Utilities:Gas and Electric",
+    "441.28",
+    "Shop, September",
+    null
+   ]
+  ],
+  "note": "Gas & electric bill.",
+  "id": "S47",
+  "total": "441.28",
+  "due": "2026-10-12",
+  "lines": [
+   {
+    "account": "Utilities:Gas and Electric",
+    "amount": "441.28",
+    "memo": "Shop, September",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-21",
+  "customer": "Van Dyke Construction",
+  "ref": "20782",
+  "method": "Check",
+  "apply": [
+   [
+    "2417",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Van Dyke Construction paid 2417.",
+  "id": "S48",
+  "amount": "4740.00",
+  "applied": [
+   {
+    "invoice": "2417",
+    "amount": "4740.00",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-21",
+  "customer": "Mendoza, Rosa",
+  "ref": "17937",
+  "method": "Check",
+  "apply": [
+   [
+    "2429",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Rosa Mendoza paid 2429.",
+  "id": "S49",
+  "amount": "335.00",
+  "applied": [
+   {
+    "invoice": "2429",
+    "amount": "335.00",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-21",
+  "vendor": "Prairie Uniform Service",
+  "method": "Check",
+  "number": "4496",
+  "bills": [
+   {
+    "bill": "U-89818",
+    "amount": "112.36",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-25",
+  "note": "Paid Prairie Uniform Service U-89818.",
+  "id": "S50",
+  "total": "112.36",
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill_payment",
+  "date": "2026-09-21",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4497",
+  "bills": [
+   {
+    "bill": "S1200175.001",
+    "amount": "743.19",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-09-28",
+  "note": "Paid Midland Electric Supply S1200175.001.",
+  "id": "S51",
+  "total": "743.19",
+  "discount": "0.00"
+ },
+ {
+  "kind": "check",
+  "date": "2026-09-21",
+  "number": "ACH",
+  "payee": "Paywell Payroll Services",
+  "lines": [
+   [
+    "Payroll Expenses:Payroll Service Fees",
+    "98.50",
+    "September service fee"
+   ]
+  ],
+  "cleared": "2026-09-21",
+  "desc": "PAYWELL PAYROLL FEE",
+  "memo": "SEP",
+  "trntype": "DEBIT",
+  "note": "Paywell's monthly fee.",
+  "id": "S52",
+  "total": "98.50"
+ },
+ {
+  "kind": "sales_tax_payment",
+  "date": "2026-09-21",
+  "agency": "Illinois Department of Revenue",
+  "through": "2026-08-31",
+  "amount": "354.49",
+  "cleared": "2026-09-21",
+  "desc": "IL DEPT OF REVENUE EFT",
+  "note": "Filed and paid August's sales tax, 354.49.",
+  "id": "S53"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-21",
+  "payee": "Prairie Office Supply",
+  "lines": [
+   [
+    "Office Supplies",
+    "41.71",
+    "Office Supplies"
+   ]
+  ],
+  "cleared": "2026-09-22",
+  "desc": "PRAIRIE OFFICE SUPPLY",
+  "category": "Shopping",
+  "note": "Card: Prairie Office Supply, office supplies.",
+  "id": "S54",
+  "total": "41.71"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-22",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201154.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "245.18",
+    "Job materials",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "S55",
+  "total": "245.18",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-22",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "245.18",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-22",
+  "number": "2430",
+  "customer": "Okafor, Chidi",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "No power to garage",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "3",
+    "rate": "32.50",
+    "amount": "97.50",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "53.95"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "2",
+    "rate": "28.00",
+    "amount": "56.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "23.68"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "112.17",
+    "amount": "112.17",
+    "desc": "Wire, boxes, fittings",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Chidi Okafor.",
+  "id": "S56",
+  "taxable": "265.67",
+  "tax": "23.25",
+  "total": "433.92",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "3",
+    "53.95"
+   ],
+   "LED Wafer Light 6in": [
+    "2",
+    "23.68"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-09-22"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-22",
+  "customer": "Bella Notte Trattoria",
+  "ref": "38269",
+  "method": "Check",
+  "apply": [
+   [
+    "2416",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Bella Notte Trattoria paid 2416.",
+  "id": "S57",
+  "amount": "916.45",
+  "applied": [
+   {
+    "invoice": "2416",
+    "amount": "916.45",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-09-22",
+  "cleared": "2026-09-22",
+  "payments": [
+   "S48",
+   "S49",
+   "S57"
+  ],
+  "note": "Deposited the checks.",
+  "id": "S58",
+  "total": "5991.45",
+  "items": [
+   {
+    "source": "S48",
+    "amount": "4740.00"
+   },
+   {
+    "source": "S49",
+    "amount": "335.00"
+   },
+   {
+    "source": "S57",
+    "amount": "916.45"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-23",
+  "number": "2431",
+  "customer": "Abernathy, Ruth",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "6",
+    "rate": "105.00",
+    "amount": "630.00",
+    "desc": "Kitchen remodel circuits",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "6",
+    "rate": "65.00",
+    "amount": "390.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "574.59",
+    "amount": "574.59",
+    "desc": "Devices and plates",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Ruth Abernathy.",
+  "id": "S59",
+  "taxable": "574.59",
+  "tax": "50.28",
+  "total": "1644.87",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-09-23"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-23",
+  "customer": "Okafor, Chidi",
+  "ref": "12464",
+  "method": "Check",
+  "apply": [
+   [
+    "2430",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Chidi Okafor paid 2430.",
+  "id": "S60",
+  "amount": "433.92",
+  "applied": [
+   {
+    "invoice": "2430",
+    "amount": "433.92",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-24",
+  "vendor": "Prairie Uniform Service",
+  "number": "U-90529",
+  "expenses": [
+   [
+    "Uniforms",
+    "112.36",
+    "September service",
+    null
+   ]
+  ],
+  "note": "Uniform bill.",
+  "id": "S61",
+  "total": "112.36",
+  "terms": "Net 30",
+  "due": "2026-10-24",
+  "lines": [
+   {
+    "account": "Uniforms",
+    "amount": "112.36",
+    "memo": "September service",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-24",
+  "number": "2432",
+  "customer": "Lakeview Property Management:Cass Street Apartments",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "4",
+    "rate": "105.00",
+    "amount": "420.00",
+    "desc": "Add a circuit",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Breaker 20A AFCI",
+    "quantity": "6",
+    "rate": "64.00",
+    "amount": "384.00",
+    "desc": "20 amp combination AFCI breaker",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "250.58"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "312.42",
+    "amount": "312.42",
+    "desc": "Fixtures and trim",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Lakeview Property Management (Cass Street Apartments).",
+  "id": "S62",
+  "taxable": "696.42",
+  "tax": "60.94",
+  "total": "1177.36",
+  "issued": {
+   "Breaker 20A AFCI": [
+    "6",
+    "250.58"
+   ]
+  },
+  "terms": "1% 10 Net 30",
+  "due": "2026-10-24"
+ },
+ {
+  "kind": "transfer",
+  "date": "2026-09-24",
+  "from_account": "Checking",
+  "to_account": "Visa Business Card",
+  "amount": "1061.43",
+  "cleared": "2026-09-24",
+  "desc": "CEDAR PRAIRIE VISA PMT",
+  "trntype": "PAYMENT",
+  "card_desc": "PAYMENT THANK YOU",
+  "note": "Paid the August Visa statement in full, 1061.43.",
+  "id": "S63"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-24",
+  "payee": "Prairie Office Supply",
+  "lines": [
+   [
+    "Office Supplies",
+    "64.61",
+    "Office Supplies"
+   ]
+  ],
+  "cleared": "2026-09-25",
+  "desc": "PRAIRIE OFFICE SUPPLY",
+  "category": "Shopping",
+  "note": "Card: Prairie Office Supply, office supplies.",
+  "id": "S64",
+  "total": "64.61"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-09-25",
+  "cleared": "2026-09-25",
+  "payments": [
+   "S60"
+  ],
+  "note": "Deposited the checks.",
+  "id": "S65",
+  "total": "433.92",
+  "items": [
+   {
+    "source": "S60",
+    "amount": "433.92"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-28",
+  "number": "2433",
+  "customer": "St. Casimir Parish",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Ceiling fan install",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "510.57",
+    "amount": "510.57",
+    "desc": "Devices and plates",
+    "taxable": false,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced St. Casimir Parish.",
+  "id": "S66",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "825.57",
+  "issued": {},
+  "terms": "Net 30",
+  "due": "2026-10-28"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-28",
+  "customer": "Thompson, Greg",
+  "ref": "15816",
+  "method": "Check",
+  "apply": [
+   [
+    "2427",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Greg Thompson paid 2427.",
+  "id": "S67",
+  "amount": "601.44",
+  "applied": [
+   {
+    "invoice": "2427",
+    "amount": "601.44",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "payment",
+  "date": "2026-09-28",
+  "customer": "Abernathy, Ruth",
+  "ref": "37897",
+  "method": "Check",
+  "apply": [
+   [
+    "2431",
+    null
+   ]
+  ],
+  "discounts": [],
+  "note": "Ruth Abernathy paid 2431.",
+  "id": "S68",
+  "amount": "1644.87",
+  "applied": [
+   {
+    "invoice": "2431",
+    "amount": "1644.87",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-29",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201203.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "1080.51",
+    "Job materials",
+    "Lakeview Property Management:Cass Street Apartments"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "S69",
+  "total": "1080.51",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-29",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "1080.51",
+    "memo": "Job materials",
+    "job": "Lakeview Property Management:Cass Street Apartments"
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-29",
+  "number": "2434",
+  "customer": "Bella Notte Trattoria",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "16",
+    "rate": "105.00",
+    "amount": "1680.00",
+    "desc": "Basement finish wiring",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Apprentice Labor",
+    "quantity": "16",
+    "rate": "65.00",
+    "amount": "1040.00",
+    "desc": "Apprentice labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   }
+  ],
+  "note": "Invoiced Bella Notte Trattoria.",
+  "id": "S70",
+  "taxable": "0.00",
+  "tax": "0.00",
+  "total": "2720.00",
+  "issued": {},
+  "terms": "Net 30",
+  "due": "2026-10-29"
+ },
+ {
+  "kind": "card_charge",
+  "date": "2026-09-29",
+  "payee": "Prairie Office Supply",
+  "lines": [
+   [
+    "Office Supplies",
+    "28.46",
+    "Office Supplies"
+   ]
+  ],
+  "cleared": "2026-09-30",
+  "desc": "PRAIRIE OFFICE SUPPLY",
+  "category": "Shopping",
+  "note": "Card: Prairie Office Supply, office supplies.",
+  "id": "S71",
+  "total": "28.46"
+ },
+ {
+  "kind": "deposit",
+  "date": "2026-09-29",
+  "cleared": "2026-09-29",
+  "payments": [
+   "S67",
+   "S68"
+  ],
+  "note": "Deposited the checks.",
+  "id": "S72",
+  "total": "2246.31",
+  "items": [
+   {
+    "source": "S67",
+    "amount": "601.44"
+   },
+   {
+    "source": "S68",
+    "amount": "1644.87"
+   }
+  ]
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-30",
+  "vendor": "Prairie Fleet Card",
+  "number": "0930-7741",
+  "expenses": [
+   [
+    "Vehicle Expense:Fuel",
+    "1294.84",
+    "September fuel",
+    null
+   ]
+  ],
+  "note": "Fleet card statement for September fuel.",
+  "id": "S73",
+  "total": "1294.84",
+  "terms": "Net 15",
+  "due": "2026-10-15",
+  "lines": [
+   {
+    "account": "Vehicle Expense:Fuel",
+    "amount": "1294.84",
+    "memo": "September fuel",
+    "job": null
+   }
+  ]
+ },
+ {
+  "kind": "invoice",
+  "date": "2026-09-30",
+  "number": "2435",
+  "customer": "Bella Notte Trattoria",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "2",
+    "rate": "105.00",
+    "amount": "210.00",
+    "desc": "Exterior outlet",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "2",
+    "rate": "28.00",
+    "amount": "56.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "23.68"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "530.62",
+    "amount": "530.62",
+    "desc": "Fixtures and trim",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Bella Notte Trattoria.",
+  "id": "S74",
+  "taxable": "586.62",
+  "tax": "51.33",
+  "total": "847.95",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "2",
+    "23.68"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-10-30"
+ },
+ {
+  "kind": "check",
+  "date": "2026-09-30",
+  "number": "ACH",
+  "payee": "Harbor, Mike",
+  "payee_kind": "other_name",
+  "lines": [
+   [
+    "Owner's Draw",
+    "2000.00",
+    "Draw"
+   ]
+  ],
+  "cleared": "2026-09-30",
+  "desc": "ONLINE TRANSFER TO CHK X5531",
+  "memo": "HARBOR M",
+  "trntype": "XFER",
+  "note": "$2,000 to my personal account.",
+  "id": "S75",
+  "total": "2000.00"
+ },
+ {
+  "kind": "bank_charge",
+  "date": "2026-09-30",
+  "account": "Checking",
+  "amount": "15.00",
+  "cleared": "2026-09-30",
+  "desc": "MONTHLY MAINTENANCE FEE",
+  "expense": "Bank Service Charges",
+  "id": "S76"
+ },
+ {
+  "kind": "bank_interest",
+  "date": "2026-09-30",
+  "account": "Checking",
+  "amount": "0.79",
+  "cleared": "2026-09-30",
+  "desc": "INTEREST PAYMENT",
+  "income": "Interest Income",
+  "id": "S77"
+ },
+ {
+  "kind": "bank_interest",
+  "date": "2026-09-30",
+  "account": "Savings",
+  "amount": "4.74",
+  "cleared": "2026-09-30",
+  "desc": "INTEREST PAYMENT",
+  "income": "Interest Income",
+  "id": "S78"
+ }
+]

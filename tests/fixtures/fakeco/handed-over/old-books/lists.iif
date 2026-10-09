@@ -1,0 +1,186 @@
+!HDR	PROD	VER	REL	IIFVER	DATE	TIME	ACCNTNT	ACCNTNTSPLITTIME
+HDR	QuickBooks Pro	Version 34.0D	Release R5P	1	07/01/2026	1782950400	N	0
+!ACCNT	NAME	REFNUM	TIMESTAMP	ACCNTTYPE	OBAMOUNT	DESC	ACCNUM	SCD	BANKNUM	EXTRA	HIDDEN	DELCOUNT	USEID
+ACCNT	Checking	10	1748390400	BANK	0.00	Cedar Prairie Bank checking x4471	1000	0			N	0	N
+ACCNT	Savings	11	1748390400	BANK	0.00	Cedar Prairie Bank savings x4489	1010	0			N	0	N
+ACCNT	Petty Cash	12	1748390400	BANK	0.00	Cash box in the shop	1020	0			N	0	N
+ACCNT	Accounts Receivable	13	1748390400	AR	0.00		1100	0		ACCRCV	N	0	N
+ACCNT	Undeposited Funds	14	1748390400	OCASSET	0.00	Funds received, not yet deposited	1200	0		UNDEPOSIT	N	0	N
+ACCNT	Inventory Asset	15	1748390400	OCASSET	0.00	Stocked breakers, devices and wire	1300	0		INVENTORYASSET	N	0	N
+ACCNT	Vehicles	16	1748390400	FIXASSET	0.00		1500	0			N	0	N
+ACCNT	Vehicles:Cost	17	1748390400	FIXASSET	0.00	2023 cargo van, 2019 pickup	1510	0			N	0	N
+ACCNT	Vehicles:Accumulated Depreciation	18	1748390400	FIXASSET	0.00		1520	0			N	0	N
+ACCNT	Tools and Equipment	19	1748390400	FIXASSET	0.00		1600	0			N	0	N
+ACCNT	Tools and Equipment:Cost	20	1748390400	FIXASSET	0.00		1610	0			N	0	N
+ACCNT	Tools and Equipment:Accumulated Depreciation	21	1748390400	FIXASSET	0.00		1620	0			N	0	N
+ACCNT	Security Deposit	22	1748390400	OASSET	0.00	Shop lease deposit	1800	0			N	0	N
+ACCNT	Accounts Payable	23	1748390400	AP	0.00		2000	0		ACCPAY	N	0	N
+ACCNT	Visa Business Card	24	1748390400	CCARD	0.00	Cedar Prairie Bank Visa x9012	2050	0			N	0	N
+ACCNT	Sales Tax Payable	25	1748390400	OCLIAB	0.00		2100	0		SALESTAX	N	0	N
+ACCNT	Payroll Liabilities	26	1748390400	OCLIAB	0.00		2200	0			N	0	N
+ACCNT	Van Loan	27	1748390400	LTLIAB	0.00	Cedar Prairie Bank loan 88231	2700	0			N	0	N
+ACCNT	Opening Balance Equity	28	1748390400	EQUITY	0.00		3000	0		OPENBAL	N	0	N
+ACCNT	Owner's Equity	29	1748390400	EQUITY	0.00		3200	0			N	0	N
+ACCNT	Owner's Draw	30	1748390400	EQUITY	0.00		3300	0			N	0	N
+ACCNT	Retained Earnings	31	1748390400	EQUITY	0.00		3900	0		RETEARNINGS	N	0	N
+ACCNT	Service Income	32	1748390400	INC	0.00	Service calls	4100	0			N	0	N
+ACCNT	Installation Income	33	1748390400	INC	0.00	Project and installation work	4200	0			N	0	N
+ACCNT	Materials Income	34	1748390400	INC	0.00		4300	0			N	0	N
+ACCNT	Permit Income	35	1748390400	INC	0.00	Permit fees billed to customers	4400	0			N	0	N
+ACCNT	Sales Discounts	36	1748390400	INC	0.00	Early-payment discounts given	4900	0			N	0	N
+ACCNT	Cost of Goods Sold	37	1748390400	COGS	0.00		5000	0		COGS	N	0	N
+ACCNT	Inventory Adjustments	38	1748390400	COGS	0.00	Count differences and damaged stock	5050	0			N	0	N
+ACCNT	Job Materials	39	1748390400	COGS	0.00		5100	0			N	0	N
+ACCNT	Subcontractors	40	1748390400	COGS	0.00		5200	0			N	0	N
+ACCNT	Equipment Rental	41	1748390400	COGS	0.00		5300	0			N	0	N
+ACCNT	Permits	42	1748390400	COGS	0.00		5400	0			N	0	N
+ACCNT	Purchase Discounts	43	1748390400	COGS	0.00	Early-payment discounts taken	5900	0			N	0	N
+ACCNT	Advertising	44	1748390400	EXP	0.00		6000	0			N	0	N
+ACCNT	Bad Debt	45	1748390400	EXP	0.00		6050	0			N	0	N
+ACCNT	Bank Service Charges	46	1748390400	EXP	0.00		6100	0			N	0	N
+ACCNT	Dues and Subscriptions	47	1748390400	EXP	0.00		6150	0			N	0	N
+ACCNT	Insurance	48	1748390400	EXP	0.00		6200	0			N	0	N
+ACCNT	Insurance:General Liability	49	1748390400	EXP	0.00		6210	0			N	0	N
+ACCNT	Insurance:Workers Compensation	50	1748390400	EXP	0.00		6220	0			N	0	N
+ACCNT	Office Supplies	51	1748390400	EXP	0.00		6300	0			N	0	N
+ACCNT	Professional Fees	52	1748390400	EXP	0.00		6400	0			N	0	N
+ACCNT	Rent	53	1748390400	EXP	0.00	Shop, 1840 Plainfield Rd	6500	0			N	0	N
+ACCNT	Repairs and Maintenance	54	1748390400	EXP	0.00		6600	0			N	0	N
+ACCNT	Small Tools and Equipment	55	1748390400	EXP	0.00		6650	0			N	0	N
+ACCNT	Utilities	56	1748390400	EXP	0.00		6700	0			N	0	N
+ACCNT	Utilities:Gas and Electric	57	1748390400	EXP	0.00		6710	0			N	0	N
+ACCNT	Utilities:Telephone and Internet	58	1748390400	EXP	0.00		6720	0			N	0	N
+ACCNT	Payroll Expenses	59	1748390400	EXP	0.00		6800	0			N	0	N
+ACCNT	Payroll Expenses:Wages	60	1748390400	EXP	0.00		6810	0			N	0	N
+ACCNT	Payroll Expenses:Payroll Taxes	61	1748390400	EXP	0.00		6820	0			N	0	N
+ACCNT	Payroll Expenses:Payroll Service Fees	62	1748390400	EXP	0.00		6830	0			N	0	N
+ACCNT	Vehicle Expense	63	1748390400	EXP	0.00		6900	0			N	0	N
+ACCNT	Vehicle Expense:Fuel	64	1748390400	EXP	0.00		6910	0			N	0	N
+ACCNT	Vehicle Expense:Repairs	65	1748390400	EXP	0.00		6920	0			N	0	N
+ACCNT	Meals	66	1748390400	EXP	0.00		6950	0			N	0	N
+ACCNT	Uniforms	67	1748390400	EXP	0.00		6960	0			N	0	N
+ACCNT	Depreciation Expense	68	1748390400	EXP	0.00		7000	0			N	0	N
+ACCNT	Interest Income	69	1748390400	EXINC	0.00		8100	0			N	0	N
+ACCNT	Interest Expense	70	1748390400	EXEXP	0.00		9100	0			N	0	N
+ACCNT	Estimates	71	1748390400	NONPOSTING	0.00			0		ESTIMATE	N	0	N
+ACCNT	Purchase Orders	72	1748390400	NONPOSTING	0.00			0		PURCHORDER	N	0	N
+!CTYPE	NAME	REFNUM	TIMESTAMP	HIDDEN
+CTYPE	Commercial	73	1748390400	N
+CTYPE	General Contractor	74	1748390400	N
+CTYPE	Non-Profit	75	1748390400	N
+CTYPE	Property Management	76	1748390400	N
+CTYPE	Residential	77	1748390400	N
+!VTYPE	NAME	REFNUM	TIMESTAMP	HIDDEN
+VTYPE	Bank	78	1748390400	N
+VTYPE	Equipment	79	1748390400	N
+VTYPE	Government	80	1748390400	N
+VTYPE	Insurance	81	1748390400	N
+VTYPE	Payroll	82	1748390400	N
+VTYPE	Professional	83	1748390400	N
+VTYPE	Rent	84	1748390400	N
+VTYPE	Software	85	1748390400	N
+VTYPE	Subcontractor	86	1748390400	N
+VTYPE	Supplies	87	1748390400	N
+VTYPE	Tax Agency	88	1748390400	N
+VTYPE	Uniforms	89	1748390400	N
+VTYPE	Utilities	90	1748390400	N
+VTYPE	Vehicle	91	1748390400	N
+VTYPE	Advertising	92	1748390400	N
+!TERMS	NAME	REFNUM	TIMESTAMP	DUEDAYS	MINDAYS	DISCPER	DISCDAYS	TERMSTYPE	HIDDEN	DELCOUNT
+TERMS	Due on receipt	93	1748390400	0	0	0.0%	0	0	N	0
+TERMS	Net 15	94	1748390400	15	0	0.0%	0	0	N	0
+TERMS	Net 21	95	1748390400	21	0	0.0%	0	0	N	0
+TERMS	Net 30	96	1748390400	30	0	0.0%	0	0	N	0
+TERMS	1% 10 Net 30	97	1748390400	30	0	1.0%	10	0	N	0
+TERMS	2% 10 Net 30	98	1748390400	30	0	2.0%	10	0	N	0
+!PAYMETH	NAME	REFNUM	TIMESTAMP	HIDDEN
+PAYMETH	Cash	99	1748390400	N
+PAYMETH	Check	100	1748390400	N
+PAYMETH	E-Check	101	1748390400	N
+PAYMETH	Visa	102	1748390400	N
+PAYMETH	MasterCard	103	1748390400	N
+PAYMETH	Discover	104	1748390400	N
+PAYMETH	American Express	105	1748390400	N
+!CUST	NAME	REFNUM	TIMESTAMP	BADDR1	BADDR2	BADDR3	BADDR4	BADDR5	SADDR1	SADDR2	SADDR3	SADDR4	SADDR5	PHONE1	PHONE2	FAXNUM	EMAIL	NOTE	CONT1	CONT2	CTYPE	TERMS	TAXABLE	SALESTAXCODE	LIMIT	RESALENUM	REP	TAXITEM	NOTEPAD	SALUTATION	COMPANYNAME	FIRSTNAME	MIDINIT	LASTNAME	CUSTFLD1	CUSTFLD2	CUSTFLD3	CUSTFLD4	CUSTFLD5	CUSTFLD6	CUSTFLD7	CUSTFLD8	CUSTFLD9	CUSTFLD10	CUSTFLD11	CUSTFLD12	CUSTFLD13	CUSTFLD14	CUSTFLD15	JOBDESC	JOBTYPE	JOBSTATUS	JOBSTART	JOBPROJEND	JOBEND	HIDDEN	DELCOUNT	PRICELEVEL
+CUST	Abernathy, Ruth	106	1775174400	Ruth Abernathy	519 Western Ave	Joliet, IL 60435			Ruth Abernathy	519 Western Ave	Joliet, IL 60435			815-555-0161							Residential	Due on receipt	Y	Tax				IL Sales Tax				Ruth		Abernathy																						N	0	
+CUST	Bauer, Dennis	107	1775174400	Dennis Bauer	1207 Black Rd	Joliet, IL 60435			Dennis Bauer	1207 Black Rd	Joliet, IL 60435			815-555-0176							Residential	Due on receipt	Y	Tax				IL Sales Tax				Dennis		Bauer																						Y	0	
+CUST	Bella Notte Trattoria	108	1775174400	Bella Notte Trattoria	211 N Chicago St	Joliet, IL 60432			Bella Notte Trattoria	211 N Chicago St	Joliet, IL 60432			815-555-0122			marco@bellanotte.example		Marco Bellini		Commercial	Net 30	Y	Tax	5000.00			IL Sales Tax			Bella Notte Trattoria																									N	0	
+CUST	Cash Customer	109	1775174400	Cash Customer					Cash Customer													Due on receipt	Y	Tax				IL Sales Tax			Cash Customer																									N	0	
+CUST	Castillo, Victor	110	1775174400	Victor Castillo	1615 Dearborn St	Crest Hill, IL 60403			Victor Castillo	1615 Dearborn St	Crest Hill, IL 60403			815-555-0189							Residential	Due on receipt	Y	Tax				IL Sales Tax				Victor		Castillo																						N	0	
+CUST	Cedar Ridge Family Dental	111	1775174400	Cedar Ridge Family Dental	2410 W Jefferson St	Joliet, IL 60435			Cedar Ridge Family Dental	2410 W Jefferson St	Joliet, IL 60435			815-555-0133			office@cedarridgedental.example		Dr. Anita Shah		Commercial	Net 30	Y	Tax	5000.00			IL Sales Tax			Cedar Ridge Family Dental																									N	0	
+CUST	Dubois, Marc	112	1775174400	Marc Dubois	24319 W Lockport St	Plainfield, IL 60544			Marc Dubois	24319 W Lockport St	Plainfield, IL 60544			815-555-0154							Residential	Net 15	Y	Tax				IL Sales Tax				Marc		Dubois																						N	0	
+CUST	Hendricks, Tom	113	1775174400	Tom Hendricks	87 Mills Rd	Joliet, IL 60433			Tom Hendricks	87 Mills Rd	Joliet, IL 60433			815-555-0117							Residential	Due on receipt	Y	Tax				IL Sales Tax				Tom		Hendricks																						N	0	
+CUST	Heritage Medical Suites	114	1775174400	Heritage Medical Suites	1900 Essington Rd	Joliet, IL 60435			Heritage Medical Suites	1900 Essington Rd	Joliet, IL 60435			815-555-0140			facilities@heritagems.example		Brenda Kowal		Commercial	Net 30	Y	Tax	10000.00			IL Sales Tax			Heritage Medical Suites																									N	0	
+CUST	Horvath, Ilona	115	1775174400	Ilona Horvath	315 Haven Ave	New Lenox, IL 60451			Ilona Horvath	315 Haven Ave	New Lenox, IL 60451			815-555-0168							Residential	Due on receipt	Y	Tax				IL Sales Tax				Ilona		Horvath																						N	0	
+CUST	Kaminski, Ted	116	1775174400	Ted Kaminski	640 Garland Ct	Lockport, IL 60441			Ted Kaminski	640 Garland Ct	Lockport, IL 60441			815-555-0102							Residential	Due on receipt	Y	Tax				IL Sales Tax				Ted		Kaminski																						N	0	
+CUST	Kowalski, Janet	117	1775174400	Janet Kowalski	412 Hickory St	Joliet, IL 60435			Janet Kowalski	412 Hickory St	Joliet, IL 60435			815-555-0195			jkowalski@example.com				Residential	Net 15	Y	Tax				IL Sales Tax				Janet		Kowalski																						N	0	
+CUST	Lakeview Property Management	118	1775174400	Lakeview Property Management	1500 W Jefferson St	Suite 210	Joliet, IL 60435		Lakeview Property Management	1500 W Jefferson St	Suite 210	Joliet, IL 60435		815-555-0150			ap@lakeviewpm.example		Dana Whitfield		Property Management	1% 10 Net 30	Y	Tax	25000.00			IL Sales Tax			Lakeview Property Management																									N	0	
+CUST	Lakeview Property Management:Cass Street Apartments	119	1775174400	Lakeview Property Management	1500 W Jefferson St	Suite 210	Joliet, IL 60435		Lakeview Property Management	1500 W Jefferson St	Suite 210	Joliet, IL 60435		815-555-0150					Dana Whitfield		Property Management	1% 10 Net 30	Y	Tax				IL Sales Tax			Lakeview Property Management																			Cass St 24-unit building: unit turns and common areas		In progress				N	0	
+CUST	Lakeview Property Management:Hickory Creek Townhomes	120	1775174400	Lakeview Property Management	1500 W Jefferson St	Suite 210	Joliet, IL 60435		Lakeview Property Management	1500 W Jefferson St	Suite 210	Joliet, IL 60435		815-555-0150					Dana Whitfield		Property Management	1% 10 Net 30	Y	Tax				IL Sales Tax			Lakeview Property Management																			Hickory Creek common lighting and unit repairs		In progress				N	0	
+CUST	Lindqvist, Erik	121	1775174400	Erik Lindqvist	20 Wynstone Dr	Shorewood, IL 60404			Erik Lindqvist	20 Wynstone Dr	Shorewood, IL 60404			815-555-0126			erik.lindqvist@example.com				Residential	Due on receipt	Y	Tax				IL Sales Tax				Erik		Lindqvist																						N	0	
+CUST	Lock & Key Brewing	122	1775174400	Lock & Key Brewing	1020 S State St	Lockport, IL 60441			Lock & Key Brewing	1020 S State St	Lockport, IL 60441			815-555-0181			jen@lockandkey.example		Jen Albrecht		Commercial	Net 30	Y	Tax	8000.00			IL Sales Tax			Lock & Key Brewing																									N	0	
+CUST	Mendoza, Rosa	123	1775174400	Rosa Mendoza	228 Cora St	Joliet, IL 60432			Rosa Mendoza	228 Cora St	Joliet, IL 60432			815-555-0143							Residential	Due on receipt	Y	Tax				IL Sales Tax				Rosa		Mendoza																						N	0	
+CUST	Morales, Ana	124	1775174400	Ana Morales	905 Ella Ave	Joliet, IL 60433			Ana Morales	905 Ella Ave	Joliet, IL 60433			815-555-0172							Residential	Net 15	Y	Tax				IL Sales Tax				Ana		Morales																						N	0	
+CUST	Nguyen, Linh	125	1775174400	Linh Nguyen	13515 S Budler Rd	Plainfield, IL 60544			Linh Nguyen	13515 S Budler Rd	Plainfield, IL 60544			815-555-0119							Residential	Due on receipt	Y	Tax				IL Sales Tax				Linh		Nguyen																						N	0	
+CUST	O'Brien, Kathleen	126	1775174400	Kathleen O'Brien	806 E 9th St	Lockport, IL 60441			Kathleen O'Brien	806 E 9th St	Lockport, IL 60441			815-555-0137							Residential	Due on receipt	Y	Tax				IL Sales Tax				Kathleen		O'Brien																						N	0	
+CUST	Okafor, Chidi	127	1775174400	Chidi Okafor	2318 Caton Farm Rd	Joliet, IL 60435			Chidi Okafor	2318 Caton Farm Rd	Joliet, IL 60435			815-555-0158							Residential	Due on receipt	Y	Tax				IL Sales Tax				Chidi		Okafor																						N	0	
+CUST	Patel, Raj	128	1775174400	Raj Patel	2210 Theodore St	Crest Hill, IL 60403			Raj Patel	2210 Theodore St	Crest Hill, IL 60403			815-555-0184							Residential	Due on receipt	Y	Tax				IL Sales Tax				Raj		Patel																						N	0	
+CUST	Prairie Grain Co-op	129	1775174400	Prairie Grain Co-op	3300 Laraway Rd	New Lenox, IL 60451			Prairie Grain Co-op	3300 Laraway Rd	New Lenox, IL 60451			815-555-0190			office@prairiegrain.example		Hank Vos		Commercial	Net 30	Y	Tax	5000.00			IL Sales Tax			Prairie Grain Co-op																									N	0	
+CUST	Reyes, Maria	130	1775174400	Maria Reyes	1112 N Raynor Ave	Joliet, IL 60435			Maria Reyes	1112 N Raynor Ave	Joliet, IL 60435			815-555-0107							Residential	Due on receipt	Y	Tax				IL Sales Tax				Maria		Reyes																						N	0	
+CUST	Ridgeline Realty Management	131	1775174400	Ridgeline Realty Management	116 N Chicago St	Suite 400	Joliet, IL 60432		Ridgeline Realty Management	116 N Chicago St	Suite 400	Joliet, IL 60432		815-555-0111			payables@ridgelinerm.example		Paul Ferraro		Property Management	Net 30	Y	Tax	20000.00			IL Sales Tax			Ridgeline Realty Management																									N	0	
+CUST	Ridgeline Realty Management:205 N Chicago St	132	1775174400	Ridgeline Realty Management	116 N Chicago St	Suite 400	Joliet, IL 60432		Ridgeline Realty Management	116 N Chicago St	Suite 400	Joliet, IL 60432		815-555-0111					Paul Ferraro		Property Management	Net 30	Y	Tax				IL Sales Tax			Ridgeline Realty Management																			Mixed-use building: second floor tenant fit-out		In progress				N	0	
+CUST	Ridgeline Realty Management:Unit Turnovers	133	1775174400	Ridgeline Realty Management	116 N Chicago St	Suite 400	Joliet, IL 60432		Ridgeline Realty Management	116 N Chicago St	Suite 400	Joliet, IL 60432		815-555-0111					Paul Ferraro		Property Management	Net 30	Y	Tax				IL Sales Tax			Ridgeline Realty Management																			Make-ready electrical for apartment turnovers		In progress				N	0	
+CUST	Route 59 Auto Care	134	1775174400	Route 59 Auto Care	16110 S Route 59	Plainfield, IL 60586			Route 59 Auto Care	16110 S Route 59	Plainfield, IL 60586			815-555-0129			dave@rt59auto.example		Dave Kirchner		Commercial	Net 30	Y	Tax	3000.00			IL Sales Tax			Route 59 Auto Care																									N	0	
+CUST	Schultz, Gary	135	1775174400	Gary Schultz	1408 Laurel Ave	New Lenox, IL 60451			Gary Schultz	1408 Laurel Ave	New Lenox, IL 60451			815-555-0166							Residential	Net 15	Y	Tax				IL Sales Tax				Gary		Schultz																						N	0	
+CUST	St. Casimir Parish	136	1775174400	St. Casimir Parish	420 N Broadway St	Joliet, IL 60435			St. Casimir Parish	420 N Broadway St	Joliet, IL 60435			815-555-0105			office@stcasimir.example		Fr. Michael Duda		Non-Profit	Net 30	N	Non		E9921-4410-06					St. Casimir Parish																									N	0	
+CUST	Van Dyke Construction	137	1775174400	Van Dyke Construction	9400 W 191st St	Mokena, IL 60448			Van Dyke Construction	9400 W 191st St	Mokena, IL 60448			815-555-0198			pete@vandykebuilds.example		Pete Van Dyke		General Contractor	Net 30	N	Non	40000.00						Van Dyke Construction																									N	0	
+CUST	Van Dyke Construction:Lot 14 Prairie Crossing	138	1775174400	Van Dyke Construction	9400 W 191st St	Mokena, IL 60448			Van Dyke Construction	9400 W 191st St	Mokena, IL 60448			815-555-0198					Pete Van Dyke		General Contractor	Net 30	N	Non							Van Dyke Construction																			New house: 200A service, rough-in through trim, contract $18,600		In progress				N	0	
+CUST	Van Dyke Construction:Lot 9 Prairie Crossing	139	1775174400	Van Dyke Construction	9400 W 191st St	Mokena, IL 60448			Van Dyke Construction	9400 W 191st St	Mokena, IL 60448			815-555-0198					Pete Van Dyke		General Contractor	Net 30	N	Non							Van Dyke Construction																			New house, finished May 2026		Closed				N	0	
+CUST	Washington, Darnell	140	1775174400	Darnell Washington	509 Belmont Dr	Romeoville, IL 60446			Darnell Washington	509 Belmont Dr	Romeoville, IL 60446			815-555-0131							Residential	Due on receipt	Y	Tax				IL Sales Tax				Darnell		Washington																						N	0	
+CUST	Zielinski, Paul	141	1775174400	Paul Zielinski	1735 S Briggs St	Lockport, IL 60441			Paul Zielinski	1735 S Briggs St	Lockport, IL 60441			815-555-0179							Residential	Due on receipt	Y	Tax				IL Sales Tax				Paul		Zielinski																						N	0	
+!VEND	NAME	REFNUM	TIMESTAMP	PRINTAS	ADDR1	ADDR2	ADDR3	ADDR4	ADDR5	VTYPE	CONT1	CONT2	PHONE1	PHONE2	FAXNUM	EMAIL	NOTE	TAXID	LIMIT	TERMS	NOTEPAD	SALUTATION	COMPANYNAME	FIRSTNAME	MIDINIT	LASTNAME	CUSTFLD1	CUSTFLD2	CUSTFLD3	CUSTFLD4	CUSTFLD5	CUSTFLD6	CUSTFLD7	CUSTFLD8	CUSTFLD9	CUSTFLD10	CUSTFLD11	CUSTFLD12	CUSTFLD13	CUSTFLD14	CUSTFLD15	1099	HIDDEN	DELCOUNT
+VEND	Cedar Prairie Bank	142	1772582400	Cedar Prairie Bank	Cedar Prairie Bank	2401 W Jefferson St	Joliet, IL 60435			Bank			815-555-0400				Loan 88231						Cedar Prairie Bank																			N	N	0
+VEND	City of Joliet	143	1772582400	City of Joliet	City of Joliet	Permits Desk, City Hall	Joliet, IL 60432			Government			815-555-0410							Due on receipt			City of Joliet																			N	N	0
+VEND	Delgado, Ray	144	1772582400	Ray Delgado	Ray Delgado	711 Theodore St	Crest Hill, IL 60403			Subcontractor			815-555-0420			ray.delgado@example.com		36-1955482		Net 15				Ray		Delgado																Y	N	0
+VEND	FieldPro Software	145	1772582400	FieldPro Software	FieldPro Software	1 Market St	San Francisco, CA 94105			Software													FieldPro Software																			N	N	0
+VEND	Illinois Department of Revenue	146	1772582400	Illinois Department of Revenue	Illinois Department of Revenue	PO Box 19447	Springfield, IL 62794			Tax Agency			800-555-0150										Illinois Department of Revenue																			N	N	0
+VEND	Illinois Valley Gas & Electric	147	1772582400	Illinois Valley Gas & Electric	Illinois Valley Gas & Electric	PO Box 4100	Joliet, IL 60434			Utilities			800-555-0430				6619-0442			Net 21			Illinois Valley Gas & Electric																			N	N	0
+VEND	Joliet Industrial Partners LLC	148	1772582400	Joliet Industrial Partners LLC	Joliet Industrial Partners LLC	58 N Chicago St	Suite 300	Joliet, IL 60432		Rent	Sandra Moy		815-555-0440							Due on receipt			Joliet Industrial Partners LLC																			N	N	0
+VEND	Lund & Ostrowski CPAs	149	1772582400	Lund & Ostrowski CPAs	Lund & Ostrowski CPAs	20 N Chicago St	Suite 210	Joliet, IL 60432		Professional	Karen Lund		815-555-0450			billing@lundcpa.example				Net 30			Lund & Ostrowski CPAs																			N	N	0
+VEND	Midland Elec. Supply	150	1772582400	Midland Elec. Supply	Midland Elec. Supply	1450 Channahon Rd	Joliet, IL 60436			Supplies			815-555-0300							Net 30			Midland Elec. Supply																			N	N	0
+VEND	Midland Electric Supply	151	1772582400	Midland Electric Supply	Midland Electric Supply	1450 Channahon Rd	Joliet, IL 60436			Supplies	Jim Pruitt		815-555-0300			ar@midlandelectric.example	H-20431			2% 10 Net 30			Midland Electric Supply																			N	N	0
+VEND	Midwest Trades Insurance Agency	152	1772582400	Midwest Trades Insurance Agency	Midwest Trades Insurance Agency	1200 Houbolt Rd	Joliet, IL 60431			Insurance	Tom Rourke		815-555-0460										Midwest Trades Insurance Agency																			N	N	0
+VEND	Paywell Payroll Services	153	1772582400	Paywell Payroll Services	Paywell Payroll Services	PO Box 880	Naperville, IL 60566			Payroll			800-555-0470										Paywell Payroll Services																			N	N	0
+VEND	Plainfield Hardware & Lumber	154	1772582400	Plainfield Hardware & Lumber	Plainfield Hardware & Lumber	24000 W Main St	Plainfield, IL 60544			Supplies			815-555-0480										Plainfield Hardware & Lumber																			N	N	0
+VEND	Prairie Fleet Card	155	1772582400	Prairie Fleet Card	Prairie Fleet Card	PO Box 6290	Springfield, IL 62708			Vehicle			800-555-0490				7741-0098-221			Net 15			Prairie Fleet Card																			N	N	0
+VEND	Prairie Office Supply	156	1772582400	Prairie Office Supply	Prairie Office Supply	2121 W Jefferson St	Joliet, IL 60435			Supplies			815-555-0500										Prairie Office Supply																			N	N	0
+VEND	Prairie Uniform Service	157	1772582400	Prairie Uniform Service	Prairie Uniform Service	1820 Moen Ave	Rockdale, IL 60436			Uniforms			815-555-0510				U-2207			Net 30			Prairie Uniform Service																			N	N	0
+VEND	SearchLocal Ads	158	1772582400	SearchLocal Ads	SearchLocal Ads	PO Box 1290	Chicago, IL 60690			Advertising													SearchLocal Ads																			N	N	0
+VEND	Valley Broadband	159	1772582400	Valley Broadband	Valley Broadband	PO Box 2525	Aurora, IL 60507			Utilities			800-555-0520				88-410-2275						Valley Broadband																			N	N	0
+VEND	Will County Equipment Rental	160	1772582400	Will County Equipment Rental	Will County Equipment Rental	2900 Mound Rd	Joliet, IL 60436			Equipment			815-555-0530							Net 30			Will County Equipment Rental																			N	N	0
+!EMP	NAME	REFNUM	TIMESTAMP	INIT	ADDR1	ADDR2	ADDR3	ADDR4	ADDR5	SSNO	PHONE1	PHONE2	FIRSTNAME	MIDINIT	LASTNAME	HIDDEN	DELCOUNT
+EMP	Brandt, Kayla	161	1757030400		Kayla Brandt	310 N Hammes Ave	Joliet, IL 60435			XXX-XX-7702			Kayla		Brandt	N	0
+EMP	Ortega, Luis	162	1757030400		Luis Ortega	1610 Clement St	Joliet, IL 60435			XXX-XX-3318			Luis		Ortega	N	0
+!OTHERNAME	NAME	REFNUM	TIMESTAMP	BADDR1	BADDR2	BADDR3	BADDR4	BADDR5	PHONE1	PHONE2	FAXNUM	EMAIL	CONT1	HIDDEN	DELCOUNT
+OTHERNAME	Harbor, Mike	163	1739750400	Mike Harbor	17 Fieldstone Dr	Shorewood, IL 60404			815-555-0149					N	0
+!INVITEM	NAME	REFNUM	TIMESTAMP	INVITEMTYPE	DESC	PURCHASEDESC	ACCNT	ASSETACCNT	COGSACCNT	QNTY	QNTY	PRICE	COST	TAXABLE	SALESTAXCODE	PAYMETH	TAXVEND	PREFVEND	REORDERPOINT	EXTRA	CUSTFLD1	CUSTFLD2	CUSTFLD3	CUSTFLD4	CUSTFLD5	DEP_TYPE	ISPASSEDTHRU	HIDDEN	DELCOUNT
+INVITEM	Additional Hour	164	1765670400	SERV	Service, each additional hour		Service Income				0	95.00	0.00	N	Non												N	N	0
+INVITEM	Apprentice Labor	165	1765670400	SERV	Apprentice labor, per hour		Installation Income				0	65.00	0.00	N	Non												N	N	0
+INVITEM	Emergency Call	166	1765670400	SERV	After-hours emergency call, first hour		Service Income				0	225.00	0.00	N	Non												N	N	0
+INVITEM	Labor	167	1765670400	SERV	Electrician labor, per hour		Installation Income				0	105.00	0.00	N	Non												N	N	0
+INVITEM	Service Call	168	1765670400	SERV	Service call, first hour		Service Income				0	145.00	0.00	N	Non												N	N	0
+INVITEM	Breaker 20A 1P	169	1765670400	INVENTORY	20 amp single-pole breaker	20A 1P plug-on breaker	Materials Income	Inventory Asset	Cost of Goods Sold		0	14.95	8.62	Y	Tax			Midland Electric Supply	20								N	N	0
+INVITEM	Breaker 20A AFCI	170	1765670400	INVENTORY	20 amp combination AFCI breaker	20A CAFCI plug-on breaker	Materials Income	Inventory Asset	Cost of Goods Sold		0	64.00	42.10	Y	Tax			Midland Electric Supply	8								N	N	0
+INVITEM	EV Charger 48A	171	1765670400	INVENTORY	48A Level 2 EV charger, hardwired	48A hardwired EVSE	Materials Income	Inventory Asset	Cost of Goods Sold		0	899.00	579.00	Y	Tax			Midland Electric Supply	1								N	N	0
+INVITEM	GFCI Receptacle 20A	172	1765670400	INVENTORY	20A tamper-resistant GFCI receptacle	20A TR GFCI, white	Materials Income	Inventory Asset	Cost of Goods Sold		0	32.50	18.15	Y	Tax			Midland Electric Supply	12								N	N	0
+INVITEM	LED Wafer Light 6in	173	1765670400	INVENTORY	6 in LED wafer downlight, selectable color	6in LED wafer 5CCT	Materials Income	Inventory Asset	Cost of Goods Sold		0	28.00	11.85	Y	Tax			Midland Electric Supply	24								N	N	0
+INVITEM	Smoke/CO Detector	174	1765670400	INVENTORY	Hardwired smoke/CO combination alarm	Hardwired smoke/CO combo, 10yr	Materials Income	Inventory Asset	Cost of Goods Sold		0	69.00	39.10	Y	Tax			Midland Electric Supply	6								N	N	0
+INVITEM	Surge Protector	175	1765670400	INVENTORY	Whole-home surge protective device	Type 2 SPD, panel mount	Materials Income	Inventory Asset	Cost of Goods Sold		0	245.00	131.20	Y	Tax			Midland Electric Supply	2								N	N	0
+INVITEM	Wire 12/2 NM 250ft	176	1765670400	INVENTORY	12/2 NM-B cable, 250 ft coil	12/2 NM-B 250ft	Materials Income	Inventory Asset	Cost of Goods Sold		0	189.00	121.45	Y	Tax			Midland Electric Supply	3								N	N	0
+INVITEM	Materials	177	1765670400	PART	Job materials	Job materials	Materials Income		Job Materials		0	0.00	0.00	Y	Tax			Midland Electric Supply									N	N	0
+INVITEM	Permit Fee	178	1765670400	OTHC	Permit fee, billed at cost		Permit Income				0	0.00	0.00	N	Non												N	N	0
+INVITEM	Trip Charge	179	1765670400	OTHC	Trip charge, outside service area		Service Income				0	49.00	0.00	N	Non												N	N	0
+INVITEM	Senior Discount	180	1765670400	DISC	Senior discount		Sales Discounts				0	-10%	0.00	N	Non												N	N	0
+INVITEM	Subtotal	181	1765670400	SUBT	Subtotal						0	0.00	0.00	N	Non												N	N	0
+INVITEM	IL Sales Tax	182	1765670400	STAX	Joliet combined sales tax		Sales Tax Payable				0	8.75%	0.00	N	Non		Illinois Department of Revenue										N	N	0
+INVITEM	Smoke Alarm Package	183	1765670400	GRP	Smoke/CO alarm replacement, up to three alarms						0	0.00	0.00	N	Non												N	N	0

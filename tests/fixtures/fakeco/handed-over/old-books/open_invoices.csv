@@ -1,0 +1,60 @@
+"Harbor Electric LLC"
+"Open Invoices"
+"As of June 30, 2026"
+,,"Type","Date","Num","P. O. #","Terms","Due Date","Class","Aging","Open Balance"
+"Abernathy, Ruth",,,,,,,,,,
+,,"Invoice","06/29/2026","2384",,"Due on receipt","06/29/2026",,"1","274.05"
+"Total Abernathy, Ruth",,,,,,,,,,"274.05"
+"Bauer, Dennis",,,,,,,,,,
+,,"Invoice","04/16/2026","2318",,"Due on receipt","04/16/2026",,"75","186.40"
+"Total Bauer, Dennis",,,,,,,,,,"186.40"
+"Cedar Ridge Family Dental",,,,,,,,,,
+,,"Invoice","05/29/2026","2361",,"Net 30","06/28/2026",,"2","1,486.25"
+"Total Cedar Ridge Family Dental",,,,,,,,,,"1,486.25"
+"Hendricks, Tom",,,,,,,,,,
+,,"Invoice","06/22/2026","2379",,"Due on receipt","06/22/2026",,"8","486.93"
+"Total Hendricks, Tom",,,,,,,,,,"486.93"
+"Kaminski, Ted",,,,,,,,,,
+,,"Credit Memo","05/14/2026","2350",,,"05/14/2026",,,"-150.00"
+"Total Kaminski, Ted",,,,,,,,,,"-150.00"
+"Kowalski, Janet",,,,,,,,,,
+,,"Invoice","06/10/2026","2370",,"Net 15","06/25/2026",,"5","318.27"
+"Total Kowalski, Janet",,,,,,,,,,"318.27"
+"Lakeview Property Management",,,,,,,,,,
+,"Cass Street Apartments",,,,,,,,,
+,,"Invoice","05/08/2026","2342",,"1% 10 Net 30","06/07/2026",,"23","3,875.12"
+,,"Invoice","06/30/2026","2386",,"1% 10 Net 30","07/30/2026",,,"2,148.60"
+,"Total Cass Street Apartments",,,,,,,,,"6,023.72"
+,"Hickory Creek Townhomes",,,,,,,,,
+,,"Invoice","06/19/2026","2377",,"1% 10 Net 30","07/19/2026",,,"2,630.44"
+,"Total Hickory Creek Townhomes",,,,,,,,,"2,630.44"
+"Total Lakeview Property Management",,,,,,,,,,"8,654.16"
+"Lock & Key Brewing",,,,,,,,,,
+,,"Invoice","06/15/2026","2373",,"Net 30","07/15/2026",,,"4,212.80"
+"Total Lock & Key Brewing",,,,,,,,,,"4,212.80"
+"Morales, Ana",,,,,,,,,,
+,,"Invoice","06/30/2026","2385",,"Net 15","07/15/2026",,,"1,186.42"
+"Total Morales, Ana",,,,,,,,,,"1,186.42"
+"Prairie Grain Co-op",,,,,,,,,,
+,,"Invoice","03/12/2026","2291","PG-0312","Net 30","04/11/2026",,"80","1,241.37"
+"Total Prairie Grain Co-op",,,,,,,,,,"1,241.37"
+"Ridgeline Realty Management",,,,,,,,,,
+,"205 N Chicago St",,,,,,,,,
+,,"Invoice","06/26/2026","2383","RRM-205-07","Net 30","07/26/2026",,,"5,318.75"
+,"Total 205 N Chicago St",,,,,,,,,"5,318.75"
+,"Unit Turnovers",,,,,,,,,
+,,"Invoice","06/04/2026","2366",,"Net 30","07/04/2026",,,"742.53"
+,"Total Unit Turnovers",,,,,,,,,"742.53"
+"Total Ridgeline Realty Management",,,,,,,,,,"6,061.28"
+"St. Casimir Parish",,,,,,,,,,
+,,"Invoice","06/24/2026","2381",,"Net 30","07/24/2026",,,"1,962.50"
+"Total St. Casimir Parish",,,,,,,,,,"1,962.50"
+"Van Dyke Construction",,,,,,,,,,
+,"Lot 14 Prairie Crossing",,,,,,,,,
+,,"Invoice","05/21/2026","2355","VDC-14-02","Net 30","06/20/2026",,"10","6,420.00"
+,"Total Lot 14 Prairie Crossing",,,,,,,,,"6,420.00"
+"Total Van Dyke Construction",,,,,,,,,,"6,420.00"
+"Washington, Darnell",,,,,,,,,,
+,,"Invoice","02/18/2026","2264",,"Due on receipt","02/18/2026",,"132","145.00"
+"Total Washington, Darnell",,,,,,,,,,"145.00"
+"TOTAL",,,,,,,,,,"32,485.43"

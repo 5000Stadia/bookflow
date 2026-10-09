@@ -1,0 +1,15 @@
+"Harbor Electric LLC"
+"Uncleared Bank and Card Transactions"
+"As of June 30, 2026"
+,,"Type","Date","Num","Name","Memo","Clr","Amount","Balance"
+"1000 · Checking",,,,,,,,,
+,,"Check","06/25/2026","4471","Midland Electric Supply","S1185870.001, S1186212.001",,"-2,906.33","-2,906.33"
+,,"Bill Pmt -Check","06/29/2026","4472","Delgado, Ray","Inv 0612",,"-900.00","-3,806.33"
+,,"Bill Pmt -Check","06/30/2026","4473","Prairie Uniform Service","U-88003",,"-108.90","-3,915.23"
+,,"Deposit","06/30/2026",,,"Bella Notte 1622.40, Patel 693.20",,"2,315.60","-1,599.63"
+"Total 1000 · Checking",,,,,,,,"-1,599.63","-1,599.63"
+"2050 · Visa Business Card",,,,,,,,,
+,,"Credit Card Charge","06/29/2026",,"Plainfield Hardware & Lumber","Wire nuts, tape, anchors",,"-64.18","-64.18"
+,,"Credit Card Charge","06/30/2026",,,"Lunch, Lot 14 crew",,"-23.50","-87.68"
+"Total 2050 · Visa Business Card",,,,,,,,"-87.68","-87.68"
+"TOTAL",,,,,,,,"-1,687.31","-1,687.31"
