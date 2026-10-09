@@ -11,6 +11,7 @@ from bookflow.company import schema
 from bookflow.company.ledger_reports import register_ledger_functions
 from bookflow.core.exact import _require_i64
 from bookflow.core.money import Money
+from bookflow.company.party_merges import family_cte, survivor_sql
 
 
 class _IntegerText(sa.TypeDecorator):
@@ -40,12 +41,14 @@ def balance_expression(db=None):
         register_functions(db)
     lines, accounts = schema.posting_lines, schema.accounts
     # Each posting leg has one nonnegative side, so this subtraction fits i64.
+    # A merged-away customer's lines count to its survivor (party_merges.py).
+    party = sa.literal_column(survivor_sql("customer", "posting_lines.name_id")).label("name_id")
     totals = sa.select(
-        lines.c.name_id,
+        party,
         sa.func.bookflow_sum_int(lines.c.debit_minor_units - lines.c.credit_minor_units).label("net"),
     ).select_from(lines.join(accounts, accounts.c.id == lines.c.account_id)).where(
         lines.c.name_type == "customer", accounts.c.type == "accounts_receivable",
-    ).group_by(lines.c.name_id).cte("customer_ar_totals").prefix_with("MATERIALIZED")
+    ).group_by(party).cte("customer_ar_totals").prefix_with("MATERIALIZED")
     net = sa.select(totals.c.net).where(
         totals.c.name_id == schema.customers.c.id,
     ).correlate(schema.customers).scalar_subquery()
@@ -68,12 +71,8 @@ def family_balance(db, id: str) -> int:
 def _family_net(db, id: str) -> int:
     """Unbounded intermediate for projections and nonblocking credit warnings."""
     register_functions(db)
-    value = db.raw.execute("""
-        WITH RECURSIVE family(id) AS (
-            SELECT id FROM customers WHERE id = :id
-            UNION
-            SELECT c.id FROM customers c JOIN family f ON c.parent_id = f.id
-        )
+    value = db.raw.execute(f"""
+        WITH RECURSIVE {family_cte("family", ":id")}
         SELECT bookflow_sum_int(l.debit_minor_units - l.credit_minor_units)
         FROM posting_lines l JOIN accounts a ON a.id = l.account_id
         WHERE l.name_type = 'customer' AND a.type = 'accounts_receivable'
@@ -103,12 +102,8 @@ def credit_warning(
         return None
     exposure = _family_net(db, owner["id"]) + new_total
     if old_customer_id is not None:
-        same_family = db.raw.execute("""
-            WITH RECURSIVE family(id) AS (
-                SELECT id FROM customers WHERE id = :owner
-                UNION
-                SELECT c.id FROM customers c JOIN family f ON c.parent_id = f.id
-            )
+        same_family = db.raw.execute(f"""
+            WITH RECURSIVE {family_cte("family", ":owner")}
             SELECT EXISTS(SELECT 1 FROM family WHERE id = :old)
         """, {"owner": owner["id"], "old": old_customer_id}).fetchone()[0]
         if same_family:
@@ -132,12 +127,13 @@ def vendor_balance_expression(db=None):
     if db is not None:
         register_functions(db)
     lines, accounts = schema.posting_lines, schema.accounts
+    party = sa.literal_column(survivor_sql("vendor", "posting_lines.name_id")).label("name_id")
     totals = sa.select(
-        lines.c.name_id,
+        party,
         sa.func.bookflow_sum_int(lines.c.credit_minor_units - lines.c.debit_minor_units).label("net"),
     ).select_from(lines.join(accounts, accounts.c.id == lines.c.account_id)).where(
         lines.c.name_type == "vendor", accounts.c.type == "accounts_payable",
-    ).group_by(lines.c.name_id).cte("vendor_ap_totals").prefix_with("MATERIALIZED")
+    ).group_by(party).cte("vendor_ap_totals").prefix_with("MATERIALIZED")
     net = sa.select(totals.c.net).where(
         totals.c.name_id == schema.vendors.c.id,
     ).correlate(schema.vendors).scalar_subquery()

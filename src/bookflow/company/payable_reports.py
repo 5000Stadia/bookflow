@@ -48,6 +48,7 @@ receivables side.
 """
 from __future__ import annotations
 
+from bookflow.company.party_merges import survivor_sql as _survivor
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -199,7 +200,7 @@ WITH transfer AS (
  SELECT x.source_id FROM transfer x JOIN transfer_target g ON g.source_id=x.source_id
  GROUP BY x.source_id, x.amount HAVING sum(g.amount)=x.amount
 ), ap_line AS (
- SELECT l.id, l.transaction_id AS tx, l.name_id AS party,
+ SELECT l.id, l.transaction_id AS tx, {party} AS party,
         l.credit_minor_units-l.debit_minor_units AS amount, b.effective_date AS effect_date,
         (SELECT coalesce(s.reversed_source_id, s.id) FROM posting_line_sources s
          WHERE s.posting_line_id=l.id AND s.amount_minor_units=l.debit_minor_units+l.credit_minor_units
@@ -214,7 +215,7 @@ WITH transfer AS (
  FROM ap_line l JOIN transfer_target g ON g.source_id=l.transfer_id
 ), settled AS (
  SELECT s.obligation_transaction_id AS bill, s.source_transaction_id AS payment,
-        k.vendor_id AS party, s.amount_minor_units AS amount
+        {key_party} AS party, s.amount_minor_units AS amount
  FROM ap_applications s
  JOIN ap_obligation_keys k ON k.transaction_id=s.obligation_transaction_id
                           AND k.id=s.obligation_key_id
@@ -235,7 +236,7 @@ WITH transfer AS (
  JOIN transaction_revisions r ON r.id=t.current_revision_id
  LEFT JOIN purchase_profiles p ON p.revision_id=t.current_revision_id
 )
-"""
+""".replace("{party}", _survivor("vendor", "l.name_id")).replace("{key_party}", _survivor("vendor", "k.vendor_id"))
 
 _AGING = _EFFECTS + f""", vendor_columns AS (
  SELECT party,
@@ -333,7 +334,8 @@ def unpaid_bills(inp: UnpaidBillsInput, s, *, principal_id=None) -> UnpaidBillsO
             vendor_id = ledger._decode_cursor(inp.cursor, s.company).account_id
         elif inp.vendor is not None:
             from bookflow.company.parties import resolve_party
-            vendor_id = resolve_party(s.company, "vendor", inp.vendor)["id"]
+            from bookflow.company.party_merges import survivor
+            vendor_id = survivor(s.company, "vendor", resolve_party(s.company, "vendor", inp.vendor)["id"])
         state, offset = ledger._state(s, inp, "unpaid-bills", principal_id, vendor_id, account_scoped=False)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"as_of": inp.as_of, "vendor": vendor_id,

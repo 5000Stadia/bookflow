@@ -56,6 +56,7 @@ from bookflow.company.ledger_reports import (
 )
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_SQL, SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.core.errors import BookflowError
+from bookflow.company.party_merges import survivor_sql as _survivor
 
 
 class AsOfInput(StrictModel):
@@ -207,7 +208,9 @@ NO_CUSTOMER = "No name"
 # lossless integer text.
 _EFFECTS = """
 WITH ar AS (
- SELECT l.transaction_id AS tx, l.name_id AS party,
+ -- A merged-away customer reads as its survivor here, so every report built on these
+ -- effects (aging, open invoices, statements, balance summary and detail) shows one customer.
+ SELECT l.transaction_id AS tx, {party} AS party,
         l.debit_minor_units-l.credit_minor_units AS amount, b.effective_date AS effect_date
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
  JOIN accounts a ON a.id=l.account_id
@@ -225,7 +228,7 @@ WITH ar AS (
  SELECT transaction_id, id, party_id FROM credit_source_keys
 ), settled AS (
  SELECT s.paid_transaction_id AS invoice, s.paying_transaction_id AS receipt,
-        k.party_id AS credit_party, s.amount_minor_units AS amount,
+        {credit_party} AS credit_party, s.amount_minor_units AS amount,
         s.effective_date AS effect_date
  FROM applications s
  JOIN settlement_sources k ON k.transaction_id=s.paying_transaction_id
@@ -235,7 +238,7 @@ WITH ar AS (
                    WHERE u.reverses_application_id=s.id AND u.effective_date<=:as_of)
 ), settled_party AS (
  SELECT s.invoice, s.receipt, s.credit_party, s.amount, s.effect_date,
-        p.customer_id AS debit_party
+        {debit_party} AS debit_party
  FROM settled s JOIN transactions t ON t.id=s.invoice
  JOIN sales_profiles p ON p.revision_id=t.current_revision_id
 ), signed AS (
@@ -252,7 +255,9 @@ WITH ar AS (
  JOIN transaction_revisions r ON r.id=t.current_revision_id
  LEFT JOIN sales_profiles p ON p.revision_id=t.current_revision_id
 )
-"""
+""".replace("{party}", _survivor("customer", "l.name_id")).replace(
+    "{credit_party}", _survivor("customer", "k.party_id")).replace(
+    "{debit_party}", _survivor("customer", "p.customer_id"))
 
 _AGING = _EFFECTS + f""", party_columns AS (
  SELECT party,
@@ -429,7 +434,8 @@ def open_invoices(inp: OpenInvoicesInput, s, *, principal_id=None) -> OpenInvoic
             customer_id = ledger._decode_cursor(inp.cursor, s.company).account_id
         elif inp.customer is not None:
             from bookflow.company.parties import resolve_party
-            customer_id = resolve_party(s.company, "customer", inp.customer)["id"]
+            from bookflow.company.party_merges import survivor
+            customer_id = survivor(s.company, "customer", resolve_party(s.company, "customer", inp.customer)["id"])
         state, offset = ledger._state(s, inp, "open-invoices", principal_id, customer_id, account_scoped=False)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"as_of": inp.as_of, "customer": customer_id,
@@ -472,7 +478,8 @@ def statement(inp: StatementInput, s, *, principal_id=None) -> StatementOutput:
             customer_id = ledger._decode_cursor(inp.cursor, s.company).account_id
         elif inp.customer is not None:
             from bookflow.company.parties import resolve_party
-            customer_id = resolve_party(s.company, "customer", inp.customer)["id"]
+            from bookflow.company.party_merges import survivor
+            customer_id = survivor(s.company, "customer", resolve_party(s.company, "customer", inp.customer)["id"])
         state, offset = ledger._state(s, inp, "statement", principal_id, customer_id, account_scoped=False)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"as_of": inp.date_to, "date_from": inp.date_from, "customer": customer_id,

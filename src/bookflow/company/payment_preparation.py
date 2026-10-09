@@ -1,4 +1,5 @@
 """Complete invoice discovery and shared origin-aware receipt calculations."""
+from bookflow.company.party_merges import family_cte
 import json
 from collections import namedtuple
 import sqlalchemy as sa
@@ -63,9 +64,7 @@ def _candidate_query(s, inp, *, page_ids=None, resolved=None, projection='identi
         with_sql, values = '', []
         party_filter = 'p.customer_id IN (' + ','.join('?' for _ in parties) + ')' if parties else '0'
     else:
-        with_sql = """WITH RECURSIVE candidate_family(id) AS (
-            SELECT id FROM customers WHERE id=? UNION
-            SELECT child.id FROM customers AS child JOIN candidate_family AS family ON child.parent_id=family.id)
+        with_sql = f"""WITH RECURSIVE {family_cte('candidate_family')}
         """
         values = [context['customer_id']]
         party_filter = 'p.customer_id IN (SELECT id FROM candidate_family)'
@@ -286,8 +285,7 @@ def payment_page(s, inp):
     method = defaults._row(s.company, 'payment_method', inp.payment_method, active=False)['id'] if inp.payment_method else None
     family = {customer}
     if customer and inp.include_descendants:
-        family.update(row[0] for row in s.company.raw.execute("""WITH RECURSIVE family(id) AS (
-            SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
+        family.update(row[0] for row in s.company.raw.execute(f"""WITH RECURSIVE {family_cte()}
             SELECT id FROM family""", (customer,)))
     t = query.indexed_source(c.transactions, 'ix_co17_transactions_current',
         'current_revision_id', 'type', 'status', 'id', 'version', 'number')

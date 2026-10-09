@@ -39,7 +39,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 account uncategorized (Ask My Accountant); its read input adds no census node.
     # +4 sales-tax adjust and sales-tax adjustment show, query and void (R175).
     # +2 journal restore and invoice restore (R151).
-    assert len(rows) == 523
+    # +4 customer and vendor merge and unmerge (R117).
+    assert len(rows) == 527
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -188,6 +189,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # No new variant kind; the groups stay 26.
     # 2927 -> 2931 (R151), measured on the merged tree: journal restore and invoice restore each add
     # the null branches of their optional date and number. No new variant kind; the groups stay 26.
+    # R117 (customer and vendor merge and unmerge) adds none: merged, into, reason and the idempotency key are
+    # all required or context, so no optional branch is new. Re-measured on the merged tree: still 2931.
     assert sum(len(group["paths"]) for group in mapped)==2931
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as

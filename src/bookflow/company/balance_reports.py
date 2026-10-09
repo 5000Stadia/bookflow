@@ -244,7 +244,8 @@ def _selected_party(inp, s, noun):
     if selector is None:
         return None
     from bookflow.company.parties import resolve_party
-    return resolve_party(s.company, noun, selector)["id"]
+    from bookflow.company.party_merges import survivor
+    return survivor(s.company, noun, resolve_party(s.company, noun, selector)["id"])
 
 
 def customer_balance_summary(inp: CustomerBalanceSummaryInput, s, *, principal_id=None) -> CustomerBalanceSummaryOutput:

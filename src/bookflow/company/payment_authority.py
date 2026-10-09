@@ -3,6 +3,7 @@
 These helpers only read company facts. They neither admit credentials nor add a
 permission system; callers enforce the returned existing resource requirements.
 """
+from bookflow.company.party_merges import family_cte
 import sqlalchemy as sa
 import json
 
@@ -456,8 +457,7 @@ def denied_events(s, resolved=None):
 
 def payer_transactions(db, customer_id):
     """Exact AR-contributing family graph shared with balance disclosure."""
-    family = [row[0] for row in db.raw.execute("""WITH RECURSIVE family(id) AS (
-        SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
+    family = [row[0] for row in db.raw.execute(f"""WITH RECURSIVE {family_cte()}
         SELECT id FROM family""", (customer_id,))]
     return set(db.conn.execute(sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
         c.accounts.c.id == c.posting_lines.c.account_id).where(c.accounts.c.type == 'accounts_receivable',

@@ -1,4 +1,5 @@
 """Atomic new-cash receipts and exact-party immutable invoice applications."""
+from bookflow.company.party_merges import merged_sql
 import json
 
 import sqlalchemy as sa
@@ -374,7 +375,11 @@ def _prepare(s, ctx, inp, operation):
     # Each party's row and ancestry is read once for this preparation, however many of its
     # steps name the party (a receipt applied to hundreds of jobs names each one three times).
     customers, lineages = {}, {}
+    merged_away = {row[0] for row in s.company.raw.execute(merged_sql('customer'))}
     def customer(party_id, active=True):
+        # A customer merged into the payer's family is paid through its survivor although the
+        # merge made it inactive (party_merges.py); its old invoices stay payable.
+        active = active and party_id not in merged_away
         if not active and (party_id, True) in customers:
             return customers[(party_id, True)]
         if (party_id, active) not in customers:

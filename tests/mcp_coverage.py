@@ -115,9 +115,13 @@ CUTOVER_COMMANDS = frozenset(('cutover apply', 'cutover plan', 'cutover tie-out'
 # agent is refused over HTTP.
 RESTORE_COMMANDS = frozenset(('invoice restore', 'journal restore'))
 
+# R117, merging duplicate customers and vendors. Its witness drives all four surfaces over
+# identical copies of the demo: preview, merge, the same merge again, A/R aging, and undo.
+MERGE_COMMANDS = frozenset(('customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge'))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -635,6 +639,7 @@ def execution_map():
     from tests.test_entry_review import COMMANDS as ENTRY_REVIEW_COMMANDS
     from tests.test_cutover_surfaces import COMMANDS as CUTOVER_SURFACE_COMMANDS
     from tests.test_restore_deleted import COMMANDS as RESTORE_SURFACE_COMMANDS
+    from tests.test_party_merge_surfaces import COMMANDS as MERGE_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -701,6 +706,7 @@ def execution_map():
                    'tests/test_entry_review.py::test_the_study_scenario_warns_the_agent_and_lands_on_the_owners_list' if cmd.name in ENTRY_REVIEW_COMMANDS else  # http
                    'tests/test_cutover_surfaces.py::test_the_same_move_in_through_python_cli_http_and_mcp' if cmd.name in CUTOVER_SURFACE_COMMANDS else  # all four
                    'tests/test_restore_deleted.py::test_an_agent_is_refused_over_the_transport' if cmd.name in RESTORE_SURFACE_COMMANDS else  # python, http
+                   'tests/test_party_merge_surfaces.py::test_the_same_merge_through_python_cli_http_and_mcp' if cmd.name in MERGE_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

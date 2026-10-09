@@ -39,7 +39,7 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
         for index in sorted(table.indexes, key=lambda index: index.name))
     assert M.DDL == compiled
     assert M.GUARDS == tuple(guard_statements())
-    assert M.down_revision == 'co0066' and HEADS['company'] == M.revision
+    assert M.down_revision == 'co0066' and M.revision == 'co0067'  # co0068 (party merges) sits on it
     # The widened type CHECK is exactly what the ledger now declares.
     assert M.REPLACEMENTS['transactions'][0][1] == 'CONSTRAINT ck_transaction_type CHECK (' + TRANSACTION_TYPE_CHECK + ')'
 
@@ -51,7 +51,7 @@ def test_a_co0066_file_keeps_its_rows_and_admits_the_new_type_only(tmp_path):
         conn.execute(EVENT)
         before = conn.execute('SELECT * FROM audit_events').fetchall()
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0066', 'co0067')
+        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0066', HEADS['company'])
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
     with sqlite3.connect(path) as conn:

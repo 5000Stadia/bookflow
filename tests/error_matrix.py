@@ -1754,3 +1754,27 @@ for _name, _face in (('journal restore', 'journal entry'), ('invoice restore', '
     }
 MATRIX['journal restore']['E_UNBALANCED_ENTRY'] = 'the retained lines no longer balance'
 MATRIX['journal restore']['E_NO_EXCHANGE_RATE'] = 'no stored rate for a foreign line on the restore date'
+
+# Merging duplicate customers and vendors (R117): an audited alias, never a re-pointing of revisions.
+for _kind in ('customer', 'vendor'):
+    MATRIX[f'{_kind} merge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries either name or id',
+        'E_MERGE_REFUSED': f'the same {_kind} twice, one already merged or a survivor of other merges, a job or linked or open-balance {_kind}, or a currency the survivor never used (the details say which)',
+        'E_REASON_REQUIRED': 'a merge is always given a reason',
+        'E_ACTIVE_DEPENDENTS': f'deactivating the merged {_kind} finds active members still under it',
+        'E_RECORD_IN_USE': f'deactivating the merged {_kind} finds it still in use',
+        'E_PERMISSION': 'an agent asked; merging is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+    MATRIX[f'{_kind} unmerge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries that name or id',
+        'E_MERGE_REFUSED': f'the {_kind} is not merged into another one',
+        'E_REASON_REQUIRED': 'an undo is always given a reason',
+        'E_INACTIVE_REFERENCE': f'the survivor was made inactive since, so the {_kind} cannot stand beside it again',
+        'E_PERMISSION': 'an agent asked; undoing a merge is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
