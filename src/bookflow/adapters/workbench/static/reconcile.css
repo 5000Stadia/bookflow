@@ -42,3 +42,11 @@
 .reconcile-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.7rem 0 0}
 .reconcile-certificate{border:1px solid #bcd8c6;background:#f2f9f4;border-radius:.35rem;
   padding:.7rem;margin:.7rem 0;overflow-wrap:anywhere}
+/* Finish with adjustment: a person's last resort, set apart from the ordinary finish. */
+.reconcile-adjust{flex:1 1 100%;border:1px solid #e3c9a0;background:#fdf8ef;border-radius:.35rem;
+  padding:.6rem .75rem;display:grid;gap:.45rem;min-width:0}
+.reconcile-adjust h3{margin:0;font-size:1rem}
+.reconcile-adjust p{margin:0;overflow-wrap:anywhere}
+.reconcile-adjust label{display:grid;gap:.25rem}
+.reconcile-adjust input{width:100%;box-sizing:border-box;min-width:0}
+.reconcile-adjust button{justify-self:start}

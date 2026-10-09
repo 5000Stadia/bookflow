@@ -321,7 +321,7 @@ Example JSON output:
 
 ## `journal post`
 
-Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields.
+Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields. When you are unsure which account fits, do not guess: post the line to Uncategorized Expense (Ask My Accountant), or Uncategorized Income for money received, with a memo saying what is unclear. `account uncategorized` lists what is waiting there, and moving an entry to its account later is an ordinary update of the document.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

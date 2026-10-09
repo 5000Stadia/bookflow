@@ -336,6 +336,22 @@ unset BOOKFLOW_TOKEN TOKEN_DOCUMENT
 
 Confirm that the host has stopped before removing anything. If this was an isolated documentation trial, remove only the exact `BOOKFLOW_TRIAL_ROOT` created by `mktemp`; it contains the isolated data root and, for a source run, the isolated environment. Never remove a normal Bookflow data root or a source checkout. Cleanup is intentionally not a recursive copy-paste command because the trial-root path must be inspected by the operator first. If the data root is retained, revoke the short-lived guide token with [`token revoke`](cli/token.md) when it is no longer needed.
 
+## When the account is unclear: Ask My Accountant
+
+Every company has two accounts for entries whose right account is not yet known:
+**Uncategorized Expense (Ask My Accountant)** for spending and **Uncategorized Income**
+for money received. The standard profile adds them to each new company; `profile apply
+standard` adds them to an older one.
+
+When you are unsure which account an expense or receipt belongs to, do not guess. Post
+it to the matching Uncategorized account and put what is unclear in the memo, in words
+the person can answer ("Hardware store, no itemised receipt: tools or job supplies?").
+A guessed account looks finished and is never questioned; an Uncategorized one is asked
+about. `account uncategorized` lists what is waiting, oldest first, with each account's
+count and amount, and the Overview shows the same. When the person answers, move the
+entry by updating its own document (`check update`, `bill update`, `journal update`
+and so on) to the right account; it then leaves the list.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:
@@ -480,6 +496,14 @@ stable record IDs). Combine it with `projection: "reference"` and
 `include_inactive: true` to retrieve current labels and activity, without full record
 collections. It intersects every other criterion and remains subject to ordinary
 company authority and cursor checks. Omitted `ids` preserves ordinary browsing.
+
+## A reconciliation that will not tie
+
+Never force a statement to tie. `reconcile finish` with `adjustment` (a journal to
+Reconciliation Discrepancies for whatever is left) is for a person only and refuses an
+agent with `E_PERMISSION`. When the difference will not reach zero, leave the draft open
+and tell the owner the account, the statement date and the remaining difference from
+`reconcile preview`.
 
 ## Deleting duplicate documents
 

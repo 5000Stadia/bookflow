@@ -119,7 +119,7 @@ def opening(identity, snapshot, value, *, made, generation=1, predecessor=None):
 
 
 def certificate(identity, snapshot, value, totals, *, opening_id, covered, prior, issuer, made,
-                generation=1, previous=None):
+                generation=1, previous=None, original_difference=None):
     """A certified statement and the whole account as it stood when it was certified.
 
     Every current head is a member, not only what was ticked: an outstanding movement is part of
@@ -136,7 +136,9 @@ def certificate(identity, snapshot, value, totals, *, opening_id, covered, prior
         opening_id=opening_id, previous_certificate_id=previous, supersedes_certificate_id=None,
         origin_draft_revision_id=value.current_revision_id,
         beginning_balance=totals.beginning_balance, ending_balance=totals.ending_balance,
-        selected_sum=totals.selected_sum, original_difference=totals.difference,
+        # A finish with a reconciliation adjustment records the difference it adjusted away.
+        selected_sum=totals.selected_sum,
+        original_difference=totals.difference if original_difference is None else original_difference,
         final_difference=0, positive_sum=totals.positive_sum, negative_sum=totals.negative_sum,
         positive_count=totals.positive_count, negative_count=totals.negative_count,
         currency=pop['currency'],

@@ -266,7 +266,7 @@ class StandardProfileManifest(_ProfileInput):
     manifest_id: Literal["standard"]
     version: int = Field(ge=1)
     lists: list[
-        Literal["term", "payment-method", "sales-tax-code", "ship-method", "customer-message"]
+        Literal["term", "payment-method", "sales-tax-code", "ship-method", "customer-message", "account"]
     ]
     records: dict[str, list[dict[str, Any]]]
 
@@ -278,6 +278,7 @@ class StandardProfileManifest(_ProfileInput):
             "sales-tax-code",
             "ship-method",
             "customer-message",
+            "account",
         ]
         if self.lists != expected or list(self.records) != expected:
             raise ValueError("standard profile lists and records must use the canonical order")
@@ -288,6 +289,7 @@ class StandardProfileManifest(_ProfileInput):
             "sales-tax-code": 2,
             "ship-method": 5,
             "customer-message": 3,
+            "account": 2,
         }
         for noun in expected:
             if len(self.records[noun]) != expected_counts[noun]:
@@ -301,6 +303,20 @@ class StandardProfileManifest(_ProfileInput):
                     raise ValueError("standard-profile seed keys must be globally unique")
                 all_seed_keys.add(seed_key)
                 payload = {key: value for key, value in raw.items() if key != "seed_key"}
+                if noun == "account":
+                    # The seeded accounts are ordinary chart accounts: the account create rules
+                    # validate them, and their name is the uniqueness key.
+                    from bookflow.company.accounts import AccountCreateInput
+
+                    try:
+                        parsed_account = AccountCreateInput.model_validate(payload)
+                    except ValidationError:
+                        raise ValueError("standard profile has invalid account data") from None
+                    normalized = unicodedata.normalize("NFC", parsed_account.name.casefold())
+                    if normalized in normalized_keys:
+                        raise ValueError("standard profile repeats a normalized account key")
+                    normalized_keys.add(normalized)
+                    continue
                 try:
                     parsed = parse_profile_input(noun, payload)
                 except BookflowError as exc:
@@ -929,7 +945,7 @@ def plan_standard_profile(
     planned: list[ProfileMutation] = []
     preserved: dict[str, int] = {}
     for noun in manifest.lists:
-        table = _table(noun)
+        table = c.accounts if noun == "account" else _table(noun)
         preserved[noun] = 0
         for raw in manifest.records[noun]:
             seed_key = str(raw["seed_key"])
@@ -940,6 +956,13 @@ def plan_standard_profile(
                 preserved[noun] += 1
                 continue
             payload = {key: value for key, value in raw.items() if key != "seed_key"}
+            if noun == "account":
+                mutation = _plan_standard_account(db, payload, seed_key, actor_id=actor_id, via=via, at=timestamp)
+                if mutation is None:
+                    preserved[noun] += 1
+                else:
+                    planned.append(mutation)
+                continue
             planned.append(
                 plan_profile_create(
                     db,
@@ -952,6 +975,41 @@ def plan_standard_profile(
                 )
             )
     return manifest, tuple(planned), preserved
+
+
+def _plan_standard_account(
+    db: Database,
+    payload: Mapping[str, Any],
+    seed_key: str,
+    *,
+    actor_id: str,
+    via: str,
+    at: str,
+) -> ProfileMutation | None:
+    """Plan one standard account, or None when the company already has an account by its name.
+
+    A company that made its own "Uncategorized Income" keeps it and gets no second one. The
+    packaged number is a suggestion: when the company already uses it, the account is added
+    without a number rather than refused.
+    """
+    from bookflow.company import accounts
+
+    name_key = normalize_display_name(payload["name"])[1]
+    taken = db.conn.execute(
+        sa.select(c.accounts.c.id).where(
+            sa.or_(c.accounts.c.name_key == name_key, c.accounts.c.full_name_key == name_key)
+        )
+    ).first()
+    if taken is not None:
+        return None
+    values = dict(payload)
+    number = values.get("number")
+    if number is not None and db.conn.execute(
+        sa.select(c.accounts.c.id).where(c.accounts.c.number_key == number)
+    ).first() is not None:
+        values["number"] = None
+    mutation = accounts.plan_account_create(db, values, actor_id=actor_id, via=via, at=at)
+    return ProfileMutation("account", c.accounts.name, "create", None, {**mutation.after, "seed_key": seed_key})
 
 
 def apply_standard_profile(

@@ -8,13 +8,14 @@ from bookflow.company.journal_models import (
 from bookflow.company.journal_outputs import (
     JournalOutput, JournalWriteOutput, JournalPageOutput, JournalHistoryOutput,
 )
+from bookflow.commands.common import UNSURE_ACCOUNT
 
 
 def _write(verb, model):
     def planner(inp, ctx, s):
         return journals.prepare(s, ctx, inp, verb)
     cmd = command('journal ' + verb, scope='company', description={
-        'post': 'Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields.',
+        'post': 'Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields.' + UNSURE_ACCOUNT,
         'update': 'Append an immutable correction with an exact old-date reversal and a full new-date replacement.',
         'void': 'Void a journal with a required context reason and an exact reversal at its current accounting date.',
     }[verb], input_model=model, output_model=JournalWriteOutput, writes={'company'},

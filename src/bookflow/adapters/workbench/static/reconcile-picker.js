@@ -62,19 +62,33 @@
     const actions=node('div');actions.className='reconcile-actions';
     const finish=node('button','Finish and certify');finish.type='button';finish.disabled=true;
     finish.setAttribute('data-reconcile-finish','');
-    actions.append(finish);
+    // A statement that genuinely will not tie: QuickBooks' "Enter Adjustment". Offered only once
+    // the saved marks still leave a difference and nothing unsaved is pending, so the amount it
+    // names is the one the finish will post. Agents are refused by the command itself.
+    const adjust=node('section');adjust.className='reconcile-adjust';adjust.hidden=true;
+    adjust.setAttribute('data-reconcile-adjust','');adjust.setAttribute('aria-label','Finish with adjustment');
+    const adjustText=node('p');adjustText.setAttribute('data-reconcile-adjust-text','');
+    const reasonLabel=node('label','Reason for the adjustment ');
+    const reason=node('input');reason.type='text';reason.maxLength=500;
+    reason.setAttribute('data-reconcile-adjust-reason','');reasonLabel.append(reason);
+    const adjustFinish=node('button','Finish with adjustment');adjustFinish.type='button';adjustFinish.disabled=true;
+    adjustFinish.setAttribute('data-reconcile-adjust-finish','');
+    adjust.append(node('h3','The statement will not tie?'),adjustText,reasonLabel,adjustFinish);
+    actions.append(finish,adjust);
     const certificate=node('div');certificate.hidden=true;certificate.className='reconcile-certificate';
     entries.before(summary);entries.after(controls,list,actions,certificate);
     entries.hidden=true;
 
     const rows=entries.querySelector('[data-collection-items]');
     const chosen=new Map();
-    let currency='', server=null, busy=false, finished=false;
+    let currency='', server=null, busy=false, finished=false, cutoff='';
+    const ADJUSTMENT_ACCOUNT='Reconciliation Discrepancies';
     // A disabled button says "not yet"; a button that looks ready and does nothing when pressed
     // says the page is broken. So everything that makes the page unready goes through here.
     function working(value){
       busy=value;load.disabled=value || finished;markAll.disabled=clearAll.disabled=value || finished;
       finish.disabled=value || finished || !server || !server.balanced;
+      adjustFinish.disabled=value || finished || !server || server.balanced || adjust.hidden || !reason.value.trim();
     }
 
     async function command(name,input,headers={}){
@@ -110,6 +124,13 @@
         status.textContent=difference===0
           ? 'The difference is zero. Save your marks, then finish.'
           : 'Keep ticking until the difference is zero.';
+        // Offered on the saved marks only: an unsaved tick would change what it posts.
+        const saved=Number(server.totals.difference);
+        adjust.hidden=finished || saved===0 || difference!==saved;
+        if(!adjust.hidden)adjustText.textContent='If you have looked and it still will not tie, finish with an '
+          +'adjustment: one journal for '+money(saved,currency)+' '+currency
+          +(cutoff?' dated '+cutoff:'')+', posted to '+ADJUSTMENT_ACCOUNT+', and the statement is certified.';
+        working(busy);
       }
       rows.dispatchEvent(new Event('change',{bubbles:true}));
     }
@@ -135,7 +156,7 @@
           const page=await command('reconcile candidates',{draft:draftField.value,limit:200,
             ...(cursor?{cursor}:{}),
             ...(query.value?{filters:{number:query.value,hide_after_date:true,sort:'date',descending:false}}:{})});
-          currency=page.currency;
+          currency=page.currency;cutoff=page.cutoff||cutoff;
           for(const row of page.items){
             const label=node('label');label.className='reconcile-movement';
             label.dataset.stale=String(row.stale);label.dataset.claimed=String(row.claimed);
@@ -202,6 +223,34 @@
                +money(done.totals.cleared_balance,currency)+' '+currency));
         list.replaceChildren();controls.hidden=true;
         status.textContent='This statement is reconciled.';
+      }catch(e){error.textContent=e.message;}finally{working(false);}
+    });
+
+    reason.addEventListener('input',()=>working(busy));
+    adjustFinish.addEventListener('click',async()=>{
+      if(busy||finished||!server||!reason.value.trim())return;working(true);error.textContent='';
+      try{
+        const fresh=await command('reconcile preview',{draft:draftField.value,
+          expected_version:Number(versionField.value||1)});
+        if(fresh.balanced)throw new Error('The saved marks balance this statement now; finish it without an adjustment.');
+        const done=await command('reconcile finish',{
+          operation_key:key('adjust'),draft:draftField.value,
+          expected_version:fresh.version,
+          expected_facts_fingerprint:fresh.expected_facts_fingerprint,
+          dependency_guard:fresh.dependency_guard,
+          adjustment:{reason:reason.value.trim()}},
+          {'X-Bookflow-Reason':'Finish the statement with a reconciliation adjustment'});
+        finished=true;adjust.hidden=true;
+        finish.textContent='Statement certified';
+        const made=done.adjustment;
+        certificate.hidden=false;
+        certificate.replaceChildren(node('h2','Statement certified with an adjustment'),
+          node('p','Journal '+(made.number||made.journal_id)+' posted '+made.amount_decimal+' '+currency
+               +' to '+made.account_name+' on '+made.date+'.'),
+          node('p','Certificate '+done.certificate_id+' · cleared balance '
+               +money(done.totals.cleared_balance,currency)+' '+currency));
+        list.replaceChildren();controls.hidden=true;
+        status.textContent='This statement is reconciled, with an adjustment.';
       }catch(e){error.textContent=e.message;}finally{working(false);}
     });
 
