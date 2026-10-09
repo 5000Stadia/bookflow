@@ -185,7 +185,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # null branches of memo, number and class_id), sales-tax adjustment query 7 (cursor, date_from,
     # date_to, agency, adjustment_account, number, status), void 1 (expected_version), show 0.
     # No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2927
+    # 2927 -> 2929, measured per command on both trees (9f5ed99 and this one): reconcile import 3 -> 5. It reads
+    # a statement kept as an attachment, so `content` is now optional (+1, its null branch) and `attachment`
+    # is a new optional string (+1, its null branch); cutover apply and cutover plan stay at 6.
+    assert sum(len(group["paths"]) for group in mapped)==2929
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
