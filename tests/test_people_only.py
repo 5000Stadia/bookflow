@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_sales_tax_adjustment_catalog as tip_layer
+from bookflow.hub import permission_restore_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -20,9 +20,10 @@ REASON = {"X-Bookflow-Reason": "people-only witness"}
 def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_changes_who_can_do_what():
     registry.load_all()
     tip = runtime.current_catalog()
-    # The tip has since moved to sales-tax-adjustment-v1, which carries these admin actions unchanged.
-    assert tip is tip_layer and tip.CATALOG.admin_actions == layer.CATALOG.admin_actions
-    assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS)
+    # The tip has since moved on (sales-tax-adjustment-v1, then restore-v1), which carries these admin actions
+    # and adds its own people-only acts: restoring a deleted journal entry or invoice.
+    assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
+    assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {'journal restore', 'invoice restore'}
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.
     writes = {d.name for d in tip.CATALOG.commands if d.capability in ("user", "membership", "token")

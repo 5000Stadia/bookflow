@@ -38,7 +38,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +3 cutover plan, apply and tie-out (R166).
     # +1 account uncategorized (Ask My Accountant); its read input adds no census node.
     # +4 sales-tax adjust and sales-tax adjustment show, query and void (R175).
-    assert len(rows) == 521
+    # +2 journal restore and invoice restore (R151).
+    assert len(rows) == 523
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -185,7 +186,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # null branches of memo, number and class_id), sales-tax adjustment query 7 (cursor, date_from,
     # date_to, agency, adjustment_account, number, status), void 1 (expected_version), show 0.
     # No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2927
+    # 2927 -> 2931 (R151), measured on the merged tree: journal restore and invoice restore each add
+    # the null branches of their optional date and number. No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2931
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

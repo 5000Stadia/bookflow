@@ -1887,6 +1887,153 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `invoice restore`
+
+Restore a deleted invoice as it stood before deletion: post a new invoice for the same customer, lines, prices, quantities, tax codes, terms, addresses and custom fields through invoice post, and link it to the deleted one in the audit trail. The deleted invoice stays deleted with its number and history; the new one takes the next number unless number is given. Posts at the deleted invoice's date unless date is given. Refused when it would no longer come to the same subtotal, tax and total, when the period is closed, or when a customer, item or account is inactive; group, subtotal and discount lines and invoices billed from estimates or work orders are not restored yet. People only: an agent is refused. Requires the explicit invoice Delete grant and ledger.post. Asking again for the same deleted invoice answers with the first restoration and posts nothing.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard; explicit grant required |
+| Capability | transaction.invoice.delete |
+| Additional resources | ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/invoice.restore` |
+| External binary body | none |
+
+### CLI
+
+`bookflow invoice restore 01ARZ3NDEKTSV4RRFFQ69G5FAV --date 2026-07-01 --reason "Deleted by mistake" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "invoice restore", "input": {"invoice": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "date": "2026-07-01"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `invoice` | `INVOICE` | string | yes | no | — | minimum length 1 |
+| `date` | `--date` | string \| null | no | yes | null | Accounting date of the restored document. Omitted, it is the deleted document's own date; give an open date when that date is now inside a closed period. |
+| `number` | `--number` | string \| null | no | yes | null | Number of the restored document. Omitted, it takes the next number in its series: the deleted document keeps its own number in its retained history. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/invoice.restore`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `family` | literal["journal_entry", "invoice"] | yes | no | — | — |
+| `deleted_id` | string | yes | no | — | — |
+| `deleted_number` | string | yes | no | — | — |
+| `deleted_revision_id` | string | yes | no | — | — |
+| `restored_id` | string | yes | no | — | — |
+| `restored_number` | string | yes | no | — | — |
+| `date` | string | yes | no | — | — |
+| `total_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `left_out` | array[string] | no | no | [] | What the deleted document carried that the restored one does not, and why. |
+| `restored_at` | string \| null | no | yes | null | — |
+| `restored_by` | string \| null | no | yes | null | — |
+| `changed` | boolean | no | no | true | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "currency": "USD",
+  "date": "2026-01-01",
+  "deleted_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "deleted_number": "value",
+  "deleted_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "dry_run": false,
+  "family": "journal_entry",
+  "idempotent_replay": false,
+  "left_out": [],
+  "restored_at": null,
+  "restored_by": null,
+  "restored_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "restored_number": "value",
+  "total_minor_units": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `invoice settlement`
 
 Show current invoice gross, applied and due with separate concurrency and commercial revision identities.

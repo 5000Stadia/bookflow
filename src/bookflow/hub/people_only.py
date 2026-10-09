@@ -15,6 +15,14 @@ PEOPLE_ONLY_PREFIX = 'admin:people-only:'
 CLOSING_DATE_ACTION = 'admin:company:closing-date'
 ROLES_RULE = 'user roles and permissions are set by a person'
 CLOSING_DATE_RULE = 'the closing date is set by a person'
+# Commands outside the rules above that are still a person's act, with the sentence that names the act:
+# restoring a deleted document (restore-v1) and merging parties (party-merge-v1).
+ACT_SUBJECTS = {
+    'journal restore': 'Restoring a deleted document',
+    'invoice restore': 'Restoring a deleted document',
+    'customer merge': 'Merging customers', 'customer unmerge': 'Undoing a customer merge',
+    'vendor merge': 'Merging vendors', 'vendor unmerge': 'Undoing a vendor merge',
+}
 
 
 @lru_cache(maxsize=4)
@@ -42,6 +50,13 @@ def _is_person(s) -> bool:
 
 
 def refusal(rule: str, *, command: str, capability: str, field: str | None = None) -> BookflowError:
+    act = ACT_SUBJECTS.get(command)
+    if act and not field:
+        rule = f"{act[0].lower()}{act[1:]} is a person's act"
+        return BookflowError('E_PERMISSION', message=(
+            f"{act} is a person's act, not an agent's. Ask your principal to make this change."), details={
+            'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command, 'required_role': 'human',
+            'next_step': 'Ask your principal (the person you act for) to make this change themselves.'})
     subject = 'The closing date' if field == 'closing_date' else 'Who can do what in Bookflow'
     details = {'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command, 'required_role': 'human',
                'next_step': 'Ask your principal (the person you act for) to make this change themselves.'}

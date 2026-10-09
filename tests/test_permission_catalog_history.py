@@ -52,6 +52,7 @@ ACCEPTED = {
     'uncategorized-v1': (515, 'dced5fb01946a8346701896d5c7e41def95b64a22d211f59adba53111828a03f'),
     'human-administration-v1': (515, '4299f7604a39a74f0e9310703eecf2014f4ec7f75ba7cbe8973d5729172727a4'),
     'sales-tax-adjustment-v1': (519, '03d9f30190f30e741521e98ac6044a6962e29d26f2a3be25f54f338c8174486f'),
+    'restore-v1': (521, '0a94a8ee9ee2f15db64858e594ea131f2afeef36cb29f11e9509d84e19fa584c'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -97,6 +98,7 @@ CHAIN_ADDITIONS = {
     'human-administration-v1': set(),
     'sales-tax-adjustment-v1': {'sales-tax adjust', 'sales-tax adjustment query', 'sales-tax adjustment show',
                                 'sales-tax adjustment void'},
+    'restore-v1': {'invoice restore', 'journal restore'},
 }
 
 _ANCESTOR_EDIT = """

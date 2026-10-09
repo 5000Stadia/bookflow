@@ -841,6 +841,155 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `journal restore`
+
+Restore a deleted journal entry as it stood before deletion: post a new entry with the same lines, accounts, names, classes, memo and custom fields through journal post, and link it to the deleted one in the audit trail. The deleted entry stays deleted with its number and history; the new one takes the next number unless number is given. Posts at the deleted entry's date unless date is given; a closed period, an inactive account or name refuses. People only: an agent is refused. Requires the explicit journal Delete grant and ledger.post. Asking again for the same deleted entry answers with the first restoration and posts nothing.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard; explicit grant required |
+| Capability | transaction.journal_entry.delete |
+| Additional resources | ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/journal.restore` |
+| External binary body | none |
+
+### CLI
+
+`bookflow journal restore 01ARZ3NDEKTSV4RRFFQ69G5FAV --reason "Deleted by mistake" --company "Demo Plumbing Co" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "journal restore", "input": {"journal": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `journal` | `JOURNAL` | string | yes | no | — | minimum length 1 |
+| `date` | `--date` | string \| null | no | yes | null | Accounting date of the restored document. Omitted, it is the deleted document's own date; give an open date when that date is now inside a closed period. |
+| `number` | `--number` | string \| null | no | yes | null | Number of the restored document. Omitted, it takes the next number in its series: the deleted document keeps its own number in its retained history. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/journal.restore`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `family` | literal["journal_entry", "invoice"] | yes | no | — | — |
+| `deleted_id` | string | yes | no | — | — |
+| `deleted_number` | string | yes | no | — | — |
+| `deleted_revision_id` | string | yes | no | — | — |
+| `restored_id` | string | yes | no | — | — |
+| `restored_number` | string | yes | no | — | — |
+| `date` | string | yes | no | — | — |
+| `total_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `left_out` | array[string] | no | no | [] | What the deleted document carried that the restored one does not, and why. |
+| `restored_at` | string \| null | no | yes | null | — |
+| `restored_by` | string \| null | no | yes | null | — |
+| `changed` | boolean | no | no | true | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "currency": "USD",
+  "date": "2026-01-01",
+  "deleted_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "deleted_number": "value",
+  "deleted_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "dry_run": false,
+  "family": "journal_entry",
+  "idempotent_replay": false,
+  "left_out": [],
+  "restored_at": null,
+  "restored_by": null,
+  "restored_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "restored_number": "value",
+  "total_minor_units": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_NO_EXCHANGE_RATE` | No exchange rate exists for the exact accounting date and currency pair. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_UNBALANCED_ENTRY` | Journal debits and credits must be equal. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `journal show`
 
 Show a journal and its current or selected immutable revision, historical lines, captured custom fields and posting batch totals.
