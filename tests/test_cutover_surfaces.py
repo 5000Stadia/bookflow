@@ -59,10 +59,10 @@ def test_the_same_move_in_through_python_cli_http_and_mcp(tmp_path):
         assert plan["ready"] and not plan["dry_run"], surface
         assert {f["kind"] for f in plan["files"]} == {"iif", "trial_balance", "open_invoices", "unpaid_bills",
                                                       "ar_aging", "ap_aging", "inventory_valuation"}, surface
-        assert (applied["created"], applied["already_in"]) == (75, 0), surface
+        assert (applied["created"], applied["already_in"]) == (76, 0), surface
         assert tie["tied"] and tie["clearing"]["minor_units"] == 0, (surface, tie["summary"])
         assert tie["receivables"]["books_total"]["minor_units"] == 2509905, surface
         assert tie["payables"]["books_total"]["minor_units"] == 984590, surface
-        assert (rerun["created"], rerun["already_in"]) == (0, 75), surface
+        assert (rerun["created"], rerun["already_in"]) == (0, 76), surface
         shapes.add(tuple((step["kind"], step["outside_id"], step["action"]) for step in applied["steps"]))
     assert len(shapes) == 1

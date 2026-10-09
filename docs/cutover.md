@@ -56,14 +56,15 @@ What it posts:
 
 | Old books | Bookflow |
 |---|---|
-| Every trial balance account except receivables, payables and inventory | One opening journal dated `as_of`, balanced by one line to the clearing account |
+| Every trial balance account except receivables, payables, inventory and (with one agency) sales tax payable | One opening journal dated `as_of`, balanced by one line to the clearing account |
 | An open invoice | An invoice for its open balance, with its number, date, due date, terms and customer P.O., of one `Opening balance` line: debit receivables, credit the clearing account |
 | An open credit memo or unapplied payment | A credit memo for its amount: debit the clearing account, credit receivables |
 | An unpaid bill | A bill for its open balance, with its date, due date, terms and reference number, of one expense line on the clearing account |
 | A bill credit | A vendor credit for its amount on the clearing account |
 | An item's stock | An inventory adjustment dated `as_of`: its quantity on hand and asset value, against the clearing account |
+| Sales Tax Payable, when the old books' sales tax items name one agency | A sales tax adjustment (`sales-tax adjust`) dated `as_of` for that agency against the clearing account, so `sales-tax liability` shows it under the agency and `sales-tax pay` pays it |
 
-The clearing account is `Cutover Clearing`, an other current asset account made on first use, or the account named by `clearing_account`. It is 0.00 exactly when the documents and the stock equal the trial balance's receivables, payables and inventory. Receivables and payables are never lines of the opening journal.
+The clearing account is `Cutover Clearing`, an other current asset account made on first use, or the account named by `clearing_account`. It is 0.00 exactly when the documents, the stock and the opening sales tax adjustment equal the trial balance's receivables, payables, inventory and sales tax payable. Receivables and payables are never lines of the opening journal.
 
 ## `cutover tie-out`
 
@@ -100,7 +101,7 @@ Compares the books as of `as_of` with the old books:
 | `unknown_terms`, `unknown_class` | warning | A terms or class name is not in this company's lists; the document keeps its due date |
 | `item_skipped` | warning | A group, assembly, payment or sales tax group item, or an item whose account Bookflow does not allow, is not brought in |
 | `undeposited_funds` | warning | The balance comes in as one opening amount that Make Deposits cannot pick |
-| `sales_tax_payable` | warning | The opening sales tax owed comes in as one amount not tied to a tax agency, so `sales-tax pay` cannot pay it; pay it with a check or journal entry against Sales Tax Payable |
+| `sales_tax_payable` | warning | The old books' sales tax items name several agencies or none (or the one agency is an existing vendor not flagged as a tax agency), so the opening sales tax owed comes in as one journal amount not tied to an agency and `sales-tax pay` cannot pay it; pay it with a check or journal entry against Sales Tax Payable |
 | `row_width`, `row_shifted` | blocking | A list or report row has a field more or fewer than its headings, or a field in the wrong column |
 | `term_settings_differ` | blocking | A term here has other days or discount than the old books' term of that name |
 | `item_settings_differ` | warning | An item here has another price or cost than the old books' item of that name |

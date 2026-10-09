@@ -90,7 +90,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source` | string \| null | yes | yes | — | The product and version the IIF files name, when they do |
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
 | `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
-| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, journal, deactivation |
+| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, sales_tax_adjustment, journal, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
 | `counts[].already_in` | integer | yes | no | — | Records an earlier run of the cutover made, found by their outside id |
 | `counts[].matched` | integer | yes | no | — | Old-books records that are existing Bookflow records |
@@ -306,7 +306,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source` | string \| null | yes | yes | — | The product and version the IIF files name, when they do |
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
 | `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
-| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, journal, deactivation |
+| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, sales_tax_adjustment, journal, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
 | `counts[].already_in` | integer | yes | no | — | Records an earlier run of the cutover made, found by their outside id |
 | `counts[].matched` | integer | yes | no | — | Old-books records that are existing Bookflow records |

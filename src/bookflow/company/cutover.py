@@ -1264,15 +1264,36 @@ def _tax_agencies(built: Built) -> list[str]:
 def _opening_sales_tax(built: Built, inp, target: dict[str, Any], row: src.TrialBalanceRow) -> bool:
     """How the old books' Sales Tax Payable balance comes in. True: as a line of the opening journal.
 
-    It does, today: Bookflow attributes sales tax owed to an agency only through sales, credit memos
-    and remittances, so an opening balance arrives unattributed, `sales-tax liability` shows it as
-    not attributed to an agency and `sales-tax pay` cannot settle it. This function is the one place
-    that decides it, so an opening balance can later be posted to its agency instead.
+    When the old books owe exactly one sales tax agency, it comes in as that agency's own balance:
+    one `sales-tax adjust` dated `as_of` against the clearing account (an increase for what is owed,
+    a reduction for a debit balance), so `sales-tax liability` shows it under the agency and
+    `sales-tax pay` can pay it. The clearing account still nets to 0.00: the opening journal's
+    clearing line grows by exactly what the adjustment posts back to it.
+
+    Otherwise -- several agencies or none in the source, an agency that is an existing vendor not
+    flagged as a tax agency, no clearing account, or a company on the payment_receipt sales tax
+    basis -- it stays a line of the opening journal, not tied to an agency, and the plan says how
+    to pay it.
     """
     agencies = _tax_agencies(built)
+    owed = -row.net  # what the old books owe the agency: Sales Tax Payable is credit-normal
+    agency = _party_for(built, "vendor", agencies[0]) if len(agencies) == 1 else None
+    clearing = _clearing_value(built)
+    flagged = agency is not None and (isinstance(agency, Ref) or any(
+        v["id"] == agency and v["is_tax_agency"] and v["active"] for v in built.books.vendors))
+    if flagged and clearing is not None and built.books.info.get("sales_tax_liability_basis") == "invoice_date":
+        outside_id = f"sales-tax:{inp.as_of}"
+        linked = built.books.link(outside_id, "transaction")
+        payload = {"agency": agency, "date": inp.as_of, "adjustment_account": clearing,
+                   "direction": "increase" if owed > 0 else "reduce", "amount": _amount_text(built, abs(owed)),
+                   "memo": f"Opening sales tax owed to {agencies[0]} from the old books as of {inp.as_of}"}
+        built.steps.append(Step("sales_tax_adjustment", outside_id, f"Opening sales tax · {agencies[0]}", "sales-tax adjust",
+                                payload, "already_in" if linked else "create", linked, amount=abs(owed), date=inp.as_of,
+                                detail=f"{'owed to' if owed > 0 else 'credit with'} {agencies[0]}"))
+        return False
     to = f" to {agencies[0]}" if len(agencies) == 1 else " to the agency"
     _problem(built, "warning", "sales_tax_payable",
-             f"The old books owe {_show(built, -row.net)} of sales tax. It comes in as one opening amount on Sales Tax "
+             f"The old books owe {_show(built, owed)} of sales tax. It comes in as one opening amount on Sales Tax "
              f"Payable that is not tied to a tax agency, so `sales-tax pay` cannot pay it and `sales-tax liability` lists "
              f"it as not attributed to an agency.",
              f"Pay it{to} with a check (or a journal entry) whose account is Sales Tax Payable.",
@@ -1294,6 +1315,7 @@ def _journal(built: Built, inp, number: str | None) -> None:
             if target["type"] == "non_posting":
                 continue
             if target.get("role") == "sales_tax_payable" and not _opening_sales_tax(built, inp, target, row):
+                built.tb_by_target[target["id"] or target["ref"]] = built.tb_by_target.get(target["id"] or target["ref"], 0) + row.net
                 continue
             lines.append((target, row))
             built.tb_by_target[target["id"] or target["ref"]] = built.tb_by_target.get(target["id"] or target["ref"], 0) + row.net
@@ -1379,7 +1401,7 @@ def _closing(built: Built, inp) -> None:
 
 def _counts(built: Built) -> list[CutoverCount]:
     order = ("account", "term", "customer", "vendor", "item", "invoice", "credit_memo", "bill", "vendor_credit",
-             "inventory_adjustment", "journal", "deactivation")
+             "inventory_adjustment", "sales_tax_adjustment", "journal", "deactivation")
     tally = {kind: [0, 0, 0] for kind in order}
     totals: dict[str, int] = {}
     for step in built.steps:

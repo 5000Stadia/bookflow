@@ -103,7 +103,7 @@ class CutoverException(BaseModel):
 
 class CutoverCount(BaseModel):
     kind: str = Field(description="account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, "
-                                  "inventory_adjustment, journal, deactivation")
+                                  "inventory_adjustment, sales_tax_adjustment, journal, deactivation")
     create: int = Field(description="Records this run makes")
     already_in: int = Field(description="Records an earlier run of the cutover made, found by their outside id")
     matched: int = Field(description="Old-books records that are existing Bookflow records")

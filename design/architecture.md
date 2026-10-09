@@ -5191,9 +5191,15 @@ made before it stays, and a rerun continues. The apply's own receipt is stored o
 idempotency key; it writes no audit event of its own (each step's event is the record), and is
 registered in `core/commit_hooks.OWNERS` as `cutover.apply`.
 
-The old books' Sales Tax Payable balance is decided in one place, `_opening_sales_tax`: today it
-stays a journal line, unattributed to an agency (sales tax is attributed only by sales, credit
-memos and remittances), with a warning naming how to pay it.
+The old books' Sales Tax Payable balance is decided in one place, `_opening_sales_tax`. When the
+source's sales tax items name exactly one agency (and that vendor is, or is made, a flagged tax
+agency, a clearing account exists and the company is on the `invoice_date` basis), it becomes one
+`sales-tax adjust` step (outside id `sales-tax:<as_of>`, kind `sales_tax_adjustment`) dated `as_of`
+against the clearing account: an increase for a credit balance, a reduction for a debit balance.
+It is then that agency's balance, which `sales-tax liability` shows and `sales-tax pay` can pay;
+the opening journal omits the account and its clearing line grows by the same amount, so the
+clearing account still nets to 0.00. Otherwise it stays a journal line, unattributed to an
+agency, with the `sales_tax_payable` warning naming how to pay it.
 
 `tie_out` reads `report trial-balance`, `report ar-aging`, `report ap-aging` and `report
 inventory-valuation` as of `as_of` through `run_in_session`, every page, and compares per Bookflow account (source rows aggregated

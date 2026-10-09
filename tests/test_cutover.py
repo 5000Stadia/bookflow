@@ -76,14 +76,15 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     # the old books' marker names), 22 are made, plus the clearing account; Net 45 is the one new term.
     assert _counts(plan) == {"account": (23, 0, 19), "term": (1, 0, 4), "customer": (11, 0, 0), "vendor": (7, 0, 0),
                              "item": (10, 0, 0), "invoice": (10, 0, 0), "credit_memo": (2, 0, 0), "bill": (6, 0, 0),
-                             "vendor_credit": (1, 0, 0), "inventory_adjustment": (2, 0, 0), "journal": (1, 0, 0),
-                             "deactivation": (1, 0, 0)}
+                             "vendor_credit": (1, 0, 0), "inventory_adjustment": (2, 0, 0),
+                             "sales_tax_adjustment": (1, 0, 0), "journal": (1, 0, 0), "deactivation": (1, 0, 0)}
+    # The old books' sales tax items name one agency, so the 1,036.59 of sales tax they owe comes in
+    # as that agency's balance (R175) and the plan has nothing to warn about it.
     assert {(e["severity"], e["code"]) for e in plan["exceptions"]} == {
-        ("warning", "non_posting_accounts"), ("warning", "item_skipped"), ("warning", "sales_tax_payable"),
-        ("note", "account_number_differs")}
-    tax = next(e for e in plan["exceptions"] if e["code"] == "sales_tax_payable")
-    assert "1,036.59" in tax["problem"] and "not tied to a tax agency" in tax["problem"]
-    assert tax["fix"] == "Pay it to Illinois Department of Revenue with a check (or a journal entry) whose account is Sales Tax Payable."
+        ("warning", "non_posting_accounts"), ("warning", "item_skipped"), ("note", "account_number_differs")}
+    tax_step = next(step for step in plan["steps"] if step["kind"] == "sales_tax_adjustment")
+    assert (tax_step["outside_id"], tax_step["name"]) == (f"sales-tax:{AS_OF}", "Opening sales tax · Illinois Department of Revenue")
+    assert {row["kind"]: row["amount"]["minor_units"] for row in plan["counts"] if row["amount"]}["sales_tax_adjustment"] == 103659
     number = next(e for e in plan["exceptions"] if e["code"] == "account_number_differs")
     assert number["subject"] == "3900 · Retained Earnings" and "3100" in number["problem"]
     # The run at a glance comes first, totals by kind: invoices and credits net to AR, bills and
@@ -95,13 +96,14 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     assert totals["inventory_adjustment"] == 167500
     assert {f["name"]: (f["decided_by"], bool(f["attachment"])) for f in plan["files"]}["accounts.iif"] == ("headings", True)
     journal = plan["journal"]
-    assert not {line["description"] for line in journal["lines"]} & {
-        "1100 · Accounts Receivable", "2000 · Accounts Payable", "1300 · Inventory Asset"}
-    # The clearing line is what the documents and stock carry: AR less AP plus inventory.
-    assert journal["clearing"]["minor_units"] == 2509905 - 984590 + 167500
+    assert not {line["account"] for line in journal["lines"]} & {
+        "Accounts Receivable", "Accounts Payable", "Inventory Asset", "Sales Tax Payable"}
+    # The clearing line is what the documents, stock and opening sales tax carry: AR less AP plus
+    # inventory, less the sales tax the adjustment credits to the agency.
+    assert journal["clearing"]["minor_units"] == 2509905 - 984590 + 167500 - 103659
 
     applied = run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from QuickBooks")
-    assert (applied["created"], applied["already_in"]) == (75, 0)
+    assert (applied["created"], applied["already_in"]) == (76, 0)
     tie = run("cutover tie-out", dict(as_of=AS_OF, files=files))
     assert tie["tied"], tie
     assert tie["clearing"]["minor_units"] == 0
@@ -136,9 +138,45 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     events = run("audit list", dict(limit=200))["items"]
     moved = [e for e in events if (e["source_ref"] or "").startswith("cutover:")]
     # One event per record made, and one per export given as text, kept as an attachment.
-    assert len(moved) == 75 + 8
+    assert len(moved) == 76 + 8
     assert sorted(e["command"] for e in moved if e["source_ref"].startswith("cutover:file:")) == ["attachment add"] * 8
     assert run("customer show", dict(customer="Patel, Anita"))["active"] is False
+
+
+def test_the_opening_sales_tax_is_the_agencys_and_sales_tax_pay_settles_it(mover):
+    """R175: one agency in the old books, so what they owe it is that agency's balance here."""
+    run, files = mover["run"], mover["files"]
+    run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from QuickBooks")
+    owed = run("sales-tax liability", dict(as_of=AS_OF))
+    row, = owed["rows"]
+    assert row["display_agency_label"] == "Illinois Department of Revenue" and row["is_tax_agency"]
+    assert (row["adjusted"]["minor_units"], row["unattributed"]["minor_units"], row["balance"]["minor_units"]) == (103659, 0, 103659)
+    assert run("account show", dict(account="Sales Tax Payable"))["balance"]["minor_units"] == 103659
+    adjustment, = run("sales-tax adjustment query", {})["items"]
+    assert (adjustment["date"], adjustment["direction"], adjustment["adjustment_account_name"]) == (AS_OF, "increase", "Cutover Clearing")
+    assert run("cutover tie-out", dict(as_of=AS_OF, files=files))["tied"]
+    paid = run("sales-tax pay", dict(agency="Illinois Department of Revenue", date="2026-10-20", through_date=AS_OF,
+                                    funding_account="Checking", method="Check", memo="Q3 sales tax"), reason="Pay Q3 sales tax")
+    assert paid["total"]["minor_units"] == 103659 and paid["remainder_at_posting"]["minor_units"] == 0
+    assert run("sales-tax liability", dict(as_of="2026-10-31"))["totals"]["balance"]["minor_units"] == 0
+    # The tie-out is as of the cutover date, before the payment, so it still ties.
+    assert run("cutover tie-out", dict(as_of=AS_OF, files=files))["tied"]
+
+
+def test_two_agencies_keep_the_opening_sales_tax_in_the_journal_with_a_warning(mover):
+    run, files = mover["run"], mover["files"]
+    items = text("items.iif")
+    line = next(row for row in items.splitlines() if row.startswith("INVITEM\tIL Sales Tax\t"))
+    second = line.replace("IL Sales Tax", "City Sales Tax", 1).replace("Illinois Department of Revenue", "City of Riverbend", 1)
+    given = [{"content": items.replace(line, line + "\r\n" + second), "name": "items.iif"} if f.get("name") == "items.iif" else f
+             for f in files]
+    plan = run("cutover plan", dict(as_of=AS_OF, files=given))
+    assert not [step for step in plan["steps"] if step["kind"] == "sales_tax_adjustment"]
+    tax = next(e for e in plan["exceptions"] if e["code"] == "sales_tax_payable")
+    assert "1,036.59" in tax["problem"] and "not tied to a tax agency" in tax["problem"]
+    assert tax["fix"] == "Pay it to the agency with a check (or a journal entry) whose account is Sales Tax Payable."
+    assert "Sales Tax Payable" in {line["account"] for line in plan["journal"]["lines"]}
+    assert plan["journal"]["clearing"]["minor_units"] == 2509905 - 984590 + 167500
 
 
 def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
@@ -146,7 +184,7 @@ def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
     first = run("cutover apply", dict(as_of=AS_OF, files=files), idempotency_key="move-in-1")
     before = _balances(run)
     retry = run("cutover apply", dict(as_of=AS_OF, files=files), idempotency_key="move-in-1")
-    assert retry["idempotent_replay"] is True and retry["created"] == first["created"] == 75
+    assert retry["idempotent_replay"] is True and retry["created"] == first["created"] == 76
     # The eight files given as text were kept as attachments; every later call passes ids.
     kept = {f["name"]: f["attachment"] for f in first["files"]}
     assert len(kept) == 10 and all(kept.values())
@@ -157,7 +195,7 @@ def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
     plan = run("cutover plan", dict(as_of=AS_OF, files=by_id))
     assert plan["ready"] and {f["name"]: f["attachment"] for f in plan["files"]} == kept
     again = run("cutover apply", dict(as_of=AS_OF, files=by_id))
-    assert (again["created"], again["already_in"]) == (0, 75)
+    assert (again["created"], again["already_in"]) == (0, 76)
     assert all(step["action"] == "already_in" for step in again["steps"])
     text_again = run("cutover plan", dict(as_of=AS_OF, files=files))
     assert {f["name"]: f["attachment"] for f in text_again["files"]} == kept  # text an earlier run kept shows its id
