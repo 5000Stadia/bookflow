@@ -89,6 +89,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `ready` | boolean | yes | no | — | True when nothing blocks `cutover apply` |
 | `source` | string \| null | yes | yes | — | The product and version the IIF files name, when they do |
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
+| `blocking` | array[string] | yes | no | — | Each blocking exception as one compact line, `FILE line N: code: problem`; empty when nothing blocks. It leads the result so that an MCP result compacted to fit keeps it; `exceptions` has each one whole |
 | `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
 | `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, sales_tax_adjustment, journal, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
@@ -120,6 +121,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `checks[].difference.amount` | string | yes | no | — | — |
 | `checks[].difference.currency` | string | yes | no | — | — |
 | `checks[].difference.minor_units` | integer | yes | no | — | — |
+| `clearing` | object \| null | yes | yes | — | The clearing account's parts: the opening journal's balancing line, the open documents, the opening stock and the opening sales tax, with their net; null when nothing posts to it |
+| `clearing.account` | string | yes | no | — | The clearing account |
+| `clearing.account_id` | string \| null | yes | yes | — | Its ID; null when this run makes it |
+| `clearing.parts` | array[object] | yes | no | — | Everything that posts to it, by part; the same parts in plan and apply, so the two reconcile line by line |
+| `clearing.parts[].part` | literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax"] | yes | no | — | `opening_journal`: the journal's balancing line; `invoices_and_credit_memos` and `bills_and_vendor_credits`: the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` that brings the agency's balance in |
+| `clearing.parts[].amount` | object | yes | no | — | What this part posts to the clearing account, debit positive |
+| `clearing.parts[].amount.amount` | string | yes | no | — | — |
+| `clearing.parts[].amount.currency` | string | yes | no | — | — |
+| `clearing.parts[].amount.minor_units` | integer | yes | no | — | — |
+| `clearing.parts[].records` | integer | yes | no | — | The records that carry it, made or already in |
+| `clearing.net` | object | yes | no | — | The parts added up, debit positive: 0.00 once everything ties |
+| `clearing.net.amount` | string | yes | no | — | — |
+| `clearing.net.currency` | string | yes | no | — | — |
+| `clearing.net.minor_units` | integer | yes | no | — | — |
 | `files` | array[object] | yes | no | — | Each file read, with its attachment id and SHA-256 to reuse |
 | `files[].name` | string | yes | no | — | The file's label |
 | `files[].kind` | string \| null | yes | yes | — | What the file was read as; null when it could not be told |
@@ -174,7 +189,9 @@ Example JSON output:
 {
   "already_in": 1,
   "as_of": "value",
+  "blocking": [],
   "checks": [],
+  "clearing": null,
   "clearing_account_id": null,
   "counts": [],
   "created": 1,
@@ -305,6 +322,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `ready` | boolean | yes | no | — | True when nothing blocks `cutover apply` |
 | `source` | string \| null | yes | yes | — | The product and version the IIF files name, when they do |
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
+| `blocking` | array[string] | yes | no | — | Each blocking exception as one compact line, `FILE line N: code: problem`; empty when nothing blocks. It leads the result so that an MCP result compacted to fit keeps it; `exceptions` has each one whole |
 | `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
 | `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, sales_tax_adjustment, journal, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
@@ -336,6 +354,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `checks[].difference.amount` | string | yes | no | — | — |
 | `checks[].difference.currency` | string | yes | no | — | — |
 | `checks[].difference.minor_units` | integer | yes | no | — | — |
+| `clearing` | object \| null | yes | yes | — | The clearing account's parts: the opening journal's balancing line, the open documents, the opening stock and the opening sales tax, with their net; null when nothing posts to it |
+| `clearing.account` | string | yes | no | — | The clearing account |
+| `clearing.account_id` | string \| null | yes | yes | — | Its ID; null when this run makes it |
+| `clearing.parts` | array[object] | yes | no | — | Everything that posts to it, by part; the same parts in plan and apply, so the two reconcile line by line |
+| `clearing.parts[].part` | literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax"] | yes | no | — | `opening_journal`: the journal's balancing line; `invoices_and_credit_memos` and `bills_and_vendor_credits`: the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` that brings the agency's balance in |
+| `clearing.parts[].amount` | object | yes | no | — | What this part posts to the clearing account, debit positive |
+| `clearing.parts[].amount.amount` | string | yes | no | — | — |
+| `clearing.parts[].amount.currency` | string | yes | no | — | — |
+| `clearing.parts[].amount.minor_units` | integer | yes | no | — | — |
+| `clearing.parts[].records` | integer | yes | no | — | The records that carry it, made or already in |
+| `clearing.net` | object | yes | no | — | The parts added up, debit positive: 0.00 once everything ties |
+| `clearing.net.amount` | string | yes | no | — | — |
+| `clearing.net.currency` | string | yes | no | — | — |
+| `clearing.net.minor_units` | integer | yes | no | — | — |
 | `files` | array[object] | yes | no | — | Each file read, with its attachment id and SHA-256 to reuse |
 | `files[].name` | string | yes | no | — | The file's label |
 | `files[].kind` | string \| null | yes | yes | — | What the file was read as; null when it could not be told |
@@ -386,7 +418,9 @@ Example JSON output:
 ```json
 {
   "as_of": "value",
+  "blocking": [],
   "checks": [],
+  "clearing": null,
   "counts": [],
   "dry_run": false,
   "exceptions": [],

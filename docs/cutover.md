@@ -35,6 +35,36 @@ bookflow cutover apply --as-of 2026-09-30 --files '[...]' --company "Riverbend P
 bookflow cutover tie-out --as-of 2026-09-30 --files '[...]' --company "Riverbend Plumbing" --json
 ```
 
+## A worked example: plan, apply, tie-out
+
+Over MCP, attach each export first, then pass only attachment ids. The ids stay the same on every call, so the plan, the move-in and the tie-out read exactly the same files, and no file is ever retyped.
+
+1. Find the company id: `{"command": "company show", "input": {}}` returns `company_id`.
+2. Attach each export once. The launcher reads the file itself (it must sit under a directory the MCP server was started with as `--input-dir DIR`):
+
+   ```json
+   {"command": "attachment add", "reason": "Old books export",
+    "input": {"record_type": "company_info", "record_id": "<company_id>", "original_filename": "trial_balance.csv",
+              "media_type": "text/csv", "caption": "Old books export"},
+    "transport": {"input_file": "/home/me/exports/trial_balance.csv"}}
+   ```
+
+   Each result's `attachment.id` is that file's id. Do the same for the IIF lists, the open invoices, the unpaid bills, the inventory valuation and the two aging summaries.
+3. Plan, writing nothing:
+
+   ```json
+   {"command": "cutover plan", "input": {"as_of": "2026-09-30", "files": [
+     {"attachment": "<accounts.iif id>"}, {"attachment": "<customers.iif id>"}, {"attachment": "<vendors.iif id>"},
+     {"attachment": "<items.iif id>"}, {"attachment": "<trial_balance.csv id>"}, {"attachment": "<open_invoices.csv id>"},
+     {"attachment": "<unpaid_bills.csv id>"}, {"attachment": "<inventory_valuation.csv id>"}]}}
+   ```
+
+   Read `summary` and `blocking` first: `blocking` has one line per blocking exception, naming its file, line and problem, and it is kept even when a long result is compacted. Fix each (export the file again, or add a `mappings` entry) and plan again until `ready` is true. A few files can be planned on their own to find a problem faster; without the trial balance the plan says so once, as a note, and `ready` stays false. `clearing.parts` shows what each part of the move-in posts to the clearing account (the opening journal, the invoices and credit memos, the bills and vendor credits, the opening stock and the opening sales tax) and `clearing.net` is 0.00 when they tie.
+4. Move in with the same input and a reason: `{"command": "cutover apply", "reason": "Move in from the old books", "input": {...the same as_of and files...}}`. Its `clearing.parts` are built the same way as the plan's, so the two reconcile part by part. Running it again makes nothing new: every record already made is `already_in`.
+5. Tie out with the same files plus the two aging summaries: `{"command": "cutover tie-out", "input": {"as_of": "2026-09-30", "files": [...the same ids..., {"attachment": "<ar_aging.csv id>"}, {"attachment": "<ap_aging.csv id>"}]}}`. `tied` is true when the trial balance, receivables, payables, stock and lists match and the clearing account is 0.00; otherwise its rows name each difference.
+
+When the MCP server has no input directory, give a file once as its text (`{"content": "...", "name": "trial_balance.csv"}`): `cutover apply` keeps it as an attachment and returns its id in `files[].attachment` for every later call. Copy the text exactly; a retyped row with a tab added or dropped is refused as `row_width` or `row_shifted`.
+
 ## `cutover plan`
 
 Reads the files and returns, writing nothing:
@@ -42,6 +72,8 @@ Reads the files and returns, writing nothing:
 - `mappings`: every old-books account, customer, job, vendor, item and terms name, with the Bookflow record it stands for or `create`. An account maps by its system role (receivables, payables, undeposited funds, inventory, sales tax payable, opening balance equity, retained earnings, cost of goods sold), then by full name and type, then is made from the account list with its number. A number already used by an account of another name is an exception.
 - `steps`: every write in order: accounts, terms, customers and jobs, vendors, items, the clearing account and the `Opening balance` item, invoices and credit memos, bills and vendor credits, opening stock, the opening journal, then deactivating what was inactive in the old books. Each step names its outside id.
 - `journal`: the opening journal's lines.
+- `clearing`: the clearing account's parts (the opening journal's balancing line, the invoices and credit memos, the bills and vendor credits, the opening stock and the opening sales tax adjustment), each debit positive with the records that carry it, and their `net`, 0.00 once everything ties. `cutover apply` returns the same parts.
+- `blocking`: each blocking exception as one line, `FILE line N: code: problem`, ahead of the rest of the result.
 - `checks`: the trial balance's debits against its credits, its receivables against the open invoices and credits, its payables against the unpaid bills and credits, its inventory against the items' asset values.
 - `counts`, first: records and totals by kind (invoices, credit memos, bills, vendor credits, stock and the journal carry their total amount), so the whole run reads at a glance even when the step list is long.
 - `exceptions`: every problem, `blocking` first, then `warning` and `note`. `cutover apply` refuses with `E_CUTOVER_BLOCKED` while any blocking exception stands. A record matched to one here is compared with the old books: a term whose days or discount differ is blocking; an account matched to one that keeps another number, such as Retained Earnings, is a note.
@@ -97,6 +129,8 @@ Compares the books as of `as_of` with the old books:
 | `period_closed` | blocking | The closing date is on or after an open document's date |
 | `as_of_mismatch`, `cash_basis_trial_balance`, `trial_balance_unbalanced`, `total_mismatch`, `subtotal_mismatch` | blocking | A report was exported for another date or basis, or does not add up to its own totals |
 | `no_chart` | blocking | The company has no chart of accounts |
+| `no_trial_balance` | blocking, or a note in `cutover plan` | No trial balance file was given. `cutover plan` checks files given in pieces and says once that `cutover apply` needs the trial balance; `cutover apply` and `cutover tie-out` refuse without it |
+| `no_account_list` | warning | No chart of accounts IIF was given, so items whose accounts are not already here cannot be planned; it names them once |
 | `account_number_dropped` | warning | An account comes in without its number |
 | `unknown_terms`, `unknown_class` | warning | A terms or class name is not in this company's lists; the document keeps its due date |
 | `item_skipped` | warning | A group, assembly, payment or sales tax group item, or an item whose account Bookflow does not allow, is not brought in |

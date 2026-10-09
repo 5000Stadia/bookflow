@@ -30,7 +30,26 @@ journals. Old documents posted by hand keep their old dates and put old income i
 3. `cutover tie-out`: compares the trial balance and the aging with the old books; the Cutover
    Clearing account ties at 0.00.
 
-The three take the same input. [Moving a company in](cutover.md) lists the exports and each step.
+The three take the same input. Attach each export once and pass only the attachment ids, so every
+call reads the same files and nothing is retyped:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "attachment add", "reason": "Old books export",
+ "input": {"record_type": "company_info", "record_id": "<company_id from company show>",
+           "original_filename": "trial_balance.csv", "media_type": "text/csv", "caption": "Old books export"},
+ "transport": {"input_file": "/home/me/exports/trial_balance.csv"}}
+{"command": "cutover plan", "input": {"as_of": "2026-09-30",
+ "files": [{"attachment": "<accounts.iif id>"}, {"attachment": "<trial_balance.csv id>"}, "...one per export..."]}}
+{"command": "cutover apply", "reason": "Move in from the old books", "input": "...the same as_of and files..."}
+{"command": "cutover tie-out", "input": "...the same as_of and files, plus the A/R and A/P aging summaries..."}
+```
+
+Read the plan's `summary` and `blocking` (one line per blocking exception, kept even in a compacted
+result) first, fix and plan again until `ready` is true, then apply. `clearing.parts` in the plan and
+in apply show what each part posts to the clearing account, so the two reconcile. Files can be planned
+in pieces; apply needs the trial balance with all of them. [Moving a company in](cutover.md) lists
+the exports and each step, with the worked example in full.
 
 ## Operator bootstrap
 

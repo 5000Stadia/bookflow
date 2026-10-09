@@ -62,6 +62,7 @@ def test_every_hand_authored_fence_is_classified():
     expected = {
         "concepts.md": [("illustrative", "python")],
         "agent-guide.md": [
+            ("illustrative", "json"),
             ("illustrative", "bash"),
             ("executable", "python"),
             ("illustrative", "bash"),
