@@ -182,6 +182,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `created` | integer | yes | no | — | Records this run made |
 | `already_in` | integer | yes | no | — | Records earlier runs had made |
 | `clearing_account_id` | string \| null | yes | yes | — | The clearing account |
+| `default_sales_tax_item` | string \| null | no | yes | null | The sales tax item this run made the company's default, because it is the only one and the company had none, so the first invoice needs no tax item named; null when it set no default |
 
 Example JSON output:
 
@@ -195,6 +196,7 @@ Example JSON output:
   "clearing_account_id": null,
   "counts": [],
   "created": 1,
+  "default_sales_tax_item": null,
   "dry_run": false,
   "exceptions": [],
   "files": [],

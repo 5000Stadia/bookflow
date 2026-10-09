@@ -440,7 +440,7 @@ Example JSON output:
 
 ## `reconcile import`
 
-Read a bank or credit card statement file (OFX, QFX or CSV text) against the account: each line comes back matched to one entry, suggested, unmatched (enter it), or already reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a statement reconciliation, started from the file's statement date and ending balance; finish it with `reconcile preview` and `reconcile finish`. Safe to run again: nothing already true is repeated. Use --dry-run to preview.
+Read a bank or credit card statement file (OFX, QFX or CSV; pasted text, or an attachment by id) against the account: each line comes back matched to one entry, suggested, unmatched (enter it), or already reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a statement reconciliation, started from the file's statement date and ending balance; finish it with `reconcile preview` and `reconcile finish`. Safe to run again: nothing already true is repeated. Use --dry-run to preview.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -471,7 +471,8 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
-| `content` | `--content` | string | yes | no | — | The statement file's text, exactly as downloaded from the bank.; minimum length 1; maximum length 5000000 |
+| `content` | `--content` | string \| null | no | yes | null | The statement file's text, exactly as downloaded from the bank. Give this or `attachment`. |
+| `attachment` | `--attachment` | string \| null | no | yes | null | An attachment in this company holding the statement file, as `attachment add company_info <company id> FILE` returns its id (over MCP the file goes in that command's transport.input_file). Give this or `content`. |
 | `format` | `--format` | literal["auto", "ofx", "qfx", "csv"] | no | no | "auto" | File format; auto tells OFX/QFX (an <OFX> element) from CSV. |
 | `csv_mapping.date` | `--csv-mapping-date` | string | no | no | "" | Header of the posted-date column.; maximum length 200 |
 | `csv_mapping.amount` | `--csv-mapping-amount` | string | no | no | "" | Header of a signed amount column (positive = money in).; maximum length 200 |
