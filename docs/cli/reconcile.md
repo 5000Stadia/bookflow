@@ -75,6 +75,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `contract` | literal["reconciliation.private.v1"] | no | no | "reconciliation.private.v1" | — |
 | `draft` | string | yes | no | — | — |
+| `draft_version` | integer | no | no | 1 | The draft's current version: what `reconcile mark`, `reconcile preview` and `reconcile finish` take as expected_version. |
 | `account_id` | string | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `cutoff` | string | yes | no | — | — |
@@ -116,6 +117,7 @@ Example JSON output:
   "currency": "USD",
   "cutoff": "value",
   "draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "draft_version": 1,
   "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
   "items": [],
   "negative_sum": 1,

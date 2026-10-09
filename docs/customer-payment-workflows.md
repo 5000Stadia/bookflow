@@ -136,7 +136,7 @@ Required follow-ups remain required under the active project goal.
 
 ## Active examples and independent totals
 
-The main/reference seeds preserve their exact 295/201 command prefixes and append
+The main/reference seeds preserve their exact 297/201 command prefixes and append
 33 commands each. Payment Example Customer and Jobs A/B have invoice dues of
 $10/$20/$0; P1 retains $10 payer credit and P2 retains $10 Job B credit. The family
 net AR is $10. P1's original $125 receipt is corrected to $130 with retained
