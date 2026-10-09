@@ -35,6 +35,18 @@
       if(row){advanced.append(row);if(name==='f:operation_key')row.hidden=true;}
     }
     form.insertBefore(advanced,form.querySelector('.form-submit')||form.lastElementChild);
+    // The command's own bulk and filter inputs are what Mark all, Clear all marks and the search
+    // box already send, and the recording keys are for agents. Under the ticking area they read
+    // as a second, raw form, so they are hidden; they still submit their untouched defaults.
+    for(const el of [...form.elements]){
+      const name=el.name||'';
+      if(!(name==='f:all'||name==='f:all_action'||name.startsWith('f:filters.')||name==='empty:entries'
+           ||name==='ctx:source_ref'||name==='ctx:directive'||name==='ctx:idempotency_key'))continue;
+      const row=el.closest('.form-field,.row,label.clear-control');
+      if(row && !row.contains(entries))row.hidden=true;
+    }
+    const preview=form.querySelector('button[name=action][value=preview]');if(preview)preview.hidden=true;
+    const save=form.querySelector('button[name=action][value=submit]');if(save)save.textContent='Save marks';
     const error=node('p');error.setAttribute('role','alert');marker.after(error);
     const summary=node('section');summary.className='reconcile-summary';
     summary.setAttribute('aria-label','Reconciliation totals');
