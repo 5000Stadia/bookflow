@@ -8,7 +8,11 @@ from bookflow.company.cutover_models import (
 
 _FILES = (" The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) "
           "and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging "
-          "Summaries and the Inventory Valuation Summary), each given as an attachment or as text.")
+          "Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: "
+          "`attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then "
+          "`files: [{\"attachment\": \"<id>\"}, ...]` on every call. Text works too (`{\"content\": ..., \"name\": ...}`): "
+          "`cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the "
+          "id instead of the text.")
 
 
 @command("cutover plan", scope="company", required_role="member", capability="ledger.read",

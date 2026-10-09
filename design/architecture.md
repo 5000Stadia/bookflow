@@ -5129,7 +5129,13 @@ adds `detail`. `docs/cutover.md` is the user page.
 
 `company/cutover_sources.py` is pure parsing. IIF list files are tab-separated, one `!KEYWORD`
 header per list (`!ACCNT`, `!CUST`, `!VEND`, `!INVITEM`, `!TERMS`; others are counted and
-ignored), decoded as UTF-8 and otherwise Windows-1252. Report CSVs are found by their headings
+ignored), decoded as UTF-8 and otherwise Windows-1252; a quoted field may hold tabs. A list row
+with more fields than its header, or more than one fewer, is `row_width`; one field fewer is the
+empty last field a genuine Enterprise export leaves out, and is padded. Every row's fixed-form
+columns (HIDDEN, TAXABLE, 1099, USEID, ISPASSEDTHRU as Y or N; REFNUM, TIMESTAMP, DELCOUNT as whole
+numbers) must hold such values, else `row_shifted`: a tab added and another dropped keeps the width
+and still moves the fields between them. A report CSV row between its headings and TOTAL must have
+exactly the headings' cell count. Report CSVs are found by their headings
 (title rows optional): Debit/Credit for the trial balance, Type/Open Balance for open invoices and
 unpaid bills, Current/TOTAL for the aging summaries, On Hand/Asset Value for inventory valuation.
 `_grouped` walks indent columns into `Customer:Job` paths, checks every `Total <name>` row and the
@@ -5145,12 +5151,22 @@ Outside ids: `account:<path key>`, `customer:<path key>`, `vendor:<key>`, `item:
 for documents (n counts identical rows within a file), `inventory:<item key>`,
 `journal:<as_of>:<part>`, and `<list outside id>:inactive` for deactivations.
 
+Exports given as text: `apply` first keeps each one as an attachment on `company_info`, through
+`attachment add` run with an in-memory body (the demo seed's transfer pattern), with source_ref
+`cutover:file:<sha256>`; `build` fills `files[].attachment` from that link on later runs, so the
+plan shows the id to pass instead of the text. Plan and apply output lead with `counts`, records
+and totals by kind, because the MCP budget keeps the head of the step list and drops other lists.
+
 Matching order for an account: explicit mapping; link; system role (IIF `EXTRA` marker, AR/AP
 type, or the well-known system names); full name and type; otherwise made from the IIF row with
 its number. A taken number with another name, a name of another type, a trial-balance account in
 no list, and a receivable or payable account mapped to anything but a receivable or payable
 account are blocking exceptions. Customers, vendors, items and terms match by mapping, link, then
-name; terms reading `Net N` or `N% D Net M` are made, others are a warning. Jobs bring only job
+name. A term's meaning comes from its `!TERMS` row (either export layout: DUEDAYS/DISCPER/DISCDAYS,
+or STDDUEDAYS/STDDISCDAYS with DISCPER as `1.0%`) or else its name (`Net N`, `N% D Net M`, `Due on
+receipt`); a matched term with other settings is `term_settings_differ` (blocking), a matched item
+with another price or cost is a warning, and a matched account that keeps another number is a
+`note` (Retained Earnings). Terms with neither are a warning. Jobs bring only job
 facts (they inherit their customer's address and contacts). Tax codes go on customers only when
 the company has sales tax on. Group, assembly, payment and sales-tax-group items are skipped with a
 warning.
@@ -5175,11 +5191,18 @@ made before it stays, and a rerun continues. The apply's own receipt is stored o
 idempotency key; it writes no audit event of its own (each step's event is the record), and is
 registered in `core/commit_hooks.OWNERS` as `cutover.apply`.
 
-`tie_out` reads `report trial-balance`, `report ar-aging` and `report ap-aging` as of `as_of`
-through `run_in_session`, every page, and compares per Bookflow account (source rows aggregated
+The old books' Sales Tax Payable balance is decided in one place, `_opening_sales_tax`: today it
+stays a journal line, unattributed to an agency (sales tax is attributed only by sales, credit
+memos and remittances), with a warning naming how to pay it.
+
+`tie_out` reads `report trial-balance`, `report ar-aging`, `report ap-aging` and `report
+inventory-valuation` as of `as_of` through `run_in_session`, every page, and compares per Bookflow account (source rows aggregated
 through the plan's mapping) and per customer, job and vendor in every aging column; the source
 aging is the aging summary file when given, otherwise the open documents aged by `aging.bucket_of`
-on their due dates (credits on their dates).
+on their due dates (credits on their dates). `lists` compares the IIF lists' fields that matter
+with the records the plan resolved (active, account type and number, job status and description,
+terms, credit limit, 1099, item type, price and cost, term settings); by-design differences are
+notes. `tied` needs every section to match.
 
 Other-charge items may name a balance-sheet account (`items.sold_account_types` and
 `sold_account_problem`, read by item validation, `sales_defaults._sold_account`, the sales and

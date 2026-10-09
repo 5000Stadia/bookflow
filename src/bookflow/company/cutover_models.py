@@ -80,15 +80,19 @@ class CutoverTieOutInput(CutoverInput):
 class CutoverFileOutput(BaseModel):
     name: str = Field(description="The file's label")
     kind: str | None = Field(description="What the file was read as; null when it could not be told")
-    detected: bool = Field(description="True when the kind was read from the file's own headings")
-    attachment: str | None = Field(description="The attachment it was read from, or null for inline content")
+    decided_by: Literal["given", "headings"] | None = Field(description=(
+        "How the kind was decided: `given` by the file's own `kind`, `headings` read from the file; null when it could not be"))
+    attachment: str | None = Field(description=(
+        "The attachment holding the file: the one it was read from, or for inline text the one `cutover apply` kept it as. "
+        "Pass `{\"attachment\": \"<id>\"}` in `files` on later calls instead of the text"))
     sha256: str = Field(description="SHA-256 of the file's text")
     rows: int = Field(description="Data rows read from it")
 
 
 class CutoverException(BaseModel):
-    severity: Literal["blocking", "warning"] = Field(description=(
-        "`blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it"))
+    severity: Literal["blocking", "warning", "note"] = Field(description=(
+        "`blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it; "
+        "`note` says how something here differs from the old books by design"))
     code: str = Field(description="Stable name of the exception, e.g. unmapped_account or receivables_do_not_tie")
     problem: str = Field(description="What is wrong, in a sentence")
     fix: str | None = Field(description="What resolves it")
@@ -103,6 +107,9 @@ class CutoverCount(BaseModel):
     create: int = Field(description="Records this run makes")
     already_in: int = Field(description="Records an earlier run of the cutover made, found by their outside id")
     matched: int = Field(description="Old-books records that are existing Bookflow records")
+    amount: MoneyOutput | None = Field(description=(
+        "For documents, stock and the journal: their total open amount, value or journal total, made and already in; "
+        "null for lists"))
 
 
 class CutoverStep(BaseModel):
@@ -158,13 +165,13 @@ class CutoverPlanOutput(BaseModel):
     ready: bool = Field(description="True when nothing blocks `cutover apply`")
     source: str | None = Field(description="The product and version the IIF files name, when they do")
     summary: str = Field(description="One line: what the run makes and what blocks it")
-    files: list[CutoverFileOutput]
-    counts: list[CutoverCount]
-    exceptions: list[CutoverException] = Field(description="Every problem found, blocking first")
+    counts: list[CutoverCount] = Field(description="Records and totals by kind: the whole run at a glance")
+    exceptions: list[CutoverException] = Field(description="Every problem found, blocking first, then warnings and notes")
     checks: list[CutoverCheck] = Field(description="The tie checks the plan can make before anything is written")
-    mappings: CutoverMappingsOutput = Field(description="The complete resolved mapping, in the input's shape")
+    files: list[CutoverFileOutput] = Field(description="Each file read, with its attachment id and SHA-256 to reuse")
     journal: CutoverJournal | None = Field(description="The opening journal; null when the trial balance carries only document-owned accounts")
     steps: list[CutoverStep] = Field(description="Every write in order, with what each one makes")
+    mappings: CutoverMappingsOutput = Field(description="The complete resolved mapping, in the input's shape")
 
 
 class CutoverApplyOutput(CutoverPlanOutput):
@@ -190,12 +197,50 @@ class CutoverTieSection(BaseModel):
     rows: list[CutoverTieRow]
 
 
+class CutoverStockRow(BaseModel):
+    name: str = Field(description="The item")
+    record_id: str | None = Field(description="The Bookflow item compared; null when none stands for it")
+    source_quantity: str = Field(description="Quantity on hand in the old books")
+    books_quantity: str = Field(description="Quantity on hand here as of the cutover date")
+    source_value: MoneyOutput = Field(description="Asset value in the old books")
+    books_value: MoneyOutput = Field(description="Asset value here as of the cutover date")
+    difference: MoneyOutput = Field(description="source_value less books_value; 0.00 ties")
+
+
+class CutoverStockSection(BaseModel):
+    source: str = Field(description="What the old books' side was read from, or `none` when no valuation was given")
+    source_total: MoneyOutput
+    books_total: MoneyOutput
+    differences: int = Field(description="Items whose quantity or value does not tie")
+    rows: list[CutoverStockRow]
+
+
+class CutoverListRow(BaseModel):
+    list: Literal["account", "customer", "vendor", "item", "term"]
+    name: str = Field(description="The record as the old books name it")
+    record_id: str | None = Field(description="The Bookflow record compared; null when none stands for it")
+    field: str = Field(description="active, type, number, job_status, job_description, terms, credit_limit, eligible_1099, price, cost, due_days, discount_percent or discount_days")
+    source: str | None = Field(description="The old books' value")
+    books: str | None = Field(description="The value here")
+
+
+class CutoverListSection(BaseModel):
+    source: str = Field(description="What the old books' side was read from")
+    compared: int = Field(description="Records compared")
+    differences: int = Field(description="Fields that do not match")
+    rows: list[CutoverListRow] = Field(description="Every field that does not match")
+    notes: list[CutoverListRow] = Field(description="Fields that differ by design, such as an account matched to one here that keeps its own number")
+
+
 class CutoverTieOutOutput(BaseModel):
     as_of: str
-    tied: bool = Field(description="True when every compared figure ties to the cent and the clearing account is 0.00")
+    tied: bool = Field(description=(
+        "True when every compared figure ties to the cent, the clearing account is 0.00, and every list field compared matches"))
     summary: str
     trial_balance: CutoverTieSection
     receivables: CutoverTieSection
     payables: CutoverTieSection
+    inventory: CutoverStockSection
+    lists: CutoverListSection
     clearing: MoneyOutput = Field(description="The clearing account's balance as of the cutover date; 0.00 ties")
     exceptions: list[CutoverException] = Field(description="Problems that kept a figure from being compared")
