@@ -142,3 +142,5 @@ Compares the books as of `as_of` with the old books:
 | `account_number_differs` | note | An account matched to one here keeps its own number |
 | `open_balance_changed` | warning | A document brought in earlier now shows another open balance in the old books |
 | `sales_tax_disabled` | warning | The old books charge sales tax and this company has it turned off |
+| `possible_duplicate_vendor`, `possible_duplicate_customer` | warning | Two vendors (or two customers) look like one party, such as `Midland Electric Supply` and `Midland Elec. Supply`; both come in as they are, and the exception names both so the owner can say whether they are one |
+| `sales_tax_default` | note | The company has sales tax on and no default sales tax item, and the move-in leaves exactly one: `cutover apply` makes it the company default (`default_sales_tax_item` in its result), so the first invoice does not need one named |

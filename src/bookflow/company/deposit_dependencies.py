@@ -71,8 +71,12 @@ def require_unclaimed(s, source):
     _authorize_claim(s, source, claim)
     raise BookflowError('E_DEPOSIT_DEPENDENCY', details={
         'source': source, 'deposit': claim['transaction_id'],
-        'next': 'deposit coordinate',
-        'reason': 'A claimed receipt requires one atomic source and deposit correction.'})
+        'next': 'deposit delete',
+        'reason': ('This receipt is banked on a deposit, so it cannot be changed or voided while it is there. '
+                   'Run `deposit delete` on the deposit (preview first; it returns every receipt on it to Undeposited '
+                   'Funds and reverses the bank effect), change or void this receipt, then `deposit post` the '
+                   'receipts that still belong together. A deposit already on a certified reconciliation must be '
+                   'released from it first.')})
 
 
 def claim_details(s, source, claim):

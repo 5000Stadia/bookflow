@@ -8,7 +8,14 @@ operations a person's clicks make, so the draft is finished the ordinary way.
 
 Running it again changes nothing that is already true: a movement already ticked stays ticked,
 a draft already started for the same statement date is reused, and a FITID the file repeats is
-read once. The file is never stored and never leaves the machine.
+read once. Pasted text is never stored and never leaves the machine; a file given as an attachment
+stays the attachment it already was.
+
+The statement comes as pasted text (`content`) or as an attachment already in the company
+(`attachment`), as `attachment add company_info <company id> FILE` returns it; over MCP that file
+goes in `transport.input_file` of `attachment add`. `reconcile import` itself takes no
+`transport.input_file`: a preview must read the file, and a command with a binary body is only
+shown its digest when previewing.
 """
 from typing import Literal
 
@@ -48,9 +55,13 @@ class CsvMapping(m.Model):
 
 class ImportInput(m.Dated):
     account: m.AccountSelector
-    content: str = Field(min_length=1, max_length=5_000_000,
-                         description="The statement file's text, exactly as downloaded from the bank.",
-                         json_schema_extra={'multiline': True, 'text_file': '.csv,.ofx,.qfx,.txt,text/csv,text/plain'})
+    content: str | None = Field(None, min_length=1, max_length=5_000_000,
+                                description=("The statement file's text, exactly as downloaded from the bank. "
+                                             "Give this or `attachment`."),
+                                json_schema_extra={'multiline': True, 'text_file': '.csv,.ofx,.qfx,.txt,text/csv,text/plain'})
+    attachment: str | None = Field(None, min_length=1, max_length=26, description=(
+        "An attachment in this company holding the statement file, as `attachment add company_info <company id> FILE` "
+        "returns its id (over MCP the file goes in that command's transport.input_file). Give this or `content`."))
     format: Literal['auto', 'ofx', 'qfx', 'csv'] = Field(
         'auto', description='File format; auto tells OFX/QFX (an <OFX> element) from CSV.')
     csv_mapping: CsvMapping = Field(default_factory=CsvMapping,
@@ -70,6 +81,8 @@ class ImportInput(m.Dated):
 
     @model_validator(mode='after')
     def target(self):
+        if (self.content is None) == (self.attachment is None):
+            raise ValueError('give exactly one of content or attachment')
         if self.draft is not None and self.start:
             raise ValueError('give draft or start, not both')
         if self.suggest_days < self.match_days:
@@ -235,7 +248,12 @@ def _prepare(inp, ctx, s, ids):
     given = inp.csv_mapping.model_dump()
     default = CsvMapping().model_dump()
     mapping = {**default, **mapping, **{k: v for k, v in given.items() if v != default[k]}}
-    parsed = files.parse(inp.content, inp.format, places, mapping)
+    if inp.attachment is not None:
+        from bookflow.company.attachment_text import attachment_text
+        text = attachment_text(s, inp.attachment, 'attachment')[1]
+    else:
+        text = inp.content
+    parsed = files.parse(text, inp.format, places, mapping)
     if inp.save_mapping and parsed.format != 'csv':
         raise files.invalid('save_mapping', 'only a CSV file has a column mapping to save')
     if parsed.currency and parsed.currency.upper() != currency:
@@ -349,7 +367,7 @@ def _prepare(inp, ctx, s, ids):
                                          amount=c.amount, number=c.number, payees=c.payees,
                                          memo=c.memo or None) for c in unsupported),
                           next_step=step)
-    return dict(output=output, account_id=account_id, started=started, start_value=draft if started else None,
+    return dict(output=output, text=text, account_id=account_id, started=started, start_value=draft if started else None,
                 opening_draft=opening_draft, marks=marks, parsed=parsed, lines=lines, mapping=mapping,
                 draft_id=value.id if value is not None else None, ending=ending,
                 statement_date=statement_date)
@@ -404,7 +422,7 @@ ERRORS = sorted(set(rc.ERRORS) | {'E_AMOUNT_PRECISION'})
 
 reconcile_import = command(
     'reconcile import', scope='company',
-    description='Read a bank or credit card statement file (OFX, QFX or CSV text) against the account: '
+    description='Read a bank or credit card statement file (OFX, QFX or CSV; pasted text, or an attachment by id) against the account: '
                 'each line comes back matched to one entry, suggested, unmatched (enter it), or already '
                 'reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a '
                 'statement reconciliation, started from the file\'s statement date and ending balance; finish '
@@ -496,7 +514,7 @@ def _store(s, ctx, inp, prepared, summary):
     if new_lines:
         store.store(conn, identity=import_id, account_id=account_id, draft_id=draft_id,
                     parsed_format=prepared['parsed'].format,
-                    file_sha256=hashlib.sha256(inp.content.encode()).hexdigest(),
+                    file_sha256=hashlib.sha256(prepared['text'].encode()).hexdigest(),
                     statement_date=prepared['statement_date'], ending_balance=prepared['ending'],
                     suggest_days=inp.suggest_days, line_count=len(prepared['lines']), lines=new_lines,
                     made=dict(created_at=at, created_by=actor.id if actor else None,

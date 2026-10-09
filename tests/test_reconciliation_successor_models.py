@@ -85,8 +85,15 @@ def test_opening_complete_partition_gl_card_and_unbounded_intermediates(client,d
     opening=draft(bank,kind='opening',ending=100000,selections=selections)
     before=driver.dump();assert p.opening(s,opening).selected_sum==100000
     assert p.account_population(s,bank,'2026-01-31')[1]==90000
-    with pytest.raises(p.ReconciliationError,match='OPENING_UNPROVEN'):p.opening(s,opening.model_copy(update={'selections':selections[:1]}))
-    with pytest.raises(p.ReconciliationError,match='OPENING_UNPROVEN'):p.opening(s,opening.model_copy(update={'header':opening.header.model_copy(update={'entered_balance':90001})}))
+    with pytest.raises(p.ReconciliationError,match='OPENING_UNPROVEN') as unplaced:p.opening(s,opening.model_copy(update={'selections':selections[:1]}))
+    assert unplaced.value.details['check']=='unplaced_movements' and unplaced.value.details['unplaced']==1
+    assert '`reconcile mark`' in unplaced.value.details['next']
+    with pytest.raises(p.ReconciliationError,match='OPENING_UNPROVEN') as off:p.opening(s,opening.model_copy(update={'header':opening.header.model_copy(update={'entered_balance':90001})}))
+    # The books held 900.00 at the opening date; the covered movements come to 1000.00; the statement opening given is 900.01.
+    got={k:off.value.details[k] for k in ('check','book_balance','statement_opening','covered_total','outstanding_total','difference','opening_date')}
+    assert got=={'check':'covered_total','book_balance':90000,'statement_opening':90001,'covered_total':100000,'outstanding_total':-10000,'difference':-9999,'opening_date':opening.header.opening_date}
+    assert (off.value.details['book_balance_decimal'],off.value.details['difference_decimal'])==('900.00','-99.99')
+    assert 'outstanding' in off.value.details['next'] and 'adjustment' in off.value.details['next']
     assert driver.dump()==before
     card=account(client,'ii card','credit_card');j=journal(client,pair(equity,card,'10'))
     cs=context(driver,[j['id']]);co=draft(card,kind='opening',ending=1000,selections=select(cs,action='covered'))

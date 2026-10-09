@@ -191,7 +191,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # the null branches of their optional date and number. No new variant kind; the groups stay 26.
     # R117 (customer and vendor merge and unmerge) adds none: merged, into, reason and the idempotency key are
     # all required or context, so no optional branch is new. Re-measured on the merged tree: still 2931.
-    assert sum(len(group["paths"]) for group in mapped)==2931
+    # 2931 -> 2933: reconcile import 3 -> 5. It reads a statement kept as an attachment, so `content` is now
+    # optional (+1, its null branch) and `attachment` is a new optional string (+1, its null branch).
+    assert sum(len(group["paths"]) for group in mapped)==2933
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

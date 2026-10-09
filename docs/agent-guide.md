@@ -533,6 +533,27 @@ stable record IDs). Combine it with `projection: "reference"` and
 collections. It intersects every other criterion and remains subject to ordinary
 company authority and cursor checks. Omitted `ids` preserves ordinary browsing.
 
+## Reading a bank statement from a file
+
+When the owner says the statement is in your input folder, attach the file once and import it by its
+attachment id; `reconcile import` itself takes no `transport.input_file`, and pasted text works too
+(`content`). The attachment is the same one you would give `cutover`:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "attachment add", "reason": "July checking statement",
+ "input": {"record_type": "company_info", "record_id": "<company_id from company show>",
+           "original_filename": "checking-2026-07.ofx", "media_type": "application/x-ofx"},
+ "transport": {"input_file": "/home/me/input/checking-2026-07.ofx"}}
+{"command": "reconcile import", "reason": "Reconcile July checking",
+ "input": {"account": "Checking", "attachment": "<attachment id from the reply>", "start": true}}
+```
+
+Leave out `start` to read the statement without opening a reconciliation. Each line comes back matched,
+suggested, unmatched (enter it, then import again) or already reconciled. Import again after entering
+what the statement shows; nothing already true is repeated. Then `reconcile preview` and
+`reconcile finish`.
+
 ## A reconciliation that will not tie
 
 Never force a statement to tie. `reconcile finish` with `adjustment` (a journal to

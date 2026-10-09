@@ -233,8 +233,18 @@ class Client:
                     return inspected, False, {"operation_ref": reference, "response_kind": "verified_result_inspection"}
                 return await self.post(f'/adapters/mcp/intents/{reference}/{arguments.action}', reference=reference, kind='release' if arguments.action == 'release' else 'state'), False, {"operation_ref": reference, 'response_kind': 'recovery_observation'}
             files, direction = arguments.transport, metadata['transfer']
-            if (files.input_file is not None and direction != 'input') or (files.output_file is not None and direction != 'output'):
-                raise BookflowError('E_USAGE', details={"reason": "file_direction"})
+            if files.input_file is not None and direction != 'input':
+                raise BookflowError('E_USAGE', message=(
+                    f'{arguments.command} does not read a file from transport.input_file; only a command that takes a '
+                    'binary body does (attachment add). Attach the file first with attachment add, passing the file in '
+                    'its transport.input_file, then give this command the attachment id it returns '
+                    '(statements: reconcile import, input.attachment) or its text.'),
+                    details={"reason": "file_direction", "transport": "input_file"})
+            if files.output_file is not None and direction != 'output':
+                raise BookflowError('E_USAGE', message=(
+                    f'{arguments.command} writes no file to transport.output_file; only a download does '
+                    '(attachment get). Read the result from the reply instead.'),
+                    details={"reason": "file_direction", "transport": "output_file"})
             if direction == 'input' and files.input_file is None:
                 raise BookflowError('E_USAGE', message='Supply transport.input_file with the permitted business file path.')
             output_file = files.output_file or (self.outputs.destination() if direction == 'output' else None)

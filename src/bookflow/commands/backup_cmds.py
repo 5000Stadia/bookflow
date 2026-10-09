@@ -86,7 +86,8 @@ def apply_company_backup(plan: Plan, ctx: Context, s: Session) -> Applied:
     warnings = []
     if m["missing_attachments"]:
         warnings.append(f"{len(m['missing_attachments'])} attachment file(s) the company refers to were missing or damaged on disk "
-                        "and are not in the backup; run `company verify` on the company")
+                        "and are not in the backup (their SHA-256 values are in `missing_attachments`); put the original files "
+                        "back with `attachment add` and back up again")
     out = CompanyBackupOutput(backup_id=m["backup_id"], company_id=row["id"], display_name=row["display_name"],
                               file_name=result["file_name"], path=str(result["path"]), size_bytes=result["size_bytes"],
                               sha256=result["sha256"], schema_revision=m["schema_revision"], created_at=m["created_at"],

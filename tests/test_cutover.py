@@ -81,7 +81,9 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     # The old books' sales tax items name one agency, so the 1,036.59 of sales tax they owe comes in
     # as that agency's balance (R175) and the plan has nothing to warn about it.
     assert {(e["severity"], e["code"]) for e in plan["exceptions"]} == {
-        ("warning", "non_posting_accounts"), ("warning", "item_skipped"), ("note", "account_number_differs")}
+        ("warning", "non_posting_accounts"), ("warning", "item_skipped"), ("note", "account_number_differs"),
+        ("note", "sales_tax_default")}
+    assert "IL Sales Tax" in next(e for e in plan["exceptions"] if e["code"] == "sales_tax_default")["problem"]
     tax_step = next(step for step in plan["steps"] if step["kind"] == "sales_tax_adjustment")
     assert (tax_step["outside_id"], tax_step["name"]) == (f"sales-tax:{AS_OF}", "Opening sales tax · Illinois Department of Revenue")
     assert {row["kind"]: row["amount"]["minor_units"] for row in plan["counts"] if row["amount"]}["sales_tax_adjustment"] == 103659
@@ -145,7 +147,9 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     events = run("audit list", dict(limit=200))["items"]
     moved = [e for e in events if (e["source_ref"] or "").startswith("cutover:")]
     # One event per record made, and one per export given as text, kept as an attachment.
-    assert len(moved) == 76 + 8
+    # ... and the one `company update` that makes the only sales tax item the company's default.
+    assert len(moved) == 76 + 8 + 1
+    assert [e["command"] for e in moved if e["source_ref"] == "cutover:default-sales-tax-item"] == ["company update"]
     assert sorted(e["command"] for e in moved if e["source_ref"].startswith("cutover:file:")) == ["attachment add"] * 8
     assert run("customer show", dict(customer="Patel, Anita"))["active"] is False
 
@@ -193,6 +197,10 @@ def test_two_agencies_keep_the_opening_sales_tax_in_the_journal_with_a_warning(m
 def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
     run, files = mover["run"], mover["files"]
     first = run("cutover apply", dict(as_of=AS_OF, files=files), idempotency_key="move-in-1")
+    # The only sales tax item becomes the company's default, and the result says so (the blind July
+    # trial's first invoice failed for want of one).
+    assert first["default_sales_tax_item"] == "IL Sales Tax" and "company's default" in first["summary"]
+    assert run("company show")["info"]["default_sales_tax_item_id"] == run("item show", dict(item="IL Sales Tax"))["id"]
     before = _balances(run)
     retry = run("cutover apply", dict(as_of=AS_OF, files=files), idempotency_key="move-in-1")
     assert retry["idempotent_replay"] is True and retry["created"] == first["created"] == 76
@@ -206,7 +214,7 @@ def test_a_rerun_makes_nothing_and_a_retry_replays(mover):
     plan = run("cutover plan", dict(as_of=AS_OF, files=by_id))
     assert plan["ready"] and {f["name"]: f["attachment"] for f in plan["files"]} == kept
     again = run("cutover apply", dict(as_of=AS_OF, files=by_id))
-    assert (again["created"], again["already_in"]) == (0, 76)
+    assert (again["created"], again["already_in"]) == (0, 76) and again["default_sales_tax_item"] is None
     assert all(step["action"] == "already_in" for step in again["steps"])
     text_again = run("cutover plan", dict(as_of=AS_OF, files=files))
     assert {f["name"]: f["attachment"] for f in text_again["files"]} == kept  # text an earlier run kept shows its id
@@ -363,6 +371,24 @@ def test_files_planned_in_pieces_get_one_note_for_the_trial_balance_and_one_for_
         run("cutover apply", dict(as_of=AS_OF, files=pieces))
     assert refused.value.code == "E_CUTOVER_BLOCKED"
     assert [e["code"] for e in refused.value.details["exceptions"]] == ["no_trial_balance"]
+
+
+def test_vendors_and_customers_that_look_like_one_party_are_flagged_and_nothing_else(mover):
+    """The blind July trial's old books held Midland Electric Supply and Midland Elec. Supply, and nothing said so."""
+    run = mover["run"]
+    header = "\n".join(text("vendors.iif").splitlines()[:3])
+    pad = "\t" * (text("vendors.iif").splitlines()[2].count("\t") - 1)
+    vendors = header + "\n" + "\n".join(f"VEND\t{name}{pad}0" for name in (
+        "Midland Electric Supply", "Midland Elec. Supply", "Route 59 Auto", "Route 69 Auto", "Ferguson Supply", "Ferguson Supply Inc.")) + "\n"
+    plan = run("cutover plan", dict(as_of=AS_OF, files=[{"content": vendors, "name": "vendors.iif"}]))
+    flagged = [e for e in plan["exceptions"] if e["code"] == "possible_duplicate_vendor"]
+    assert all(e["severity"] == "warning" for e in flagged) and plan["blocking"] == []
+    pairs = {e["problem"].split(" look like")[0] for e in flagged}
+    assert pairs == {"vendor 'Midland Elec. Supply' and 'Midland Electric Supply'", "vendor 'Ferguson Supply' and 'Ferguson Supply Inc.'"}
+    assert all("owner" in e["fix"] for e in flagged)
+    # Route 59 and Route 69 are two vendors, and a job under a customer is not a second customer.
+    plan = run("cutover plan", dict(as_of=AS_OF, files=[{"content": text("customers.iif"), "name": "customers.iif"}]))
+    assert not [e for e in plan["exceptions"] if e["code"].startswith("possible_duplicate")]
 
 
 def test_blocking_lines_lead_and_exceptions_outlast_steps_when_a_result_is_cut():
