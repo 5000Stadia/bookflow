@@ -4,7 +4,7 @@
 
 ## `cutover apply`
 
-Move the company in from its old books: make the accounts, terms, customers, vendors and items, post each open invoice, credit, bill and vendor credit for its open balance with its own number and dates, bring in each item's opening stock, and post one opening journal at the cutover date for every other trial-balance account against a clearing account that ends at 0.00. Runs the ordinary commands, each write carrying the source reference `cutover:` plus its outside id, so a rerun makes only what is missing. Refused while the plan has blocking exceptions. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), each given as an attachment or as text.
+Move the company in from its old books: make the accounts, terms, customers, vendors and items, post each open invoice, credit, bill and vendor credit for its open balance with its own number and dates, bring in each item's opening stock, and post one opening journal at the cutover date for every other trial-balance account against a clearing account that ends at 0.00. Runs the ordinary commands, each write carrying the source reference `cutover:` plus its outside id, so a rerun makes only what is missing. Refused while the plan has blocking exceptions. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -89,20 +89,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `ready` | boolean | yes | no | — | True when nothing blocks `cutover apply` |
 | `source` | string \| null | yes | yes | — | The product and version the IIF files name, when they do |
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
-| `files` | array[object] | yes | no | — | — |
-| `files[].name` | string | yes | no | — | The file's label |
-| `files[].kind` | string \| null | yes | yes | — | What the file was read as; null when it could not be told |
-| `files[].detected` | boolean | yes | no | — | True when the kind was read from the file's own headings |
-| `files[].attachment` | string \| null | yes | yes | — | The attachment it was read from, or null for inline content |
-| `files[].sha256` | string | yes | no | — | SHA-256 of the file's text |
-| `files[].rows` | integer | yes | no | — | Data rows read from it |
-| `counts` | array[object] | yes | no | — | — |
+| `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
 | `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, journal, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
 | `counts[].already_in` | integer | yes | no | — | Records an earlier run of the cutover made, found by their outside id |
 | `counts[].matched` | integer | yes | no | — | Old-books records that are existing Bookflow records |
-| `exceptions` | array[object] | yes | no | — | Every problem found, blocking first |
-| `exceptions[].severity` | literal["blocking", "warning"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it |
+| `counts[].amount` | object \| null | yes | yes | — | For documents, stock and the journal: their total open amount, value or journal total, made and already in; null for lists |
+| `counts[].amount.amount` | string | yes | no | — | — |
+| `counts[].amount.currency` | string | yes | no | — | — |
+| `counts[].amount.minor_units` | integer | yes | no | — | — |
+| `exceptions` | array[object] | yes | no | — | Every problem found, blocking first, then warnings and notes |
+| `exceptions[].severity` | literal["blocking", "warning", "note"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it; `note` says how something here differs from the old books by design |
 | `exceptions[].code` | string | yes | no | — | Stable name of the exception, e.g. unmapped_account or receivables_do_not_tie |
 | `exceptions[].problem` | string | yes | no | — | What is wrong, in a sentence |
 | `exceptions[].fix` | string \| null | yes | yes | — | What resolves it |
@@ -123,12 +120,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `checks[].difference.amount` | string | yes | no | — | — |
 | `checks[].difference.currency` | string | yes | no | — | — |
 | `checks[].difference.minor_units` | integer | yes | no | — | — |
-| `mappings` | object | yes | no | — | The complete resolved mapping, in the input's shape |
-| `mappings.accounts` | object[string, string] | yes | no | — | Every old-books account to its Bookflow account ID, or `create` |
-| `mappings.customers` | object[string, string] | yes | no | — | Every old-books customer and job to its Bookflow ID, or `create` |
-| `mappings.vendors` | object[string, string] | yes | no | — | Every old-books vendor to its Bookflow ID, or `create` |
-| `mappings.items` | object[string, string] | yes | no | — | Every old-books item to its Bookflow ID, or `create` |
-| `mappings.terms` | object[string, string] | yes | no | — | Every old-books terms name to its Bookflow ID, or `create` |
+| `files` | array[object] | yes | no | — | Each file read, with its attachment id and SHA-256 to reuse |
+| `files[].name` | string | yes | no | — | The file's label |
+| `files[].kind` | string \| null | yes | yes | — | What the file was read as; null when it could not be told |
+| `files[].decided_by` | literal["given", "headings"] \| null | yes | yes | — | How the kind was decided: `given` by the file's own `kind`, `headings` read from the file; null when it could not be |
+| `files[].attachment` | string \| null | yes | yes | — | The attachment holding the file: the one it was read from, or for inline text the one `cutover apply` kept it as. Pass `{"attachment": "<id>"}` in `files` on later calls instead of the text |
+| `files[].sha256` | string | yes | no | — | SHA-256 of the file's text |
+| `files[].rows` | integer | yes | no | — | Data rows read from it |
 | `journal` | object \| null | yes | yes | — | The opening journal; null when the trial balance carries only document-owned accounts |
 | `journal.date` | string | yes | no | — | The cutover date |
 | `journal.number` | string \| null | yes | yes | — | The opening journal's number; null for the next number |
@@ -160,6 +158,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `steps[].amount.minor_units` | integer | yes | no | — | — |
 | `steps[].date` | string \| null | yes | yes | — | The document's accounting date |
 | `steps[].detail` | string \| null | yes | yes | — | What else the step carries, in a phrase |
+| `mappings` | object | yes | no | — | The complete resolved mapping, in the input's shape |
+| `mappings.accounts` | object[string, string] | yes | no | — | Every old-books account to its Bookflow account ID, or `create` |
+| `mappings.customers` | object[string, string] | yes | no | — | Every old-books customer and job to its Bookflow ID, or `create` |
+| `mappings.vendors` | object[string, string] | yes | no | — | Every old-books vendor to its Bookflow ID, or `create` |
+| `mappings.items` | object[string, string] | yes | no | — | Every old-books item to its Bookflow ID, or `create` |
+| `mappings.terms` | object[string, string] | yes | no | — | Every old-books terms name to its Bookflow ID, or `create` |
 | `created` | integer | yes | no | — | Records this run made |
 | `already_in` | integer | yes | no | — | Records earlier runs had made |
 | `clearing_account_id` | string \| null | yes | yes | — | The clearing account |
@@ -228,7 +232,7 @@ Example JSON output:
 
 ## `cutover plan`
 
-Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), each given as an attachment or as text.
+Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 | Contract | Value |
 |---|---|
@@ -301,20 +305,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `ready` | boolean | yes | no | — | True when nothing blocks `cutover apply` |
 | `source` | string \| null | yes | yes | — | The product and version the IIF files name, when they do |
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
-| `files` | array[object] | yes | no | — | — |
-| `files[].name` | string | yes | no | — | The file's label |
-| `files[].kind` | string \| null | yes | yes | — | What the file was read as; null when it could not be told |
-| `files[].detected` | boolean | yes | no | — | True when the kind was read from the file's own headings |
-| `files[].attachment` | string \| null | yes | yes | — | The attachment it was read from, or null for inline content |
-| `files[].sha256` | string | yes | no | — | SHA-256 of the file's text |
-| `files[].rows` | integer | yes | no | — | Data rows read from it |
-| `counts` | array[object] | yes | no | — | — |
+| `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
 | `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, journal, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
 | `counts[].already_in` | integer | yes | no | — | Records an earlier run of the cutover made, found by their outside id |
 | `counts[].matched` | integer | yes | no | — | Old-books records that are existing Bookflow records |
-| `exceptions` | array[object] | yes | no | — | Every problem found, blocking first |
-| `exceptions[].severity` | literal["blocking", "warning"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it |
+| `counts[].amount` | object \| null | yes | yes | — | For documents, stock and the journal: their total open amount, value or journal total, made and already in; null for lists |
+| `counts[].amount.amount` | string | yes | no | — | — |
+| `counts[].amount.currency` | string | yes | no | — | — |
+| `counts[].amount.minor_units` | integer | yes | no | — | — |
+| `exceptions` | array[object] | yes | no | — | Every problem found, blocking first, then warnings and notes |
+| `exceptions[].severity` | literal["blocking", "warning", "note"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it; `note` says how something here differs from the old books by design |
 | `exceptions[].code` | string | yes | no | — | Stable name of the exception, e.g. unmapped_account or receivables_do_not_tie |
 | `exceptions[].problem` | string | yes | no | — | What is wrong, in a sentence |
 | `exceptions[].fix` | string \| null | yes | yes | — | What resolves it |
@@ -335,12 +336,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `checks[].difference.amount` | string | yes | no | — | — |
 | `checks[].difference.currency` | string | yes | no | — | — |
 | `checks[].difference.minor_units` | integer | yes | no | — | — |
-| `mappings` | object | yes | no | — | The complete resolved mapping, in the input's shape |
-| `mappings.accounts` | object[string, string] | yes | no | — | Every old-books account to its Bookflow account ID, or `create` |
-| `mappings.customers` | object[string, string] | yes | no | — | Every old-books customer and job to its Bookflow ID, or `create` |
-| `mappings.vendors` | object[string, string] | yes | no | — | Every old-books vendor to its Bookflow ID, or `create` |
-| `mappings.items` | object[string, string] | yes | no | — | Every old-books item to its Bookflow ID, or `create` |
-| `mappings.terms` | object[string, string] | yes | no | — | Every old-books terms name to its Bookflow ID, or `create` |
+| `files` | array[object] | yes | no | — | Each file read, with its attachment id and SHA-256 to reuse |
+| `files[].name` | string | yes | no | — | The file's label |
+| `files[].kind` | string \| null | yes | yes | — | What the file was read as; null when it could not be told |
+| `files[].decided_by` | literal["given", "headings"] \| null | yes | yes | — | How the kind was decided: `given` by the file's own `kind`, `headings` read from the file; null when it could not be |
+| `files[].attachment` | string \| null | yes | yes | — | The attachment holding the file: the one it was read from, or for inline text the one `cutover apply` kept it as. Pass `{"attachment": "<id>"}` in `files` on later calls instead of the text |
+| `files[].sha256` | string | yes | no | — | SHA-256 of the file's text |
+| `files[].rows` | integer | yes | no | — | Data rows read from it |
 | `journal` | object \| null | yes | yes | — | The opening journal; null when the trial balance carries only document-owned accounts |
 | `journal.date` | string | yes | no | — | The cutover date |
 | `journal.number` | string \| null | yes | yes | — | The opening journal's number; null for the next number |
@@ -372,6 +374,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `steps[].amount.minor_units` | integer | yes | no | — | — |
 | `steps[].date` | string \| null | yes | yes | — | The document's accounting date |
 | `steps[].detail` | string \| null | yes | yes | — | What else the step carries, in a phrase |
+| `mappings` | object | yes | no | — | The complete resolved mapping, in the input's shape |
+| `mappings.accounts` | object[string, string] | yes | no | — | Every old-books account to its Bookflow account ID, or `create` |
+| `mappings.customers` | object[string, string] | yes | no | — | Every old-books customer and job to its Bookflow ID, or `create` |
+| `mappings.vendors` | object[string, string] | yes | no | — | Every old-books vendor to its Bookflow ID, or `create` |
+| `mappings.items` | object[string, string] | yes | no | — | Every old-books item to its Bookflow ID, or `create` |
+| `mappings.terms` | object[string, string] | yes | no | — | Every old-books terms name to its Bookflow ID, or `create` |
 
 Example JSON output:
 
@@ -429,7 +437,7 @@ Example JSON output:
 
 ## `cutover tie-out`
 
-Compare the books with the old books as of the cutover date: the trial balance account by account, and receivables and payables aging customer by customer and vendor by vendor, column by column, plus the clearing account, which ties at 0.00. Lists every difference. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), each given as an attachment or as text.
+Compare the books with the old books as of the cutover date: the trial balance account by account, and receivables and payables aging customer by customer and vendor by vendor, column by column, plus the clearing account, which ties at 0.00. Lists every difference. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 | Contract | Value |
 |---|---|
@@ -497,7 +505,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `as_of` | string | yes | no | — | — |
-| `tied` | boolean | yes | no | — | True when every compared figure ties to the cent and the clearing account is 0.00 |
+| `tied` | boolean | yes | no | — | True when every compared figure ties to the cent, the clearing account is 0.00, and every list field compared matches |
 | `summary` | string | yes | no | — | — |
 | `trial_balance` | object | yes | no | — | — |
 | `trial_balance.source` | string | yes | no | — | What the old books' side was read from |
@@ -580,12 +588,58 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payables.rows[].difference.amount` | string | yes | no | — | — |
 | `payables.rows[].difference.currency` | string | yes | no | — | — |
 | `payables.rows[].difference.minor_units` | integer | yes | no | — | — |
+| `inventory` | object | yes | no | — | — |
+| `inventory.source` | string | yes | no | — | What the old books' side was read from, or `none` when no valuation was given |
+| `inventory.source_total` | object | yes | no | — | — |
+| `inventory.source_total.amount` | string | yes | no | — | — |
+| `inventory.source_total.currency` | string | yes | no | — | — |
+| `inventory.source_total.minor_units` | integer | yes | no | — | — |
+| `inventory.books_total` | object | yes | no | — | — |
+| `inventory.books_total.amount` | string | yes | no | — | — |
+| `inventory.books_total.currency` | string | yes | no | — | — |
+| `inventory.books_total.minor_units` | integer | yes | no | — | — |
+| `inventory.differences` | integer | yes | no | — | Items whose quantity or value does not tie |
+| `inventory.rows` | array[object] | yes | no | — | — |
+| `inventory.rows[].name` | string | yes | no | — | The item |
+| `inventory.rows[].record_id` | string \| null | yes | yes | — | The Bookflow item compared; null when none stands for it |
+| `inventory.rows[].source_quantity` | string | yes | no | — | Quantity on hand in the old books |
+| `inventory.rows[].books_quantity` | string | yes | no | — | Quantity on hand here as of the cutover date |
+| `inventory.rows[].source_value` | object | yes | no | — | Asset value in the old books |
+| `inventory.rows[].source_value.amount` | string | yes | no | — | — |
+| `inventory.rows[].source_value.currency` | string | yes | no | — | — |
+| `inventory.rows[].source_value.minor_units` | integer | yes | no | — | — |
+| `inventory.rows[].books_value` | object | yes | no | — | Asset value here as of the cutover date |
+| `inventory.rows[].books_value.amount` | string | yes | no | — | — |
+| `inventory.rows[].books_value.currency` | string | yes | no | — | — |
+| `inventory.rows[].books_value.minor_units` | integer | yes | no | — | — |
+| `inventory.rows[].difference` | object | yes | no | — | source_value less books_value; 0.00 ties |
+| `inventory.rows[].difference.amount` | string | yes | no | — | — |
+| `inventory.rows[].difference.currency` | string | yes | no | — | — |
+| `inventory.rows[].difference.minor_units` | integer | yes | no | — | — |
+| `lists` | object | yes | no | — | — |
+| `lists.source` | string | yes | no | — | What the old books' side was read from |
+| `lists.compared` | integer | yes | no | — | Records compared |
+| `lists.differences` | integer | yes | no | — | Fields that do not match |
+| `lists.rows` | array[object] | yes | no | — | Every field that does not match |
+| `lists.rows[].list` | literal["account", "customer", "vendor", "item", "term"] | yes | no | — | — |
+| `lists.rows[].name` | string | yes | no | — | The record as the old books name it |
+| `lists.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when none stands for it |
+| `lists.rows[].field` | string | yes | no | — | active, type, number, job_status, job_description, terms, credit_limit, eligible_1099, price, cost, due_days, discount_percent or discount_days |
+| `lists.rows[].source` | string \| null | yes | yes | — | The old books' value |
+| `lists.rows[].books` | string \| null | yes | yes | — | The value here |
+| `lists.notes` | array[object] | yes | no | — | Fields that differ by design, such as an account matched to one here that keeps its own number |
+| `lists.notes[].list` | literal["account", "customer", "vendor", "item", "term"] | yes | no | — | — |
+| `lists.notes[].name` | string | yes | no | — | The record as the old books name it |
+| `lists.notes[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when none stands for it |
+| `lists.notes[].field` | string | yes | no | — | active, type, number, job_status, job_description, terms, credit_limit, eligible_1099, price, cost, due_days, discount_percent or discount_days |
+| `lists.notes[].source` | string \| null | yes | yes | — | The old books' value |
+| `lists.notes[].books` | string \| null | yes | yes | — | The value here |
 | `clearing` | object | yes | no | — | The clearing account's balance as of the cutover date; 0.00 ties |
 | `clearing.amount` | string | yes | no | — | — |
 | `clearing.currency` | string | yes | no | — | — |
 | `clearing.minor_units` | integer | yes | no | — | — |
 | `exceptions` | array[object] | yes | no | — | Problems that kept a figure from being compared |
-| `exceptions[].severity` | literal["blocking", "warning"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it |
+| `exceptions[].severity` | literal["blocking", "warning", "note"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it; `note` says how something here differs from the old books by design |
 | `exceptions[].code` | string | yes | no | — | Stable name of the exception, e.g. unmapped_account or receivables_do_not_tie |
 | `exceptions[].problem` | string | yes | no | — | What is wrong, in a sentence |
 | `exceptions[].fix` | string \| null | yes | yes | — | What resolves it |
@@ -604,6 +658,28 @@ Example JSON output:
     "minor_units": 1
   },
   "exceptions": [],
+  "inventory": {
+    "books_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "differences": 1,
+    "rows": [],
+    "source": "value",
+    "source_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  },
+  "lists": {
+    "compared": 1,
+    "differences": 1,
+    "notes": [],
+    "rows": [],
+    "source": "value"
+  },
   "payables": {
     "books_total": {
       "amount": "value",

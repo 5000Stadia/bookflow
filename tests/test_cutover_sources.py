@@ -98,3 +98,32 @@ def test_iif_lists_read_every_section_and_name_what_they_skip():
     utilities = [row for row in sources.lists["account"] if row.path.startswith("Utilities")]
     assert [(row.path, row.get("ACCNUM"), row.get("ACCNTTYPE")) for row in utilities] == [
         ("Utilities", "6700", "EXP"), ("Utilities:Telephone", "6710", "EXP"), ("Utilities:Gas and Electric", "6720", "EXP")]
+
+
+def test_a_list_export_that_leaves_out_an_empty_last_field_reads_whole():
+    # Enterprise exports end each customer row at DELCOUNT when PRICELEVEL is empty: one field
+    # short of the header, always the trailing one.
+    lines = fixture("customers.iif").split("\r\n")
+    trimmed = "\r\n".join(line[:-1] if line.startswith("CUST\t") and line.endswith("\t") else line for line in lines)
+    assert trimmed != fixture("customers.iif")
+    sources = read(("customers.iif", None, trimmed))
+    assert not sources.problems
+    patel = next(row for row in sources.lists["customer"] if row.path == "Patel, Anita")
+    assert (patel.get("HIDDEN"), patel.get("DELCOUNT"), patel.get("PRICELEVEL")) == ("Y", "0", "")
+
+
+def test_a_quoted_field_may_hold_a_tab():
+    header = "!VEND\tNAME\tREFNUM\tTIMESTAMP\tNOTEPAD\tHIDDEN\tDELCOUNT"
+    row = 'VEND\tFerguson Supply\t401\t1715623380\t"Call first\tthen email"\tN\t0'
+    sources = read(("vendors.iif", None, header + "\r\n" + row + "\r\n"))
+    assert not sources.problems
+    assert sources.lists["vendor"][0].get("NOTEPAD") == "Call first\tthen email"
+
+
+def test_a_report_row_with_a_comma_too_few_is_refused():
+    text = fixture("open_invoices.csv")
+    row = ',,"Invoice","09/25/2026","1203","BD-0925","Net 30","10/25/2026",,,"615.00"'
+    assert row in text
+    sources = read(("open_invoices.csv", None, text.replace(row, row.replace(',,,"615.00"', ',,"615.00"'))))
+    assert [(p.code, p.line, p.severity) for p in sources.problems] == [("row_width", 10, "blocking")]
+    assert sources.documents == []

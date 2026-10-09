@@ -36,8 +36,8 @@ from bookflow.company import cutover_sources as src
 from bookflow.company import schema as c
 from bookflow.company.cutover_models import (
     CutoverApplyOutput, CutoverCheck, CutoverCount, CutoverException, CutoverFileOutput, CutoverJournal,
-    CutoverJournalLine, CutoverMappingsOutput, CutoverPlanOutput, CutoverStep, CutoverTieOutOutput, CutoverTieRow,
-    CutoverTieSection,
+    CutoverJournalLine, CutoverListRow, CutoverListSection, CutoverMappingsOutput, CutoverPlanOutput, CutoverStep,
+    CutoverStockRow, CutoverStockSection, CutoverTieOutOutput, CutoverTieRow, CutoverTieSection,
 )
 from bookflow.company.ledger_reports import money
 from bookflow.core.errors import BookflowError
@@ -173,6 +173,11 @@ def _files(s, inp) -> list[src.SourceFile]:
     return files
 
 
+def _file_id(file: src.SourceFile) -> str:
+    """The outside id of an export file given as text: its content, so the same text is kept once."""
+    return "file:" + file.sha256
+
+
 def _attachment_text(s, selector: str) -> tuple[dict, str]:
     from bookflow.company import attachment_store as store
     row = s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.id == selector)).mappings().first()
@@ -192,6 +197,9 @@ def _attachment_text(s, selector: str) -> tuple[dict, str]:
 def build(s, inp, *, journal_number: str | None = None) -> Built:
     files = _files(s, inp)
     books = Books(s, inp.as_of)
+    for file in files:
+        if file.attachment is None:
+            file.attachment = books.link(_file_id(file), "attachment")
     sources = src.read(files, books.places)
     built = Built(sources, books)
     built.exceptions.extend(sources.problems)
@@ -419,6 +427,11 @@ def _accounts(built: Built, inp) -> None:
                 continue
         if record is not None:
             made = books.link(outside_id, "account") == record["id"]
+            if entry.number and entry.number != (record["number"] or None) and not made:
+                _problem(built, "note", "account_number_differs",
+                         f"{label} is {record['full_name']} here, which keeps its number {record['number'] or '(none)'}; the old books number it {entry.number}",
+                         "Renumber it with `account update` if the old number should carry over.", file=entry.file,
+                         line=entry.line, subject=label)
             _target(built, outside_id, record_id=record["id"], ref=None, record_type=record["type"], name=record["full_name"],
                      extra={"role": record["system_role"], "label": label, "balance": entry.balance,
                             "made": made, "hidden": entry.hidden, "active": record["active"]})
@@ -487,9 +500,75 @@ _NET = re.compile(r"^net\s+(\d{1,3})$", re.IGNORECASE)
 _DISCOUNT = re.compile(r"^(\d{1,2}(?:\.\d{1,4})?)\s*%\s*(\d{1,3})\s+net\s+(\d{1,3})$", re.IGNORECASE)
 
 
+def _whole_number(text: str | None) -> int | None:
+    text = (text or "").strip()
+    return int(text) if text.isdigit() else None
+
+
+def _term_settings(name: str, row: src.ListRow | None) -> dict[str, Any] | None:
+    """What a term means in the old books: from its !TERMS row when the list was given (either
+    export layout), else read off its name (`Net 30`, `1% 10 Net 30`, `Due on receipt`); None when
+    neither says. Percent is exact millionths."""
+    from bookflow.core.exact import parse_percentage_millionths
+    percent = lambda text: parse_percentage_millionths(text.strip().rstrip("%").strip() or "0")
+    if row is not None:
+        due = _whole_number(row.get("DUEDAYS") or row.get("STDDUEDAYS"))
+        discount_days = _whole_number(row.get("DISCDAYS") or row.get("STDDISCDAYS"))
+        try:
+            discount = percent(row.get("DISCPER")) if row.get("DISCPER") else 0
+        except BookflowError:
+            discount = None
+        if row.get("TERMSTYPE") == "1":
+            return {"kind": "date_driven", "due_day_of_month": _whole_number(row.get("DAYOFMONTHDUE")),
+                    "due_next_month_if_within_days": _whole_number(row.get("DATEMINDAYS")),
+                    "discount_day_of_month": _whole_number(row.get("DISCDAYOFMONTH")) if discount else None,
+                    "discount_percent_millionths": discount or None}
+        if due is not None:
+            return {"kind": "standard", "due_days": due, "discount_percent_millionths": discount or None,
+                    "discount_days": discount_days if discount else None}
+    found = _NET.match(name.strip())
+    if found:
+        return {"kind": "standard", "due_days": int(found.group(1)), "discount_percent_millionths": None, "discount_days": None}
+    found = _DISCOUNT.match(name.strip())
+    if found:
+        return {"kind": "standard", "due_days": int(found.group(3)), "discount_percent_millionths": percent(found.group(1)),
+                "discount_days": int(found.group(2))}
+    if src.key(name) == "due on receipt":
+        return {"kind": "standard", "due_days": 0, "discount_percent_millionths": None, "discount_days": None}
+    return None
+
+
+def _term_differences(wanted: dict[str, Any], record: dict[str, Any]) -> list[str]:
+    """Each setting where the term here says something other than the old books' term."""
+    words = {"kind": "kind", "due_days": "due in days", "discount_percent_millionths": "discount percent",
+             "discount_days": "discount days", "due_day_of_month": "due day of month",
+             "due_next_month_if_within_days": "next month within days", "discount_day_of_month": "discount day of month"}
+    from bookflow.core.exact import format_percentage_millionths
+    found = []
+    for field_, value in wanted.items():
+        mine = record.get(field_)
+        if (mine or None) != (value or None):
+            shown = lambda v: ("none" if v in (None, 0) else
+                               format_percentage_millionths(v) + "%" if field_ == "discount_percent_millionths" else v)
+            found.append(f"{words[field_]} {shown(mine)} here, {shown(value)} in the old books")
+    return found
+
+
+def _term_payload(name: str, settings: dict[str, Any]) -> dict[str, Any]:
+    from bookflow.core.exact import format_percentage_millionths
+    payload: dict[str, Any] = {"name": name, "kind": settings["kind"]}
+    for field_ in ("due_days", "discount_days", "due_day_of_month", "due_next_month_if_within_days", "discount_day_of_month"):
+        if settings.get(field_) is not None:
+            payload[field_] = settings[field_]
+    if settings.get("discount_percent_millionths"):
+        payload["discount_percent"] = format_percentage_millionths(settings["discount_percent_millionths"])
+    return payload
+
+
 def _terms(built: Built, inp) -> None:
     books = built.books
     names: dict[str, tuple[str, str | None, int | None]] = {}
+    rows = {src.key(row.path): row for row in built.sources.lists["term"]}
     for kind in ("customer", "vendor"):
         for row in built.sources.lists[kind]:
             if row.get("TERMS"):
@@ -501,6 +580,7 @@ def _terms(built: Built, inp) -> None:
         names.setdefault(src.key(row.path), (row.path, row.file, row.line))
     for folded, (name, file, line) in names.items():
         outside_id = "term:" + folded
+        settings = _term_settings(name, rows.get(folded))
         decided = _mapped(inp.mappings.terms, name)
         record = None
         if decided is not None and decided.lower() != "create":
@@ -515,27 +595,30 @@ def _terms(built: Built, inp) -> None:
             if record is None:
                 record = books.by_key(books.terms, "name", name)
         if record is not None:
-            _target(built, outside_id, record_id=record["id"], ref=None, record_type="term", name=record["name"])
+            differences = _term_differences(settings, record) if settings else []
+            if differences:
+                _problem(built, "blocking", "term_settings_differ",
+                         f"terms {name!r} here are not the old books' {name!r}: " + "; ".join(differences),
+                         "Correct the term here with `term update`, or map the name to a term with the old books' settings "
+                         "with mappings.terms.", file=file, line=line, subject=name)
+                continue
+            _target(built, outside_id, record_id=record["id"], ref=None, record_type="term", name=record["name"],
+                    extra={"settings": settings})
             built.mappings["terms"][name] = record["id"]
             if books.link(outside_id, "term") == record["id"]:
                 _already(built, "term", outside_id, name, record["id"], "term")
             continue
-        payload = None
-        found = _NET.match(name.strip())
-        if found:
-            payload = {"name": name.strip(), "kind": "standard", "due_days": int(found.group(1))}
-        found = _DISCOUNT.match(name.strip())
-        if found:
-            payload = {"name": name.strip(), "kind": "standard", "discount_percent": found.group(1),
-                       "discount_days": int(found.group(2)), "due_days": int(found.group(3))}
-        if payload is None:
+        if settings is None:
             _problem(built, "warning", "unknown_terms",
-                     f"terms {name!r} are not in this company's terms list and do not read as Net N or N% D Net M; documents keep their due dates and come in without terms",
-                     "Add the term, or map it with mappings.terms.", file=file, line=line, subject=name)
+                     f"terms {name!r} are not in this company's terms list and neither a terms list nor the name says "
+                     "what they mean; documents keep their due dates and come in without terms",
+                     "Give the terms list IIF export, add the term, or map it with mappings.terms.", file=file, line=line,
+                     subject=name)
             continue
+        payload = _term_payload(name.strip(), settings)
         built.steps.append(Step("term", outside_id, name, "term create", payload, "create", record_type="term", ref=outside_id,
-                                detail="due in %d days" % payload["due_days"]))
-        _target(built, outside_id, record_id=None, ref=outside_id, record_type="term", name=name)
+                                detail=("due in %d days" % payload["due_days"]) if "due_days" in payload else "date driven"))
+        _target(built, outside_id, record_id=None, ref=outside_id, record_type="term", name=name, extra={"settings": settings})
         built.mappings["terms"][name] = "create"
 
 
@@ -784,6 +867,13 @@ def _items(built: Built, inp) -> None:
                     continue
         if record is not None:
             made = books.link(outside_id, "item") == record["id"]
+            if not made:
+                differences = _item_differences(built, row, record)
+                if differences:
+                    _problem(built, "warning", "item_settings_differ",
+                             f"item {row.path} is {record['full_name']} here, which differs from the old books: " + "; ".join(differences),
+                             "Update the item here, or map the name to another item with mappings.items.", file=row.file,
+                             line=row.line, subject=row.path)
             _target(built, outside_id, record_id=record["id"], ref=None, record_type="item", name=record["full_name"],
                     extra={"item_type": record["type"], "hidden": row.get("HIDDEN").upper() == "Y", "active": record["active"],
                            "made": made})
@@ -808,6 +898,27 @@ def _items(built: Built, inp) -> None:
         _target(built, outside_id, record_id=None, ref=outside_id, record_type="item", name=row.path,
                 extra={"item_type": kind, "hidden": row.get("HIDDEN").upper() == "Y", "active": True, "made": True})
         built.mappings["items"][row.path] = "create"
+
+
+def _source_money(built: Built, text: str) -> int | None:
+    """An amount column as minor units, or None when it is blank, a percent or unreadable."""
+    if not text or text.strip().endswith("%"):
+        return None
+    try:
+        return src.parse_amount(text, built.books.places)
+    except ValueError:
+        return None
+
+
+def _item_differences(built: Built, row: src.ListRow, record: dict[str, Any]) -> list[str]:
+    """Price and cost where an item here says something other than the old books' item."""
+    found = []
+    for column, field_, word in (("PRICE", "price_minor_units", "price"), ("COST", "cost_minor_units", "cost")):
+        wanted = _source_money(built, row.get(column))
+        mine = record.get(field_)
+        if wanted is not None and (wanted or None) != (mine or None):
+            found.append(f"{word} {_show(built, mine or 0)} here, {_show(built, wanted)} in the old books")
+    return found
 
 
 def _item_account(built: Built, row: src.ListRow, column: str, allowed: set[str], what: str):
@@ -1142,6 +1253,33 @@ def _stock(built: Built, inp) -> None:
                                 detail=f"{row.quantity} on hand"))
 
 
+# ---------------------------------------------------------------- the opening sales tax
+
+def _tax_agencies(built: Built) -> list[str]:
+    """The old books' sales tax agencies: the vendors their sales tax items are owed to."""
+    return sorted({row.get("TAXVEND") for row in built.sources.lists["item"]
+                   if row.get("INVITEMTYPE").upper() in ("STAX", "COMPTAX") and row.get("TAXVEND")})
+
+
+def _opening_sales_tax(built: Built, inp, target: dict[str, Any], row: src.TrialBalanceRow) -> bool:
+    """How the old books' Sales Tax Payable balance comes in. True: as a line of the opening journal.
+
+    It does, today: Bookflow attributes sales tax owed to an agency only through sales, credit memos
+    and remittances, so an opening balance arrives unattributed, `sales-tax liability` shows it as
+    not attributed to an agency and `sales-tax pay` cannot settle it. This function is the one place
+    that decides it, so an opening balance can later be posted to its agency instead.
+    """
+    agencies = _tax_agencies(built)
+    to = f" to {agencies[0]}" if len(agencies) == 1 else " to the agency"
+    _problem(built, "warning", "sales_tax_payable",
+             f"The old books owe {_show(built, -row.net)} of sales tax. It comes in as one opening amount on Sales Tax "
+             f"Payable that is not tied to a tax agency, so `sales-tax pay` cannot pay it and `sales-tax liability` lists "
+             f"it as not attributed to an agency.",
+             f"Pay it{to} with a check (or a journal entry) whose account is Sales Tax Payable.",
+             file=row.file, line=row.line, subject=row.label)
+    return True
+
+
 # ---------------------------------------------------------------- the opening journal
 
 def _journal(built: Built, inp, number: str | None) -> None:
@@ -1155,17 +1293,14 @@ def _journal(built: Built, inp, number: str | None) -> None:
                 continue
             if target["type"] == "non_posting":
                 continue
+            if target.get("role") == "sales_tax_payable" and not _opening_sales_tax(built, inp, target, row):
+                continue
             lines.append((target, row))
             built.tb_by_target[target["id"] or target["ref"]] = built.tb_by_target.get(target["id"] or target["ref"], 0) + row.net
             if target.get("role") == "undeposited_funds":
                 _problem(built, "warning", "undeposited_funds",
                          f"Undeposited Funds holds {_show(built, row.net)} in the old books; it comes in as one opening amount that Make Deposits cannot pick",
                          "Deposit those receipts in the old books before the cutover, or move the amount to the bank with a journal entry when it is deposited.",
-                         file=row.file, line=row.line, subject=row.label)
-            if target.get("role") == "sales_tax_payable":
-                _problem(built, "warning", "sales_tax_payable",
-                         f"Sales Tax Payable holds {_show(built, -row.net)} from the old books; the sales tax liability report shows it as not attributed to an agency",
-                         "Pay it to the agency with a check or journal entry against Sales Tax Payable.",
                          file=row.file, line=row.line, subject=row.label)
     if not lines:
         return
@@ -1191,7 +1326,8 @@ def _journal(built: Built, inp, number: str | None) -> None:
             payload["number"] = number if len(parts) == 1 else f"{number}-{index}"
         linked = built.books.link(outside_id, "transaction")
         built.steps.append(Step("journal", outside_id, f"Opening journal{'' if len(parts) == 1 else f' part {index}'}", "journal post",
-                                payload, "already_in" if linked else "create", linked, amount=sum(abs(r.net) for _, r in part),
+                                payload, "already_in" if linked else "create", linked,
+                                amount=(sum(abs(r.net) for _, r in part) + abs(net)) // 2,
                                 date=inp.as_of, detail=f"{len(payload_lines)} lines"))
         for target, row in part:
             shown.append(CutoverJournalLine(account=target["name"], account_id=target["id"], side="debit" if row.net > 0 else "credit",
@@ -1245,19 +1381,25 @@ def _counts(built: Built) -> list[CutoverCount]:
     order = ("account", "term", "customer", "vendor", "item", "invoice", "credit_memo", "bill", "vendor_credit",
              "inventory_adjustment", "journal", "deactivation")
     tally = {kind: [0, 0, 0] for kind in order}
+    totals: dict[str, int] = {}
     for step in built.steps:
         slot = {"create": 0, "deactivate": 0, "already_in": 1, "matched": 2}[step.action]
         tally.setdefault(step.kind, [0, 0, 0])[slot] += 1
+        if step.amount is not None:
+            totals[step.kind] = totals.get(step.kind, 0) + step.amount
     stepped = {step.outside_id for step in built.steps}
     for outside_id, target in built.targets.items():
         kind = outside_id.split(":", 1)[0]
         if kind in ("account", "term", "customer", "vendor", "item") and target["id"] and outside_id not in stepped:
             tally[kind][2] += 1
-    return [CutoverCount(kind=kind, create=v[0], already_in=v[1], matched=v[2]) for kind, v in tally.items() if any(v)]
+    currency = built.books.currency
+    return [CutoverCount(kind=kind, create=v[0], already_in=v[1], matched=v[2],
+                         amount=money(totals[kind], currency) if kind in totals else None)
+            for kind, v in tally.items() if any(v)]
 
 
 def _exceptions(built: Built) -> list[CutoverException]:
-    ordered = sorted(built.exceptions, key=lambda p: 0 if p.severity == "blocking" else 1)
+    ordered = sorted(built.exceptions, key=lambda p: {"blocking": 0, "warning": 1}.get(p.severity, 2))
     return [CutoverException(severity=p.severity, code=p.code, problem=p.problem, fix=p.fix, file=p.file, line=p.line,
                              subject=p.subject) for p in ordered]
 
@@ -1287,7 +1429,8 @@ def plan_output(built: Built, inp, model=CutoverPlanOutput, **extra) -> Any:
     if built.journal:
         journal = CutoverJournal(date=built.journal["date"], number=built.journal["number"], parts=built.journal["parts"],
                                  lines=built.journal["lines"], clearing=money(built.journal["clearing"], books.currency))
-    files = [CutoverFileOutput(name=f.name, kind=f.kind, detected=f.detected, attachment=f.attachment, sha256=f.sha256, rows=f.rows)
+    files = [CutoverFileOutput(name=f.name, kind=f.kind, attachment=f.attachment, sha256=f.sha256, rows=f.rows,
+                               decided_by=("headings" if f.detected else "given") if f.kind else None)
              for f in built.sources.files]
     return model(as_of=inp.as_of, ready=not any(p.severity == "blocking" for p in built.exceptions),
                  source=built.sources.product, summary=extra.pop("summary", None) or _summary(built), files=files,
@@ -1340,6 +1483,39 @@ def _record_id(output: dict, record_type: str) -> str | None:
     return None
 
 
+def _keep_file(s, ctx, file: src.SourceFile) -> str:
+    """Keep an export given as text as an attachment on the company, through `attachment add`;
+    later calls pass its id instead of the text. Returns the attachment id."""
+    import io
+    import unicodedata
+    from bookflow.core import registry
+    from bookflow.core.dispatch import run_in_session
+    from bookflow.core.transfer_resources import TransferLease
+    from bookflow.core.transfers import InputBody, TransferResource, prepare
+    command = registry.get("attachment add")
+    name = "".join(ch for ch in file.name.replace("/", "-").replace("\\", "-") if unicodedata.category(ch) != "Cc").strip()
+    name = (name or "export.txt")[:200]
+    raw = {"record_type": "company_info", "record_id": s.company_row["id"], "original_filename": name,
+           "media_type": "text/csv" if (file.kind or "") != "iif" else "text/plain", "caption": "Old books export (move-in)"}
+    nested = ctx.model_copy(update={"idempotency_key": None, "source_ref": (SOURCE_MARK + _file_id(file))[:512],
+                                    "reason": (ctx.reason or REASON)[:140]})
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, s.transfer)
+    prepared = prepare(command, raw, nested, s)
+    lease = TransferLease(s.actor.id, s.company_row["id"], lambda lease: None)
+    try:
+        s.transfer = TransferResource(lease, prepared.store)
+        body = InputBody(s.transfer, prepared.limit, False)
+        body.receive(io.BytesIO(file.text.encode("utf-8")))
+        body.complete()
+        output = run_in_session(command, command.input_model.model_validate(raw), nested, s)
+        return output["attachment"]["id"]
+    finally:
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.transfer = saved
+        lease.close()
+        if s.company is not None and s.company.write_transaction:
+            s.company.raw.rollback()
+
+
 def _run_step(s, ctx, step: Step, payload: dict) -> dict:
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session
@@ -1373,6 +1549,14 @@ def apply(plan_: Plan, ctx, s) -> Applied:
                 ids[target["ref"]] = target["id"]
         if built.clearing_id and built.clearing_ref:
             ids[built.clearing_ref] = built.clearing_id
+        for file in built.sources.files:
+            if file.attachment is None:
+                try:
+                    file.attachment = _keep_file(s, ctx, file)
+                except BookflowError as error:
+                    raise BookflowError("E_CUTOVER_INCOMPLETE",
+                        message=f"The move-in could not keep {file.name} as an attachment: {error.message} Nothing was moved in yet.",
+                        details={"created": 0, "file": file.name, "cause": error.code, "cause_details": error.details}) from None
         created = 0
         for step in built.steps:
             if step.action in ("already_in", "matched"):
@@ -1480,13 +1664,156 @@ def _tie_section(built: Built, label: str, source: dict[str, dict[str, int]], bo
                              differences=differences, rows=rows)
 
 
+def _stock_section(s, ctx, built: Built, inp) -> CutoverStockSection:
+    """Each item's quantity on hand and asset value here against the Inventory Valuation Summary."""
+    from bookflow.core.exact import format_quantity_micro_units, parse_quantity_micro_units
+    currency = built.books.currency
+    books = {row["item_id"]: row for row in _whole(s, ctx, "report inventory-valuation", {"as_of": inp.as_of})}
+    quantity = lambda text: parse_quantity_micro_units(text or "0")
+    shown = lambda micro: format_quantity_micro_units(micro)
+    rows, differences, seen = [], 0, set()
+    for stock in sorted(built.sources.stock, key=lambda row: row.item.lower()):
+        target = built.targets.get("item:" + src.key(stock.item))
+        record_id = target["id"] if target else None
+        seen.add(record_id)
+        mine = books.get(record_id)
+        source_quantity, books_quantity = quantity(stock.quantity), quantity(mine["quantity_on_hand"]) if mine else 0
+        books_value = mine["asset_value"]["minor_units"] if mine else 0
+        differs = source_quantity != books_quantity or stock.value != books_value
+        differences += differs
+        if differs or inp.detail == "all":
+            rows.append(CutoverStockRow(name=stock.item, record_id=record_id, source_quantity=shown(source_quantity),
+                                        books_quantity=shown(books_quantity), source_value=money(stock.value, currency),
+                                        books_value=money(books_value, currency), difference=money(stock.value - books_value, currency)))
+    for record_id, mine in books.items():
+        if record_id in seen:
+            continue
+        books_quantity, books_value = quantity(mine["quantity_on_hand"]), mine["asset_value"]["minor_units"]
+        if books_quantity or books_value:
+            differences += 1
+            rows.append(CutoverStockRow(name=mine["item_name"], record_id=record_id, source_quantity=shown(0),
+                                        books_quantity=shown(books_quantity), source_value=money(0, currency),
+                                        books_value=money(books_value, currency), difference=money(-books_value, currency)))
+    return CutoverStockSection(source="Inventory Valuation Summary" if built.sources.stock_files else "none",
+                               source_total=money(sum(row.value for row in built.sources.stock), currency),
+                               books_total=money(sum(row["asset_value"]["minor_units"] for row in books.values()), currency),
+                               differences=differences, rows=rows)
+
+
+def _lists_section(built: Built) -> CutoverListSection:
+    """The list fields that matter, as the old books' lists give them, against the records here."""
+    books = built.books
+    by_id = {kind: {row["id"]: row for row in table} for kind, table in (
+        ("account", books.accounts), ("customer", books.customers), ("vendor", books.vendors), ("item", books.items),
+        ("term", books.terms))}
+    skipped = {p.subject for p in built.exceptions if p.code in ("item_skipped", "non_posting_accounts")}
+    rows: list[CutoverListRow] = []
+    notes: list[CutoverListRow] = []
+    compared = 0
+
+    def record_for(kind: str, path: str):
+        target = built.targets.get(f"{kind}:{src.key(path)}")
+        return by_id[kind].get(target["id"]) if target and target["id"] else None
+
+    def add(kind, name, record, field_, source, here, *, note=False):
+        (notes if note else rows).append(CutoverListRow(list=kind, name=name, record_id=record["id"] if record else None,
+                                                        field=field_, source=source, books=here))
+
+    yes_no = lambda flag: "yes" if flag else "no"
+    term_name = lambda term_id: by_id["term"][term_id]["name"] if term_id in by_id["term"] else None
+    amount = lambda minor: None if not minor else _show(built, minor)
+
+    def active(kind, row, record, *, note=False):
+        hidden = row.get("HIDDEN").upper() == "Y"
+        if hidden == bool(record["active"]):
+            add(kind, row.path, record, "active", yes_no(not hidden), yes_no(record["active"]), note=note)
+
+    for row in built.sources.lists["account"]:
+        kind = src.ACCOUNT_TYPES.get(row.get("ACCNTTYPE").upper())
+        if kind == "non_posting":
+            continue
+        record = record_for("account", row.path)
+        compared += 1
+        if record is None:
+            add("account", row.path, None, "missing", "in the old books", None)
+            continue
+        if kind and record["type"] != kind:
+            add("account", row.path, record, "type", kind, record["type"])
+        number = row.get("ACCNUM") or None
+        if number and number != record["number"]:
+            add("account", row.path, record, "number", number, record["number"], note=True)
+        target = built.targets.get("account:" + src.key(row.path)) or {}
+        active("account", row, record, note=bool(target.get("balance")))
+    for row in built.sources.lists["customer"]:
+        record = record_for("customer", row.path)
+        compared += 1
+        if record is None:
+            add("customer", row.path, None, "missing", "in the old books", None)
+            continue
+        active("customer", row, record)
+        if ":" in row.path:
+            status = JOB_STATUS.get(row.get("JOBSTATUS").lower(), "none")
+            if status != (record.get("job_status") or "none"):
+                add("customer", row.path, record, "job_status", status, record.get("job_status") or "none")
+            if (row.get("JOBDESC") or None) != (record.get("job_description") or None):
+                add("customer", row.path, record, "job_description", row.get("JOBDESC") or None, record.get("job_description"))
+            continue
+        wanted = _term_for(built, row.get("TERMS")) if row.get("TERMS") else None
+        if row.get("TERMS") and (wanted if isinstance(wanted, str) and not isinstance(wanted, Ref) else None) != record.get("terms_id"):
+            add("customer", row.path, record, "terms", row.get("TERMS"), term_name(record.get("terms_id")))
+        limit = _source_money(built, row.get("LIMIT"))
+        if limit and limit != record.get("credit_limit_minor_units"):
+            add("customer", row.path, record, "credit_limit", amount(limit), amount(record.get("credit_limit_minor_units")))
+    for row in built.sources.lists["vendor"]:
+        record = record_for("vendor", row.path)
+        compared += 1
+        if record is None:
+            add("vendor", row.path, None, "missing", "in the old books", None)
+            continue
+        active("vendor", row, record)
+        wanted = _term_for(built, row.get("TERMS")) if row.get("TERMS") else None
+        if row.get("TERMS") and (wanted if isinstance(wanted, str) and not isinstance(wanted, Ref) else None) != record.get("terms_id"):
+            add("vendor", row.path, record, "terms", row.get("TERMS"), term_name(record.get("terms_id")))
+        if (row.get("1099").upper() == "Y") != bool(record.get("eligible_1099")):
+            add("vendor", row.path, record, "eligible_1099", yes_no(row.get("1099").upper() == "Y"), yes_no(record.get("eligible_1099")))
+        limit = _source_money(built, row.get("LIMIT"))
+        if limit and limit != record.get("credit_limit_minor_units"):
+            add("vendor", row.path, record, "credit_limit", amount(limit), amount(record.get("credit_limit_minor_units")))
+    for row in built.sources.lists["item"]:
+        record = record_for("item", row.path)
+        compared += 1
+        if record is None:
+            add("item", row.path, None, "missing", "in the old books", None, note=row.path in skipped)
+            continue
+        active("item", row, record)
+        kind = src.ITEM_TYPES.get(row.get("INVITEMTYPE").upper())
+        if kind and kind != record["type"]:
+            add("item", row.path, record, "type", kind, record["type"])
+        for column, field_, word in (("PRICE", "price_minor_units", "price"), ("COST", "cost_minor_units", "cost")):
+            wanted = _source_money(built, row.get(column))
+            if wanted is not None and (wanted or None) != (record.get(field_) or None):
+                add("item", row.path, record, word, amount(wanted) or "0.00", amount(record.get(field_)))
+    for outside_id, target in built.targets.items():
+        if not outside_id.startswith("term:") or not target.get("settings") or not target["id"]:
+            continue
+        record = by_id["term"].get(target["id"])
+        if record is None:
+            continue
+        compared += 1
+        for difference in _term_differences(target["settings"], record):
+            field_, _, rest = difference.partition(" here, ")
+            add("term", target["name"], record, "settings", rest.removesuffix(" in the old books"), field_)
+    return CutoverListSection(source="IIF lists", compared=compared, differences=len(rows), rows=rows, notes=notes)
+
+
 def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
     built = build(s, inp)
     books = built.books
     currency = books.currency
     problems = [p for p in built.exceptions if p.severity == "blocking" and p.code in (
         "no_trial_balance", "several_trial_balances", "unmapped_account", "mapping_not_found", "unknown_file", "no_chart",
-        "type_conflict", "number_taken", "unreadable_report", "unreadable_amount", "cash_basis_trial_balance", "as_of_mismatch")]
+        "type_conflict", "number_taken", "unreadable_report", "unreadable_amount", "cash_basis_trial_balance", "as_of_mismatch",
+        "row_width", "row_shifted")]
     trial = _whole(s, ctx, "report trial-balance", {"date_to": inp.as_of})
     books_tb = {row["account_id"]: row for row in trial}
     source_tb: dict[str, int] = defaultdict(int)
@@ -1528,19 +1855,26 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
     label, source_ap = _source_aging(built, "payable", inp.as_of)
     payables = _tie_section(built, label, source_ap, _whole(s, ctx, "report ap-aging", {"as_of": inp.as_of}),
                             "vendor_id", "current_vendor_name", "vendor", inp.detail)
+    inventory = _stock_section(s, ctx, built, inp)
+    lists = _lists_section(built)
     clearing = books_tb[clearing_id]["signed_net"]["minor_units"] if clearing_id in books_tb else 0
-    tied = not problems and not (tb_differences or receivables.differences or payables.differences or clearing)
+    tied = not problems and not (tb_differences or receivables.differences or payables.differences or inventory.differences
+                                 or lists.differences or clearing)
     if tied:
-        summary = f"tied: the trial balance, receivables and payables match the old books to the cent as of {inp.as_of}"
+        summary = (f"tied: the trial balance, receivables, payables and stock match the old books to the cent as of {inp.as_of}, "
+                   f"and the {lists.compared} list records compared match")
     else:
-        parts = [f"{n} {what}" for n, what in ((tb_differences, "trial balance difference"), (receivables.differences, "receivables difference"),
-                                                (payables.differences, "payables difference")) if n]
+        parts = [f"{n} {what}{'s' if n != 1 else ''}" for n, what in (
+            (tb_differences, "trial balance difference"), (receivables.differences, "receivables difference"),
+            (payables.differences, "payables difference"), (inventory.differences, "stock difference"),
+            (lists.differences, "list difference")) if n]
         if clearing:
             parts.append(f"clearing account at {_show(built, clearing)}")
         if problems:
             parts.append(f"{len(problems)} exception{'s' if len(problems) != 1 else ''}")
         summary = "not tied: " + ", ".join(parts)
     return CutoverTieOutOutput(as_of=inp.as_of, tied=tied, summary=summary, trial_balance=trial_section,
-                               receivables=receivables, payables=payables, clearing=money(clearing, currency),
+                               receivables=receivables, payables=payables, inventory=inventory, lists=lists,
+                               clearing=money(clearing, currency),
                                exceptions=[CutoverException(severity=p.severity, code=p.code, problem=p.problem, fix=p.fix,
                                                             file=p.file, line=p.line, subject=p.subject) for p in problems])
