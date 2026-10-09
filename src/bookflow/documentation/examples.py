@@ -1121,3 +1121,17 @@ EXAMPLES.update({
                              ' --limit 25 --company "Demo Plumbing Co" --json',
                              {"customer": "Riverside Apartments", "settlement": "open", "direction": "asc", "limit": 25}),
 })
+
+# R117: merging a duplicate customer or vendor. `--dry-run` is the preview.
+EXAMPLES.update({
+    "customer merge": Example('bookflow customer merge "Riverside Apts" "Riverside Apartments" --reason "Same customer entered twice"'
+                              ' --company "Demo Plumbing Co" --json',
+                              {"merged": "Riverside Apts", "into": "Riverside Apartments"}),
+    "customer unmerge": Example('bookflow customer unmerge "Riverside Apts" --reason "They are two companies after all"'
+                                ' --company "Demo Plumbing Co" --json', {"merged": "Riverside Apts"}),
+    "vendor merge": Example('bookflow vendor merge "Central Supply Co" "Central Supply" --reason "Same supplier entered twice"'
+                            ' --company "Demo Plumbing Co" --json',
+                            {"merged": "Central Supply Co", "into": "Central Supply"}),
+    "vendor unmerge": Example('bookflow vendor unmerge "Central Supply Co" --reason "Two suppliers after all"'
+                              ' --company "Demo Plumbing Co" --json', {"merged": "Central Supply Co"}),
+})

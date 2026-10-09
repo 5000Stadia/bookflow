@@ -23,6 +23,7 @@ made before 2026 and 2,000.00 for payments made in 2026 or later, read for the y
 """
 from __future__ import annotations
 
+from bookflow.company.party_merges import survivor_sql
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -83,7 +84,7 @@ class Vendor1099SummaryOutput(ledger.Page):
 # are subtracted; the sums are lossless text.
 _PAID = """
 WITH paid AS (
- SELECT l.name_id AS vendor, a.type AS account_type, l.credit_minor_units-l.debit_minor_units AS amount
+ SELECT """ + survivor_sql("vendor", "l.name_id") + """ AS vendor, a.type AS account_type, l.credit_minor_units-l.debit_minor_units AS amount
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
  JOIN accounts a ON a.id=l.account_id
  WHERE l.name_type='vendor' AND a.type IN ('bank', 'credit_card')

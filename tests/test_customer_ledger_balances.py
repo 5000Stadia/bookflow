@@ -130,6 +130,7 @@ def test_projection_precision_and_exact_party_type_without_fixture():
         db.raw.executescript('''
             CREATE TABLE customers (id TEXT PRIMARY KEY, parent_id TEXT);
             CREATE TABLE accounts (id TEXT PRIMARY KEY, type TEXT);
+            CREATE TABLE party_merges (party_kind TEXT, merged_id TEXT, survivor_id TEXT, undone_at TEXT);
             CREATE TABLE posting_lines (account_id TEXT, name_type TEXT, name_id TEXT,
                                         debit_minor_units INTEGER, credit_minor_units INTEGER);
             INSERT INTO customers VALUES ('parent', NULL), ('job', 'parent'), ('leaf', 'job'), ('other', NULL);

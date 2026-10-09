@@ -156,7 +156,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     assert refused.value.code == "E_SCHEMA_UNKNOWN" and "newer version of Bookflow" in refused.value.message
     assert _registered(client) == {company} and set(org_folder.iterdir()) == folders
 
-    # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 only added tables; putting the old CHECK back
+    # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 and co0067 only added tables; putting the old CHECK back
     # and dropping the index, triggers and tables is the exact co0062 file.
     import importlib
     co0063 = importlib.import_module("bookflow.storage.company_migrations.versions.0063_card_credits")
@@ -170,11 +170,12 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             conn.execute(f"DROP TRIGGER {trigger}")  # co0065's
         for table in ("statement_csv_mappings", "statement_lines", "statement_imports"):
             conn.execute(f"DROP TABLE {table}")  # co0066's, with their triggers
+        conn.execute("DROP TABLE party_merges")  # co0067's, with its triggers
         conn.execute("UPDATE alembic_version SET version_num = 'co0062'")
 
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0066"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0067"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

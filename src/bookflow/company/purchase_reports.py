@@ -31,6 +31,7 @@ bounds which orders by their own date.
 """
 from __future__ import annotations
 
+from bookflow.company.party_merges import survivor_sql
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -203,7 +204,7 @@ WITH receipts AS (
  GROUP BY batch_id
 ), keyed AS (
  SELECT e.item_id, e.quantity, e.amount,
-        CASE WHEN e.name_type='vendor' THEN e.name_id WHEN v.named=1 THEN v.vendor_id END AS party
+        """ + survivor_sql("vendor", "CASE WHEN e.name_type='vendor' THEN e.name_id WHEN v.named=1 THEN v.vendor_id END") + """ AS party
  FROM effects e LEFT JOIN effect_vendor v ON v.batch_id=e.batch_id
 )
 """
@@ -301,7 +302,7 @@ FROM purchase_orders t JOIN purchase_order_revisions r ON r.id=t.current_revisio
 LEFT JOIN vendors v ON v.id=r.vendor_id
 WHERE t.status IN ('open', 'partly_received')
   AND NOT EXISTS (SELECT 1 FROM purchase_order_conversions k WHERE k.source_document_id=t.id)
-  AND r.date<=:date_to AND (:vendor IS NULL OR r.vendor_id=:vendor)
+  AND r.date<=:date_to AND (:vendor IS NULL OR """ + survivor_sql("vendor", "r.vendor_id") + """=:vendor)
 ORDER BY r.date, t.number, t.id
 """
 
@@ -336,7 +337,8 @@ def open_purchase_orders(inp: OpenPurchaseOrdersInput, s, *, principal_id=None) 
             vendor_id = ledger._decode_cursor(inp.cursor, s.company).account_id
         elif inp.vendor is not None:
             from bookflow.company.parties import resolve_party
-            vendor_id = resolve_party(s.company, "vendor", inp.vendor)["id"]
+            from bookflow.company.party_merges import survivor
+            vendor_id = survivor(s.company, "vendor", resolve_party(s.company, "vendor", inp.vendor)["id"])
         state, offset = ledger._state(s, inp, "open-purchase-orders", principal_id, vendor_id, account_scoped=False)
         raw, currency = s.company.raw, state.metadata.currency
         found = []

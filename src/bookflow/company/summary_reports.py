@@ -78,6 +78,7 @@ report refuses to print figures that do not.
 """
 from __future__ import annotations
 
+from bookflow.company.party_merges import survivor_sql
 from bookflow.company.cash_report_view import reporting_connection
 
 from bookflow.company.report_basis import Basis, basis_field
@@ -354,7 +355,9 @@ CLASS_SCOPE = "(:class_id IS NULL OR l.class_id=:class_id)"
 # A posting line names exactly one party (`ck_ledger_party_pair`), so a customer filter
 # is that party being a customer and being this one. A sale writes its customer onto every
 # leg, which is what makes this cut of income complete.
-CUSTOMER_SCOPE = "(:customer IS NULL OR (l.name_type='customer' AND l.name_id=:customer))"
+# A merged-away customer's lines are its survivor's (party_merges.py).
+CUSTOMER_SCOPE = ("(:customer IS NULL OR (l.name_type='customer' AND "
+                  + survivor_sql("customer", "l.name_id") + "=:customer))")
 
 
 def _income(*scopes):
@@ -380,7 +383,7 @@ _INCOME_BY_PARTY = _income(CLASS_SCOPE, CUSTOMER_SCOPE)
 # Income posted against a name from another list is nobody's sale, so only a customer
 # keys a row; everything else falls into the one unnamed row and the total is unmoved.
 _BY_CUSTOMER = _INCOME + """, keyed AS (
- SELECT CASE WHEN name_type='customer' THEN name_id END AS party, amount FROM income_lines
+ SELECT CASE WHEN name_type='customer' THEN """ + survivor_sql("customer", "name_id") + """ END AS party, amount FROM income_lines
 ), grouped AS (
  SELECT party, bookflow_sum_int(amount) AS income FROM keyed GROUP BY party
 ), selected AS (
@@ -484,8 +487,8 @@ _BY_VENDOR = _EXPENSE + """, effect_vendor AS (
  WHERE name_type='vendor' AND batch_id IN (SELECT batch_id FROM expense_lines)
  GROUP BY batch_id
 ), keyed AS (
- SELECT CASE WHEN e.name_type='vendor' THEN e.name_id
-             WHEN v.named=1 THEN v.vendor_id END AS party, e.amount
+ SELECT """ + survivor_sql("vendor", """CASE WHEN e.name_type='vendor' THEN e.name_id
+             WHEN v.named=1 THEN v.vendor_id END""") + """ AS party, e.amount
  FROM expense_lines e LEFT JOIN effect_vendor v ON v.batch_id=e.batch_id
 ), grouped AS (
  SELECT party, bookflow_sum_int(amount) AS expense FROM keyed GROUP BY party
@@ -533,7 +536,8 @@ def _resolve(db, field: str, selector: str) -> str:
     """The stable ID a typed filter names, through the same resolver its list uses."""
     if field == "customer":
         from bookflow.company.parties import resolve_party
-        return resolve_party(db, "customer", selector)["id"]
+        from bookflow.company.party_merges import survivor
+        return survivor(db, "customer", resolve_party(db, "customer", selector)["id"])
     from bookflow.company import list_service
     from bookflow.company.lists import get_list_definition
     return list_service.resolve_selector(db, c.classes, get_list_definition("class"), selector)["id"]

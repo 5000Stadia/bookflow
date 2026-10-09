@@ -1,4 +1,5 @@
 """Exact current settlement capacity and authenticated read-only page recipes."""
+from bookflow.company.party_merges import family_cte, survivor_sql
 import base64
 import hashlib
 import hmac
@@ -135,11 +136,11 @@ def payer_balances(s, customer_id):
     from bookflow.core.money import Money
     from bookflow.core.exact import _require_i64
     from bookflow.company.payment_authority import authorize_query
-    family = sa.select(c.customers.c.id).where(c.customers.c.id == customer_id).cte('balance_family', recursive=True)
-    family = family.union(sa.select(c.customers.c.id).join(family, c.customers.c.parent_id == family.c.id))
+    # The family includes customers merged into any member (party_merges.py).
+    family = [row[0] for row in s.company.raw.execute(f"WITH RECURSIVE {family_cte('balance_family')} SELECT id FROM balance_family", (customer_id,))]
     transactions = sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
         c.accounts.c.id == c.posting_lines.c.account_id).where(c.accounts.c.type == 'accounts_receivable',
-        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(sa.select(family.c.id))).distinct()
+        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(family)).distinct()
     authorize_query(s, transactions)
     currency = s.company_info_row['home_currency']
     # One lossless posting scan supplies both CP02 projections. Reuse the owning
@@ -147,16 +148,14 @@ def payer_balances(s, customer_id):
     # SUM/REAL or a stored running balance.
     customer_balances.register_functions(s.company)
     # Group losslessly; do not reject a party intermediate before cancellation.
-    party_nets = {party: int(amount or '0') for party, amount in s.company.raw.execute("""
-        WITH RECURSIVE balance_family(id) AS (
-            SELECT id FROM customers WHERE id=? UNION
-            SELECT child.id FROM customers AS child JOIN balance_family AS family ON child.parent_id=family.id)
-        SELECT name_id,bookflow_sum_int(debit_minor_units-credit_minor_units)
+    party_nets = {party: int(amount or '0') for party, amount in s.company.raw.execute(f"""
+        WITH RECURSIVE {family_cte('balance_family')}
+        SELECT {survivor_sql('customer', 'name_id')} AS party,bookflow_sum_int(debit_minor_units-credit_minor_units)
         FROM posting_lines INDEXED BY ix_co17_posting_party_ar
         WHERE name_type='customer'
             AND account_id IN (SELECT id FROM accounts WHERE type='accounts_receivable')
             AND name_id IN (SELECT id FROM balance_family)
-        GROUP BY name_id
+        GROUP BY party
         """, (customer_id,)).fetchall()}
     payer, family_net = party_nets.get(customer_id, 0), sum(party_nets.values())
     return dict(customer_id=customer_id, payer_balance=Money(_require_i64(int(payer or '0'), field='current_balance'), currency).to_dict(),

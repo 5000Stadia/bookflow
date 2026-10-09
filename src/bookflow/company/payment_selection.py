@@ -1,4 +1,5 @@
 """Audited shared payment drafts; immutable origins survive interface handoff."""
+from bookflow.company.party_merges import family_cte
 import json
 
 import sqlalchemy as sa
@@ -189,8 +190,7 @@ def compatible(s, context_, facts):
                    and key['currency'] == context_['currency'] for key in funding['keys'].values()):
             raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={'invoice_id': header['id']})
     else:
-        family = s.company.raw.execute('''WITH RECURSIVE family(id) AS (
-            SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
+        family = s.company.raw.execute(f'''WITH RECURSIVE {family_cte()}
             SELECT id FROM family''', (context_['customer_id'],)).fetchall()
         if profile['customer_id'] not in {row[0] for row in family}:
             raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={'invoice_id': header['id']})

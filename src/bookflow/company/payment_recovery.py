@@ -1,4 +1,5 @@
 """Durable complete-intent recovery on one shared, nonfinancial draft identity."""
+from bookflow.company.party_merges import family_cte
 import json
 import sqlalchemy as sa
 from bookflow.company import schema as c, payment_selection as selection, payment_queries as q
@@ -300,8 +301,7 @@ def comparison(s,row,inp):
             r=revisions[h['current_revision_id']]
             facts[h['id']]=dict(version=h['version'],status=h['status'],revision_id=r['id'],date=r['date'],currency=r['currency'],
                 due=(r['total_minor_units'] if h['status']=='posted' else 0)-applied.get(h['id'],0),profile=profiles.get(r['id']))
-    family={r[0] for r in s.company.raw.execute('''WITH RECURSIVE family(id) AS (
-        SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
+    family={r[0] for r in s.company.raw.execute(f'''WITH RECURSIVE {family_cte()}
         SELECT id FROM family''',(context['customer_id'],))}
     funding={};source=None
     if context['payment_id']:

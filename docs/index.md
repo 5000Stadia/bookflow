@@ -219,6 +219,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/money_out_revision_profiles`](schema/company/money_out_revision_profiles.md)
 - [`company/notes`](schema/company/notes.md)
 - [`company/other_names`](schema/company/other_names.md)
+- [`company/party_merges`](schema/company/party_merges.md)
 - [`company/payment_component_keys`](schema/company/payment_component_keys.md)
 - [`company/payment_components`](schema/company/payment_components.md)
 - [`company/payment_deletions`](schema/company/payment_deletions.md)

@@ -1167,3 +1167,6 @@ globals().update(_define_discount_tables(metadata, _column, _table))
 
 from bookflow.company.statement_schema import define_tables as _define_statement_tables
 globals().update(_define_statement_tables(metadata, _column, _table))
+
+from bookflow.company.party_merge_schema import define_tables as _define_party_merge_tables
+globals().update(_define_party_merge_tables(metadata, _column, _table))

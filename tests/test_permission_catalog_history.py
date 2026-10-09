@@ -49,6 +49,7 @@ ACCEPTED = {
     'backup-schedule-v1': (508, '43582adbc2b0fb3341c2af31766c7740a1d8f7c6ea495a79f5675485b4f477b7'),
     'entry-review-v1': (511, '50fd1552c34eb3ab3d6e73d129491a00bbff1efd2f721a1b94c37003b719a7c0'),
     'cutover-v1': (514, 'fbea65dcc4951605c67b4bc10692006c48f7f92b5ef0f161071d8933b48fb12c'),
+    'party-merge-v1': (518, '86e3b9ada4568ed1d2d9e31e9e1738816c89f31d0244ac20b0d64e3e954326c1'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -90,6 +91,7 @@ CHAIN_ADDITIONS = {
     'backup-schedule-v1': {'backup list', 'backup rehearse', 'backup schedule', 'backup verify'},
     'entry-review-v1': {'report entries-to-review', 'report prior-balances', 'review mark'},
     'cutover-v1': {'cutover apply', 'cutover plan', 'cutover tie-out'},
+    'party-merge-v1': {'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge'},
 }
 
 _ANCESTOR_EDIT = """

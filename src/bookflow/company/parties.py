@@ -1541,9 +1541,21 @@ def plan_party_active_change(
     via: str,
     cascade: bool = False,
     at: str | None = None,
+    unmerging: bool = False,
 ) -> PartyActivePlan:
     table = _table(noun)
     requested = _row(db, table, record_id)
+    if noun in {"customer", "vendor"} and active and not unmerging:
+        from bookflow.company.party_merges import live_merge
+        if live_merge(db, noun, record_id) is not None:
+            raise BookflowError(
+                "E_RECORD_IN_USE",
+                details={
+                    "record_type": noun,
+                    "record_id": record_id,
+                    "problem": f"a merged {noun} can be made active again only by undoing its merge",
+                },
+            )
     if noun == "other-name" and active and requested.get("converted_to_id") is not None:
         raise BookflowError(
             "E_RECORD_IN_USE",

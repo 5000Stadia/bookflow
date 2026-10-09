@@ -136,6 +136,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_TOKEN_NOT_FOUND": "No such token.",
     "E_CUTOVER_BLOCKED": "The move-in plan has blocking exceptions; fix or map them, then run it again.",
     "E_CUTOVER_INCOMPLETE": "The move-in stopped part way; what it made stays in and running it again continues.",
+    "E_MERGE_REFUSED": "These two entries cannot be merged; the details name why.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}

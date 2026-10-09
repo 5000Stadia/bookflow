@@ -1,6 +1,6 @@
 # Merging duplicate list entries (R117)
 
-Status: design, customers first. Vendors share the code path; items and accounts are later.
+Status: built on branch future/merge (customers and vendors). Items and accounts are later.
 
 ## The anchor
 
@@ -79,3 +79,35 @@ Vendors use the same table and code path (`ap_obligation_keys`, bill-payment val
 the vendor balance read are the vendor-side readers). Items and accounts are different in
 kind (accounts carry type and hierarchy rules, items carry inventory cost layers) and are
 not in this design.
+
+## As built
+
+- `party_merges` (co0067). Triggers: no delete; the only update is the one undo stamp; both
+  entries must exist; merges are one level deep (a survivor is never merged away, and nothing
+  is merged into a merged-away entry). To fold a survivor into a third entry, undo the merges
+  into it first.
+- `src/bookflow/company/party_merges.py` owns the two SQL fragments every reader uses:
+  `survivor_sql(kind, expr)` (what an id reads as) and `family_cte()` (a customer, its jobs,
+  and everything merged into any of them; a merged-away job is not counted under its old parent).
+- Commands (`src/bookflow/commands/merge_cmds.py`): `customer merge`, `customer unmerge`,
+  `vendor merge`, `vendor unmerge`. People only (an agent gets `E_PERMISSION`), reason
+  required, idempotent on the pair, `--dry-run` is the preview. Refusals are `E_MERGE_REFUSED`
+  with the problem named. Permission delta `party-merge-v1` on `cutover-v1`.
+- The merged entry is made inactive through the ordinary list path (audit action `merge`, not
+  one the generic list undo has a handler for), and `customer activate` refuses it while merged.
+- Readers resolved: the receivable effects behind A/R aging, open invoices, statements and the
+  customer balance summary and detail; customer and vendor balance expressions, family balance
+  and credit-limit exposure; every payment family (receive, selection, preparation, recovery,
+  payer balance, authority); sales by customer; the payable effects behind A/P aging, unpaid
+  bills and vendor balances; expenses and purchases by vendor; 1099; open purchase orders.
+  Selecting the merged entry by name in a report filter reads as the survivor.
+- A receipt from the survivor pays a merged customer's old invoice: the component is keyed to the
+  merged customer, which `payments.py` admits although it is inactive.
+- Vendors: a bill payment never crosses vendors, so a vendor with an open payable balance is
+  refused ("pay or settle its bills and credits first"). The reads share the alias unchanged.
+
+Not resolved yet (each a reader that still shows the merged entry under its own name):
+transaction lists and QuickReports filtered by name, the customer and vendor registers, job
+profitability, time and billable-cost reports, and the workbench customer and vendor centres'
+own lists of merges. Unposted documents still naming the merged entry (estimates, sales and
+purchase orders, memorized transactions) are refused on their next save until re-pointed.
