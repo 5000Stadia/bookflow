@@ -220,3 +220,17 @@ def test_voiding_a_deposit_frees_its_receipts_and_keeps_both_effects(books):
         company=COMPANY, reason="bank them for real this time")
     assert again["deposit"]["id"] != posted["deposit"]["id"]
     assert balances(client)[1][books["bank"]] == 16000
+
+
+def test_a_line_drawn_from_undeposited_funds_is_refused_with_its_reason(books):
+    """A balance the move-in brought into Undeposited Funds has no receipt to pick; the refusal says what to do."""
+    client = books["client"]
+    document = dict(mode="inline", deposit_to=books["bank"], date="2026-06-03", sources=[],
+                    additional=[dict(received_from=dict(kind="customer", id=books["customer"]),
+                                     from_account=books["uf"], amount="40.00")])
+    with pytest.raises(bookflow.BookflowError) as refused:
+        client.run("deposit post", dict(operation_key="from-uf", document=document), company=COMPANY,
+                   reason="deposit the opening checks")
+    assert refused.value.code == "E_VALIDATION"
+    assert "Undeposited Funds" in refused.value.message and "journal entry" in refused.value.message
+    assert refused.value.details["fields"][0]["field"] == "additional.from_account"

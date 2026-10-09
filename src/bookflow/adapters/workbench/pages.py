@@ -1808,6 +1808,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 value = request.query_params.get('f:' + field, request.query_params.get(field))
                 if value is not None and field in cmd.input_model.model_fields:
                     attempted['f:' + field] = value
+            if ('f:draft' in attempted and 'f:expected_version' not in attempted and company_id
+                    and 'expected_version' in cmd.input_model.model_fields):
+                # A link that names the draft but not its version (the home page's open reconciliations) opens at
+                # the draft's current version, so the first submit is not refused for a version nobody read.
+                try:
+                    attempted['f:expected_version'] = str(run(request, 'reconcile candidates', {
+                        'draft': attempted['f:draft'], 'limit': 1}, company_id)['draft_version'])
+                except BookflowError:
+                    pass
         receipt_source_labels = {}
         receipt_date = None
         receipt_choices = []

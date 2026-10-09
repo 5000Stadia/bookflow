@@ -35,8 +35,9 @@ AS_OF = "2026-06-30"
 CORE_FILES = ("lists.iif", "trial_balance.csv", "open_invoices.csv", "unpaid_bills.csv", "inventory_valuation.csv")
 AGING_FILES = ("ar_aging.csv", "ap_aging.csv")
 # The general chart already numbers two accounts the old books number differently: Bank Fees is the old books'
-# Bank Service Charges, and Other Expense moves off 9100 so Interest Expense keeps its number.
-MAPPINGS = {"accounts": {"Bank Service Charges": "Bank Fees"}}
+# Bank Service Charges, and Interest Expense (9100 in the old books, Other Expense here) is made new with `create`:
+# the plan warns that it comes in without its number, and the tie-out finds it by what the move-in recorded.
+MAPPINGS = {"accounts": {"Bank Service Charges": "Bank Fees", "Interest Expense": "create"}}
 NAMES = {"Bank Service Charges": "Bank Fees"}  # old-books account name -> the Bookflow account it became
 STATEMENT_ONLY = ("bank_charge", "bank_interest")
 
@@ -121,7 +122,6 @@ class Replay:
         self.client.run("company new", dict(organization=ORGANIZATION, legal_name=D.COMPANY["legal_name"],
                                              display_name=COMPANY, home_currency="USD", timezone="America/Chicago"))
         self.run("company update", dict(sales_tax_enabled=True))
-        self.run("account update", dict(account="Other Expense", number="9900"))
 
     def attach(self, names) -> list[dict]:
         company_id = self.run("company show")["company_id"]
@@ -345,7 +345,7 @@ class Replay:
     def _deposit(self, ev: dict):
         if all(row["source"].startswith("uf:") for row in ev["items"]):
             # Undeposited Funds came in as one opening amount: a deposit cannot draw on it (an `additional` line
-            # from Undeposited Funds is refused with a bare E_VALIDATION), so the cutover's own advice is followed.
+            # from Undeposited Funds is refused, with the reason and the journal to use), so that advice is followed.
             checks = ", ".join(f"{row['source'][3:]} {row['amount']}" for row in ev["items"])
             made = self.run("journal post", dict(date=ev["date"], memo=f"Deposit of checks received before the move-in: "
                                                  f"{checks}", lines=[
@@ -354,8 +354,8 @@ class Replay:
             self.made[ev["id"]] = made
             self.note("Deposit of checks received before the cutover", "workaround", ["journal post"],
                       "the move-in brings Undeposited Funds in as one amount that Make Deposits cannot pick, and a "
-                      "deposit line drawn from Undeposited Funds is refused with E_VALIDATION and no details; the "
-                      "cutover's advice is a journal from Undeposited Funds to Checking",
+                      "deposit line drawn from Undeposited Funds is refused with the reason and the journal to use; "
+                      "the cutover's advice is a journal from Undeposited Funds to Checking",
                       "the two receipts sit in Undeposited Funds and Make Deposits picks them", event=ev["id"])
             return
         sources, additional = [], []
@@ -810,12 +810,12 @@ class Replay:
         self.note("June sales tax owed to the state at the cutover", "does", ["cutover apply", "sales-tax pay"],
                   "comes in as a sales tax adjustment under the Illinois Department of Revenue and is paid with "
                   "`sales-tax pay` on July 20")
-        self.note("Account numbers the new chart already uses (6100, 9100)", "workaround",
-                  ["account update", "cutover plan mappings"],
-                  "the plan blocks with number_taken; Bank Service Charges maps to Bank Fees and Bookflow's Other "
-                  "Expense is renumbered so Interest Expense keeps 9100. Mapping Interest Expense to `create` "
-                  "instead brings it in without its number and `cutover tie-out` then never ties (it reports the "
-                  "account as missing and its 612.88 as two trial balance differences): a defect",
+        self.note("Account numbers the new chart already uses (6100, 9100)", "does",
+                  ["cutover plan mappings"],
+                  "the plan blocks with number_taken and says what holds the number; Bank Service Charges maps to "
+                  "Bank Fees and Interest Expense maps to `create`, so it comes in without 9100 (the plan warns, naming "
+                  "the choices: renumber Other Expense, `create <number>`, or unnumbered) and `cutover tie-out` ties "
+                  "it by what the move-in recorded",
                   "the old books are the new books' chart; no collision")
         if ("warning", "item_skipped") in codes:
             self.note("Group item (Smoke Alarm Package)", "workaround", ["item create"],

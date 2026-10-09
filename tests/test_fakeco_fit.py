@@ -36,7 +36,17 @@ def test_july_kept_in_bookflow_matches_the_answer_key(tmp_path, monkeypatch):
 
     tie = replay.cutover["tie"]
     assert tie["tied"], tie["summary"]
+    # Interest Expense was mapped to `create` on a number Bookflow's chart holds: it came in unnumbered, with the
+    # collision stated, and the tie-out still found it (R166).
+    dropped = [e for e in replay.cutover["plan"]["exceptions"] if e["code"] == "account_number_dropped"]
+    assert len(dropped) == 1 and "Other Expense" in dropped[0]["problem"] and "renumber" in dropped[0]["fix"]
     assert fakeco_replay.differences(replay.books("2026-07-31"), fakeco_replay.expected("2026-07-31")) == []
+
+    # Every cleared check pairs on its own number at the first import: nothing is ticked by hand and no check is
+    # told to be entered again (R167).
+    checking = month["reconciliations"]["Checking"]
+    assert checking["by_hand"] == []
+    assert not [line for line in checking["first"]["lines"] if line["status"] == "unmatched" and line["number"]]
 
     key = fakeco_replay.key("2026-07-31")["reconciliations"]
     for account, done in month["reconciliations"].items():

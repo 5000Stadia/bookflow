@@ -524,7 +524,7 @@ def _candidates(inp, ctx, s):
                               authority_transactions=snapshot.authority_transactions,
                               limit=inp.limit, offset=offset, expected_fingerprint=expected)
     return Plan(m.CandidatesOutput(
-        draft=value.id, account_id=account_id,
+        draft=value.id, draft_version=value.version, account_id=account_id,
         currency=snapshot.source.accounts[account_id]['currency'],
         cutoff=value.header.statement_date or value.header.opening_date,
         items=page.items, count=page.count, component_count=page.component_count,

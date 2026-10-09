@@ -712,6 +712,7 @@ FINGERPRINT_SAMPLE=Field(json_schema_extra={'sample':'0'*64})
 class CandidatesOutput(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
     draft: ID=DRAFT_SAMPLE
+    draft_version: Version=Field(1,description='The draft\'s current version: what `reconcile mark`, `reconcile preview` and `reconcile finish` take as expected_version.')
     account_id: ID
     currency: Currency
     cutoff: str

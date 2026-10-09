@@ -49,6 +49,21 @@ def resolve_account(s, selector, previous=None):
         normal_balance=defaults.NORMAL_BALANCE[raw['type']])
 
 
+def refuse_from_account(account):
+    """Say why a line cannot be drawn from this account, instead of leaving the validator's bare refusal."""
+    if account.system_role=='undeposited_funds':
+        reason=('A deposit line is money received from someone, drawn from an income, expense, equity, liability or asset account. '
+                'Undeposited Funds is the account that receipts waiting for a deposit sit in, and the receipts themselves are picked as '
+                'sources, not entered as a line. If the amount came in with the move-in from the old books as one opening balance, '
+                'there is no receipt to pick: move it to the bank with a journal entry (debit the bank, credit Undeposited Funds).')
+    elif account.system_role is not None or account.type in ('accounts_receivable','accounts_payable','inventory'):
+        reason=(f'{account.full_name} is an account Bookflow keeps for its own documents, so a deposit line cannot be drawn from it. '
+                'Receive customer payments with payment receive, or use a journal entry.')
+    else:
+        return
+    raise BookflowError('E_VALIDATION',message=reason,details={'fields':[{'field':'additional.from_account','problem':reason}]})
+
+
 def resolve_additional(s, value, row_id, ordinal, previous):
     tables={'customer':c.customers,'vendor':c.vendors,'employee':c.employees,'other_name':c.other_names}
     party=effects.rows(s,tables[value.received_from.kind],tables[value.received_from.kind].c.id==value.received_from.id)
@@ -66,6 +81,8 @@ def resolve_additional(s, value, row_id, ordinal, previous):
         party_name=old.party_name if retained else party[0].get('full_name') or party[0]['name'],
         class_id=cls['id'] if cls else None,
         class_name=old.class_name if cls and old and cls['id']==old.class_id else (cls.get('full_name') or cls['name']) if cls else None)
-    return Additional(row_id=row_id,ordinal=ordinal,account=resolve_account(s,value.from_account,previous.account if previous else None),
+    account=resolve_account(s,value.from_account,previous.account if previous else None)
+    refuse_from_account(account)
+    return Additional(row_id=row_id,ordinal=ordinal,account=account,
         units=amount(value.amount,s.company_info_row['home_currency']),dimensions=dimensions,memo=value.memo,check_number=value.check_number,
         payment_method=oldmethod if method and oldmethod and method['id']==oldmethod.id else defaults._ref(method) if method else None)

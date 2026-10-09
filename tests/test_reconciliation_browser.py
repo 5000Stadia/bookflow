@@ -37,6 +37,20 @@ def workbench(tmp_path, monkeypatch):
         {'account': bank, 'side': 'debit', 'amount': '250.00'},
         {'account': equity, 'side': 'credit', 'amount': '250.00'}]},
         company=company, reason='Seed something to reconcile')
+    from bookflow.core.ids import new_id
+    run = lambda name, data, **ctx: client.run(name, data, company=company, **ctx)
+    why = dict(reason='A draft whose link carries no version')
+    opening = run('reconcile opening start', dict(
+        operation_key=new_id(), account=bank, opening_date='2025-12-31', entered_balance='0.00',
+        evidence=dict(format=1, statement_reference=None, entered_text='First statement'), references=[]), **why)['draft']
+    draft = run('reconcile start', dict(operation_key=new_id(), account=bank, statement_date='2026-01-31',
+                                        ending_balance='250.00', opening_draft_id=opening['id']), **why)['draft']
+    row = run('reconcile candidates', dict(draft=draft['id'], limit=5))['items'][0]
+    # The draft changes after a link to it was made: its version is no longer the first one.
+    changed = run('reconcile mark', dict(
+        operation_key=new_id(), draft=draft['id'], expected_version=draft['version'],
+        entries=[dict(movement=row['movement'], group_fingerprint=row['group_fingerprint'], action='mark')]), **why)['draft']
+    assert changed['version'] > draft['version']
     login = os_login()
     client.run('user set-password', {'username': login, 'password': PASSWORD})
 
@@ -49,7 +63,7 @@ def workbench(tmp_path, monkeypatch):
     try:
         browser = TestClient(handle.app)
         assert browser.post('/login', json={'username': login, 'password': PASSWORD}).status_code == 200
-        yield type('Workbench', (), {'browser': browser, 'company_id': company, 'bank': bank})
+        yield type('Workbench', (), {'browser': browser, 'company_id': company, 'bank': bank, 'draft': changed})
     finally:
         handle.stop()
 
@@ -94,3 +108,13 @@ def test_every_reconcile_command_has_a_page_that_answers(workbench):
         page = workbench.browser.get(url, follow_redirects=False)
         assert page.status_code == 200, (name, url, page.status_code)
         assert 'name="password"' not in page.text, (name, 'sent a signed-in reader to log in')
+
+
+def test_a_link_naming_only_the_draft_opens_at_its_current_version(workbench):
+    """The home page's open-reconciliation link carries the draft and no version; the form still has one."""
+    draft = workbench.draft
+    shown = workbench.browser.get(f"/c/{workbench.company_id}/reconcile/mark?f:draft={draft['id']}")
+    assert shown.status_code == 200
+    html = shown.text
+    field = html[html.index('name="f:expected_version"'):][:400]
+    assert f'value="{draft["version"]}"' in field, field
