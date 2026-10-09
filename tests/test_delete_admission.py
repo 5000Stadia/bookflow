@@ -152,10 +152,17 @@ def test_marker_metadata_is_strict_and_only_family_deletes_are_registered():
     assert set(CAPABILITIES) == set(DELETE_NAMES)
     # Every finite deletion family, and nothing else, is explicit-grant only ...
     assert registry.EXPLICIT_GRANT_ONLY_CAPABILITIES == {capability(family) for family in FAMILIES}
-    # ... and each such capability is held by exactly one command, that family's Delete.
+    # ... and each such capability is held by that family's Delete. Restoring a deleted document
+    # (journal, invoice) is the one other act that needs the same explicit grant, so those two
+    # Restores also carry it; nothing else does.
     marked = [c for c in registry.all_commands(include_standalone=True) if c.requires_explicit_grant]
-    assert sorted(c.capability for c in marked) == sorted(registry.EXPLICIT_GRANT_ONLY_CAPABILITIES)
-    assert all(c.name.endswith(' delete') and c.is_write for c in marked), [c.name for c in marked]
+    deletes = [c for c in marked if c.name.endswith(' delete')]
+    restores = [c for c in marked if c.name.endswith(' restore')]
+    assert sorted(c.capability for c in deletes) == sorted(registry.EXPLICIT_GRANT_ONLY_CAPABILITIES)
+    assert sorted(c.name for c in restores) == ['invoice restore', 'journal restore']
+    assert {c.capability for c in restores} == {capability('invoice'), capability('journal_entry')}
+    assert len(deletes) + len(restores) == len(marked)
+    assert all(c.is_write for c in marked), [c.name for c in marked]
     for extra in ({'explicit_grant_only': False}, {'policy_provider': 'allow'}):
         with pytest.raises(ValidationError):
             Input.model_validate(extra)
