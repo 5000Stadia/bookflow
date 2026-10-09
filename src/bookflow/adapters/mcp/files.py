@@ -23,25 +23,47 @@ def _parts(value):
     return parts
 
 
-def _private_directory(fd):
+def unsafe(problem, path, fix, *, facts=True):
+    """The refusal for a local path that is not safe to read through or write into, saying what is wrong and the fix.
+
+    The blind July trial's launcher refused a group-writable input folder with only "The acting user may not
+    run this command here"; nothing said which part of the path was unsafe or what to change.
+    """
+    where = path or "the path"
+    details = {"stage": "local_file", "reason": "unsafe_file"}
+    if facts:
+        details.update(path=path, problem=problem, fix=fix)
+    return BookflowError("E_PERMISSION", message=f"{where} is not safe for MCP file transfer: {problem}. {fix}", details=details)
+
+
+def _private_directory(fd, path=None):
     info = os.fstat(fd)
-    if info.st_uid != os.getuid() or info.st_mode & 0o022:
-        raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"})
+    if info.st_uid != os.getuid():
+        raise unsafe(f"the directory is owned by uid {info.st_uid}, not the account running this server (uid {os.getuid()})",
+                     path, "Change its owner to that account (chown), or start the launcher as the directory's owner.")
+    if info.st_mode & 0o022:
+        who = "group- and world-writable" if info.st_mode & 0o022 == 0o022 else (
+            "group-writable" if info.st_mode & 0o020 else "world-writable")
+        raise unsafe(f"the directory is {who} (mode {oct(info.st_mode & 0o777)[2:]})", path,
+                     f"Run `chmod go-w {path or 'DIR'}` (a folder made with umask 002 is group-writable), then restart "
+                     "the launcher.")
 
 
-def _open_directory(parts, start=None, lineage=None):
+def _open_directory(parts, start=None, lineage=None, base=""):
     fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY) if start is None else os.dup(start)
     try:
         if start is not None:
             _private_directory(fd)
+        walked = []
         for part in parts:
+            walked.append(part)
             nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = nxt
             if lineage is not None:
                 lineage.append(_identity(os.fstat(fd)))
             if start is not None:
-                _private_directory(fd)
+                _private_directory(fd, base + "/" + "/".join(walked))
         return fd
     except BaseException:
         os.close(fd)
@@ -65,7 +87,7 @@ class Directories:
                 fd = _open_directory(parts, lineage=lineage)
                 info = os.fstat(fd)
                 try:
-                    _private_directory(fd)
+                    _private_directory(fd, value)
                 except BaseException:
                     os.close(fd)
                     raise
@@ -73,7 +95,8 @@ class Directories:
         except OSError as exc:
             self.close()
             if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
-                raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"}) from None
+                raise unsafe("a part of the path is a symbolic link or not a directory", value,
+                             "Configure the real directory (no symbolic link in its path) as the launcher's directory.", facts=False) from None
             raise BookflowError("E_IO", details={"operation": "file_configuration", "errno": exc.errno}) from None
         except BaseException:
             self.close()
@@ -127,7 +150,7 @@ class Directories:
                 os.close(check)
             relative = parts[len(root):-1]
             parent_lineage = []
-            parent = _open_directory(relative, fd, lineage=parent_lineage)
+            parent = _open_directory(relative, fd, lineage=parent_lineage, base="/" + "/".join(root))
             parent_identity = _identity(os.fstat(parent))
 
             def verify():
@@ -149,7 +172,8 @@ class Directories:
             yield parent, parts[-1], verify
         except OSError as exc:
             if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
-                raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"}) from None
+                raise unsafe("a part of the path, or the file itself, is a symbolic link or not what it should be",
+                             value, "Give the real file's path: no symbolic link in it, a regular file in a folder.", facts=False) from None
             raise BookflowError("E_IO", details={"operation": "local_file", "errno": exc.errno}) from None
         finally:
             if parent is not None:
@@ -162,7 +186,9 @@ class Directories:
             try:
                 before = os.fstat(fd)
                 if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-                    raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"})
+                    raise unsafe("it is not a regular file with a single name" if stat.S_ISREG(before.st_mode)
+                                 else "it is not a regular file",
+                                 value, "Copy the content into a plain file (no hard link, pipe or device) in the input folder.", facts=False)
                 with os.fdopen(fd, "rb", closefd=False) as stream:
                     yield stream
                 after = os.fstat(fd)

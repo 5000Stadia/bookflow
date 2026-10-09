@@ -148,3 +148,22 @@ def test_symlink_denial_has_public_permission_classification(tmp_path, ancestor)
         assert caught.value.details == {"stage": "local_file", "reason": "unsafe_file"}
     finally:
         caps.close()
+
+
+def test_a_group_writable_folder_is_refused_with_what_is_wrong_and_the_fix(tmp_path):
+    """The blind July trial's launcher refused a folder made with umask 002 with only "The acting user may not run this command here"."""
+    folder = tmp_path / "input"
+    folder.mkdir(mode=0o700)
+    folder.chmod(0o775)
+    with pytest.raises(BookflowError) as caught:
+        Directories([str(folder)], flag="--input-dir")
+    error = caught.value
+    assert error.code == "E_PERMISSION" and error.details["reason"] == "unsafe_file"
+    assert "group-writable" in error.message and f"chmod go-w {folder}" in error.message
+    assert error.details["path"] == str(folder) and "775" in error.details["problem"]
+    folder.chmod(0o757)
+    with pytest.raises(BookflowError) as caught:
+        Directories([str(folder)])
+    assert "world-writable" in caught.value.message
+    folder.chmod(0o755)
+    Directories([str(folder)]).close()
