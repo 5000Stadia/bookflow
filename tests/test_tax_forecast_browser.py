@@ -148,7 +148,7 @@ def exercise_cap_browser(client,root,tmp_path,source,count,net,tax,started):
             assert [t.split('\n')[0] for t in totals[1:] if '\n' in t] in ([],['Net','Tax','Gross']),totals
             capture(b,tmp_path/f'cap-bounded-preview-{width}.png')
             receipts.append(dict(width=width,hypothetical=note,error=error,preview_totals=totals))
-            if width==390:_click(b,'submit');first_id=_saved(b,'invoice')
+            if width==390:_click(b,'submit');first_id=_saved(b,'invoice',timeout=120)
     first=client.run('invoice show',dict(invoice=first_id),company=COMPANY)
     assert first['subtotal_minor_units']==expected_net and first['tax_minor_units']==expected_tax
     state=run(client,'estimate','billing',estimate=source['id']);assert state['can_bill_together']

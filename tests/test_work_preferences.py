@@ -14,11 +14,17 @@ def settings(client, **values):
 @pytest.mark.parametrize('field', ['estimates_enabled', 'progress_billing_enabled', 'close_estimates_after_billing'])
 @pytest.mark.parametrize('value', [None, 'true', 'false', 0, 1])
 def test_strict_nonnull_update(client, field, value):
-    before = client.run('company show', {}, company=COMPANY)
+    # `preference_changes` says how many seconds ago each preference last changed, which moves with the clock;
+    # a refused update must change nothing else.
+    def shown():
+        document = client.run('company show', {}, company=COMPANY)
+        return dict(document, preference_changes=[dict(row, seconds_since_update=0)
+                                                  for row in document['preference_changes']])
+    before = shown()
     with pytest.raises(BookflowError) as caught:
         settings(client, **{field: value})
     assert caught.value.code == 'E_VALIDATION'
-    assert client.run('company show', {}, company=COMPANY) == before
+    assert shown() == before
 
 
 @pytest.mark.parametrize('verb', ['invoice', 'sales-receipt'])

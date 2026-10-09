@@ -438,13 +438,14 @@ def test_preview_default_repeated_reset_and_whole_organization_boundary(referenc
     kept = c.company.new(legal_name='Keep company',home_currency='USD',organization='Keep organization')
     kept_path = Path(c.company.show(company=kept['company_id'])['path'])
     keep_before = snapshot(kept_path)
-    reset = c.demo.reset(include_reference=True)
+    # The root now holds two companies that are not the demo's (R168), so a reset names the root it may reset.
+    reset = c.demo.reset(include_reference=True,force=str(root))
     assert all(r['company_id'] not in (reset['company_id'],reset['reference_company_id']) for r in old)
     assert Path(reset['trashed_path']).is_dir()
     assert (Path(reset['trashed_path'])/'Disposable sibling').is_dir()
     assert snapshot(kept_path) == keep_before
     assert c.company.show(company=kept['company_id'])['organization_id'] == outside['organization_id']
-    default = c.demo.reset()
+    default = c.demo.reset(force=str(root))
     assert default['reference_company_id'] is default['reference_display_name'] is None
     assert {r['display_name'] for r in c.company.list()['items']} == {DEMO,'Keep company'}
     assert (Path(default['trashed_path'])/REFERENCE).is_dir()

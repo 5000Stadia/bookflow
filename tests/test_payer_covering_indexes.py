@@ -355,10 +355,11 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
         h_entry=dict(raw.execute('SELECT * FROM audit_entries ORDER BY rowid DESC LIMIT 1').fetchone())
         assert h_entry['record_id']==co and decode_snapshot(h_entry['after'])=={'from':'co0018','schema_revision':head}
     # The hub's own objects are unchanged; the one hub migration newer than this root's source
-    # (h0014, authority generation) adds its table and change triggers and nothing else.
+    # (h0014, authority generation; hub0015, the audit log's four append-only triggers) adds
+    # those tables and triggers and nothing else.
     added=[x for x in hub_after_rows[0] if x not in hub_before_rows[0]]
     assert [x for x in hub_after_rows[0] if x in hub_before_rows[0]]==hub_before_rows[0]
-    assert added and all(x[1].startswith('authority_generation') for x in added),added
+    assert added and all(x[1].startswith(('authority_generation','audit_events_no_','audit_entries_no_')) for x in added),added
     event_cols=[c[1] for c in hub_before_rows[1]['audit_events'][0]]
     new_events=hub_after_rows[1]['audit_events'][1][len(hub_before_rows[1]['audit_events'][1]):]
     upgrade_events={r[2+3*event_cols.index('id')] for r in new_events}

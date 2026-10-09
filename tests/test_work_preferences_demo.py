@@ -7,7 +7,7 @@ from tests.demo_oracle import as_edited_by_r83
 from tests.test_reference_year import reference_client, reference_template
 
 
-@pytest.mark.parametrize('resource,count', [('seed.toml',283), ('reference.toml',189)])
+@pytest.mark.parametrize('resource,count', [('seed.toml',285), ('reference.toml',189)])
 def test_exact_prior_prefix(resource, count):
     current = files('bookflow.demo').joinpath(resource).read_bytes()
     old = as_edited_by_r83(subprocess.check_output(['git','show','3644f3fb50a9b74203a366228f4285c24e39c978:src/bookflow/demo/'+resource]), resource)
@@ -36,7 +36,7 @@ def test_preference_examples_retain_history_and_zero_balance(reference_client, c
     assert [info[f] for f in ('estimates_enabled','progress_billing_enabled','close_estimates_after_billing')] == [True,True,False]
 
 
-@pytest.mark.parametrize('resource,base_count', [('seed.toml',295), ('reference.toml',201)])
+@pytest.mark.parametrize('resource,base_count', [('seed.toml',297), ('reference.toml',201)])
 def test_complete_tax_payment_append_union_preserves_each_frozen_command(resource, base_count):
     """Both reviewed tails survive, with their original order and capture inputs."""
     import json

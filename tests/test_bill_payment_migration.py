@@ -110,6 +110,10 @@ def _superseded_after(revision):
         module = importlib.import_module(versions.__name__ + '.' + info.name)
         if getattr(module, 'revision', '') in later:
             names.update(getattr(module, 'REPLACED', ()))
+            # A migration that rewrites a guard in place names it in TRIGGERS (co0067); one that adds
+            # triggers lists their whole statements there (co0066), whose name is the third word.
+            names.update(t.split()[2] if t.startswith('CREATE TRIGGER') else t
+                         for t in getattr(module, 'TRIGGERS', ()))
     return names
 
 

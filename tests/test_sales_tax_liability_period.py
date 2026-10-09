@@ -2,7 +2,8 @@
 
 The blind trial asked for "September's sales tax so far" and got the cumulative balance,
 because the read took only `as_of`. Moved to 2026-09-28 as the trial's demo was, the demo owes
-40.04 at the end of August and 76.46 on September 28, so September so far collected 36.42.
+40.04 at the end of August and 78.56 on September 28, so September so far collected 36.42 and the
+agency's late-filing penalty (R175, DEMO-STADJ-1, 2.10) added to what is owed.
 """
 import pytest
 
@@ -33,20 +34,20 @@ def test_september_is_the_months_tax_and_as_of_is_unchanged(books):
     running = books({'as_of': '2026-09-28'})
     assert _totals(running) == {'beginning_balance': None, 'tax_charged': '76.46',
                                 'tax_credited': '0.00', 'remitted': '0.00',
-                                'unattributed': '0.00', 'balance': '76.46'}
+                                'unattributed': '0.00', 'adjusted': '2.10', 'balance': '78.56'}
     assert running['metadata']['period'] == {'date_from': None, 'date_to': '2026-09-28'}
 
     september = books({'date_from': '2026-09-01', 'date_to': '2026-09-28'})
     assert _totals(september) == {'beginning_balance': '40.04', 'tax_charged': '36.42',
                                   'tax_credited': '0.00', 'remitted': '0.00',
-                                  'unattributed': '0.00', 'balance': '76.46'}
+                                  'unattributed': '0.00', 'adjusted': '2.10', 'balance': '78.56'}
     assert september['metadata']['period'] == {'date_from': '2026-09-01', 'date_to': '2026-09-28'}
     # Every row adds up on its own, and as_of names the same end as date_to.
     for row in september['rows']:
         amount = {k: float(row[k]['amount']) for k in
-                  ('beginning_balance', 'tax_charged', 'tax_credited', 'remitted', 'unattributed', 'balance')}
+                  ('beginning_balance', 'tax_charged', 'tax_credited', 'remitted', 'unattributed', 'adjusted', 'balance')}
         assert round(amount['beginning_balance'] + amount['tax_charged'] - amount['tax_credited']
-                     - amount['remitted'] + amount['unattributed'], 2) == amount['balance']
+                     - amount['remitted'] + amount['unattributed'] + amount['adjusted'], 2) == amount['balance']
     assert _totals(books({'date_from': '2026-09-01', 'as_of': '2026-09-28'})) == _totals(september)
 
 

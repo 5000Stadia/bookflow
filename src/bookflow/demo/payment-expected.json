@@ -1,12 +1,12 @@
 {
   "basis": "Row22 plan section12 fixed business sequence; integer USD cents",
   "old_command_counts": {
-    "seed.toml": 295,
+    "seed.toml": 297,
     "reference.toml": 201
   },
   "append_count": 33,
   "final_command_counts": {
-    "seed.toml": 388,
+    "seed.toml": 390,
     "reference.toml": 294
   },
   "net": {

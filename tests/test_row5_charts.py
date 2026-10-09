@@ -65,6 +65,11 @@ def test_manifest_validation_rejects_duplicate_or_incomplete_roles():
     assert exc.value.details["missing"] == ["retained_earnings"]
 
 
+# The standard profile (v3, Ask My Accountant) puts two ordinary accounts into every company, whatever its chart:
+# Uncategorized Expense (Ask My Accountant) 6990 and Uncategorized Income 4990.
+PROFILE_ACCOUNTS = 2
+
+
 def test_chart_plan_is_write_free_and_apply_is_one_complete_set(client):
     ids = _ids()
     database = _chartless_database(client)
@@ -75,7 +80,7 @@ def test_chart_plan_is_write_free_and_apply_is_one_complete_set(client):
             db, "contractor", actor_id=company["created_by"], via="python",
             id_factory=lambda: next(ids), at="2026-09-04T00:00:00.000+00:00",
         )
-        assert db.conn.execute(sa.select(sa.func.count()).select_from(schema.accounts)).scalar_one() == 0
+        assert db.conn.execute(sa.select(sa.func.count()).select_from(schema.accounts)).scalar_one() == PROFILE_ACCOUNTS
         after, rows = charts.apply_chart_application(db, plan)
         db.raw.execute("COMMIT")
 
@@ -84,7 +89,7 @@ def test_chart_plan_is_write_free_and_apply_is_one_complete_set(client):
     with open_database(database, writable=False) as db:
         stored = db.conn.execute(sa.select(schema.accounts).order_by(schema.accounts.c.number)).mappings().all()
         info = db.conn.execute(sa.select(schema.company_info)).mappings().one()
-        assert len(stored) == len(rows)
+        assert len(stored) == len(rows) + PROFILE_ACCOUNTS
         assert {row["system_role"] for row in stored if row["system_role"]} == charts.required_system_roles()
         assert info["default_chart"] == "contractor" and info["default_chart_version"] == 1
 
@@ -113,7 +118,7 @@ def test_existing_account_conflict_rejects_before_any_chart_write(client):
         db.raw.execute("ROLLBACK")
     assert exc.value.code == "E_CHART_INVALID"
     assert exc.value.details["conflicts"][0]["fields"]
-    assert before == after == 1
+    assert before == after == 1 + PROFILE_ACCOUNTS
 
 
 def test_unknown_chart_uses_nonrevealing_record_not_found_shape():
@@ -142,7 +147,7 @@ def test_company_rollout_applies_selected_chart_and_standard_profile(client):
 
     assert info["default_chart"] == "service" and info["default_chart_version"] == 1
     assert info["version"] == 2
-    assert account_count == len(charts.get_manifest("service").accounts)
+    assert account_count == len(charts.get_manifest("service").accounts) + PROFILE_ACCOUNTS
     assert term_count == 6
     assert events == [("company new",), ("chart apply",), ("profile apply",)]
 
@@ -160,5 +165,5 @@ def test_explicit_chartless_rollout_still_applies_standard_profile(client):
         account_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.accounts)).scalar_one()
         profile_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.payment_methods)).scalar_one()
     assert info["default_chart"] is None and info["version"] == 1
-    assert account_count == 0
+    assert account_count == PROFILE_ACCOUNTS
     assert profile_count == 12  # 2b693bc (R135) adds the Credit Card payment method

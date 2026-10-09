@@ -59,7 +59,9 @@ def test_rename_and_aba_are_two_hub_attributions_without_company_events(root, cl
         assert all(x.storage == 'hub' and x.kind == 'issuer' and x.record_id == company and x.fields == ('issuer.display_name',) for x in result.changes)
         one = changes_page(s, first[1], request, PageInput(limit=1), binding)
         two = changes_page(s, first[1], request, PageInput(limit=1,cursor=one.next_cursor), binding)
-        assert one.items + two.items == result.changes and two.next_cursor is None
+        # Each read stamps the change's age from the clock, so two reads a second apart differ in that field only.
+        aged = lambda changes: [x.model_copy(update={'age_seconds': 0}) for x in changes]
+        assert aged(one.items + two.items) == aged(result.changes) and two.next_cursor is None
         assert one.total_count == two.total_count == 2
     observe(client,monkeypatch,compare,company)
     assert _storage(root,path) == saved

@@ -1,7 +1,7 @@
 {
   "append_count": 43,
-  "base_command_counts": {"seed.toml": 345, "reference.toml": 251},
-  "final_command_counts": {"seed.toml": 388, "reference.toml": 294},
+  "base_command_counts": {"seed.toml": 347, "reference.toml": 251},
+  "final_command_counts": {"seed.toml": 390, "reference.toml": 294},
   "parent_due_minor_units": 1000,
   "financial_delta_minor_units": {"bank": 0, "accounts_receivable": 0, "income": 0, "expense": 0},
   "new_rows": {

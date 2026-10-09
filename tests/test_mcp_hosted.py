@@ -247,7 +247,9 @@ def agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
                 current = await run("invoice show", {"invoice": invoice["id"]})
                 assert current["version"] == 2 and current["revision"]["memo"] == "Agent continued"
 
-                directive = await run("directive add", {"text": "Record today's plumbing receipts and balanced bank entry."})
+                # A standing instruction that stands in for a reason is the person's: the agent's own is not (R163).
+                directive = hosted.ok("directive.add", {"text": "Record today's plumbing receipts and balanced bank entry."},
+                                      company=hosted.company_id)
                 code = directive["directive"]["code"]
                 journal_input = {"date": "2026-01-12", "lines": [
                     {"account": bank["id"], "side": "debit", "amount": "12.34"},

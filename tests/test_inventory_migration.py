@@ -86,9 +86,12 @@ def test_the_frozen_ddl_is_what_the_shipped_metadata_declares():
         expected.append(str(CreateTable(table).compile(dialect=dialect())).strip())
         expected.extend(str(CreateIndex(index).compile(dialect=dialect())).strip()
                         for index in sorted(table.indexes, key=lambda index: index.name))
+    # A statement belongs to the table it defines (or indexes), not to every table its foreign keys name:
+    # co0067 rebuilt `transactions`, which `inventory_documents` only refers to.
+    import re
+    defined = lambda statement: re.match(r"CREATE (?:UNIQUE )?(?:TABLE (\w+)|INDEX \w+ ON (\w+))", statement).groups()
     assert [statement for statement in M.DDL
-            if not any(f" {name} " in statement or f" {name} (" in statement
-                       for name in rebuilt)] == expected
+            if not any(name in defined(statement) for name in rebuilt)] == expected
     # A rebuilt table may since have gained indexes; the ones this revision created must remain.
     shipped = {index.name for name in M.NEW_TABLES for index in schema.metadata.tables[name].indexes}
     frozen = {statement.split()[2] for statement in M.DDL if statement.startswith("CREATE INDEX")}

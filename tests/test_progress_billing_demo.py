@@ -16,7 +16,7 @@ from tests.test_reference_year import demo_runner, page_rows, reference_client, 
 from tests.test_service_sales_demo import COMPANIES
 
 
-OLD_COUNTS = {"seed.toml": 242, "reference.toml": 148}
+OLD_COUNTS = {"seed.toml": 244, "reference.toml": 148}
 FIXTURE = files("bookflow.demo").joinpath("example.pdf").read_bytes()
 FINANCIAL = {"estimate invoice", "estimate sales-receipt", "work-order invoice", "work-order sales-receipt", "invoice post", "sales-receipt post"}
 

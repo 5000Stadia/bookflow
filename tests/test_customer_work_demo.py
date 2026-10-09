@@ -17,7 +17,7 @@ from tests.test_service_sales_demo import COMPANIES
 NOUNS = ("proposal", "estimate", "work-order")
 SHARED_VERBS = ("create", "update", "copy", "show", "query", "history")
 OWN_VERB = {"proposal": "estimate", "estimate": "work-order", "work-order": "complete"}
-OLD_COUNTS = {"seed.toml": 171, "reference.toml": 76}
+OLD_COUNTS = {"seed.toml": 173, "reference.toml": 76}
 FIXTURE = files("bookflow.demo").joinpath("example.pdf").read_bytes()
 
 
@@ -43,7 +43,7 @@ assert (NET, TAX, GROSS) == (14001, 960, 14961)
 @pytest.mark.parametrize("resource", ["seed.toml", "reference.toml"])
 def test_manifests_append_all_twenty_one_work_commands_after_the_old_entries(resource):
     commands = tomllib.loads(files("bookflow.demo").joinpath(resource).read_text())["commands"]
-    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:(201 if resource == "seed.toml" else 107)]
+    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:(203 if resource == "seed.toml" else 107)]
     assert not [e for e in old if e["command"].split()[0] in NOUNS]
     verbs = {f"{noun} {verb}" for noun in NOUNS for verb in (*SHARED_VERBS, OWN_VERB[noun])}
     work = [e for e in new if e["command"] in verbs]
@@ -282,7 +282,8 @@ def test_work_previews_change_nothing(reference_client, company, prefix):
     preview = run("work-order complete", work_order=order["id"], expected_version=4, actual_end="2026-09-14T16:30:00Z")
     assert not preview["changed"] and preview["status"] == "complete"
     estimate = client.run("estimate query", {"number": p + "EST-3"}, company=company)["items"][0]
-    preview = run("estimate update", estimate=estimate["id"], expected_version=1, status="accepted", decision_note="Preview only")
+    preview = run("estimate update", estimate=estimate["id"], expected_version=1, status="accepted", acknowledge_expired=True,
+                  decision_note="Preview only")
     assert preview["dry_run"] and preview["status"] == "accepted" and len(preview["facts_fingerprint"]) == 64
     preview = run("proposal create", date="2026-09-16", customer=customer["id"], title="Preview only",
                   sales_tax_item="Commercial Example Tax 8%", customer_tax_code="Tax",

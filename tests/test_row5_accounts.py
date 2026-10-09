@@ -392,9 +392,14 @@ def test_account_selector_is_cross_company_secret_and_default_sort_is_lexical(cl
         name="Unnumbered", type="income", company=second_company
     )
     listed = client.account.list(company=second_company)
+    # The standard profile's two Ask My Accountant accounts (4990, 6990) are in every company and sort by number too.
+    profile = {row["number"]: row["id"] for row in listed["items"] if row["number"] in ("4990", "6990")}
+    assert sorted(profile) == ["4990", "6990"]
     assert [row["id"] for row in listed["items"]] == [
         left["id"],
         right["id"],
+        profile["4990"],
+        profile["6990"],
         last["id"],
     ]
 

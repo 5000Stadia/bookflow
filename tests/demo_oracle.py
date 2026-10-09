@@ -59,6 +59,14 @@ input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_est
     (b'"KIT-DEC-4"', b'"KIT-4"'),
 )
 
+# The one in-place edit the move-in made (3844af3): the demo's opening journal is no longer a hand-posted
+# `journal post` but the one-file move-in (`cutover plan`, `cutover apply`, `cutover tie-out`) that posts the
+# same DEMO-OPEN journal. Exact-prefix witnesses apply it to the frozen bytes; every other change still fails.
+CUTOVER_SEED_EDITS = (
+    ('[[commands]]\ncommand = "journal post"\ncapture = "opening_journal"\ninput = { date = "2026-01-01", number = "DEMO-OPEN", memo = "Opening capital journal", lines = [{ account = "Checking", side = "debit", amount = "5000.00" }, { account = "Opening Balance Equity", side = "credit", amount = "5000.00" }] }\n\n'.encode(),
+     '# The company moved in from its old books on the first day of the year: the opening trial balance\n# comes in through the move-in commands, which post it as the DEMO-OPEN journal and tie it out.\n\n[[commands]]\ncommand = "cutover plan"\n\n[commands.input]\nas_of = "2026-01-01"\njournal_number = "DEMO-OPEN"\n\n[[commands.input.files]]\nname = "Opening trial balance.csv"\nkind = "trial_balance"\ncontent = """\n,,"Debit","Credit"\n"1000 · Checking",,"5,000.00",\n"3000 · Opening Balance Equity",,,"5,000.00"\n"TOTAL",,"5,000.00","5,000.00"\n"""\n\n[[commands]]\ncommand = "cutover apply"\nreason = "Opening balances from the old books"\n\n[commands.input]\nas_of = "2026-01-01"\njournal_number = "DEMO-OPEN"\n\n[[commands.input.files]]\nname = "Opening trial balance.csv"\nkind = "trial_balance"\ncontent = """\n,,"Debit","Credit"\n"1000 · Checking",,"5,000.00",\n"3000 · Opening Balance Equity",,,"5,000.00"\n"TOTAL",,"5,000.00","5,000.00"\n"""\n\n[[commands]]\ncommand = "cutover tie-out"\n\n[commands.input]\nas_of = "2026-01-01"\n\n[[commands.input.files]]\nname = "Opening trial balance.csv"\nkind = "trial_balance"\ncontent = """\n,,"Debit","Credit"\n"1000 · Checking",,"5,000.00",\n"3000 · Opening Balance Equity",,,"5,000.00"\n"TOTAL",,"5,000.00","5,000.00"\n"""\n\n'.encode()),
+)
+
 
 def as_edited_by_r83(old, resource):
     """Frozen bytes of a demo resource as they read after R83's deliberate in-place edits.
@@ -67,7 +75,7 @@ def as_edited_by_r83(old, resource):
     """
     if resource != 'seed.toml':
         return old
-    for before, after in R83_SEED_EDITS:
+    for before, after in (*R83_SEED_EDITS, *CUTOVER_SEED_EDITS):
         old = old.replace(before, after)
     return old
 

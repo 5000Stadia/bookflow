@@ -76,7 +76,7 @@ def denied(fn):
 def test_default_resource_denies_all_delete_families_before_role_bypass(role):
     # No database/company lookup is possible here: activation must precede it.
     # hub=None: a session with no activated root, the legacy default-deny route.
-    s = SimpleNamespace(is_hub_admin=role == 'hub_admin', memberships=[], role=role, hub=None)
+    s = SimpleNamespace(is_hub_admin=role == 'hub_admin', memberships=[], role=role, hub=None, actor=None)
     for capability in CAPABILITIES:
         denied(lambda: access.require_resource(s, capability, 'standard'))
 
@@ -95,7 +95,7 @@ def test_execute_denies_before_pending_maintenance(commands, monkeypatch):
     # A normal command must reach the same maintenance path; stop before its
     # ordinary authorization so this witness requires no database fixture.
     monkeypatch.setattr(dispatch, 'run_in_session', lambda *a, **kw: {'ordinary': True})
-    session = SimpleNamespace(is_hub_admin=True, hub=SimpleNamespace(writable=True), commits=hooks,
+    session = SimpleNamespace(is_hub_admin=True, hub=SimpleNamespace(writable=True), actor=None, commits=hooks,
                               config=SimpleNamespace(flush_pending=flush))
     # This fake hub has no permission_state: it is a never-activated (legacy) root.
     monkeypatch.setattr('bookflow.hub.permission_access.activated', lambda session: False)
@@ -112,7 +112,7 @@ def test_early_recovery_precedes_saved_facts_and_company_open(commands, monkeypa
     def unexpected(*args, **kwargs):
         pytest.fail('Company authorization/opening preceded explicit activation denial')
     monkeypatch.setattr(dispatch, 'authorize', unexpected)
-    s = SimpleNamespace(is_hub_admin=True, hub=None)
+    s = SimpleNamespace(is_hub_admin=True, hub=None, actor=None)
     denied(lambda: dispatch._permanent_recovery(cmds['recover'], Input(),
         Context.new(Interface.python, 'g0'), s, 'private selector', 'option', dry_run))
     assert called == []
@@ -123,13 +123,13 @@ def test_ordinary_authorization_denies_before_company_resolution(commands, monke
     cmds, called = commands
     monkeypatch.setattr(dispatch, 'resolve_company', lambda *a: pytest.fail('Resolved hidden company'))
     denied(lambda: dispatch.authorize(cmds[verb], Context.new(Interface.python, 'g0'),
-                                     SimpleNamespace(is_hub_admin=True, hub=None), company_selector='hidden'))
+                                     SimpleNamespace(is_hub_admin=True, hub=None, actor=None), company_selector='hidden'))
     assert called == []
 
 
 def test_fixture_policy_is_local_and_does_not_skip_resource_roles(commands, monkeypatch):
     cmds, _ = commands
-    s = SimpleNamespace(company_row={'id': 'C', 'organization_id': 'O'}, is_hub_admin=False, hub=None,
+    s = SimpleNamespace(company_row={'id': 'C', 'organization_id': 'O'}, is_hub_admin=False, hub=None, actor=None,
         memberships=[{'scope_type': 'company', 'scope_id': 'C', 'role': 'readonly'}])
     calls = []
     # Test-local override, never a runtime/config/Context provider API.

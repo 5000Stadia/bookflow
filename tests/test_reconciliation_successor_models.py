@@ -484,7 +484,8 @@ def test_real_shared_input_validation_accepts_json_arrays_into_domain_tuples():
     # than failing on a number; what it holds is that the models alone never register anything.
     from bookflow.commands.reconcile_cmds import reconcile_finish  # noqa: F401  (forces the import)
     registry.load_all()
-    registered={c.name for c in registry.all_commands() if c.name.startswith('reconcile ')}
+    # `reconcile import` (R167) declares its input model beside its command, not in this module's INPUTS.
+    registered={c.name for c in registry.all_commands() if c.name.startswith('reconcile ')}-{'reconcile import'}
     assert registered and registered<set(m.INPUTS), 'a registered command with no declared input model'
     from bookflow.company.deposit_dependencies import RECONCILIATION
     assert RECONCILIATION.revision is None

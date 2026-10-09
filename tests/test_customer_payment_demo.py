@@ -15,7 +15,7 @@ RESOURCE=Path(__file__).parents[1]/'src/bookflow/demo'
 EXPECTED=json.loads((RESOURCE/'payment-expected.json').read_text())
 
 
-@pytest.mark.parametrize('filename,count',[('seed.toml',295),('reference.toml',201)])
+@pytest.mark.parametrize('filename,count',[('seed.toml',297),('reference.toml',201)])
 def test_payment_append_keeps_exact_frozen_bytes_and_command_prefix(filename,count):
     old=as_edited_by_r83(subprocess.check_output(['git','show',BASE+':src/bookflow/demo/'+filename]),filename)
     current=(RESOURCE/filename).read_bytes()

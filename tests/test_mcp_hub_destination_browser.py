@@ -107,6 +107,8 @@ def test_hub_organization_and_company_new_attach_destinations_with_complete_rece
     # Both archive and replacement paths are checked inside this owned root.
     form(b,env.site.base_url+'/hub/demo/reset')
     _fill(b,'f:include_reference','false')
+    # The root now holds the company this test made, which is not the demo's: a reset names the root (R168).
+    _fill(b,'f:force',str(root))
     prospective=preview()
     # Reseeding the whole demo company takes about half a minute (30-37 s measured alone).
     reset=saved(lambda out:'/c/'+out['company_id']+'/',timeout=120)
