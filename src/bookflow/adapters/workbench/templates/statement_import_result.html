@@ -17,7 +17,7 @@
 <td data-label="Payee">{{ line.payee or line.memo or '—' }}{% if line.number %} · #{{ line.number }}{% endif %}</td>
 <td data-label="Date">{{ line.date|day }}</td>
 <td data-label="Amount" class="num">{{ line.amount|money(v.currency, home=math_company_currency) }}</td>
-<td data-label="Outcome"><strong>{{ line.status_label }}</strong>{% if line.ticked %}<br><small>{{ line.ticked }}</small>{% endif %}{% if line.previously_imported %}<br><small>Imported before</small>{% endif %}</td>
+<td data-label="Outcome"><strong>{{ line.status_label }}</strong>{% if line.ticked %}<br><small>{{ 'Ticked on Submit' if import_preview and line.ticked == 'Ticked by this import' else line.ticked }}</small>{% endif %}{% if line.previously_imported %}<br><small>Imported before</small>{% endif %}</td>
 <td data-label="Detail">{% if line.suggestions %}Could be: {% for s in line.suggestions %}{{ s.payee or s.memo or 'entry' }} · {{ s.date|day }} · {{ s.amount|money(v.currency, home=math_company_currency) }}{% if not loop.last %}; {% endif %}{% endfor %}{% elif line.status != 'matched' %}{{ line.reason }}{% endif %}</td>
 </tr>{% endfor %}
 </tbody></table></div>
