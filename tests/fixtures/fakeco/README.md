@@ -3,7 +3,8 @@
 Harbor Electric LLC is a made-up three-person electrical contractor in Joliet, Illinois (owner Mike Harbor, a
 journeyman, an apprentice; payroll through an outside service). It kept its books in the anchor desktop product
 until 2026-06-30 and moves to Bookflow then. Every file here is written by `tests/fakeco.py` from
-`tests/fakeco_data.py`; `tests/test_fakeco_fit.py` checks that the files are exactly what the generator writes.
+`tests/fakeco_data.py`; `tests/test_fakeco_fit.py` checks that the files are exactly what the generator writes,
+and keeps July in Bookflow through `tests/fakeco_replay.py` to compare the books with the key.
 
 Regenerate after changing either module:
 
@@ -34,7 +35,8 @@ Funds, three outstanding checks and a deposit in transit, two card charges not y
 
 `2026-07/`: the owner's paperwork for each week (`paperwork-2026-07-week-1.txt` to `-5`), the checking
 statement as OFX and CSV (the CSV newest first, with running balances), the savings statement and the Visa
-card's transactions as CSV. `2026-08/` and `2026-09/` carry one shorter paperwork file each and the same
+card's transactions as CSV, and the card statement's summary box (`visa-2026-07-summary.txt`), since a card's
+CSV download carries no balance. `2026-08/` and `2026-09/` carry one shorter paperwork file each and the same
 statements. Statements show exactly what the paperwork describes, as the bank and card company posted it,
 plus what only a statement knows: the monthly service fee and interest.
 

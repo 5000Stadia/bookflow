@@ -442,6 +442,25 @@ def bank_csv(books: F.Books, account: str, first: date, last: date, beginning: i
     return (CRLF.join(out) + CRLF).encode("ascii"), balance
 
 
+def card_summary(books: F.Books, first: date, last: date, beginning: int) -> bytes:
+    """The statement's summary box, which a card's CSV download leaves out."""
+    lines = statement_lines(books, "Visa Business Card", first, last)
+    payments = sum(m.amount for m in lines if m.kind == "payment")
+    credits = sum(m.amount for m in lines if m.kind == "credit")
+    purchases = sum(m.amount for m in lines if m.kind == "charge")
+    ending = beginning + payments + credits + purchases
+    due = F.next_business_day(last + timedelta(days=25))
+    out = ["Cedar Prairie Bank Visa Business, account ending 9012", "Harbor Electric LLC",
+           f"Statement closing date {F.us(last)}", "",
+           f"Previous balance        {F.qb_money(beginning):>12}",
+           f"Payments                {F.qb_money(payments):>12}",
+           f"Other credits           {F.qb_money(credits):>12}",
+           f"Purchases               {F.qb_money(purchases):>12}",
+           f"New balance             {F.qb_money(ending):>12}", "",
+           f"Payment due date {F.us(due)}. Transactions are in the CSV download for this period."]
+    return (CRLF.join(out) + CRLF).encode("ascii")
+
+
 def card_csv(books: F.Books, first: date, last: date, beginning: int) -> tuple[bytes, int]:
     lines = statement_lines(books, "Visa Business Card", first, last)
     owed, rows = beginning, []
@@ -703,6 +722,8 @@ def render() -> dict[str, bytes]:
         files[folder + f"savings-{month_end:%Y-%m}.csv"] = savings
         card, card_end = card_csv(books, first, month_end, beginning["Visa Business Card"])
         files[folder + f"visa-{month_end:%Y-%m}.csv"] = card
+        files[folder + f"visa-{month_end:%Y-%m}-summary.txt"] = card_summary(books, first, month_end,
+                                                                            beginning["Visa Business Card"])
         beginning = {"Checking": ending, "Savings": savings_end, "Visa Business Card": card_end}
         month_events = [ev for ev in books.events if first <= F.day(ev["date"]) <= month_end
                         and ev["kind"] not in ("bank_charge", "bank_interest")]

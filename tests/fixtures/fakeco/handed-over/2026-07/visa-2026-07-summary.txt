@@ -1,0 +1,11 @@
+Cedar Prairie Bank Visa Business, account ending 9012
+Harbor Electric LLC
+Statement closing date 07/31/2026
+
+Previous balance            2,486.17
+Payments                   -2,486.17
+Other credits                 -38.97
+Purchases                   1,520.62
+New balance                 1,481.65
+
+Payment due date 08/25/2026. Transactions are in the CSV download for this period.
