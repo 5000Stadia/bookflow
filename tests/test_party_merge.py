@@ -181,3 +181,70 @@ def test_vendor_merge_shares_the_alias(client, root):
     undone = client.run("vendor unmerge", {"merged": "Summit Pipe Contracting"}, company=COMPANY, reason="two suppliers")
     assert undone["changed"]
     assert "Summit Pipe Contracting" in {row["name"] for row in client.run("vendor list", {}, company=COMPANY)["items"]}
+
+
+def _named_everywhere(client, kind):
+    """One document of every kind that can name a party, each naming a fresh duplicate entry.
+    Returns the duplicate's id and the kinds made, one document each."""
+    run = lambda command, body, **kw: client.run(command, body, company=COMPANY, **kw)
+    account = lambda name, kind_: run("account create", {"name": name, "type": kind_})["id"]
+    if kind == "customer":
+        income = account("Merge Count Income", "income")
+        nontaxable = next(c["id"] for c in run("sales-tax-code list", {})["items"] if c["code"] == "Non")
+        dup = run("customer create", {"name": "Merge Count Duplicate", "sales_tax_code_id": nontaxable})["id"]
+        item = run("item create", {"name": "Merge Count Service", "type": "service", "sales_enabled": True,
+                                   "description": "Service", "price": "100.00", "income_account_id": income,
+                                   "sales_tax_code_id": nontaxable})["id"]
+        lines = [{"item": item, "quantity": "1", "unit_price": "100.00"}]
+        named = {"name_type": "customer", "name_id": dup}
+        invoice = run("invoice post", {"number": "MC-1", "date": "2027-03-03", "customer": dup, "lines": lines})
+        run("sales-receipt post", {"number": "MC-2", "date": "2027-03-04", "customer": dup,
+                                   "deposit_to": "Checking", "payment_method": "Check", "lines": lines})
+        run("credit-memo post", {"date": "2027-03-05", "customer": dup, "lines": lines}, reason="Returned")
+        cash = next(r["id"] for r in run("payment-method list", {})["items"] if r["kind"] == "cash")
+        run("payment receive", {"customer": dup, "date": "2027-03-06", "amount": "40.00", "payment_method": cash,
+                                "operation_key": "merge-count-payment",
+                                "applications": {"mode": "inline", "items": [
+                                    {"invoice": invoice["id"], "expected_version": invoice["version"],
+                                     "amount": "40.00"}]}}, reason="Paid part")
+        run("journal post", {"number": "MC-J", "date": "2027-03-07", "lines": [
+            {"account": "Checking", "side": "debit", "amount": "10.00"},
+            {"account": income, "side": "credit", "amount": "10.00", **named}]})
+        run("check post", {"account": "Checking", "date": "2027-03-08", "number": "7001", "amount": "5.00",
+                           "pay_to": named, "expenses": [{"account": income, "amount": "5.00"}]}, reason="Refund")
+        run("register post", {"account": "Checking", "date": "2027-03-09", "direction": "increase",
+                              "amount": "7.00", "payee": named,
+                              "allocations": [{"account": income, "amount": "7.00"}]})
+        return dup, {"invoice", "sales_receipt", "credit_memo", "payment", "journal", "check", "register"}
+    expense = account("Merge Count Supplies", "expense")
+    dup = run("vendor create", {"name": "Merge Count Elec. Supply"})["id"]
+    named = {"name_type": "vendor", "name_id": dup}
+    spend = lambda amount: [{"account": expense, "amount": amount}]
+    run("card-charge post", {"account": "Business Credit Card", "date": "2027-03-03", "amount": "36.48",
+                             "pay_to": named, "expenses": spend("36.48")}, reason="Card receipt")
+    run("check post", {"account": "Checking", "date": "2027-03-04", "number": "7002", "amount": "20.00",
+                       "pay_to": named, "expenses": spend("20.00")}, reason="Supplies")
+    run("register post", {"account": "Checking", "date": "2027-03-05", "direction": "decrease",
+                          "amount": "9.00", "payee": named, "allocations": spend("9.00")})
+    run("journal post", {"number": "MC-VJ", "date": "2027-03-06", "lines": [
+        {"account": expense, "side": "debit", "amount": "3.00", **named},
+        {"account": "Checking", "side": "credit", "amount": "3.00"}]})
+    # A bill and a vendor credit for the same amount leave no open payable to refuse the merge.
+    run("bill post", {"number": "MC-B1", "date": "2027-03-07", "due_date": "2027-04-07", "vendor": dup,
+                      "expenses": spend("50.00")})
+    run("vendor-credit post", {"date": "2027-03-08", "vendor": dup, "expenses": spend("50.00")}, reason="Return")
+    run("purchase-order post", {"vendor": dup, "date": "2027-03-09", "number": "MC-PO",
+                                "lines": [{"account": expense, "description": "Wire", "amount": "12.00"}]},
+        reason="Order wire")
+    return dup, {"card_charge", "check", "register", "journal", "bill", "vendor_credit", "purchase_order"}
+
+
+@pytest.mark.parametrize("kind, into", [("customer", SURVIVOR), ("vendor", "Lakeview Pipe Supply")])
+def test_preview_counts_every_document_that_names_the_duplicate(client, kind, into):
+    """A party kept on a line or register entry (a card receipt's payee) is history the reports
+    fold into the survivor, so the merge counts it too: one per document, each kind once."""
+    dup, made = _named_everywhere(client, kind)
+    preview = client.run(f"{kind} merge", {"merged": dup, "into": into}, company=COMPANY,
+                         reason="same entry twice", dry_run=True)
+    counted = {row["type"]: row["count"] for row in preview["documents"]}
+    assert preview["document_count"] == sum(counted.values()) == len(made), counted

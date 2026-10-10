@@ -96,18 +96,51 @@ def require_person(s, kind: str, verb: str = "merge") -> None:
 
 # --- what moves -------------------------------------------------------------------------
 
+# Every stored party reference a read resolves to the survivor through ``survivor_sql``, as
+# (document id, party kind, party id). A document belongs to the merge when any of them names
+# the merged entry: its header, an entered line, a posting line (a card charge or register
+# entry keeps its payee there), a receipt or credit's component key, a sale's or purchase's
+# profile, or a payable key. The preview counts from the same places the reports resolve, so
+# the two never disagree. Purchase orders are their own table and are counted beside these.
+_REFERENCES = """
+ SELECT r.transaction_id AS tx, r.name_type AS kind, r.name_id AS party FROM transaction_revisions r
+   JOIN transactions t ON t.current_revision_id=r.id
+ UNION ALL SELECT d.transaction_id, d.name_type, d.name_id FROM document_lines d
+   JOIN transactions t ON t.current_revision_id=d.revision_id
+ UNION ALL SELECT l.transaction_id, l.name_type, l.name_id FROM posting_lines l
+ UNION ALL SELECT transaction_id, 'customer', party_id FROM payment_component_keys
+ UNION ALL SELECT transaction_id, 'customer', party_id FROM credit_source_keys
+ UNION ALL SELECT p.transaction_id, 'customer', p.customer_id FROM sales_profiles p
+   JOIN transactions t ON t.current_revision_id=p.revision_id
+ UNION ALL SELECT transaction_id, 'vendor', vendor_id FROM ap_obligation_keys
+ UNION ALL SELECT transaction_id, 'vendor', vendor_id FROM ap_source_keys
+"""
+
+
+def _document_ids_sql() -> str:
+    """Distinct ids of the documents that name ``:party`` of kind ``:kind`` anywhere."""
+    return f"SELECT DISTINCT tx FROM ({_REFERENCES}) WHERE kind=:kind AND party=:party"
+
+
 def _documents(db, kind: str, party_id: str) -> dict[str, int]:
-    """Documents whose current revision names the entry, counted by type."""
-    rows = db.raw.execute("""SELECT t.type, count(*) FROM transactions t
-        JOIN transaction_revisions r ON r.id=t.current_revision_id
-        WHERE r.name_type=? AND r.name_id=? GROUP BY t.type ORDER BY t.type""", (kind, party_id)).fetchall()
-    return {str(kind_): int(n) for kind_, n in rows}
+    """Documents that name the entry anywhere a read resolves it to a survivor, counted by type."""
+    params = {"kind": kind, "party": party_id}
+    rows = db.raw.execute(f"""SELECT t.type, count(*) FROM transactions t
+        WHERE t.id IN ({_document_ids_sql()}) GROUP BY t.type""", params).fetchall()
+    counts = {str(kind_): int(n) for kind_, n in rows}
+    if kind == "vendor":
+        orders = db.raw.execute("""SELECT count(*) FROM purchase_orders o
+            JOIN purchase_order_revisions r ON r.id=o.current_revision_id
+            WHERE r.vendor_id=:party""", params).fetchone()[0]
+        if orders:
+            counts["purchase_order"] = int(orders)
+    return dict(sorted(counts.items()))
 
 
 def _currencies(db, kind: str, party_id: str) -> set[str]:
-    rows = db.raw.execute("""SELECT DISTINCT r.currency FROM transactions t
+    rows = db.raw.execute(f"""SELECT DISTINCT r.currency FROM transactions t
         JOIN transaction_revisions r ON r.id=t.current_revision_id
-        WHERE r.name_type=? AND r.name_id=?""", (kind, party_id)).fetchall()
+        WHERE t.id IN ({_document_ids_sql()})""", {"kind": kind, "party": party_id}).fetchall()
     return {str(r[0]) for r in rows}
 
 
