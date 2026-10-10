@@ -76,7 +76,8 @@ class BillPayInput(_Input):
     class_id: _Selector | None = None
     discount_account: _Selector | None = Field(default=None, description=(
         'Account credited for any discount taken; defaults to the company vendor discount account, '
-        'else "Discounts Taken", which is created as an income account if the chart lacks it.'))
+        'else an active account named "Discounts Taken"; with none of these the payment is refused '
+        'and the error lists the discount accounts in the chart (nothing is created).'))
 
     @model_validator(mode='after')
     def one_row_per_bill(self) -> Self:

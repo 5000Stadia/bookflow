@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from bookflow.core.registry import Plan, command
 from bookflow.company.cutover_models import (
-    CutoverApplyInput, CutoverApplyOutput, CutoverPlanOutput, CutoverTieOutInput, CutoverTieOutOutput,
+    CutoverApplyInput, CutoverApplyOutput, CutoverPlanInput, CutoverPlanOutput, CutoverTieOutInput, CutoverTieOutOutput,
 )
 
 _FILES = (" The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) "
@@ -23,8 +23,10 @@ _FILES = (" The files are the old books' exports: IIF list exports (chart of acc
                       "invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. "
                       "Reads the export files and returns what a move-in at the cutover date would make: the "
                       "resolved mapping of every account, customer, vendor, item and term, every write in order, the "
-                      "opening journal, the tie checks and every exception. Writes nothing." + _FILES),
-         input_model=CutoverApplyInput, output_model=CutoverPlanOutput,
+                      "opening journal, the tie checks and every exception. Writes nothing. A long plan can be read in pages: "
+                      "pass `limit`, and while `has_more` is true pass `next_cursor` back as `cursor` with the same input; "
+                      "the counts, blocking lines, exceptions and checks always cover the whole plan." + _FILES),
+         input_model=CutoverPlanInput, output_model=CutoverPlanOutput,
          error_codes=["E_RECORD_NOT_FOUND", "E_IO", "E_DB_BUSY"])
 def plan_cutover(inp, ctx, s):
     from bookflow.company import cutover

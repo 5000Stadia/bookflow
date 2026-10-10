@@ -78,7 +78,7 @@ def gaps(s, snapshot, draft):
     if lines is None:
         return None
     cutoff = draft.header.statement_date or draft.header.opening_date
-    ticked = [v for v in candidates(snapshot, draft.account_id, cutoff, draft) if v.selected]
+    ticked = [v for v in candidates(snapshot, draft.account_id, cutoff, draft, s.company.conn) if v.selected]
     return files.cleared_without_line(lines, ticked, suggest_days=window)
 
 

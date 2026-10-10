@@ -49,7 +49,9 @@ Read the plan's `summary` and `blocking` (one line per blocking exception, kept 
 result) first, fix and plan again until `ready` is true, then apply. `clearing.parts` in the plan and
 in apply show what each part posts to the clearing account, so the two reconcile. Files can be planned
 in pieces; apply needs the trial balance with all of them. [Moving a company in](cutover.md) lists
-the exports and each step, with the worked example in full.
+the exports and each step, with the worked example in full. A long plan reads in pages: pass `limit`
+(and the same input), and while `has_more` is true pass `next_cursor` back as `cursor`; the counts,
+`blocking`, exceptions and checks always cover the whole plan.
 
 Give the rest of the old books with the same call when the owner has them: each bank and card
 account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail, Cleared:
