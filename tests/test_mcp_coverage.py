@@ -42,7 +42,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 customer and vendor merge and unmerge (R117).
     # +1 payment bounce (R176).
     # +1 vendor 1099-opening (R179).
-    assert len(rows) == 529
+    # +1 attachment text (R170 blind July: a statement's summary box read over MCP).
+    assert len(rows) == 530
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -211,7 +212,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # group, the MoneyInput's own optional amount, and expected_version's null branch). cutover plan and apply stay
     # at 6 and tie-out at 5 (a file's kind gains three literal values, not a node); reconcile start stays at 4.
     # Re-measured on the merged tree (R176/R177 + R178 + R179): 2933 + 10 + 19 + 3 = 2965.
-    assert sum(len(group["paths"]) for group in mapped)==2965
+    # 2965 -> 2967 (R170 blind July fixes), measured per command on both trees: reconcile import 5 -> 7, the null
+    # branches of its new optional limit and cursor (a long statement read in pages). attachment text, a new
+    # command, adds none: its one input, the attachment id, is required, as attachment get's is (0 nodes).
+    # No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2967
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

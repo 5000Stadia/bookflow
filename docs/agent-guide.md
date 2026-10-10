@@ -605,6 +605,15 @@ suggested, unmatched (enter it, then import again) or already reconciled. Import
 what the statement shows; nothing already true is repeated. Then `reconcile preview` and
 `reconcile finish`.
 
+A long statement can be read in pages: pass `limit`, and while `has_more` is true pass `next_cursor`
+back as `cursor` with the same file. The counts, the ticking and `cleared_without_line` always cover
+the whole file, whichever page you read.
+
+A statement's summary box (its closing date and new balance) often comes as a separate text file. It is
+not a statement file and `reconcile import` refuses it. Attach it the same way and read it with
+`attachment text <attachment id>`, which returns a small text file's content (at most 64 KiB); take
+`statement_date` and `ending_balance` from what it says, never from the books.
+
 ## A reconciliation that will not tie
 
 Never force a statement to tie. `reconcile finish` with `adjustment` (a journal to

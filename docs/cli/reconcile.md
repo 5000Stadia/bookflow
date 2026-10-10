@@ -493,6 +493,8 @@ The same example as complete `bookflow_run` arguments:
 | `suggest_days` | `--suggest-days` | integer | no | no | 14 | Days apart for a same-amount entry to be offered as a suggestion.; minimum 0; maximum 120 |
 | `mapping_name` | `--mapping-name` | string | no | no | "" | Use the CSV mapping saved under this name for the account; columns given in csv_mapping override it.; maximum length 80 |
 | `save_mapping` | `--save-mapping` | string | no | no | "" | Save the CSV mapping used for this import under this name for the account (a newer save of a name replaces it for later use).; maximum length 80 |
+| `limit` | `--limit` | integer \| null | no | yes | null | Statement lines to return in this result, from the cursor on; omitted, every line comes back. The counts, the ticking and cleared_without_line always cover the whole file. |
+| `cursor` | `--cursor` | string \| null | no | yes | null | next_cursor from an earlier import of the same file on the same account: the lines after those it returned. |
 
 ### Command and context options
 
@@ -635,6 +637,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `cleared_without_line[].number` | string | yes | no | — | — |
 | `cleared_without_line[].payees` | array[string] | yes | no | — | — |
 | `cleared_without_line[].memo` | string \| null | yes | yes | — | — |
+| `has_more` | boolean | no | no | false | More lines follow this page: pass next_cursor as cursor, with the same file, for them. |
+| `next_cursor` | string \| null | no | yes | null | The cursor for the lines after this page; null on the last page. |
 | `next_step` | string | yes | no | — | — |
 
 Example JSON output:
@@ -659,7 +663,9 @@ Example JSON output:
   "draft_started": false,
   "ending_balance": null,
   "format": "ofx",
+  "has_more": false,
   "lines": [],
+  "next_cursor": null,
   "next_step": "value",
   "statement_date": null
 }
