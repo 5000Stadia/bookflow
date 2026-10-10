@@ -165,14 +165,24 @@ def invoices(s, inp):
         _discount_terms(s, out['items'], context)
     else:
         out['items'] = []
-    return dict(out, **balances)
+    return dict(out, **balances, available_credits=available_credits(s, context))
+
+
+def available_credits(s, context):
+    """The customer's open credit memos, surfaced where a payment is prepared: a receipt never uses
+    them, and an agent applying one through `payment apply` is told nothing otherwise."""
+    from bookflow.company.credits import open_credits
+    return [dict(credit_memo_id=row['id'], number=row['number'], date=row['date'],
+                 available=Money(row['available_minor_units'], row['currency']).to_dict(), next='customer-credit apply')
+            for row in open_credits(s, context['customer_id'])]
 
 
 def suggest(s, inp):
     context, rows, strategy, rendered, remaining, amount = choose(s, inp)
     lineage = lineage_facts(s, [context['customer_id'], *(row.customer_id for row in rows)])
     return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered, lineage]),
-        amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[])
+        amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[],
+        available_credits=available_credits(s, context))
 
 
 def choose(s, inp):

@@ -1236,6 +1236,41 @@ def _page_worth(s, headers):
     return worth
 
 
+def available_expression(t):
+    """What a credit memo row of ``t`` (transactions) is still worth: capacity less applications less refunds."""
+    app, inverse = c.applications, c.applications.alias('filter_apply_inverse')
+    use, release = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('filter_release')
+    component, key = c.credit_components, c.credit_source_keys
+    held = sa.select(sa.func.coalesce(sa.func.sum(component.c.amount_minor_units), 0)).where(
+        component.c.transaction_id == t.c.id, component.c.revision_id == t.c.current_revision_id
+    ).scalar_subquery()
+    spent = sa.select(sa.func.coalesce(sa.func.sum(app.c.amount_minor_units), 0)).where(
+        app.c.kind == 'apply', app.c.paying_transaction_id == t.c.id,
+        ~sa.exists(sa.select(inverse.c.id).where(
+            inverse.c.reverses_application_id == app.c.id))).scalar_subquery()
+    paid = sa.select(sa.func.coalesce(sa.func.sum(use.c.amount_minor_units), 0)).select_from(
+        use.join(key, key.c.id == use.c.credit_source_key_id)).where(
+        key.c.transaction_id == t.c.id, use.c.kind == 'consume',
+        ~sa.exists(sa.select(release.c.id).where(
+            release.c.reverses_consumption_id == use.c.id))).scalar_subquery()
+    return held - spent - paid
+
+
+def open_credits(s, customer_id):
+    """The customer's posted credit memos with money left, oldest first: what the anchor's Receive
+    Payments shows under Discounts & Credits. Each is applied with `customer-credit apply`."""
+    t, r, p = c.transactions, c.transaction_revisions, c.credit_profiles
+    worth = available_expression(t).label('available_minor_units')
+    query = (sa.select(t.c.id, t.c.number, r.c.date, r.c.currency, worth).select_from(
+        t.join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id))
+        .where(t.c.type == DOCUMENT_TYPE, t.c.status == 'posted', p.c.customer_id == customer_id,
+               available_expression(t) > 0).order_by(r.c.date, t.c.id))
+    if sa.inspect(s.company.conn).has_table('credit_deletions'):
+        query = query.where(~sa.exists(sa.select(c.credit_deletions.c.transaction_id).where(
+            c.credit_deletions.c.transaction_id == t.c.id)))
+    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+
+
 def query_page(s, ctx, inp):
     """Page credit memos, newest or oldest first, with what each is still worth."""
     from bookflow.company import accounts
@@ -1276,22 +1311,7 @@ def query_page(s, ctx, inp):
     if inp.available_only:
         # Capacity less applications less consumptions, in SQL, so the filter happens before
         # the page rather than after it -- the same arithmetic `_page_worth` reports.
-        app, inverse = c.applications, c.applications.alias('filter_apply_inverse')
-        use, release = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('filter_release')
-        component, key = c.credit_components, c.credit_source_keys
-        held = sa.select(sa.func.coalesce(sa.func.sum(component.c.amount_minor_units), 0)).where(
-            component.c.transaction_id == t.c.id, component.c.revision_id == t.c.current_revision_id
-        ).scalar_subquery()
-        spent = sa.select(sa.func.coalesce(sa.func.sum(app.c.amount_minor_units), 0)).where(
-            app.c.kind == 'apply', app.c.paying_transaction_id == t.c.id,
-            ~sa.exists(sa.select(inverse.c.id).where(
-                inverse.c.reverses_application_id == app.c.id))).scalar_subquery()
-        paid = sa.select(sa.func.coalesce(sa.func.sum(use.c.amount_minor_units), 0)).select_from(
-            use.join(key, key.c.id == use.c.credit_source_key_id)).where(
-            key.c.transaction_id == t.c.id, use.c.kind == 'consume',
-            ~sa.exists(sa.select(release.c.id).where(
-                release.c.reverses_consumption_id == use.c.id))).scalar_subquery()
-        query = query.where(t.c.status == 'posted', held - spent - paid > 0)
+        query = query.where(t.c.status == 'posted', available_expression(t) > 0)
     found = [dict(row) for row in s.company.conn.execute(
         query.offset(state.offset).limit(inp.limit + 1)).mappings()]
     more, found = len(found) > inp.limit, found[:inp.limit]

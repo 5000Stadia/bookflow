@@ -76,7 +76,9 @@ class PaymentContext(StrictModel):
             if self.customer is None or 'payment' in self.model_fields_set:
                 raise ValueError('new_receipt requires customer and forbids payment')
         elif self.payment is None or {'customer', 'ar_account'} & self.model_fields_set:
-            raise ValueError('existing_credit requires payment and forbids customer/ar_account')
+            raise ValueError('existing_credit requires payment (a receipt holding unapplied money) and forbids '
+                             'customer/ar_account; a credit memo is not a payment: apply it to an invoice with '
+                             '`customer-credit apply`, or use mode new_receipt to see the customer\'s available_credits')
         return self
 
 

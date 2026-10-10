@@ -151,6 +151,16 @@ financial records remain unchanged. The reference annual trial balance is
 8,048,600 cents; income is 6,457,000 and net assets 7,457,000. These are active
 examples for continuation, not a reason to cancel every new record.
 
+## A customer's credit memos at payment time
+
+The anchor's Receive Payments shows the customer's credits under Discounts & Credits. Here a
+receipt never uses a credit memo; `payment invoices` and `payment suggest` list the customer's
+open credit memos as `available_credits` (number, date, money left), each with
+`next: customer-credit apply`. Apply one to an invoice with `customer-credit apply`
+(`credit_memo`, its `expected_version`, and each invoice with its `expected_version` and
+amount). `payment apply` and `payment suggest` in mode `existing_credit` take a receipt's
+unapplied money only; handed a credit memo, they refuse and name `customer-credit apply`.
+
 ## Early-payment discounts
 
 Terms with a discount (for example "2% 10 Net 30") make an invoice or bill discountable
