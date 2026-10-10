@@ -145,6 +145,10 @@ review cb5fcd7 (gate g96052d).
 - [~] R170 fit check on a realistic fake company (Kabe: 'numbers are numbers, you can just make a bunch of fake to test'): three months of a small trade business's records (old-books exports at a cutover, bank and card statements, the week-by-week paperwork) with an answer key; each kind of transaction marked does it, workaround or missing by replaying it through Bookflow; then an agent keeps one month of it blind, reconciles it to the statement and a person closes it
 - [x] R173 an "Ask My Accountant" home for what the agent isn't sure about: Uncategorized Expense and Income accounts, `account uncategorized`, counted on the Overview (gate gad7a1a)
 - [x] R174 a person may finish a statement that won't tie with a labelled adjustment to Reconciliation Discrepancies; agents never can (gate gad7a1a)
+- [ ] R176 a bounced customer check in one step, as the anchor's Record Bounced Check: the receipt's invoices reopen, the bank's fee comes out of the bank to an expense, and a charge back to the customer is billed (gate g55f9e5)
+- [ ] R177 write off a bad debt without cash, as the anchor does: receive payment for 0.00 with the open balance taken as a discount or credit to a Bad Debt account, by a person or an agent with a reason (gate g55f9e5)
+- [ ] R178 vendor credits with item lines: returning stock to the supplier is one document that takes the items out at the credited cost (gate g55f9e5)
+- [ ] R179 the move-in brings the rest of the old books: uncleared bank and card items and the last reconciliation (so the first one certifies), customers' sales tax items, the 1099 totals paid so far this year, and undeposited checks as receipts waiting to be deposited (gate g55f9e5)
 - [ ] R165 fixes from Kabe's live use of v1.5 and v1.6, as they arrive
 
 ## M4 — After V1.5: concepts to develop
