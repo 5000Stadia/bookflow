@@ -109,7 +109,21 @@ def show(s, inp):
     bounce = payment_bounces.live_bounces(s, [header['id']]).get(header['id'])
     return PaymentShowOutput(**dict(header, **({'status': 'deleted'} if deletion else {})), deletion=deletion,
         revision=revision_output(revision, profile), current=current_output(s, header['id']),
-        bounce=payment_bounces.on_receipt(bounce) if bounce else None)
+        bounce=payment_bounces.on_receipt(bounce) if bounce else None,
+        write_off=write_off_on_receipt(s, header['id'], revision))
+
+
+def write_off_on_receipt(s, payment_id, revision):
+    """A 0.00 receipt that took discounts wrote off a debt: say so, and to which account."""
+    if revision['total_minor_units'] != 0:
+        return None
+    rows = list(discount_rows(s, payment_id).values())
+    if not rows:
+        return None
+    account = defaults._row(s.company, 'account', rows[0]['discount_account_id'], active=False)
+    total = sum(row['amount_minor_units'] for row in rows)
+    return dict(account=defaults._ref(account), amount=Money(total, revision['currency']).to_dict(),
+                note=f"No cash — written off to {account['full_name']}")
 
 
 def revision_output(revision, profile):
@@ -317,12 +331,15 @@ def _profile(s, inp, context_, *, write_off=False):
     payer = defaults._row(s.company, 'customer', context_['customer_id'], active=not write_off)
     from bookflow.company.parties import project_party_record
     projected = project_party_record(s.company, 'customer', payer, custom_values=())
-    method = inp.payment_method or projected.get('effective_preferred_payment_method_id')
+    # A write-off moves no cash, so the customer's usual way of paying does not describe it:
+    # only a method given explicitly is recorded, otherwise the list's own "Other".
+    method = inp.payment_method or (None if write_off else projected.get('effective_preferred_payment_method_id'))
     if method is None and write_off:
         # No cash changes hands, so no method of payment is being used: the list's own "Other".
-        method = s.company.conn.execute(sa.select(c.payment_methods.c.id).where(
-            c.payment_methods.c.kind == 'other', c.payment_methods.c.active.is_(True))
-            .order_by(c.payment_methods.c.name)).scalars().first()
+        # Several methods may be of kind "other" (a Mobile Wallet is one): the one named Other first.
+        m = c.payment_methods
+        method = s.company.conn.execute(sa.select(m.c.id).where(m.c.kind == 'other', m.c.active.is_(True))
+            .order_by(sa.case((sa.func.lower(m.c.name) == 'other', 0), else_=1), m.c.name)).scalars().first()
     if method is None:
         names = _method_names(s)
         error = _invalid('payment_method', 'give payment_method, one of: ' + ', '.join(names)
@@ -442,6 +459,7 @@ def _prepare(s, ctx, inp, operation):
     audited = lambda: dict(**created(), audit_event_id=event)
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     previous, funding, custom_plan, sequence = None, None, None, None
+    write_off = False
     if operation == 'receive':
         amount = money(inp.amount, defaults._info(s.company)['home_currency'], 'amount').minor_units
         if amount < 0:
@@ -605,7 +623,9 @@ def _prepare(s, ctx, inp, operation):
                 suggested_minor_units=target['suggested'], discount_date=terms.discount_date,
                 terms_percent_millionths=terms.percent_millionths))
             discount_view['discount'] = Money(target['discount'], context_['currency']).to_dict()
-            late = early.late_warning(invoice['type'].replace('_', ' '), invoice['number'], terms, inp.date)
+            # A write-off's "discount" is the debt written off, not an early-payment discount,
+            # so whether the terms offered one is beside the point.
+            late = None if write_off else early.late_warning(invoice['type'].replace('_', ' '), invoice['number'], terms, inp.date)
             if late:
                 warnings.append(late)
         app_outputs.append(dict(application_id=app['id'], invoice_id=invoice['id'], invoice_version=changed['version'],

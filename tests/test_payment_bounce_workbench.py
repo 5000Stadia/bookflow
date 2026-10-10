@@ -57,6 +57,13 @@ def test_the_bounced_check_form_records_the_return_and_the_receipt_says_so(hoste
     assert shown["bounce"]["note"] == "bounced on 2026-07-08" and shown["bounce"]["returned"]["minor_units"] == 7500
     page = browser.get(f"/c/{hosted.company_id}/receive-payments?payment={check['id']}", headers=HEADERS)
     assert page.status_code == 200
+    # The receipt's own page, where the form lands, says it bounced and how to undo it.
+    detail = browser.get(f"/c/{hosted.company_id}/payment/{check['id']}", headers=HEADERS)
+    assert detail.status_code == 200
+    text = re.sub(r"<[^>]+>", "", detail.text)
+    assert 'id="payment-bounce"' in detail.text and "Bounced on" in text and "Bank returned check 311" in text
+    assert "75.00" in text and "10.00" in text and f"/customer-refund/{shown['bounce']['refund_id']}" in detail.text
+    assert "void the returned-check refund" in text
 
 
 def test_an_agent_records_the_return_over_http_under_the_existing_role_rules(hosted):

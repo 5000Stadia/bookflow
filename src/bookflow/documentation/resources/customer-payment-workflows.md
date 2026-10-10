@@ -219,6 +219,10 @@ that is waived a discount account such as Sales Discounts; it is never defaulted
   debt does it with `sales-tax adjust`.
 - A customer who has been made inactive can be written off without being reactivated; the
   customer stays inactive.
+- No cash moves, so no method is used: the receipt records the list's Other method unless
+  `payment_method` is given (the customer's preferred method is not taken), and no
+  early-payment-terms warning is given. `payment show` carries `write_off` ("No cash — written
+  off to Bad Debt") in place of a deposit account; the receipt is never deposited.
 - A partial write-off is a receipt with some cash and a discount to an expense account, or a
   0.00 receipt for part of an invoice; the rest stays due.
 - To reverse a write-off, `payment unapply` it and `payment void` it, as any receipt. It is
