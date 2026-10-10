@@ -176,8 +176,9 @@ through its discount date. `payment invoices` rows carry `discount_date` and
   or check total stays the cash.
 - The discount account is `discount_account` on the command, else the company
   `customer_discount_account_id` / `vendor_discount_account_id`, else the active account
-  named "Discounts Given" / "Discounts Taken", else that account is created as an income
-  account in the same write.
+  named "Discounts Given" / "Discounts Taken". With none of those the write is refused
+  with `E_VALIDATION` on `discount_account`, listing the discount-like accounts in the
+  chart (the anchor asks which discount account); nothing is created.
 - `payment unapply` / `bill payment unapply` of a discounted settlement leaves the
   discount with the payment as unapplied credit (customer) or unapplied debit (vendor).
   A void or deletion reverses the discount posting with the rest of the payment. A

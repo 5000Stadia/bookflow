@@ -20,8 +20,9 @@ discount can still be entered then, and the output warns that it is late.
 
 **Where the account comes from.** An explicit account on the command, else the company
 preference (``customer_discount_account_id`` / ``vendor_discount_account_id``), else an active
-account already named "Discounts Given" / "Discounts Taken", else that account is created in
-the chart, as an income account, in the same write.
+account already named "Discounts Given" / "Discounts Taken". With none of those the payment is
+refused on ``discount_account`` (E_VALIDATION), listing the discount-like accounts in the chart:
+the anchor's Pay Bills and Receive Payments ask which discount account, and nothing is created.
 """
 from __future__ import annotations
 
@@ -39,8 +40,8 @@ from bookflow.core.errors import BookflowError
 WHOLE = 100_000_000
 DISCOUNT_ACCOUNT_TYPES = frozenset({'income', 'other_income', 'expense', 'other_expense', 'cost_of_goods_sold'})
 SIDES = {
-    'customer': dict(name='Discounts Given', type='income', preference='customer_discount_account_id'),
-    'vendor': dict(name='Discounts Taken', type='income', preference='vendor_discount_account_id'),
+    'customer': dict(name='Discounts Given', preference='customer_discount_account_id'),
+    'vendor': dict(name='Discounts Taken', preference='vendor_discount_account_id'),
 }
 
 
@@ -136,11 +137,11 @@ def validate_preference(db, field, account_id):
 
 
 def resolve_account(s, ctx, side, selector, *, at, field='discount_account'):
-    """The account a discount posts to, and the account row to create first when there is none.
+    """The account a discount posts to.
 
     Returns ``(facts, created)``. ``facts`` is the captured account shape a posting line carries;
-    ``created`` is the new chart row when nothing named the account, no preference is set and the
-    default account does not exist yet -- the write inserts it before its postings.
+    ``created`` is always ``None`` now (kept so callers' create-before-post plumbing stays inert):
+    with no account named, no preference and no default-named account, the payment is refused.
     """
     spec = SIDES[side]
     db = s.company
@@ -157,9 +158,28 @@ def resolve_account(s, ctx, side, selector, *, at, field='discount_account'):
         c.accounts.c.full_name_key == key, c.accounts.c.active.is_(True))).mappings()]
     if found:
         return _account_facts(_usable(found[0], field, home)), None
-    mutation = accounts.plan_account_create(db, {'name': spec['name'], 'type': spec['type']},
-                                            actor_id=s.actor.id, via=ctx.interface.value, at=at)
-    return _account_facts(mutation.after), mutation
+    raise _invalid(field, _missing_account_problem(db, side, spec, home))
+
+
+def _missing_account_problem(db, side, spec, home):
+    """The anchor's Pay Bills / Receive Payments asks which discount account; so does this.
+
+    Nothing is created: the refusal names the field, the company preference that would answer
+    it for every later payment, and the discount-like accounts already in the chart.
+    """
+    rows = db.conn.execute(sa.select(c.accounts.c.full_name).where(
+        c.accounts.c.active.is_(True), c.accounts.c.type.in_(sorted(DISCOUNT_ACCOUNT_TYPES)),
+        c.accounts.c.currency == home).order_by(c.accounts.c.full_name)).scalars().all()
+    candidates = [name for name in rows if 'discount' in name.lower()]
+    command = 'payment receive' if side == 'customer' else 'bill pay'
+    problem = (f'name the account this {side} discount posts to with discount_account on {command}, or set '
+               f'the company preference {spec["preference"]} (company update)')
+    if candidates:
+        problem += '; discount accounts in the chart: ' + ', '.join(f'"{name}"' for name in candidates)
+    else:
+        problem += '; the chart has no account named like a discount account yet (account create one, '
+        problem += 'as an income, expense or cost of goods sold account)'
+    return problem
 
 
 def account_identity(facts, created):
