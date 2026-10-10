@@ -40,7 +40,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 sales-tax adjust and sales-tax adjustment show, query and void (R175).
     # +2 journal restore and invoice restore (R151).
     # +4 customer and vendor merge and unmerge (R117).
-    assert len(rows) == 527
+    # +1 vendor 1099-opening (R179).
+    assert len(rows) == 528
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -193,7 +194,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # all required or context, so no optional branch is new. Re-measured on the merged tree: still 2931.
     # 2931 -> 2933: reconcile import 3 -> 5. It reads a statement kept as an attachment, so `content` is now
     # optional (+1, its null branch) and `attachment` is a new optional string (+1, its null branch).
-    assert sum(len(group["paths"]) for group in mapped)==2933
+    # 2933 -> 2936 (R179), measured per command: vendor 1099-opening 3 (its required amount's string|MoneyInput
+    # group, the MoneyInput's own optional amount, and expected_version's null branch). cutover plan and apply stay
+    # at 6 and tie-out at 5 (a file's kind gains three literal values, not a node); reconcile start stays at 4.
+    assert sum(len(group["paths"]) for group in mapped)==2936
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

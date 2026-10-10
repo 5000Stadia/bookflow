@@ -188,3 +188,194 @@ def test_the_rest_of_the_old_books_moves_in_ties_out_and_reruns_to_nothing(tmp_p
                  for row in waiting])))
     rows = run("report trial-balance", dict(date_to="2026-07-01", limit=200))["rows"]
     assert sum(row["signed_net"]["minor_units"] for row in rows if row["display_account_label"].endswith("Undeposited Funds")) == 0
+
+
+@pytest.mark.timeout(900)
+def test_without_the_new_files_the_banks_come_in_as_one_amount_and_undeposited_funds_as_one_receipt(tmp_path, monkeypatch):
+    harbor = _harbor(tmp_path, monkeypatch)
+    run = harbor.run
+    files = harbor.attach(CORE)
+    plan = run("cutover plan", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
+    assert plan["ready"], plan["blocking"]
+    lumps = next(e["problem"] for e in plan["exceptions"] if e["code"] == "no_reconciliation")
+    assert all(name in lumps for name in ("Checking", "Petty Cash", "Savings", "Visa Business Card"))
+    lines = {(line["account"], line["side"]): line["amount"]["minor_units"] for line in plan["journal"]["lines"]}
+    assert (lines[("Checking", "debit")], lines[("Visa Business Card", "credit")]) == (2000449, 257385)  # the trial balance's
+    counts = _counts(plan)
+    assert "uncleared_item" not in counts and "reconciliation_opening" not in counts and "vendor_1099_opening" not in counts
+    # Undeposited Funds is one receipt Make Deposits picks whole, not a journal line it cannot.
+    assert counts["undeposited_receipt"] == (1, 0, 0) and not any(account == "Undeposited Funds" for account, _ in lines)
+    assert ("warning", "undeposited_funds") in _codes(plan)
+    run("cutover apply", dict(as_of=AS_OF, files=files, mappings=MAPPINGS), reason="Move in from the old books")
+    tie = run("cutover tie-out", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
+    assert tie["tied"], tie["summary"]
+    assert tie["bank"]["rows"] == [] and tie["vendor_1099"]["rows"] == []
+    waiting = run("deposit sources", dict(date="2026-07-01"))["items"]
+    assert [(row["received_from"], row["amount"]["minor_units"]) for row in waiting] == [("Opening balance", 166200)]
+
+
+_JUNE_27 = '''"Harbor Electric LLC"
+"Reconciliation Summary"
+"1000 · Checking, Period Ending 06/27/2026"
+,,,"Jun 27, 26"
+"Beginning Balance",,,"18,402.77"
+,"Cleared Transactions",,
+,,"Checks and Payments - 38 items","-41,522.14"
+,,"Deposits and Credits - 14 items","44,723.49"
+,"Total Cleared Transactions",,"3,201.35"
+"Cleared Balance",,,"21,604.12"
+,"Uncleared Transactions",,
+,,"Checks and Payments - 1 item","-2,906.33"
+,"Total Uncleared Transactions",,"-2,906.33"
+"Register Balance as of 06/27/2026",,,"18,697.79"
+,"New Transactions",,
+,,"Checks and Payments - 2 items","-1,008.90"
+,,"Deposits and Credits - 1 item","2,315.60"
+,"Total New Transactions",,"1,306.70"
+"Ending Balance",,,"20,004.49"
+'''
+
+
+@pytest.mark.timeout(900)
+def test_a_statement_ending_before_the_cutover_opens_the_first_reconciliation_on_its_own_date(tmp_path, monkeypatch):
+    harbor = _harbor(tmp_path, monkeypatch)
+    run = harbor.run
+    files = harbor.attach(CORE + ("uncleared_2026-06-30.csv",)) + [{"content": _JUNE_27, "name": "checking_summary.csv"}]
+    plan = run("cutover plan", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
+    assert plan["ready"], plan["blocking"]
+    # The statement's balance is dated the statement's own day, as the anchor's opening balance is; the checks
+    # and deposit after it are new transactions the first reconciliation clears.
+    statement = next(step for step in plan["steps"] if step["outside_id"] == "journal:statement:2026-06-27")
+    assert (statement["date"], statement["action"]) == ("2026-06-27", "create")
+    opening = next(step for step in plan["steps"] if step["kind"] == "reconciliation_opening")
+    assert opening["date"] == "2026-06-27" and "1 uncleared item outstanding" in opening["detail"]
+    applied = run("cutover apply", dict(as_of=AS_OF, files=files, mappings=MAPPINGS), reason="Move in from the old books")
+    tie = run("cutover tie-out", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
+    assert tie["tied"], tie["summary"]
+    checking, = [row for row in tie["bank"]["rows"] if row["name"] == "Checking"]
+    assert (checking["statement_date"], checking["opening"], checking["opening_proven"]) == ("2026-06-27", "draft", True)
+    draft = run("reconcile start", dict(operation_key=new_id(), account="Checking", statement_date="2026-07-25",
+                                        ending_balance="100.00"))["draft"]
+    totals = run("reconcile preview", dict(draft=draft["id"], expected_version=draft["version"]))["totals"]
+    assert totals["beginning_balance"] == 2160412 and applied["created"] > 0
+
+
+@pytest.mark.timeout(900)
+def test_files_that_disagree_with_the_trial_balance_or_the_cutover_block_the_move_in(tmp_path, monkeypatch):
+    harbor = _harbor(tmp_path, monkeypatch)
+    run = harbor.run
+    core = harbor.attach(CORE)
+    summaries = harbor.attach(SUMMARIES)
+    plan = lambda *extra: run("cutover plan", dict(as_of=AS_OF, files=core + list(extra), mappings=MAPPINGS))
+    blocking = lambda result: {e["code"] for e in result["exceptions"] if e["severity"] == "blocking"}
+    # The June summaries say checks and charges were uncleared and no uncleared items were given.
+    missing = plan(*summaries)
+    assert not missing["ready"] and blocking(missing) == {"missing_uncleared_items"}
+    # The uncleared items without the deposit in transit (totals made to match): checking no longer ties.
+    short = (_text("uncleared_2026-06-30.csv").replace(',,"Deposit","06/30/2026",,,"Bella Notte 1622.40, Patel 693.20",,"2,315.60","-1,599.63"\r\n', '')
+             .replace('"Total 1000 · Checking",,,,,,,,"-1,599.63","-1,599.63"', '"Total 1000 · Checking",,,,,,,,"-3,915.23","-3,915.23"')
+             .replace('"TOTAL",,,,,,,,"-1,687.31","-1,687.31"', '"TOTAL",,,,,,,,"-4,002.91","-4,002.91"'))
+    untied = plan(*summaries, {"content": short, "name": "uncleared.csv"})
+    assert blocking(untied) == {"uncleared_do_not_tie"} and "Checking" in untied["blocking"][0]
+    # A receipt retyped: Undeposited Funds no longer ties.
+    retyped = _text("undeposited_funds_2026-06-30.csv").replace("1,249.13", "1,249.31").replace("1,662.00", "1,662.18")
+    assert blocking(plan({"content": retyped, "name": "undeposited.csv"})) == {"undeposited_do_not_tie"}
+    # A 1099 Summary that stops a month short of the cutover.
+    may = _text("vendor_1099_summary_2026-06.csv").replace("January through June 2026", "January through May 2026")
+    assert blocking(plan({"content": may, "name": "1099.csv"})) == {"vendor_1099_dates"}
+
+
+def test_an_opening_1099_amount_is_set_replaced_and_cleared_and_counts_by_its_date(client):
+    run = lambda name, data, **kw: client.run(name, data, company="Demo Plumbing Co", **kw)
+    vendor = "Summit Pipe Contracting"  # 1099-eligible: a 2,400.00 check on 2026-12-08
+    first = run("vendor 1099-opening", dict(vendor=vendor, year=2026, as_of="2026-06-30", amount="1500.00"), reason="Old books")
+    assert (first["changed"], first["version"], first["amount"]["minor_units"]) == (True, 1, 150000)
+    year = lambda frm, to: {row["display_vendor_label"]: (row["payments"]["minor_units"], row["opening_payments"]["minor_units"])
+                            for row in run("report vendor-1099-summary", dict(date_from=frm, date_to=to,
+                                                                              above_threshold_only=False))["rows"]}
+    assert year("2026-01-01", "2026-12-31")[vendor] == (390000, 150000)
+    assert year("2026-07-01", "2026-12-31")[vendor] == (240000, 0)  # paid through June 30: outside these dates
+    with pytest.raises(BookflowError) as stale:
+        run("vendor 1099-opening", dict(vendor=vendor, year=2026, as_of="2026-06-30", amount="1600.00", expected_version=0),
+            reason="Old books")
+    assert stale.value.code == "E_VERSION_CONFLICT"
+    replaced = run("vendor 1099-opening", dict(vendor=vendor, year=2026, as_of="2026-06-30", amount="1600.00", expected_version=1),
+                   reason="Corrected from the 1099 Summary")
+    assert (replaced["id"], replaced["version"]) == (first["id"], 2)
+    for bad, field in ((dict(vendor="Central Supply", year=2026, as_of="2026-06-30", amount="1.00"), "vendor"),
+                       (dict(vendor=vendor, year=2026, as_of="2025-12-31", amount="1.00"), "as_of")):
+        with pytest.raises(BookflowError) as refused:
+            run("vendor 1099-opening", bad, reason="Old books")
+        assert refused.value.code == "E_VALIDATION" and field in str(refused.value.details), bad
+    cleared = run("vendor 1099-opening", dict(vendor=vendor, year=2026, as_of="2026-06-30", amount="0.00"), reason="Not paid after all")
+    assert cleared["changed"] and year("2026-01-01", "2026-12-31")[vendor] == (240000, 0)
+
+
+# ---------------------------------------------------------------- July after the move-in
+
+class _RestOfTheBooks(replay_module.Replay):
+    """The fit check's July (tests/fakeco_replay.py), kept after a move-in that brings the rest of the old books:
+    no uncleared item is entered again, no June statement balance is typed, and the July 1 deposit picks the two
+    checks waiting in Undeposited Funds."""
+
+    def move_in(self) -> dict:
+        files = self.attach(CORE + REST)
+        plan = self.run("cutover plan", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
+        assert plan["ready"], plan["blocking"]
+        applied = self.run("cutover apply", dict(as_of=AS_OF, files=files, mappings=MAPPINGS), reason="Move in from the old books")
+        tie = self.run("cutover tie-out", dict(as_of=AS_OF, files=files + self.attach(replay_module.AGING_FILES), mappings=MAPPINGS))
+        self.cutover = dict(plan=plan, applied=applied, tie=tie)
+        self.journals = {step["record_id"] for step in applied["steps"] if step["kind"] == "journal"}
+        self.openings = {step["name"].split(" · ", 1)[1]: step["record_id"] for step in applied["steps"]
+                         if step["kind"] == "reconciliation_opening"}
+        return self.cutover
+
+    def opening_detail(self):
+        """Nothing to enter again: the move-in brought each uncleared item and the June reconciliation."""
+
+    def _deposit(self, ev: dict):
+        if not all(row["source"].startswith("uf:") for row in ev["items"]):
+            return super()._deposit(ev)
+        names = {row["source"][3:] for row in ev["items"]}
+        picked = [row for row in self.run("deposit sources", dict(date=ev["date"]))["items"] if row["received_from"] in names]
+        assert len(picked) == len(ev["items"]), picked
+        self.made[ev["id"]] = self.run("deposit post", dict(operation_key=new_id(), document=dict(
+            mode="inline", deposit_to="Checking", date=ev["date"],
+            sources=[dict(source_type=row["source_type"], source=row["source"], expected_version=row["expected_version"])
+                     for row in picked])))
+
+    def open_reconciliation(self, account: str, statement: str, ending: str, june: str) -> dict:
+        opening = next(draft for label, draft in self.openings.items() if label.endswith(account))
+        self.covered = {row["group_fingerprint"] for row in self.candidates(opening)
+                        if row["movement"]["transaction_id"] in self.journals}
+        return self.run("reconcile start", dict(operation_key=new_id(), account=account, statement_date=statement,
+                                                ending_balance=ending))["draft"]
+
+
+@pytest.mark.timeout(900)
+def test_july_after_the_move_in_reconciles_to_its_statements_with_nothing_entered_again(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(root))
+    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
+    client = bookflow.connect(data_root=str(root))
+    client.init()
+    harbor = _RestOfTheBooks(root, client)
+    month = harbor.keep_july()
+    assert harbor.cutover["tie"]["tied"], harbor.cutover["tie"]["summary"]
+    assert replay_module.differences(harbor.books("2026-07-31"), replay_module.expected("2026-07-31")) == []
+    key = replay_module.key("2026-07-31")["reconciliations"]
+    for account, done in month["reconciliations"].items():
+        want, totals = key[account], done["finish"]["totals"]
+        assert totals["difference"] == 0, account
+        assert (totals["beginning_balance"], totals["ending_balance"]) == (
+            replay_module.cents(want["beginning_balance"]), replay_module.cents(want["ending_balance"])), account
+        assert sorted(abs(row["amount"]) for row in done["outstanding"]) == sorted(
+            abs(replay_module.cents(row["amount"])) for row in want["outstanding"]), account
+    # June's three checks clear on their own numbers, and nothing is ticked by hand.
+    checking = month["reconciliations"]["Checking"]
+    assert checking["by_hand"] == []
+    assert not [line for line in checking["first"]["lines"] if line["status"] == "unmatched" and line["number"]]
+    # The year's 1099 summary is the whole year's: January to June from the old books, July from Bookflow.
+    year = harbor.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
+    assert [(row["display_vendor_label"], row["payments"]["minor_units"], row["opening_payments"]["minor_units"])
+            for row in year["rows"]] == [("Delgado, Ray", 845000 + 255000, 755000)]

@@ -1571,7 +1571,7 @@ def _bank_items(built: Built, inp) -> None:
     late: dict[str, int] = defaultdict(int)
     for item in sources.open_items:
         target = _bank_target(built, item.path, item.label, item.file, item.line, "items")
-        if target is None or target["type"] not in BANK_TYPES:
+        if target is None:
             continue
         if item.date is None:
             _problem(built, "blocking", "item_without_date", f"{item.type} {item.num or ''} under {item.label} has no date",
@@ -1580,7 +1580,8 @@ def _bank_items(built: Built, inp) -> None:
         if item.date > inp.as_of:
             late[item.file] += 1
             continue
-        items["account:" + src.key(item.path)].append(item)
+        if target["type"] in BANK_TYPES:  # a receipt in Undeposited Funds is `_undeposited`'s
+            items["account:" + src.key(item.path)].append(item)
     for file, count in late.items():
         _problem(built, "warning", "items_after_cutover",
                  f"{count} row{'s' if count != 1 else ''} of {file} {'are' if count != 1 else 'is'} dated after the cutover date "
@@ -1799,6 +1800,17 @@ def _undeposited(built: Built, inp) -> None:
                  "Give the customer list IIF export, or change the receipt's customer with `sales-receipt update` before depositing it.")
 
 
+def _payment_method(built: Built, number: str | None) -> str | None:
+    """A receipt's payment method: Check when it carries a check number, else Other, as the old books'
+    report does not say; whichever of them the company has, else its first active one."""
+    names = ("Check", "Other") if number and number.isdigit() else ("Other", "Check")
+    for name in names:
+        method = built.books.by_key(built.books.payment_methods, "name", name)
+        if method is not None and method["active"]:
+            return method["id"]
+    return next((method["id"] for method in built.books.payment_methods if method["active"]), None)
+
+
 def _receipt_step(built: Built, target: dict, item: src.OpenItem | None, amount: int, date: str, outside_id: str) -> Step:
     """A receipt waiting in Undeposited Funds: a sales receipt of one `Opening balance` line."""
     customer = _party_for(built, "customer", item.name) if item is not None and item.name else None
@@ -1821,14 +1833,15 @@ def _receipt_step(built: Built, target: dict, item: src.OpenItem | None, amount:
                                "memo": memo[:2000], "lines": [line]}
     if item is not None and item.num:
         payload["payment_reference"] = item.num[:128]
-        method = built.books.by_key(built.books.payment_methods, "name", "Check")
-        if item.num.isdigit() and method is not None and method["active"]:
-            payload["payment_method"] = method["id"]
+    method = _payment_method(built, item.num if item is not None else None)
+    if method:
+        payload["payment_method"] = method
     linked = built.books.link(outside_id, "transaction")
     name = f"{item.type} {item.num or ''}".rstrip() + f" · {payer or OPENING_CUSTOMER}" if item is not None else f"Undeposited Funds · {OPENING_CUSTOMER}"
     return Step("undeposited_receipt", outside_id, name, None if linked else "sales-receipt post", payload,
                 "already_in" if linked else "create", linked, amount=amount, date=date,
-                detail="waiting in Undeposited Funds for a deposit", clearing=-amount)
+                detail="waiting in Undeposited Funds for a deposit", clearing=-amount,
+                extra={"account": "account:" + src.key(item.path) if item is not None else None, "funds": target["name"]})
 
 
 # ---------------------------------------------------------------- the opening sales tax
@@ -2717,21 +2730,19 @@ def _bank_section(s, built: Built, books_tb: dict[str, dict]) -> CutoverBankSect
 
 
 def _undeposited_section(s, ctx, built: Built, inp) -> CutoverTieSection:
-    """What the old books held in Undeposited Funds against the receipts here that Make Deposits can pick."""
+    """What the old books held in Undeposited Funds against the receipts the move-in brought into it, which
+    Make Deposits picks; a deposit made since does not undo the comparison, which is as of the cutover."""
     currency = built.books.currency
     funds = {key_: t for key_, t in built.targets.items() if key_.startswith("account:") and t.get("role") == "undeposited_funds"
              and (t.get("balance") or key_ in built.undeposited)}
     if not funds:
         return CutoverTieSection(source="none", source_total=money(0, currency), books_total=money(0, currency), differences=0, rows=[])
-    waiting: dict[str, int] = defaultdict(int)
-    for row in _whole_items(s, ctx, "deposit sources", {"date": inp.as_of}):
-        if row.get("eligible") and not row.get("deposited") and row["date"] <= inp.as_of:
-            waiting[row["undeposited_funds_account"]] += row["amount"]["minor_units"]
     rows, differences, source_total, books_total = [], 0, 0, 0
     given = {"account:" + src.key(item.path) for item in built.sources.open_items}
     for key_, target in sorted(funds.items(), key=lambda pair: pair[1]["name"].lower()):
         source_value = target.get("balance", 0)
-        books_value = waiting.get(target["id"], 0) if target["id"] else 0
+        books_value = sum(step.amount for step in built.steps if step.kind == "undeposited_receipt" and step.action == "already_in"
+                          and step.record_id and step.extra.get("funds") == target["name"])
         if key_ not in built.undeposited:
             books_value = source_value if source_value <= 0 else books_value
         difference = source_value - books_value
@@ -2742,20 +2753,6 @@ def _undeposited_section(s, ctx, built: Built, inp) -> CutoverTieSection:
     label = "Undeposited Funds QuickReport" if given & set(funds) else "Trial Balance"
     return CutoverTieSection(source=label, source_total=money(source_total, currency), books_total=money(books_total, currency),
                              differences=differences, rows=rows)
-
-
-def _whole_items(s, ctx, name: str, raw: dict) -> list[dict]:
-    """Every page of a read whose rows are `items`."""
-    from bookflow.core import registry
-    from bookflow.core.dispatch import run_in_session, validate_input
-    command = registry.get(name)
-    rows, cursor = [], None
-    while True:
-        page = run_in_session(command, validate_input(command, {**raw, "limit": 200, **({"cursor": cursor} if cursor else {})}), ctx, s)
-        rows.extend(page["items"])
-        cursor = page.get("next_cursor")
-        if not cursor:
-            return rows
 
 
 def _lists_section(built: Built) -> CutoverListSection:

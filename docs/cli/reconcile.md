@@ -1108,7 +1108,7 @@ Example JSON output:
 
 ## `reconcile start`
 
-Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; an account with no opening needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it. Only a person, never an agent, may instead finish it with a labelled adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to Reconciliation Discrepancies.
+Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; naming neither, an account with no adopted opening follows its one open opening draft, such as the last reconciliation `cutover apply` brings in from the old books. An account with no opening at all needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it. Only a person, never an agent, may instead finish it with a labelled adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to Reconciliation Discrepancies.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1142,8 +1142,8 @@ The same example as complete `bookflow_run` arguments:
 | `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
 | `statement_date` | `--statement-date` | string | yes | no | — | — |
 | `ending_balance` | `--ending-balance` | string \| object | yes | no | — | A statement balance, as money: "290.00", or "-15.00" when the account is overdrawn. |
-| `opening_id` | `--opening-id` | string \| null | no | yes | null | The account's adopted reconciliation opening; omit both this and opening_draft_id to use the account's adopted opening. |
-| `opening_draft_id` | `--opening-draft-id` | string \| null | no | yes | null | An open `reconcile opening start` draft this statement follows, when the opening is not finished yet. |
+| `opening_id` | `--opening-id` | string \| null | no | yes | null | The account's adopted reconciliation opening; omit both this and opening_draft_id to use the account's adopted opening, or, when it has none, its one open opening draft. |
+| `opening_draft_id` | `--opening-draft-id` | string \| null | no | yes | null | An open `reconcile opening start` draft this statement follows, when the opening is not finished yet; omitted, the account's one open opening draft (such as the last reconciliation `cutover apply` brings in) is followed. |
 
 ### Command and context options
 

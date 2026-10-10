@@ -4,7 +4,7 @@
 
 ## `cutover apply`
 
-Move the company in from its old books: make the accounts, terms, customers, vendors and items, post each open invoice, credit, bill and vendor credit for its open balance with its own number and dates, bring in each item's opening stock, and post one opening journal at the cutover date for every other trial-balance account against a clearing account that ends at 0.00. Runs the ordinary commands, each write carrying the source reference `cutover:` plus its outside id, so a rerun makes only what is missing. Refused while the plan has blocking exceptions. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
+Move the company in from its old books: make the accounts, terms, customers, vendors and items, post each open invoice, credit, bill and vendor credit for its open balance with its own number and dates, bring in each item's opening stock, and post one opening journal at the cutover date for every other trial-balance account against a clearing account that ends at 0.00. Given the rest of the old books, it also brings each uncleared check, deposit and charge as its own document, leaves each account's last reconciliation as the opening the next `reconcile start` follows, brings the receipts waiting in Undeposited Funds for `deposit post` to pick, and sets each 1099 vendor's payments so far this year (`vendor 1099-opening`). Runs the ordinary commands, each write carrying the source reference `cutover:` plus its outside id, so a rerun makes only what is missing. Refused while the plan has blocking exceptions. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), and for the rest of the old books each bank and card account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail and Undeposited Funds' QuickReport, Cleared: No) and the 1099 Summary for January 1 to the cutover. Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -38,7 +38,7 @@ The same example as complete `bookflow_run` arguments:
 | `files[].attachment` | inside `--files` JSON array | string \| null | no | yes | null | An attachment in this company holding the export file, as `attachment add company_info <company id> FILE` returns it. Give this or `content`. |
 | `files[].content` | inside `--files` JSON array | string \| null | no | yes | null | The export file's text, when it is not an attachment. Give this or `attachment`. |
 | `files[].name` | inside `--files` JSON array | string \| null | no | yes | null | A label for this file in exceptions; defaults to the attachment's file name, else `file N`. |
-| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory). |
+| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). |
 | `mappings.accounts` | `--mappings-accounts` | object[string, string] | no | no | {} | Old-books account, as its file names it (`6700 · Utilities:6710 · Telephone`, `Utilities:Telephone` or `6710`), to a Bookflow account (ID, number or full name), or `create` to make it from the account list. |
 | `mappings.customers` | `--mappings-customers` | object[string, string] | no | no | {} | Old-books customer or `Customer:Job` to a Bookflow customer or job (ID or full name), or `create`. |
 | `mappings.vendors` | `--mappings-vendors` | object[string, string] | no | no | {} | Old-books vendor to a Bookflow vendor (ID or name), or `create`. |
@@ -91,7 +91,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
 | `blocking` | array[string] | yes | no | — | Each blocking exception as one compact line, `FILE line N: code: problem`; empty when nothing blocks. It leads the result so that an MCP result compacted to fit keeps it; `exceptions` has each one whole |
 | `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
-| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, sales_tax_adjustment, journal, deactivation |
+| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, uncleared_item, undeposited_receipt, sales_tax_adjustment, journal, reconciliation_opening, vendor_1099_opening, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
 | `counts[].already_in` | integer | yes | no | — | Records an earlier run of the cutover made, found by their outside id |
 | `counts[].matched` | integer | yes | no | — | Old-books records that are existing Bookflow records |
@@ -125,7 +125,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `clearing.account` | string | yes | no | — | The clearing account |
 | `clearing.account_id` | string \| null | yes | yes | — | Its ID; null when this run makes it |
 | `clearing.parts` | array[object] | yes | no | — | Everything that posts to it, by part; the same parts in plan and apply, so the two reconcile line by line |
-| `clearing.parts[].part` | literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax"] | yes | no | — | `opening_journal`: the journal's balancing line; `invoices_and_credit_memos` and `bills_and_vendor_credits`: the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` that brings the agency's balance in |
+| `clearing.parts[].part` | literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax", "uncleared_items", "undeposited_receipts"] | yes | no | — | `opening_journal`: the journals' balancing lines; `invoices_and_credit_memos` and `bills_and_vendor_credits`: the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` that brings the agency's balance in; `uncleared_items`: the checks, deposits and charges no statement had shown; `undeposited_receipts`: the receipts waiting in Undeposited Funds |
 | `clearing.parts[].amount` | object | yes | no | — | What this part posts to the clearing account, debit positive |
 | `clearing.parts[].amount.amount` | string | yes | no | — | — |
 | `clearing.parts[].amount.currency` | string | yes | no | — | — |
@@ -251,7 +251,7 @@ Example JSON output:
 
 ## `cutover plan`
 
-Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
+Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), and for the rest of the old books each bank and card account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail and Undeposited Funds' QuickReport, Cleared: No) and the 1099 Summary for January 1 to the cutover. Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 | Contract | Value |
 |---|---|
@@ -283,7 +283,7 @@ The same example as complete `bookflow_run` arguments:
 | `files[].attachment` | inside `--files` JSON array | string \| null | no | yes | null | An attachment in this company holding the export file, as `attachment add company_info <company id> FILE` returns it. Give this or `content`. |
 | `files[].content` | inside `--files` JSON array | string \| null | no | yes | null | The export file's text, when it is not an attachment. Give this or `attachment`. |
 | `files[].name` | inside `--files` JSON array | string \| null | no | yes | null | A label for this file in exceptions; defaults to the attachment's file name, else `file N`. |
-| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory). |
+| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). |
 | `mappings.accounts` | `--mappings-accounts` | object[string, string] | no | no | {} | Old-books account, as its file names it (`6700 · Utilities:6710 · Telephone`, `Utilities:Telephone` or `6710`), to a Bookflow account (ID, number or full name), or `create` to make it from the account list. |
 | `mappings.customers` | `--mappings-customers` | object[string, string] | no | no | {} | Old-books customer or `Customer:Job` to a Bookflow customer or job (ID or full name), or `create`. |
 | `mappings.vendors` | `--mappings-vendors` | object[string, string] | no | no | {} | Old-books vendor to a Bookflow vendor (ID or name), or `create`. |
@@ -326,7 +326,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `summary` | string | yes | no | — | One line: what the run makes and what blocks it |
 | `blocking` | array[string] | yes | no | — | Each blocking exception as one compact line, `FILE line N: code: problem`; empty when nothing blocks. It leads the result so that an MCP result compacted to fit keeps it; `exceptions` has each one whole |
 | `counts` | array[object] | yes | no | — | Records and totals by kind: the whole run at a glance |
-| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, sales_tax_adjustment, journal, deactivation |
+| `counts[].kind` | string | yes | no | — | account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, inventory_adjustment, uncleared_item, undeposited_receipt, sales_tax_adjustment, journal, reconciliation_opening, vendor_1099_opening, deactivation |
 | `counts[].create` | integer | yes | no | — | Records this run makes |
 | `counts[].already_in` | integer | yes | no | — | Records an earlier run of the cutover made, found by their outside id |
 | `counts[].matched` | integer | yes | no | — | Old-books records that are existing Bookflow records |
@@ -360,7 +360,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `clearing.account` | string | yes | no | — | The clearing account |
 | `clearing.account_id` | string \| null | yes | yes | — | Its ID; null when this run makes it |
 | `clearing.parts` | array[object] | yes | no | — | Everything that posts to it, by part; the same parts in plan and apply, so the two reconcile line by line |
-| `clearing.parts[].part` | literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax"] | yes | no | — | `opening_journal`: the journal's balancing line; `invoices_and_credit_memos` and `bills_and_vendor_credits`: the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` that brings the agency's balance in |
+| `clearing.parts[].part` | literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax", "uncleared_items", "undeposited_receipts"] | yes | no | — | `opening_journal`: the journals' balancing lines; `invoices_and_credit_memos` and `bills_and_vendor_credits`: the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` that brings the agency's balance in; `uncleared_items`: the checks, deposits and charges no statement had shown; `undeposited_receipts`: the receipts waiting in Undeposited Funds |
 | `clearing.parts[].amount` | object | yes | no | — | What this part posts to the clearing account, debit positive |
 | `clearing.parts[].amount.amount` | string | yes | no | — | — |
 | `clearing.parts[].amount.currency` | string | yes | no | — | — |
@@ -473,7 +473,7 @@ Example JSON output:
 
 ## `cutover tie-out`
 
-Compare the books with the old books as of the cutover date: the trial balance account by account, and receivables and payables aging customer by customer and vendor by vendor, column by column, plus the clearing account, which ties at 0.00. Lists every difference. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
+Compare the books with the old books as of the cutover date: the trial balance account by account, and receivables and payables aging customer by customer and vendor by vendor, column by column, plus the clearing account, which ties at 0.00; and, when given, each bank and card account against its statement plus what was in transit with its opening proven, the receipts waiting for deposit, and the 1099 payments so far this year. Lists every difference. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), and for the rest of the old books each bank and card account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail and Undeposited Funds' QuickReport, Cleared: No) and the 1099 Summary for January 1 to the cutover. Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 | Contract | Value |
 |---|---|
@@ -505,7 +505,7 @@ The same example as complete `bookflow_run` arguments:
 | `files[].attachment` | inside `--files` JSON array | string \| null | no | yes | null | An attachment in this company holding the export file, as `attachment add company_info <company id> FILE` returns it. Give this or `content`. |
 | `files[].content` | inside `--files` JSON array | string \| null | no | yes | null | The export file's text, when it is not an attachment. Give this or `attachment`. |
 | `files[].name` | inside `--files` JSON array | string \| null | no | yes | null | A label for this file in exceptions; defaults to the attachment's file name, else `file N`. |
-| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory). |
+| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). |
 | `mappings.accounts` | `--mappings-accounts` | object[string, string] | no | no | {} | Old-books account, as its file names it (`6700 · Utilities:6710 · Telephone`, `Utilities:Telephone` or `6710`), to a Bookflow account (ID, number or full name), or `create` to make it from the account list. |
 | `mappings.customers` | `--mappings-customers` | object[string, string] | no | no | {} | Old-books customer or `Customer:Job` to a Bookflow customer or job (ID or full name), or `create`. |
 | `mappings.vendors` | `--mappings-vendors` | object[string, string] | no | no | {} | Old-books vendor to a Bookflow vendor (ID or name), or `create`. |
@@ -541,7 +541,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `as_of` | string | yes | no | — | — |
-| `tied` | boolean | yes | no | — | True when every compared figure ties to the cent, the clearing account is 0.00, and every list field compared matches |
+| `tied` | boolean | yes | no | — | True when every compared figure ties to the cent, the clearing account is 0.00, every list field compared matches, and every bank and card account given in detail ties with its uncleared items in and its last reconciliation proven |
 | `summary` | string | yes | no | — | — |
 | `trial_balance` | object | yes | no | — | — |
 | `trial_balance.source` | string | yes | no | — | What the old books' side was read from |
@@ -660,16 +660,106 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lists.rows[].list` | literal["account", "customer", "vendor", "item", "term"] | yes | no | — | — |
 | `lists.rows[].name` | string | yes | no | — | The record as the old books name it |
 | `lists.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when none stands for it |
-| `lists.rows[].field` | string | yes | no | — | active, type, number, job_status, job_description, terms, credit_limit, eligible_1099, price, cost, due_days, discount_percent or discount_days |
+| `lists.rows[].field` | string | yes | no | — | active, type, number, job_status, job_description, terms, credit_limit, sales_tax_code, sales_tax_item, eligible_1099, price, cost, due_days, discount_percent or discount_days |
 | `lists.rows[].source` | string \| null | yes | yes | — | The old books' value |
 | `lists.rows[].books` | string \| null | yes | yes | — | The value here |
 | `lists.notes` | array[object] | yes | no | — | Fields that differ by design, such as an account matched to one here that keeps its own number |
 | `lists.notes[].list` | literal["account", "customer", "vendor", "item", "term"] | yes | no | — | — |
 | `lists.notes[].name` | string | yes | no | — | The record as the old books name it |
 | `lists.notes[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when none stands for it |
-| `lists.notes[].field` | string | yes | no | — | active, type, number, job_status, job_description, terms, credit_limit, eligible_1099, price, cost, due_days, discount_percent or discount_days |
+| `lists.notes[].field` | string | yes | no | — | active, type, number, job_status, job_description, terms, credit_limit, sales_tax_code, sales_tax_item, eligible_1099, price, cost, due_days, discount_percent or discount_days |
 | `lists.notes[].source` | string \| null | yes | yes | — | The old books' value |
 | `lists.notes[].books` | string \| null | yes | yes | — | The value here |
+| `bank` | object | yes | no | — | Each bank and card account given its last reconciliation or its uncleared items: the balance here against the statement's ending balance plus deposits in transit less outstanding checks (on a card, plus charges not yet posted less payments and credits), its uncleared items, and the opening the first reconciliation follows |
+| `bank.source` | string | yes | no | — | What the old books' side was read from, or `none` when no bank or card account was given in detail |
+| `bank.differences` | integer | yes | no | — | Accounts that do not tie |
+| `bank.rows` | array[object] | yes | no | — | Every bank and card account brought in from its last reconciliation or its uncleared items |
+| `bank.rows[].name` | string | yes | no | — | The bank or card account |
+| `bank.rows[].record_id` | string \| null | yes | yes | — | The Bookflow account compared; null when nothing in the books stands for it |
+| `bank.rows[].statement_date` | string \| null | yes | yes | — | The last statement the old books reconciled; null when only uncleared items were given |
+| `bank.rows[].statement_balance` | object | yes | no | — | That statement's ending balance, in the account's own sign: money in the bank, what is owed on a card |
+| `bank.rows[].statement_balance.amount` | string | yes | no | — | — |
+| `bank.rows[].statement_balance.currency` | string | yes | no | — | — |
+| `bank.rows[].statement_balance.minor_units` | integer | yes | no | — | — |
+| `bank.rows[].uncleared_increase` | object | yes | no | — | Uncleared items that raise the balance: deposits in transit on a bank account, charges not yet posted on a card |
+| `bank.rows[].uncleared_increase.amount` | string | yes | no | — | — |
+| `bank.rows[].uncleared_increase.currency` | string | yes | no | — | — |
+| `bank.rows[].uncleared_increase.minor_units` | integer | yes | no | — | — |
+| `bank.rows[].uncleared_decrease` | object | yes | no | — | Uncleared items that lower it: outstanding checks and payments on a bank account, payments and credits not yet posted on a card |
+| `bank.rows[].uncleared_decrease.amount` | string | yes | no | — | — |
+| `bank.rows[].uncleared_decrease.currency` | string | yes | no | — | — |
+| `bank.rows[].uncleared_decrease.minor_units` | integer | yes | no | — | — |
+| `bank.rows[].expected_balance` | object | yes | no | — | statement_balance + uncleared_increase - uncleared_decrease |
+| `bank.rows[].expected_balance.amount` | string | yes | no | — | — |
+| `bank.rows[].expected_balance.currency` | string | yes | no | — | — |
+| `bank.rows[].expected_balance.minor_units` | integer | yes | no | — | — |
+| `bank.rows[].books_balance` | object | yes | no | — | The account's balance here as of the cutover date, in its own sign |
+| `bank.rows[].books_balance.amount` | string | yes | no | — | — |
+| `bank.rows[].books_balance.currency` | string | yes | no | — | — |
+| `bank.rows[].books_balance.minor_units` | integer | yes | no | — | — |
+| `bank.rows[].difference` | object | yes | no | — | expected_balance less books_balance; 0.00 ties |
+| `bank.rows[].difference.amount` | string | yes | no | — | — |
+| `bank.rows[].difference.currency` | string | yes | no | — | — |
+| `bank.rows[].difference.minor_units` | integer | yes | no | — | — |
+| `bank.rows[].items_source` | integer | yes | no | — | Uncleared items the old books list for the account, dated by the cutover |
+| `bank.rows[].items_books` | integer | yes | no | — | Of those, the ones the move-in brought in here |
+| `bank.rows[].opening` | literal["draft", "certified", "none"] | yes | no | — | The last reconciliation here: `draft` an opening the next `reconcile start` follows, `certified` once the first statement after it is finished, `none` when no Reconciliation Summary was given or it did not come in |
+| `bank.rows[].opening_proven` | boolean \| null | yes | yes | — | For a draft: whether it proves, every movement by its date covered or outstanding and the covered ones equal to the statement balance, so `E_RECONCILIATION_OPENING_UNPROVEN` does not fire; null for no draft |
+| `bank.rows[].tied` | boolean | yes | no | — | The balance ties, every uncleared item is in, and a given last reconciliation is a proven draft or certified |
+| `undeposited` | object | yes | no | — | Undeposited Funds: what the old books held waiting for deposit against the receipts here Make Deposits can pick |
+| `undeposited.source` | string | yes | no | — | What the old books' side was read from |
+| `undeposited.source_total` | object | yes | no | — | — |
+| `undeposited.source_total.amount` | string | yes | no | — | — |
+| `undeposited.source_total.currency` | string | yes | no | — | — |
+| `undeposited.source_total.minor_units` | integer | yes | no | — | — |
+| `undeposited.books_total` | object | yes | no | — | — |
+| `undeposited.books_total.amount` | string | yes | no | — | — |
+| `undeposited.books_total.currency` | string | yes | no | — | — |
+| `undeposited.books_total.minor_units` | integer | yes | no | — | — |
+| `undeposited.differences` | integer | yes | no | — | Rows that do not tie |
+| `undeposited.rows` | array[object] | yes | no | — | — |
+| `undeposited.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `undeposited.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
+| `undeposited.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
+| `undeposited.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
+| `undeposited.rows[].source.amount` | string | yes | no | — | — |
+| `undeposited.rows[].source.currency` | string | yes | no | — | — |
+| `undeposited.rows[].source.minor_units` | integer | yes | no | — | — |
+| `undeposited.rows[].books` | object | yes | no | — | Bookflow's figure as of the cutover date |
+| `undeposited.rows[].books.amount` | string | yes | no | — | — |
+| `undeposited.rows[].books.currency` | string | yes | no | — | — |
+| `undeposited.rows[].books.minor_units` | integer | yes | no | — | — |
+| `undeposited.rows[].difference` | object | yes | no | — | source less books; 0.00 ties |
+| `undeposited.rows[].difference.amount` | string | yes | no | — | — |
+| `undeposited.rows[].difference.currency` | string | yes | no | — | — |
+| `undeposited.rows[].difference.minor_units` | integer | yes | no | — | — |
+| `vendor_1099` | object | yes | no | — | Each vendor on the old books' 1099 Summary: what it shows paid from January 1 to the cutover date against this company's 1099 summary for the same dates |
+| `vendor_1099.source` | string | yes | no | — | What the old books' side was read from |
+| `vendor_1099.source_total` | object | yes | no | — | — |
+| `vendor_1099.source_total.amount` | string | yes | no | — | — |
+| `vendor_1099.source_total.currency` | string | yes | no | — | — |
+| `vendor_1099.source_total.minor_units` | integer | yes | no | — | — |
+| `vendor_1099.books_total` | object | yes | no | — | — |
+| `vendor_1099.books_total.amount` | string | yes | no | — | — |
+| `vendor_1099.books_total.currency` | string | yes | no | — | — |
+| `vendor_1099.books_total.minor_units` | integer | yes | no | — | — |
+| `vendor_1099.differences` | integer | yes | no | — | Rows that do not tie |
+| `vendor_1099.rows` | array[object] | yes | no | — | — |
+| `vendor_1099.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `vendor_1099.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
+| `vendor_1099.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
+| `vendor_1099.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
+| `vendor_1099.rows[].source.amount` | string | yes | no | — | — |
+| `vendor_1099.rows[].source.currency` | string | yes | no | — | — |
+| `vendor_1099.rows[].source.minor_units` | integer | yes | no | — | — |
+| `vendor_1099.rows[].books` | object | yes | no | — | Bookflow's figure as of the cutover date |
+| `vendor_1099.rows[].books.amount` | string | yes | no | — | — |
+| `vendor_1099.rows[].books.currency` | string | yes | no | — | — |
+| `vendor_1099.rows[].books.minor_units` | integer | yes | no | — | — |
+| `vendor_1099.rows[].difference` | object | yes | no | — | source less books; 0.00 ties |
+| `vendor_1099.rows[].difference.amount` | string | yes | no | — | — |
+| `vendor_1099.rows[].difference.currency` | string | yes | no | — | — |
+| `vendor_1099.rows[].difference.minor_units` | integer | yes | no | — | — |
 | `clearing` | object | yes | no | — | The clearing account's balance as of the cutover date; 0.00 ties |
 | `clearing.amount` | string | yes | no | — | — |
 | `clearing.currency` | string | yes | no | — | — |
@@ -688,6 +778,11 @@ Example JSON output:
 ```json
 {
   "as_of": "value",
+  "bank": {
+    "differences": 1,
+    "rows": [],
+    "source": "value"
+  },
   "clearing": {
     "amount": "value",
     "currency": "USD",
@@ -749,6 +844,36 @@ Example JSON output:
   "summary": "value",
   "tied": false,
   "trial_balance": {
+    "books_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "differences": 1,
+    "rows": [],
+    "source": "value",
+    "source_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  },
+  "undeposited": {
+    "books_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "differences": 1,
+    "rows": [],
+    "source": "value",
+    "source_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  },
+  "vendor_1099": {
     "books_total": {
       "amount": "value",
       "currency": "USD",
