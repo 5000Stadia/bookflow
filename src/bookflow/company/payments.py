@@ -13,7 +13,7 @@ from bookflow.company import payment_operations as operations, early_discounts a
 from bookflow.company.payment_authority import authorize
 from bookflow.company.payment_models import PaymentContext
 from bookflow.company.payment_summaries import summarize
-from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput, PaymentRevisionOutput
+from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput, PaymentRevisionOutput, PaymentShowOutput
 from bookflow.company.sales_models import money, _invalid
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES as SETTLEABLE
 from bookflow.core import audit, clock
@@ -105,8 +105,11 @@ def show(s, inp):
             raise BookflowError('E_RECORD_NOT_FOUND')
         revision = rows[0]
         profile = effects.rows(s, c.payment_profiles, c.payment_profiles.c.revision_id == revision['id'])[0]
-    return PaymentOutput(**dict(header, **({'status': 'deleted'} if deletion else {})), deletion=deletion,
-        revision=revision_output(revision, profile), current=current_output(s, header['id']))
+    from bookflow.company import payment_bounces
+    bounce = payment_bounces.live_bounces(s, [header['id']]).get(header['id'])
+    return PaymentShowOutput(**dict(header, **({'status': 'deleted'} if deletion else {})), deletion=deletion,
+        revision=revision_output(revision, profile), current=current_output(s, header['id']),
+        bounce=payment_bounces.on_receipt(bounce) if bounce else None)
 
 
 def revision_output(revision, profile):
@@ -307,11 +310,19 @@ def _method_names(s):
         sa.select(table.c.name).where(table.c.active.is_(True)).order_by(table.c.name))]
 
 
-def _profile(s, inp, context_):
-    payer = defaults._row(s.company, 'customer', context_['customer_id'])
+def _profile(s, inp, context_, *, write_off=False):
+    # A write-off is the one receipt that may name an inactive customer: the books are being
+    # cleaned of a debt the customer will never pay, and reactivating the name just to do it
+    # would leave a trace in the customer list that means nothing.
+    payer = defaults._row(s.company, 'customer', context_['customer_id'], active=not write_off)
     from bookflow.company.parties import project_party_record
     projected = project_party_record(s.company, 'customer', payer, custom_values=())
     method = inp.payment_method or projected.get('effective_preferred_payment_method_id')
+    if method is None and write_off:
+        # No cash changes hands, so no method of payment is being used: the list's own "Other".
+        method = s.company.conn.execute(sa.select(c.payment_methods.c.id).where(
+            c.payment_methods.c.kind == 'other', c.payment_methods.c.active.is_(True))
+            .order_by(c.payment_methods.c.name)).scalars().first()
     if method is None:
         names = _method_names(s)
         error = _invalid('payment_method', 'give payment_method, one of: ' + ', '.join(names)
@@ -328,7 +339,9 @@ def _profile(s, inp, context_):
         raise
     info = defaults._info(s.company)
     destination = inp.deposit_to
-    if destination is None and info['use_undeposited_funds_for_payments']:
+    if destination is None and (info['use_undeposited_funds_for_payments'] or write_off):
+        # A write-off banks nothing, so the company's choice of where cash goes does not matter;
+        # the account recorded is simply the one a receipt would use by default.
         destination = s.company.conn.execute(sa.select(c.accounts.c.id).where(c.accounts.c.system_role == 'undeposited_funds')).scalar_one_or_none()
     account = defaults._account(s.company, destination, 'deposit_to', {'bank', 'other_current_asset'})
     raw_account = defaults._row(s.company, 'account', account.id)
@@ -364,6 +377,23 @@ def repeated_reference(s, customer_id, reference):
             f"make sure this is not the same check recorded twice" for row in rows]
 
 
+def _write_off_intent(inp, ctx):
+    """A receipt for 0.00 is a write-off, and says so: nothing else makes a zero receipt meaningful."""
+    from bookflow.core.errors import require_reason
+    if not inp.discounts:
+        raise _invalid('amount', 'cash received must be positive; to write off a bad debt without cash '
+                       'receive 0.00 and list the invoices written off in `discounts`, with `discount_account` '
+                       'an expense account such as Bad Debt')
+    if inp.applications.mode == 'suggested' or (inp.applications.mode == 'inline' and inp.applications.items):
+        raise _invalid('applications', 'a write-off receives no cash, so it applies none; name each invoice '
+                       'written off in `discounts` with its expected_version')
+    if inp.discount_account is None:
+        raise _invalid('discount_account', 'a write-off names the account the balance is written off to, '
+                       'an expense account such as Bad Debt (or a discount account such as Sales Discounts for a '
+                       'charge that is waived)')
+    require_reason(ctx.reason)
+
+
 def prepare(s, ctx, inp, operation):
     from bookflow.hub.access import one_authorization
     with one_authorization(s), prefetch.reading(s):
@@ -374,9 +404,11 @@ def _prepare(s, ctx, inp, operation):
     command = 'payment ' + operation
     # Each party's row and ancestry is read once for this preparation, however many of its
     # steps name the party (a receipt applied to hundreds of jobs names each one three times).
-    customers, lineages = {}, {}
+    customers, lineages, inactive_ok = {}, {}, []
     merged_away = {row[0] for row in s.company.raw.execute(merged_sql('customer'))}
     def customer(party_id, active=True):
+        # A write-off may name a customer who has since been made inactive (see `_profile`).
+        active = active and not inactive_ok
         # A customer merged into the payer's family is paid through its survivor although the
         # merge made it inactive (party_merges.py); its old invoices stay payable.
         active = active and party_id not in merged_away
@@ -411,12 +443,19 @@ def _prepare(s, ctx, inp, operation):
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     previous, funding, custom_plan, sequence = None, None, None, None
     if operation == 'receive':
+        amount = money(inp.amount, defaults._info(s.company)['home_currency'], 'amount').minor_units
+        if amount < 0:
+            raise _invalid('amount', 'cash received cannot be negative')
+        write_off = amount == 0
+        if write_off:
+            inactive_ok.append(True)
+            # The anchor's Receive Payments for 0.00: no cash, and the open balance taken as a
+            # discount to an expense account. Stated first so every later step can allow an
+            # inactive customer and a missing method.
+            _write_off_intent(inp, ctx)
         context_ = selection.context(s, PaymentContext(mode='new_receipt', customer=inp.customer,
-            ar_account=inp.ar_account, date=inp.date))
-        amount = money(inp.amount, context_['currency'], 'amount').minor_units
-        if amount <= 0:
-            raise _invalid('amount', 'cash received must be positive')
-        profile = _profile(s, inp, context_)
+            ar_account=inp.ar_account, date=inp.date), payer_active=not write_off)
+        profile = _profile(s, inp, context_, write_off=write_off)
         repeated = repeated_reference(s, context_['customer_id'], inp.reference)
         targets, selected = _applications(s, inp, context_, amount=amount)
         _capacity('source', sum(row['amount'] for row in targets), amount, context_['currency'], context_['customer_id'])
@@ -471,13 +510,16 @@ def _prepare(s, ctx, inp, operation):
             pending['posting_lines'].append(value)
             return value
         payer = customer(context_['customer_id'])
-        cash = leg(profile.deposit_account, amount, True, payer, 1)
+        # A write-off puts no cash in: there is no cash leg, and the lines count from the first
+        # receivable credit.
+        cash = leg(profile.deposit_account, amount, True, payer, 1) if amount else None
+        first = 2 if amount else 1
         keys, component_rows, source_rows = {}, {}, {}
         # One discount debit per customer whose invoice took one, after the receivable credits.
         discount_legs = {party_id: leg(discount_account, units, True, customer(party_id),
-                                       len(components) + 2 + position)
+                                       len(components) + first + position)
                          for position, (party_id, units) in enumerate(sorted(party_discounts.items()))}
-        for position, (party_id, capacity) in enumerate(sorted(components.items()), 2):
+        for position, (party_id, capacity) in enumerate(sorted(components.items()), first):
             party = customer(party_id)
             key = dict(**audited(), transaction_id=header['id'], line_id=identity['id'], party_id=party_id,
                        ar_account_id=context_['ar_account_id'], currency=context_['currency'])
@@ -628,10 +670,14 @@ def _prepare(s, ctx, inp, operation):
     applied_cash = Money(sum(row['applied'] for row in settled), context_['currency'])
     opening = (f"Received {Money(revision['total_minor_units'], context_['currency'])} from {payer_label}."
                if operation == 'receive' else f"Applied {applied_cash} of {payer_label}'s credit.")
-    if operation == 'receive':
+    if operation == 'receive' and not revision['total_minor_units']:
+        opening = (f'No cash received from {payer_label}; the balance is written off to {discount_account.full_name}. '
+                   'Nothing goes to the bank, and the sales tax on the invoices is unchanged.')
+    elif operation == 'receive':
         opening += ' ' + _where_the_money_went(s, profile.deposit_account)
     summary = summarize(settled, context_['currency'], opening=opening, credit=current['available_minor_units'],
-                        party_label=payer_label)
+                        party_label=payer_label,
+                        **({'discount_label': 'Written off'} if operation == 'receive' and not revision['total_minor_units'] else {}))
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
         facts_fingerprint=fp, effect=effect, current=current, summary=summary,
         warnings=(repeated + warnings) if operation == 'receive' else [],

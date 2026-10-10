@@ -128,6 +128,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.SALES_TAX_ADJUSTMENT_POLICY_VERSION: '03d9f30190f30e741521e98ac6044a6962e29d26f2a3be25f54f338c8174486f',
     c.RESTORE_POLICY_VERSION: '0a94a8ee9ee2f15db64858e594ea131f2afeef36cb29f11e9509d84e19fa584c',
     c.PARTY_MERGE_POLICY_VERSION: 'f42ffc267bd8651808375d39dfbfb7c2fa2613e5889151cd68dc6609b2174398',
+    c.BOUNCED_CHECK_POLICY_VERSION: '0b6616e4040e1986f3b010f4f2d8c92276ba12d741c28b474539755fa65ed68e',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -231,6 +232,7 @@ def known_catalog(version):
     from . import permission_sales_tax_adjustment_catalog
     from . import permission_restore_catalog
     from . import permission_party_merge_catalog
+    from . import permission_bounced_check_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -260,6 +262,7 @@ def known_catalog(version):
         c.SALES_TAX_ADJUSTMENT_POLICY_VERSION: permission_sales_tax_adjustment_catalog,
         c.RESTORE_POLICY_VERSION: permission_restore_catalog,
         c.PARTY_MERGE_POLICY_VERSION: permission_party_merge_catalog,
+        c.BOUNCED_CHECK_POLICY_VERSION: permission_bounced_check_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -270,7 +273,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.PARTY_MERGE_POLICY_VERSION)
+    return known_catalog(c.BOUNCED_CHECK_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

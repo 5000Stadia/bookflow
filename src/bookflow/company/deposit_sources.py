@@ -91,7 +91,8 @@ def _partition(g, *, cash_account, home_currency):
     require(len({r['id'] for r in legs}) == len(legs))
     cash_legs = {r['id']: r for r in legs if r['account_id'] == cash_account}
     if not rev['total_minor_units']:
-        require(h['type'] == 'sales_receipt' and not cash_legs)
+        # A sales receipt with no payment, or a write-off receipt of discounts alone: no cash to bank.
+        require(not cash_legs)
         raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
     if not cash_legs:
         raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')

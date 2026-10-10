@@ -461,6 +461,9 @@ _PAYMENT_EXAMPLES = {
     'payment update': dict(payment=ID, expected_version=1, operation_key='example-correction-1', memo='Corrected remittance note'),
     'payment unapply': dict(payment=ID, expected_version=2, operation_key='example-unapply-1', applications=[dict(application_id=ID, invoice_expected_version=2)]),
     'payment void': dict(payment=ID, expected_version=3, operation_key='example-void-1'),
+    'payment bounce': dict(payment=ID, expected_version=2, date='2026-07-09', operation_key='example-bounce-1',
+                           bank_fee_amount='12.00', bank_fee_account='Bank Service Charges',
+                           customer_fee_amount='35.00', customer_fee_account='Returned Check Charges'),
     'payment history': dict(payment=ID, limit=25),
     'payment settlement changes': dict(guard='authenticated-guard-from-payment-show', limit=25),
     'application show': dict(application=ID),
@@ -482,7 +485,7 @@ _PAYMENT_EXAMPLES = {
     'invoice settlement': dict(invoice=ID),
 }
 _PAYMENT_POSITIONALS = {
-    **{'payment ' + verb: 'payment' for verb in ('update', 'unapply', 'void', 'history')},
+    **{'payment ' + verb: 'payment' for verb in ('update', 'unapply', 'void', 'history', 'bounce')},
     'application show': 'application', 'application history': 'application',
     'payment apply': 'payment', 'payment show': 'payment', 'payment settlement': 'payment',
     'invoice settlement': 'invoice', 'payment operation show': 'operation_key', 'payment operation items': 'operation_key',
@@ -505,6 +508,8 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
     _args.extend(['--company', 'Demo Plumbing Co', '--json'])
     if _name in ('payment update', 'payment unapply', 'payment void'):
         _args.extend(['--reason', 'Correct recorded remittance'])
+    if _name == 'payment bounce':
+        _args.extend(['--reason', 'Bank returned the check unpaid'])
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)
 
 # Master browsing discovery is additive to the existing bounded query command.

@@ -11,6 +11,7 @@ PAYMENT_COMMANDS = frozenset('''application history
 application show
 invoice settlement
 payment apply
+payment bounce
 payment recovery begin
 payment recovery upload
 payment recovery seal
@@ -147,7 +148,7 @@ def capture(cmd, inp, s, result, *, dry_run=False):
     elif cmd.name in {'payment query', 'invoice query'}:
         for row in result['items']:
             add('transaction', row['id'])
-    elif cmd.name in {'payment receive', 'payment apply', 'payment unapply', 'payment void', 'payment update', 'payment show', 'payment delete'}:
+    elif cmd.name in {'payment receive', 'payment apply', 'payment unapply', 'payment void', 'payment update', 'payment show', 'payment delete', 'payment bounce'}:
         # A preview of a new receipt has no durable identity. Existing-payment
         # previews retain their input owner even if output hides prospective IDs.
         if not (dry_run and cmd.name == 'payment receive'):

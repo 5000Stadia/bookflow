@@ -388,6 +388,48 @@ count and amount, and the Overview shows the same. When the person answers, move
 entry by updating its own document (`check update`, `bill update`, `journal update`
 and so on) to the right account; it then leaves the list.
 
+## A customer's check comes back
+
+When the statement shows a returned deposited item, do not void or delete the receipt and do not
+re-enter anything by hand: `payment bounce` records the return in one step. Preview with `dry_run`
+(it shows every document and a `facts_fingerprint`), then write it with the reason.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "payment bounce", "reason": "Statement 07-09: returned deposited item, check 1182, NSF",
+ "input": {"payment": "<receipt id from payment query>", "expected_version": 2, "date": "2026-07-09",
+           "operation_key": "bounce-1182",
+           "bank_fee_amount": "12.00", "bank_fee_account": "Bank Service Charges",
+           "customer_fee_amount": "35.00", "customer_fee_account": "Returned Check Charges"}}
+```
+
+The invoices the receipt paid reopen; the returned amount and the bank's fee leave the bank as two
+lines on that date; the customer fee becomes an open invoice. The customer fee names an Other Charge
+or service item (`customer_fee_item`) or the income account an item posts to (`customer_fee_account`;
+create the item first if none does); leave out the `bank_fee_*` or `customer_fee_*` fields when there
+is none. To undo it, void the returned-check refund
+(`customer-refund void`); there is no un-bounce command. A receipt that was never deposited did not
+bounce: unapply and void it.
+
+## Writing off a bad debt
+
+A customer who will never pay is written off with a receipt for nothing, as the anchor does: the
+open balance is taken as a discount to an expense account. The customer may be inactive; do not
+reactivate it. Sales tax is not reduced. A reason is required and the owner sees an agent's write-off
+on `report entries-to-review`, so say why in it.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "payment receive", "reason": "Bauer Builders closed; owner approved the write-off",
+ "input": {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-bauer",
+           "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}],
+           "discount_account": "Bad Debt"}}
+```
+
+`discount_account` is required (an expense account such as Bad Debt; a discount account such as Sales
+Discounts for a charge that is waived, not a bad debt); `applications` stays empty. To reverse it, `payment
+unapply` then `payment void` the receipt.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:
@@ -595,7 +637,7 @@ adjustment input; a statement is certified only when its ticked movements tie.
 The owner's `report entries-to-review` lists, from any command and any actor, entries dated
 into a reconciled statement period or a closed period but entered later, entries an agent
 posted after a reconciliation was started and then cleared on it, entries touching Opening
-Balance Equity outside the move-in, and an agent's round, unexplained month-end amounts into a
-bank account. Your write's result carries a warning when it lands there. Nothing is refused;
+Balance Equity outside the move-in, an agent's round, unexplained month-end amounts into a
+bank account, and a customer balance an agent wrote off, or a charge it waived, with a receipt of 0.00 (`write_off`). Your write's result carries a warning when it lands there. Nothing is refused;
 the owner reviews it (`review mark`, a person's step). `report prior-balances` shows any
 reconciled or closed balance that has moved since, with the entries that moved it.

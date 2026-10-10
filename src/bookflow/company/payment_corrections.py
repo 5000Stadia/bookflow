@@ -53,6 +53,10 @@ def prepare_effect(s, ctx, inp, provenance):
             profile.deposit_account = account
     amount = money(inp.amount, prior['currency'], 'amount').minor_units if inp.amount is not None else prior['total_minor_units']
     if amount <= 0:
+        if not prior['total_minor_units']:
+            raise _invalid('payment', 'this receipt is a write-off with no cash and is not corrected in place: '
+                           '`payment unapply` it, `payment void` it, and receive it again with the right '
+                           'details')
         raise _invalid('amount', 'receipt total must remain positive')
     date, number = inp.date or prior['date'], inp.number or prior['number']
     memo = inp.memo if 'memo' in inp.model_fields_set else prior['memo']

@@ -325,6 +325,7 @@
       const taken=[...discounts.entries()].filter(([,value])=>value).map(([invoice,amount])=>({invoice,amount,
         ...(versions.has(invoice)?{expected_version:versions.get(invoice)}:{})}));
       if(taken.length) input.discounts=taken;
+      if($('discount-account').value.trim()) input.discount_account=$('discount-account').value.trim();
     }
     else Object.assign(input,{payment:payment.id,expected_version:payment.version});
     if(mode==='apply') Object.assign(input,{date:$('date').value,applications:selectionRef()});
@@ -700,6 +701,14 @@
       el('p',r.id===record.current_revision_id?'Latest recorded receipt facts.':'Historical receipt facts; actions use current settlement below.'),
       el('h3','Current settlement'),el('p',`${record.status}. Applied ${cash(c.applied_minor_units,c.currency)}; unapplied credit ${cash(c.available_minor_units,c.currency)}.`
         +(c.discount_minor_units?` Early-payment discounts taken: ${cash(c.discount_minor_units,c.currency)}.`:'')));
+    if(record.bounce) {
+      // The bank returned this receipt's check (`payment bounce`); the refund that took its cash back out of the bank is the record of it.
+      const b=record.bounce,block=el('div');block.className='warn';block.setAttribute('aria-label','Bounced check');
+      block.append(el('h3','Bounced on '+exact.longday(b.bounced_on)),
+        el('p',`The bank returned this check: ${cash(b.returned.minor_units,c.currency)} came back out of the bank${b.bank_fee?`, with a ${cash(b.bank_fee.minor_units,c.currency)} bank fee`:''}${b.customer_fee?`, and the customer was billed a ${cash(b.customer_fee.minor_units,c.currency)} fee`:''}. ${b.reason}`),
+        el('p','To undo it, void the returned-check refund; this receipt is then an ordinary unapplied receipt again.'));
+      section.append(block);
+    }
     if(record.deletion) {
       const d=record.deletion,block=el('div');block.className='warn';block.setAttribute('aria-label','Deleted payment');
       block.append(el('h3','Deleted payment'),
@@ -760,6 +769,14 @@
       area.append(el('p',out.idempotent_replay?'Original operation recovered. No new payment or settlement change.':'A new effect was proposed; do not treat this as recovery.'));
     }));
   }
+  // A receipt for 0.00 is a bad-debt write-off (`payment receive`): it names the expense account the
+  // balance goes to and, like every correction, gives its reason, so those two fields appear with it.
+  function syncWriteOff() {
+    const zero=mode==='receive'&&/^\s*0*(\.0*)?\s*$/.test($('amount').value)&&$('amount').value.trim()!=='';
+    $('discount-account-label').hidden=mode!=='receive';
+    if(mode==='receive') {$('reason-label').hidden=!zero;$('reason').required=zero;}
+  }
+  for(const event of ['input','change']) $('amount').addEventListener(event,syncWriteOff);
   async function startMode(verb,preserved=null) {
     $('balances').hidden=true;$('payer-balance').replaceChildren();$('family-balance').replaceChildren();
     mode=verb;invalidate();$('record').hidden=verb!=='delete';$('form').hidden=false;$('history').hidden=true;draft=preserved;selected.clear();key='WB-'+crypto.randomUUID();
@@ -768,6 +785,7 @@
     const edit=['receive','update'].includes(mode);
     $('header').hidden=['unapply','void','delete'].includes(mode);$('selection').hidden=['update','void','delete'].includes(mode);
     $('reason-label').hidden=['receive','apply'].includes(mode);$('reason').required=!$('reason-label').hidden;$('save-new').hidden=mode!=='receive';
+    syncWriteOff();
     // Deleting is confirmed on its own terms: explicit consent, and buttons that
     // say what they do rather than what a receipt form's buttons say.
     $('deletion-notice').hidden=mode!=='delete';$('confirm').checked=false;

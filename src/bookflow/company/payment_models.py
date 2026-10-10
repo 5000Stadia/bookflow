@@ -163,7 +163,13 @@ class InvoiceDiscount(StrictModel):
 class PaymentReceiveInput(StrictModel):
     customer: Selector
     date: _Date
-    amount: Amount
+    amount: Amount = Field(description=(
+        'Cash received, 0.00 or more. 0.00 is the anchor\'s write-off of a bad debt: no cash, every invoice '
+        'written off named in `discounts` with its expected_version, `discount_account` an expense account '
+        'such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank '
+        'and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", '
+        '"amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", '
+        '"expected_version": 1}], "discount_account": "Bad Debt"}.'))
     operation_key: OperationKey
     applications: ReceiveApplications = Field(default_factory=InlineApplications, description=(
         'Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); '
@@ -173,14 +179,15 @@ class PaymentReceiveInput(StrictModel):
     discounts: list[InvoiceDiscount] = Field(default_factory=list, max_length=200, description=(
         'Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it '
         '(if any) plus the discount; an invoice given no cash here needs its expected_version, and '
-        'the receipt as a whole still records cash received. The discount is debited '
+        'the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited '
         'to the discount account. Never taken unless listed: `payment invoices` shows each '
         'invoice\'s discount date and suggested discount. Example: a 1,000.00 invoice on '
         '2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", '
         '...} and discounts [{"invoice": "1043", "amount": "20.00"}].'))
     discount_account: Selector | None = Field(default=None, description=(
         'Account debited for the discounts; defaults to the company customer discount account, '
-        'else "Discounts Given", which is created as an income account if the chart lacks it.'))
+        'else "Discounts Given", which is created as an income account if the chart lacks it. '
+        'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt.'))
     payment_method: Selector | None = None
     ar_account: Selector | None = None
     deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')

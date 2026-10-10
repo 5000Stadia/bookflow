@@ -32,7 +32,7 @@ from bookflow.core.errors import BookflowError
 ENTRIES = "entries-to-review"
 PRIOR = "prior-balances"
 Flag = Literal['reconciled_period', 'closed_period', 'cleared_on_arrival', 'opening_balance_equity',
-               'round_unexplained']
+               'round_unexplained', 'write_off']
 
 
 class EntriesToReviewInput(StrictModel):
@@ -135,7 +135,9 @@ def entry_rows(s, as_of, include_reviewed):
         rows.append(EntryToReviewRow(
             transaction_id=identity, revision_id=d['revision_id'], transaction_type=d['type'],
             money_out_kind=d['money_out_kind'], number=d['number'], date=d['date'], memo=d['memo'],
-            amount=money(d['total_minor_units'], d['currency']), flags=flags,
+            # A write-off receives no cash; the row shows the balance written off.
+            amount=money(facts['write_off']['amount'] if 'write_off' in facts and not d['total_minor_units']
+                         else d['total_minor_units'], d['currency']), flags=flags,
             why='. '.join(review.WHY[f] for f in flags) + '.', account=account,
             statement_date=statement_date, posted_by_id=d['actor_id'], posted_by=names.get(d['actor_id']),
             actor_kind=d['actor_kind'], on_behalf_of_id=d['on_behalf_of'],

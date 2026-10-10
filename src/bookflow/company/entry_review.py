@@ -21,6 +21,9 @@ and lets the owner mark one reviewed. The same flags reach an agent at write tim
   starting ``cutover:``; one a person posted that way is setup and is not listed.
 - ``round_unexplained``: an agent's journal entry with no memo putting a round amount (a whole
   multiple of 100) into a bank or card account in the last three days of a month.
+- ``write_off``: a customer receipt an agent entered that takes a balance as a discount to an
+  expense account, or that received no cash at all (a bad debt written off, or a charge waived).
+  It moves an amount nobody paid out of receivables, which is the owner's call to confirm.
 
 Only live effects count: a voided or corrected document is judged by what it posts now. The
 order of events is the audit sequence, never a clock, so two writes in one millisecond still
@@ -41,7 +44,7 @@ import sqlalchemy as sa
 from bookflow.company import schema as c
 
 FLAGS = ('reconciled_period', 'closed_period', 'cleared_on_arrival', 'opening_balance_equity',
-         'round_unexplained')
+         'round_unexplained', 'write_off')
 # What the owner reads beside each flag.
 WHY = {
     'reconciled_period': 'Dated inside a reconciled statement period but entered after the statement was finished, and not cleared on it',
@@ -49,6 +52,7 @@ WHY = {
     'cleared_on_arrival': 'Entered by an agent after the reconciliation was started, then cleared on that same reconciliation',
     'opening_balance_equity': 'Touches Opening Balance Equity outside the move-in',
     'round_unexplained': 'A round amount into a bank or card account at month end, by an agent, with no memo',
+    'write_off': 'A customer balance written off, or a charge waived, by an agent',
 }
 # The move-in marker R166's cutover sets on every document it writes (as the write's
 # source reference), and the clearing account its balancing lines post to.
@@ -199,6 +203,24 @@ def _round_unexplained(s, tx):
     return out
 
 
+def _write_off(s, tx):
+    out = {}
+    for row in _rows(s, f"""
+            SELECT b.transaction_id, b.id AS batch_id, b.effective_date, a.full_name AS account,
+                   sum(d.amount_minor_units) AS amount
+            FROM payment_discounts d JOIN accounts a ON a.id=d.discount_account_id
+            JOIN transactions t ON t.id=d.transaction_id
+            JOIN posting_batches b ON b.transaction_id=t.id
+            JOIN audit_events be ON be.id=b.audit_event_id
+            JOIN transaction_revisions r ON r.id=t.current_revision_id
+            WHERE {LIVE} AND {SCOPE} AND t.type='payment' AND be.actor_kind='agent'
+              AND (a.type IN ('expense','other_expense') OR r.total_minor_units=0)
+            GROUP BY b.transaction_id, b.id, b.effective_date, a.full_name
+            ORDER BY b.effective_date""", tx=tx):
+        out.setdefault(row['transaction_id'], row)
+    return out
+
+
 def flagged(s, *, transactions=None, certificates=None, only=FLAGS):
     """{transaction id: {flag: facts}} for the live entries that match each flag."""
     tx = _tx(transactions)
@@ -207,7 +229,8 @@ def flagged(s, *, transactions=None, certificates=None, only=FLAGS):
         closed_period=lambda: _closed_period(s, tx),
         cleared_on_arrival=lambda: _cleared_on_arrival(s, tx, certificates),
         opening_balance_equity=lambda: _opening_balance_equity(s, tx),
-        round_unexplained=lambda: _round_unexplained(s, tx))
+        round_unexplained=lambda: _round_unexplained(s, tx),
+        write_off=lambda: _write_off(s, tx))
     out = {}
     for flag in FLAGS:
         if flag not in only:
@@ -278,8 +301,15 @@ def sentence(flag, facts):
     if flag == 'opening_balance_equity':
         return (f"This touches {facts['account']}, which holds opening balances from the move-in. "
                 f"An entry there afterwards is on the owner's entries-to-review list.")
+    if flag == 'write_off':
+        return (f"This writes {money_text(facts['amount'])} of a customer's balance off to {facts['account']}. "
+                f"An agent's write-off is on the owner's entries-to-review list.")
     return (f"A round amount into {facts['account']} at month end with no memo is on the owner's "
             f"entries-to-review list; say what it is in the memo.")
+
+
+def money_text(minor_units):
+    return f'{minor_units // 100:,}.{minor_units % 100:02d}'
 
 
 # ------------------------------------------------------------------ write time
@@ -303,7 +333,7 @@ def write_warnings(s, before):
     lines = []
     if added:
         found = flagged(s, transactions=added, only=('reconciled_period', 'closed_period',
-                                                     'opening_balance_equity'))
+                                                     'opening_balance_equity', 'write_off'))
         for identity in added:
             for flag, facts in found.get(identity, {}).items():
                 lines.append(sentence(flag, facts))

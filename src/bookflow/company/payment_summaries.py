@@ -51,11 +51,12 @@ def _names(rows, limit=NAMED):
     return ', '.join(shown) + (f' and {len(rows) - limit} more' if len(rows) > limit else '')
 
 
-def summarize(rows, currency, *, opening, credit=None, party_label=None) -> PaymentSummary:
+def summarize(rows, currency, *, opening, credit=None, party_label=None, discount_label='Early-payment discount taken') -> PaymentSummary:
     """``rows``: dicts of document_id, document_type, number, applied, discount, still_due (minor units).
 
     ``opening`` is the sentence that starts the paragraph, e.g. "Received 150.00 USD from Jones."
     ``credit`` is what stays on the payment as credit (customer payments only).
+    ``discount_label`` names what the discount was: a write-off is a discount to an expense account.
     """
     money = lambda units: Money(units, currency)
     paid = [row for row in rows if row['still_due'] == 0]
@@ -74,7 +75,7 @@ def summarize(rows, currency, *, opening, credit=None, party_label=None) -> Paym
     if not rows:
         words.append('Nothing was applied to any document.')
     if discount:
-        words.append(f'Early-payment discount taken: {money(discount)}.')
+        words.append(f'{discount_label}: {money(discount)}.')
     if credit is not None:
         words.append(f'{money(credit)} left as credit' + (f' for {party_label}' if party_label else '') + '.'
                      if credit else 'Nothing left as credit.')

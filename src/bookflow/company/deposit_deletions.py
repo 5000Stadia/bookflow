@@ -146,6 +146,19 @@ def blockers(s, old):
             details={'deposit_id': old['id'], 'reconciliation_key_id': held['id'],
                      'reconciliation_claim_id': held['claim_id'],
                      'next': held_next('deposit', 'deposit void')})
+    # A receipt whose check the bank returned has its cash taken back out of the bank already
+    # (`payment bounce`); deleting the deposit as well would reverse that cash a second time.
+    from bookflow.company import payment_bounces
+    bounced = payment_bounces.live_bounces(s, held_receipts(s, old['id']))
+    if bounced:
+        first = next(iter(bounced.values()))
+        raise BookflowError('E_VALIDATION', message=(
+            f"A check on this deposit was returned by the bank (bounced on {first['bounce_date']}), and its cash has "
+            'already come back out of the bank. Deleting the deposit would reverse that cash twice. Void the '
+            f"returned-check refund {first['refund_number']} (`customer-refund void`) first, which ends the bounce."),
+            details={'fields': [{'field': 'deposit', 'problem': 'holds a bounced receipt'}],
+                     'payment_ids': sorted(bounced), 'refund_ids': sorted(row['refund_id'] for row in bounced.values()),
+                     'next': 'customer-refund void'})
 
 
 def prepare(s, ctx, inp):

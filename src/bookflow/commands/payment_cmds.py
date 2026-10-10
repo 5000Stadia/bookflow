@@ -13,7 +13,7 @@ from bookflow.company.payment_outputs import (
 from bookflow.company import payments, payment_operations
 from bookflow.company.payment_models import PaymentReceiveInput, PaymentApplyInput, PaymentShowInput
 from bookflow.company.payment_models import PaymentUnapplyInput, PaymentVoidInput, PaymentUpdateInput
-from bookflow.company.payment_outputs import PaymentWriteOutput, PaymentOutput
+from bookflow.company.payment_outputs import PaymentWriteOutput, PaymentOutput, PaymentShowOutput
 
 
 def _financial(verb, model):
@@ -28,7 +28,7 @@ def _financial(verb, model):
         return plan
     cmd = command('payment ' + verb, scope='company',
         description={
-            'receive': 'Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), give applications {"mode": "suggested"}: the receipt applies exactly what `payment suggest` with strategy "exact_then_oldest" proposes (strategy "company" follows the company preference), and dry_run previews it; or copy chosen suggest rows into applications.items. With no applications the money stays as the customer\'s unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else "Discounts Given", created as an income account when missing) and credited to Accounts Receivable. `payment invoices` shows each invoice\'s discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice leaves the discount with the payment as the customer\'s credit; voiding the payment reverses it. Retains unapplied owned credit with exact-party AR ownership and immutable invoice applications.',
+            'receive': 'Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), give applications {"mode": "suggested"}: the receipt applies exactly what `payment suggest` with strategy "exact_then_oldest" proposes (strategy "company" follows the company preference), and dry_run previews it; or copy chosen suggest rows into applications.items. With no applications the money stays as the customer\'s unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else "Discounts Given", created as an income account when missing) and credited to Accounts Receivable. `payment invoices` shows each invoice\'s discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice leaves the discount with the payment as the customer\'s credit; voiding the payment reverses it. To write off a bad debt with no cash, as the anchor\'s Receive Payments for 0.00 does, give amount "0.00", list each invoice written off in `discounts` (invoice, amount, expected_version), name the account it is written off to as `discount_account` (an expense account such as Bad Debt; a discount account such as Sales Discounts for a charge that is waived), and give a reason: the invoices are settled, the bank is not touched, sales tax stays as it stood (a discount never changes it), and the customer may be inactive. A write-off is voided like any receipt, after `payment unapply`; an agent\'s write-off is listed on `report entries-to-review`. Retains unapplied owned credit with exact-party AR ownership and immutable invoice applications.',
             'apply': 'Apply existing payment credit to its exact-party invoices without ledger posting; `payment suggest` with mode "existing_credit" and strategy "exact_then_oldest" picks them oldest first.',
             'unapply': 'Reverse selected active applications and their current allocations at original dates; retain owned credit without ledger posting.',
             'void': 'Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.',
@@ -86,8 +86,47 @@ def _delete():
 payment_delete = _delete()
 
 
+def _bounce():
+    from bookflow.company import payment_bounces
+    from bookflow.company.payment_bounce_models import PaymentBounceInput, PaymentBounceOutput
+
+    def planner(inp, ctx, s):
+        return payment_bounces.prepare(s, ctx, inp)
+
+    cmd = command('payment bounce', scope='company',
+        description=('Record a customer check the bank returned, as the anchor\'s Record Bounced Check, in one step. Name the '
+                     'deposited receipt, the date the bank returned it, the bank\'s fee (`bank_fee_amount` and `bank_fee_account`, an '
+                     'expense account such as Bank Service Charges) and, if you charge for returned checks, a fee for the customer '
+                     '(`customer_fee_amount` and either `customer_fee_item`, an Other Charge or service item with a fixed price, or '
+                     '`customer_fee_account`, the income account such as Returned Check Charges that an item posts to). A reason is '
+                     'required. The invoices the receipt paid reopen with their balances; the returned amount and the bank\'s fee '
+                     'leave the bank account the deposit went into as two lines on the return date, so a statement import matches '
+                     'them; the customer\'s fee becomes an open invoice. The receipt and the deposit are not changed: the bank '
+                     'really did deposit the check. The receipt shows "bounced on ..." in `payment show`, and the returned cash is a '
+                     'customer refund (Returned check ...) in the customer\'s history. Everything is written together or nothing is. '
+                     'There is no un-bounce: reverse it with the normal corrections, `customer-refund void` (the receipt is then an '
+                     'ordinary unapplied receipt again) and voiding the fee entry and the fee invoice. A receipt still in Undeposited '
+                     'Funds never reached the bank: unapply and void it instead. Refused when the receipt was applied inside a closed '
+                     'period, when part of it was already refunded, or when it paid more than one customer or job. Dry run previews '
+                     'every document and gives `facts_fingerprint`. Example: {"payment": "3", "expected_version": 2, "date": '
+                     '"2026-07-09", "operation_key": "bounce-1182", "bank_fee_amount": "12.00", "bank_fee_account": "Bank Service '
+                     'Charges", "customer_fee_amount": "35.00", "customer_fee_account": "Returned Check Charges"}.'),
+        input_model=PaymentBounceInput, output_model=PaymentBounceOutput, writes={'company'},
+        required_role='standard', capability='ledger.post', accepts_idempotency_key=True, positional=['payment'],
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED', 'E_PERIOD_CLOSED',
+                     'E_INACTIVE_REFERENCE', 'E_APPLICATION_INACTIVE', 'E_HAS_REFUND', 'E_PREVIEW_STALE',
+                     'E_PAYMENT_OPERATION_KEY_REUSED', 'E_DUPLICATE_NUMBER', 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION',
+                     'E_APPLICATION_INCOMPATIBLE', 'E_CREDIT_UNAVAILABLE'])(planner)
+    cmd.ledger = True
+    cmd.applier(payment_bounces.apply)
+    return cmd
+
+
+payment_bounce = _bounce()
+
+
 @command('payment show', scope='company', description='Show a receipt revision separately from current owned credit and application capacity.',
-    input_model=PaymentShowInput, output_model=PaymentOutput, required_role='member', capability='ledger.read',
+    input_model=PaymentShowInput, output_model=PaymentShowOutput, required_role='member', capability='ledger.read',
     positional=['payment'], error_codes=['E_RECORD_NOT_FOUND'])
 def payment_show(inp, ctx, s):
     from bookflow.company.payment_dependencies import issue

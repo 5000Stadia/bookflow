@@ -5220,3 +5220,47 @@ its tax code like any line (`tests/test_other_charge_balance_sheet.py`).
 The demo seed's opening balance is a one-file move-in (`cutover plan`, `cutover apply` with
 `journal_number` `DEMO-OPEN`, `cutover tie-out`); `tests/fixtures/cutover/` holds the sample export
 set the tests move in.
+
+## A returned customer check, and a bad debt written off (R176, R177)
+
+**`payment bounce` is four documents written as one.** A deposited check the bank returns is the
+anchor's Record Bounced Check. It writes, in one transaction and from the books as each step leaves
+them: `payment unapply` of every live application of the receipt (the invoices reopen), a
+`customer-refund` of the receipt's cash from the bank account the deposit went into (Dr Accounts
+Receivable, Cr bank, and a consumption of the receipt's capacity so the same cash cannot be applied
+again), a register entry for the bank's fee (Dr the expense account, Cr the bank) and an invoice for
+the customer's fee. The receipt, its postings and its deposit are not touched. Each step is
+prepared and persisted by the module that owns that document (`payments`, `refunds`, `registers`,
+`sales`), so every check of theirs still applies and a refusal in any of them rolls the whole back.
+The preview prepares each step against the books as they stand now, with the refund told the
+capacity the unapply will release (`refunds._resolve(released=...)`), so a dry run is the real
+documents and its `facts_fingerprint` binds them.
+
+`payment_bounces` (co0069) is the only new table: one append-only row per bounce, naming the receipt,
+the refund, the optional fee entry and fee invoice, the return date, the amounts, the reason and the
+operation key (asking again with a key returns the row's result). A receipt is *bounced* while the
+refund the row names is posted, so the normal correction ends it: voiding the refund releases the
+receipt's capacity and `payment show` stops printing `bounce`. `customer-refund update` refuses a
+bounce's refund (the date and sources are the bounce's), `deposit delete` refuses a deposit that holds a
+bounced receipt (its cash has already left the bank once), and `payment void` on such a receipt names the
+refund to void. The receipt's `bounce` is on `PaymentShowOutput`, a subclass of `PaymentOutput`, so the
+deposit family's pinned codecs do not see it.
+
+The reopening is the receipt's unapply, whose inverse edge carries the original application date
+(`applications_exact_inverse`). A receipt applied inside a closed period therefore cannot be
+bounced: reopening there would change a closed period. Dating the inverse at the return date would
+need the edge triggers, the cash-basis readers and the correction validators to treat an inverse as
+an event of its own date; that is not done here.
+
+**A write-off is a receipt for nothing.** The anchor writes a bad debt off with Receive Payments for
+0.00, the open balance taken as a discount to a Bad Debt account. Bookflow's receipt already carries
+discounts (`payment_discounts`: the component's capacity is cash plus discount, and the invoice is
+settled through one edge for both), so the same receipt with `amount` 0.00 is the write-off: no
+cash leg, a component of discount alone, `discount_account` named (an expense account such as Bad Debt, or a discount account such as
+Sales Discounts for a waived charge; never defaulted), a reason, and `applications` empty. Nothing posts to the bank or Undeposited Funds, so Make Deposits
+(`deposit_sources._partition`) finds no cash to bank. The customer may be inactive (payer and invoice
+parties are read inactive-tolerant only on this path), the payment method defaults to the list's
+"Other", and the receipt is not corrected in place (`payment_corrections`). Sales tax is left as it
+stands, which is what a discount does everywhere here and in the anchor: the whole balance, tax
+included, goes to the expense account. An agent's write-off is the `write_off` flag of
+`entry_review`, and warns the agent at write time.

@@ -2446,3 +2446,62 @@ command = "sales-tax adjust"
 capture = "demo_sales_tax_adjustment"
 reason = "Record the late-filing penalty the agency assessed"
 input = { agency = "${tax_agency.id}", date = "2026-12-12", number = "DEMO-STADJ-1", adjustment_account = "Other Expense", direction = "increase", amount = "2.10", memo = "Late-filing penalty assessed by the agency" }
+
+# A returned check (R176): the bank sends a deposited check back. One `payment bounce` reopens the
+# invoice the check paid, takes the returned amount and the bank's 15.00 fee out of Checking, and
+# bills the customer a 25.00 returned-check fee as a new open invoice.
+[[commands]]
+command = "customer create"
+capture = "bounce_customer"
+reason = "A customer whose check the bank returns"
+input = { name = "Returned Check Example Customer" }
+
+[[commands]]
+command = "invoice post"
+capture = "bounce_invoice"
+reason = "Bill the customer whose check will come back"
+input = { date = "2026-12-05", number = "DEMO-BOUNCE-INV-1", customer = "${bounce_customer.id}", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "1", net_amount = "200.00" }] }
+
+[[commands]]
+command = "payment receive"
+capture = "bounce_payment"
+reason = "The customer's check, deposited straight to Checking"
+input = { customer = "${bounce_customer.id}", date = "2026-12-06", amount = "200.00", number = "DEMO-BOUNCE-PAY-1", payment_method = "Check", reference = "5001", deposit_to = "Checking", operation_key = "DEMO-BOUNCE-PAY-1-receive", applications = { mode = "inline", items = [{ invoice = "${bounce_invoice.id}", expected_version = 1, amount = "200.00" }] } }
+
+[[commands]]
+command = "payment bounce"
+capture = "bounce_record"
+reason = "Bank returned check 5001 unpaid"
+input = { payment = "${bounce_payment.id}", expected_version = "${bounce_payment.version}", date = "2026-12-08", operation_key = "DEMO-BOUNCE-1", bank_fee_amount = "15.00", bank_fee_account = "Bank Fees", customer_fee_amount = "25.00", customer_fee_item = "${pay_item.id}", customer_fee_number = "DEMO-BOUNCE-FEE-1" }
+
+# A bad debt written off with no cash (R177): the anchor's Receive Payments for 0.00 with the
+# balance taken as a discount to a Bad Debt expense account. The customer is inactive afterwards,
+# and the write-off is made after it was deactivated, without reactivating it.
+[[commands]]
+command = "account create"
+capture = "bad_debt_account"
+reason = "Where uncollectable customer balances are written off"
+input = { name = "Bad Debt", type = "expense" }
+
+[[commands]]
+command = "customer create"
+capture = "write_off_customer"
+reason = "A customer that closed owing a balance"
+input = { name = "Write-off Example Customer" }
+
+[[commands]]
+command = "invoice post"
+capture = "write_off_invoice"
+reason = "Bill the customer that will never pay"
+input = { date = "2026-12-03", number = "DEMO-WO-INV-1", customer = "${write_off_customer.id}", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "1", net_amount = "150.00" }] }
+
+[[commands]]
+command = "customer deactivate"
+reason = "The customer closed"
+input = { customer = "${write_off_customer.id}", expected_version = "${write_off_customer.version}" }
+
+[[commands]]
+command = "payment receive"
+capture = "write_off_payment"
+reason = "Customer closed; the balance will never be paid"
+input = { customer = "${write_off_customer.id}", date = "2026-12-11", amount = "0.00", number = "DEMO-WO-PAY-1", operation_key = "DEMO-WO-PAY-1-receive", discounts = [{ invoice = "${write_off_invoice.id}", amount = "150.00", expected_version = 1 }], discount_account = "${bad_debt_account.id}" }
