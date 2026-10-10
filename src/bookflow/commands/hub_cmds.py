@@ -16,6 +16,7 @@ from pydantic import model_serializer, BaseModel, ConfigDict, Field, field_valid
 
 from bookflow.commands.common import (CompanySummary, Empty, ListInput, NameInput, OrganizationOutput, WriteOutput,
                                       company_summary, organization_output)
+from bookflow.core import clock
 from bookflow.core.context import Context
 from bookflow.core.durability import sync_directory, sync_move_parents
 from bookflow.core.errors import BookflowError
@@ -1010,7 +1011,10 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
         def seed_history() -> None:
             for company_seed, row in zip(seeds, rows):
                 try:
-                    _apply_seed_history(s, ctx, company_seed, row)
+                    # Each seed is written as of one day; "has this expired / is this past?"
+                    # is judged on that day, so the books build the same on any real day.
+                    with clock.as_of_day(_seed_working_day(company_seed)):
+                        _apply_seed_history(s, ctx, company_seed, row)
                     if row is primary:
                         _seed_demo_agent(s, ctx, row)
                 except Exception as error:
@@ -1025,6 +1029,12 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
 
         return Applied(out, touched, f"reset demo: {orow['display_name']} / " + ", ".join(r["display_name"] for r in rows), after_commit=seed_history)
 
+
+
+def _seed_working_day(seed: dict[str, Any]) -> str | None:
+    """The day a seed's story is written as of: the demo's reset day, or the reference year's fixed day."""
+    table = seed.get("calendar") or {}
+    return table.get("reset_day") or table.get("as_of")
 
 
 def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dict[str, Any]) -> None:

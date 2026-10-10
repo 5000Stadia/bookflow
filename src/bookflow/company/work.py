@@ -101,7 +101,7 @@ def summary(header, rev, s=None, pending=None):
     return WorkSummaryOutput(**header, **{k: rev[k] for k in ('date', 'title', 'customer_id',
         'currency', 'net_minor_units', 'tax_minor_units', 'gross_minor_units')},
         customer_name=f.profile.customer.label, **_amounts(rev),
-        expired=bool(f.expires_on and f.expires_on < clock.now().date().isoformat()),
+        expired=bool(f.expires_on and f.expires_on < clock.today_iso()),
         time=_time_summary(s, f, rev, pending) if s is not None and header.get('kind') == 'time_activity' else None)
 
 
@@ -372,7 +372,7 @@ def _lifecycle(kind, old, value, inp, ctx):
                 'decision_note' not in inp.model_fields_set or not value['decision_note']):
             raise _invalid('decision_note', 'record the decision when accepting, declining or superseding')
         expiry = value['facts']['expires_on']
-        if status == 'accepted' and prior != status and expiry and expiry < clock.now().date().isoformat() and not getattr(inp, 'acknowledge_expired', False):
+        if status == 'accepted' and prior != status and expiry and expiry < clock.today_iso() and not getattr(inp, 'acknowledge_expired', False):
             raise _invalid('acknowledge_expired', 'explicitly acknowledge that the estimate has expired')
     else:
         ordinary = {'draft', 'scheduled', 'in_progress', 'on_hold'}
