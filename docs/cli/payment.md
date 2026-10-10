@@ -4,7 +4,7 @@
 
 ## `payment apply`
 
-Apply existing payment credit to its exact-party invoices without ledger posting; `payment suggest` with mode "existing_credit" and strategy "exact_then_oldest" picks them oldest first.
+Apply existing payment credit to its exact-party invoices without ledger posting; `payment suggest` with mode "existing_credit" and strategy "exact_then_oldest" picks them oldest first. A credit memo is not payment credit: apply it with `customer-credit apply`.
 
 Preview/save: choose input.operation_key once for this business operation. Call with top-level dry_run=true. Copy the returned preview result's facts_fingerprint into input.expected_facts_fingerprint, then save with dry_run=false using the same operation_key, the same business inputs and the same reason/directive. The fingerprint is returned by Bookflow; do not calculate it. A stale preview requires a fresh preview and review of the changed facts before saving.
 After an uncertain transport result, recover the existing transport reference first. For an exact business retry, preserve the original operation_key, input and context; payment operation show retrieves the canonical saved request and historical effect. A new business operation needs a new operation_key. The permanent operation_key is distinct from the optional top-level idempotency_key and from the transport reference.
@@ -471,14 +471,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow payment bounce 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --date 2026-07-09 --operation-key example-bounce-1 --bank-fee-amount 12.00 --bank-fee-account 'Bank Service Charges' --customer-fee-amount 35.00 --customer-fee-account 'Returned Check Charges' --company 'Demo Plumbing Co' --json --reason 'Bank returned the check unpaid'`
+`bookflow payment bounce 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --date 2026-07-09 --operation-key example-bounce-1 --bank-fee-amount 12.00 --bank-fee-account 'Bank Service Charges' --customer-fee-amount 35.00 --company 'Demo Plumbing Co' --json --reason 'Bank returned the check unpaid'`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "payment bounce", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "date": "2026-07-09", "operation_key": "example-bounce-1", "bank_fee_amount": "12.00", "bank_fee_account": "Bank Service Charges", "customer_fee_amount": "35.00", "customer_fee_account": "Returned Check Charges"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+{"command": "payment bounce", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "date": "2026-07-09", "operation_key": "example-bounce-1", "bank_fee_amount": "12.00", "bank_fee_account": "Bank Service Charges", "customer_fee_amount": "35.00"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
@@ -492,9 +492,9 @@ The same example as complete `bookflow_run` arguments:
 | `bank_fee_amount` | `--bank-fee-amount` | string \| null | no | yes | null | The bank's fee for returning the check, as a decimal string more than zero, such as "12.00". Omit it when the bank charged none. Give `bank_fee_account` with it. |
 | `bank_fee_account` | `--bank-fee-account` | string \| null | no | yes | null | Expense account the bank's fee is charged to, such as Bank Service Charges. Not a bank, card, receivable or income account. |
 | `bank_fee_memo` | `--bank-fee-memo` | string \| null | no | yes | null | Memo on the fee entry; defaults to a line naming the check. |
-| `customer_fee_amount` | `--customer-fee-amount` | string \| null | no | yes | null | A fee billed to the customer for the returned check, as a decimal string more than zero, such as "35.00"; it becomes an open invoice. Omit it to bill none. Give `customer_fee_item` or `customer_fee_account` with it. |
-| `customer_fee_item` | `--customer-fee-item` | string \| null | no | yes | null | Item the customer's fee is billed through, a service or Other Charge item with a fixed price, such as Returned Check Charge. Give this or `customer_fee_account`, not both. |
-| `customer_fee_account` | `--customer-fee-account` | string \| null | no | yes | null | Income account the customer's fee is billed to, such as Returned Check Charges: the fee is billed through the active item that already posts to it. Give this or `customer_fee_item`, not both. |
+| `customer_fee_amount` | `--customer-fee-amount` | string \| null | no | yes | null | A fee billed to the customer for the returned check, as a decimal string more than zero, such as "35.00"; it becomes an open invoice. Omit it to bill none. With neither `customer_fee_item` nor `customer_fee_account` it is billed, as the anchor bills it, through the Returned Check Charge item posting to the Returned Check Charges income account, both set up on first use. |
+| `customer_fee_item` | `--customer-fee-item` | string \| null | no | yes | null | Item the customer's fee is billed through, a service or Other Charge item with a fixed price, such as Returned Check Charge. Give this or `customer_fee_account`, not both; omit both for the default. |
+| `customer_fee_account` | `--customer-fee-account` | string \| null | no | yes | null | Income account the customer's fee is billed to, such as Returned Check Charges: the fee is billed through the active item that already posts to it. Give this or `customer_fee_item`, not both; omit both for the default. |
 | `customer_fee_number` | `--customer-fee-number` | string \| null | no | yes | null | Invoice number for the customer's fee; the next invoice number when omitted. |
 | `customer_fee_memo` | `--customer-fee-memo` | string \| null | no | yes | null | Memo on the fee invoice; defaults to a line naming the check. |
 | `bank_account` | `--bank-account` | string \| null | no | yes | null | Bank account the returned amount and the bank fee leave. Defaults to the account the receipt was deposited to; give it only to correct that. |
@@ -772,6 +772,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `amount_origin` | literal["entered", "selection_total", "unresolved"] | yes | no | — | — |
 | `unapplied_minor_units` | integer \| null | yes | yes | — | — |
 | `problems` | array[string] | yes | no | — | — |
+| `available_credits` | array[object] | no | no | [] | This customer's credit memos with money left, oldest first (the anchor's Discounts & Credits in Receive Payments). A payment does not use them: apply one to an invoice with `customer-credit apply` (credit_memo, its expected_version, and the invoice and amount). Omitted when there are none. |
+| `available_credits[].credit_memo_id` | string | yes | no | — | — |
+| `available_credits[].number` | string | yes | no | — | — |
+| `available_credits[].date` | string | yes | no | — | — |
+| `available_credits[].available` | object | yes | no | — | — |
+| `available_credits[].available.amount` | string | yes | no | — | — |
+| `available_credits[].available.currency` | string | yes | no | — | — |
+| `available_credits[].available.minor_units` | integer | yes | no | — | — |
+| `available_credits[].next` | string | yes | no | — | The command that applies this credit to an invoice: `customer-credit apply`. |
 
 Example JSON output:
 
@@ -1174,7 +1183,7 @@ Example JSON output:
 
 ## `payment invoices`
 
-Open (unpaid) invoices a customer can pay, with the amount due and current expected_version of each: mode "new_receipt" with customer and date. Each row also carries its early-payment `discount_date` and the `suggested_discount_minor_units` its terms offer for a receipt on that date (the terms percentage of the invoice total, tax included, less any discount already taken; zero after the discount date), which `payment receive` takes only when listed in its `discounts`. Page bounds never limit receipt intent.
+Open (unpaid) invoices a customer can pay, with the amount due and current expected_version of each: mode "new_receipt" with customer and date. Each row also carries its early-payment `discount_date` and the `suggested_discount_minor_units` its terms offer for a receipt on that date (the terms percentage of the invoice total, tax included, less any discount already taken; zero after the discount date), which `payment receive` takes only when listed in its `discounts`. available_credits lists the customer's open credit memos (the anchor's Discounts & Credits); a receipt does not use them, so apply each to an invoice with `customer-credit apply`. Page bounds never limit receipt intent.
 
 | Contract | Value |
 |---|---|
@@ -1267,6 +1276,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `family_balance.amount` | string | yes | no | — | — |
 | `family_balance.currency` | string | yes | no | — | — |
 | `family_balance.minor_units` | integer | yes | no | — | — |
+| `available_credits` | array[object] | no | no | [] | This customer's credit memos with money left, oldest first (the anchor's Discounts & Credits in Receive Payments). A payment does not use them: apply one to an invoice with `customer-credit apply` (credit_memo, its expected_version, and the invoice and amount). Omitted when there are none. |
+| `available_credits[].credit_memo_id` | string | yes | no | — | — |
+| `available_credits[].number` | string | yes | no | — | — |
+| `available_credits[].date` | string | yes | no | — | — |
+| `available_credits[].available` | object | yes | no | — | — |
+| `available_credits[].available.amount` | string | yes | no | — | — |
+| `available_credits[].available.currency` | string | yes | no | — | — |
+| `available_credits[].available.minor_units` | integer | yes | no | — | — |
+| `available_credits[].next` | string | yes | no | — | The command that applies this credit to an invoice: `customer-credit apply`. |
 
 Example JSON output:
 
@@ -2447,7 +2465,7 @@ Example JSON output:
 
 ## `payment suggest`
 
-Choose which open invoices a payment pays. strategy "exact_then_oldest" takes an invoice matching the amount exactly, otherwise the oldest invoices first until the money runs out (give the total due to pay everything open). To apply the suggestion as it stands, give `payment receive` applications {"mode": "suggested", "strategy": ...} with the same customer, date and amount; to adjust it, pass each row to applications.items as invoice = invoice_id, expected_version, amount = {"minor_units": amount_minor_units, "currency": currency}.
+Choose which open invoices a payment pays. strategy "exact_then_oldest" takes an invoice matching the amount exactly, otherwise the oldest invoices first until the money runs out (give the total due to pay everything open). To apply the suggestion as it stands, give `payment receive` applications {"mode": "suggested", "strategy": ...} with the same customer, date and amount; to adjust it, pass each row to applications.items as invoice = invoice_id, expected_version, amount = {"minor_units": amount_minor_units, "currency": currency}. available_credits lists the customer's open credit memos, which a payment does not use; apply each with `customer-credit apply`.
 
 | Contract | Value |
 |---|---|
@@ -2529,6 +2547,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `amount_origin` | literal["entered", "selection_total", "unresolved"] | yes | no | — | — |
 | `unapplied_minor_units` | integer \| null | yes | yes | — | — |
 | `problems` | array[string] | yes | no | — | — |
+| `available_credits` | array[object] | no | no | [] | This customer's credit memos with money left, oldest first (the anchor's Discounts & Credits in Receive Payments). A payment does not use them: apply one to an invoice with `customer-credit apply` (credit_memo, its expected_version, and the invoice and amount). Omitted when there are none. |
+| `available_credits[].credit_memo_id` | string | yes | no | — | — |
+| `available_credits[].number` | string | yes | no | — | — |
+| `available_credits[].date` | string | yes | no | — | — |
+| `available_credits[].available` | object | yes | no | — | — |
+| `available_credits[].available.amount` | string | yes | no | — | — |
+| `available_credits[].available.currency` | string | yes | no | — | — |
+| `available_credits[].available.minor_units` | integer | yes | no | — | — |
+| `available_credits[].next` | string | yes | no | — | The command that applies this credit to an invoice: `customer-credit apply`. |
 
 Example JSON output:
 

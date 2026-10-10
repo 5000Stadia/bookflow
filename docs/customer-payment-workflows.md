@@ -151,6 +151,16 @@ financial records remain unchanged. The reference annual trial balance is
 8,048,600 cents; income is 6,457,000 and net assets 7,457,000. These are active
 examples for continuation, not a reason to cancel every new record.
 
+## A customer's credit memos at payment time
+
+The anchor's Receive Payments shows the customer's credits under Discounts & Credits. Here a
+receipt never uses a credit memo; `payment invoices` and `payment suggest` list the customer's
+open credit memos as `available_credits` (number, date, money left), each with
+`next: customer-credit apply`. Apply one to an invoice with `customer-credit apply`
+(`credit_memo`, its `expected_version`, and each invoice with its `expected_version` and
+amount). `payment apply` and `payment suggest` in mode `existing_credit` take a receipt's
+unapplied money only; handed a credit memo, they refuse and name `customer-credit apply`.
+
 ## Early-payment discounts
 
 Terms with a discount (for example "2% 10 Net 30") make an invoice or bill discountable
@@ -176,8 +186,9 @@ through its discount date. `payment invoices` rows carry `discount_date` and
   or check total stays the cash.
 - The discount account is `discount_account` on the command, else the company
   `customer_discount_account_id` / `vendor_discount_account_id`, else the active account
-  named "Discounts Given" / "Discounts Taken", else that account is created as an income
-  account in the same write.
+  named "Discounts Given" / "Discounts Taken". With none of those the write is refused
+  with `E_VALIDATION` on `discount_account`, listing the discount-like accounts in the
+  chart (the anchor asks which discount account); nothing is created.
 - `payment unapply` / `bill payment unapply` of a discounted settlement leaves the
   discount with the payment as unapplied credit (customer) or unapplied debit (vendor).
   A void or deletion reverses the discount posting with the rest of the payment. A
@@ -220,8 +231,10 @@ that is waived a discount account such as Sales Discounts; it is never defaulted
 `payment bounce` is the anchor's Record Bounced Check. Name the deposited receipt, the date
 the bank returned it, the bank's fee (`bank_fee_amount` and `bank_fee_account`, an expense account such as Bank
 Service Charges) and, if the business charges for it, a fee for the customer
-(`customer_fee_amount` and an Other Charge or service `customer_fee_item`, or the income
-`customer_fee_account` that an item posts to, such as Returned Check Charges). A reason is required.
+(`customer_fee_amount`; billed, as the anchor bills it, through the Returned Check Charge item to
+the Returned Check Charges income account, both set up on first use, unless an Other Charge or
+service `customer_fee_item` or an income `customer_fee_account` that an item posts to is named).
+A reason is required.
 
 - The invoices the receipt paid are owed again, with their balances.
 - The bank account the deposit went into shows two lines on the return date: the returned
