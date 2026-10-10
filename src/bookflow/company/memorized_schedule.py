@@ -37,6 +37,8 @@ from bookflow.company.memorized_schema import FREQUENCIES
 def today(zone: str | None, at: datetime | None = None) -> str:
     """The current company-local date as an ISO date string."""
     from bookflow.core import clock
+    if at is None and clock.working_day() is not None:
+        return clock.working_day().isoformat()
     moment = at or clock.now()
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
