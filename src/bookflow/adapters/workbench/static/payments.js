@@ -700,6 +700,14 @@
       el('p',r.id===record.current_revision_id?'Latest recorded receipt facts.':'Historical receipt facts; actions use current settlement below.'),
       el('h3','Current settlement'),el('p',`${record.status}. Applied ${cash(c.applied_minor_units,c.currency)}; unapplied credit ${cash(c.available_minor_units,c.currency)}.`
         +(c.discount_minor_units?` Early-payment discounts taken: ${cash(c.discount_minor_units,c.currency)}.`:'')));
+    if(record.bounce) {
+      // The bank returned this receipt's check (`payment bounce`); the refund that took its cash back out of the bank is the record of it.
+      const b=record.bounce,block=el('div');block.className='warn';block.setAttribute('aria-label','Bounced check');
+      block.append(el('h3','Bounced on '+exact.longday(b.bounced_on)),
+        el('p',`The bank returned this check: ${cash(b.returned.minor_units,c.currency)} came back out of the bank${b.bank_fee?`, with a ${cash(b.bank_fee.minor_units,c.currency)} bank fee`:''}${b.customer_fee?`, and the customer was billed a ${cash(b.customer_fee.minor_units,c.currency)} fee`:''}. ${b.reason}`),
+        el('p','To undo it, void the returned-check refund; this receipt is then an ordinary unapplied receipt again.'));
+      section.append(block);
+    }
     if(record.deletion) {
       const d=record.deletion,block=el('div');block.className='warn';block.setAttribute('aria-label','Deleted payment');
       block.append(el('h3','Deleted payment'),

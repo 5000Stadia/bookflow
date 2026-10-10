@@ -112,7 +112,7 @@ Required follow-ups remain required under the active project goal.
 | CP09 | Paged invoice date/job/number/original/applied/due/payment grid and complete preview. Discount/credit-memo/aging columns depend on their owning increments. |
 | CP10 | Independent automatic-application preference plus explicit matching/oldest suggestions; draft preparation precedes preview/save. |
 | CP11 | Explicit partial per-invoice amounts; unapplied remainder is permitted. |
-| CP12 | Remaining invoice due stays open. Typed write-offs remain required follow-up work. |
+| CP12 | Remaining invoice due stays open until paid or written off: a bad debt is written off with a receipt of 0.00 (see Bad-debt write-offs). |
 | CP13 | Unapplied cash remains payer-owned credit, and `customer-refund post` sends it back: name the receipt as a `payment` source and the refund debits Accounts Receivable, credits the funding account, and consumes that overage so it stops reporting as available. |
 | CP14 | Explicit immutable unapply and same-party reapply; no mutation of old applications. |
 | CP15–CP16 | Available payment credit can partially settle exact-party invoices. Unified credit-source selection and credit memos remain required follow-ups. |
@@ -127,7 +127,7 @@ Required follow-ups remain required under the active project goal.
 | CP25 | Receipt debits bank/UF and credits AR; later deposit movement must not recognize cash twice. |
 | CP26 | Payments-to-deposit, deposit documents, fees and reconciliation require the banking increment. |
 | CP27 | Liability deposits/retainers require typed liability documents; unapplied AR credit does not substitute. |
-| CP28 | Bad-debt/write-off documents and components remain required follow-ups. |
+| CP28 | Bad debt is written off by `payment receive` with `amount` 0.00 and the balance taken as a discount to an expense account such as Bad Debt, the anchor's way; a customer check the bank returns is recorded by `payment bounce`. |
 | CP29 | Finance-charge assessment/preferences and statements remain required follow-ups. |
 | CP30 | Provider/card/online collection and external delivery remain separate authorized work. |
 | CP31 | Full aging summary/detail and graph remain required report work; dated settlement is not an aging report. |
@@ -165,9 +165,9 @@ through its discount date. `payment invoices` rows carry `discount_date` and
   invoice) or a `bill pay` row's `discount`.
 - A document may take its discount with no cash beside it: a `discounts` row for an
   invoice the applications do not pay (it then needs the invoice's `expected_version`),
-  or a `bill pay` row with `"amount": "0.00"` and a `discount`. The payment itself still
-  records cash: a receipt's `amount` is positive, and each vendor's bill payment pays
-  that vendor some money. The edge is then all discount.
+  or a `bill pay` row with `"amount": "0.00"` and a `discount`. A receipt's `amount` is
+  positive unless the whole receipt is a bad-debt write-off (see below), and each
+  vendor's bill payment pays that vendor some money. The edge is then all discount.
   A discount named after the discount date, or on a document whose terms offer none,
   is taken and the write returns a warning.
 - The document is settled by the cash plus the discount. A customer discount posts
@@ -187,6 +187,58 @@ through its discount date. `payment invoices` rows carry `discount_date` and
 - Settlement reads name the discount: `invoice settlement` applications carry
   `discount_minor_units`; bill settlement `sources` list `early_discount` beside
   `bill_payment` and `vendor_credit`.
+
+## Bad-debt write-offs
+
+A debt that will never be paid is written off the way the anchor writes it off: a receipt for
+0.00 whose open balance is taken as a discount to a Bad Debt account. `payment receive` with
+`amount` `"0.00"`, each invoice written off named in `discounts` (invoice, amount,
+`expected_version`), `discount_account` an expense account (type expense or other expense;
+the company's "Discounts Given" is an income account and is refused), and a reason.
+
+- No cash: the receipt posts debit Bad Debt, credit Accounts Receivable and nothing to the
+  bank or Undeposited Funds; Make Deposits never offers it. It carries no payment method of
+  its own (the list's "Other" is recorded) and `applications` must be empty.
+- The invoices are settled through the same edge any discount uses, so open invoices, aging,
+  statements and customer balances all read them as paid.
+- Sales tax is left as it stood. The anchor's discount path does not reduce the sales tax
+  owed, and neither does this: the whole balance, tax included, goes to the expense account,
+  and the Sales Tax Payable liability is untouched. A business that may reclaim tax on a bad
+  debt does it with `sales-tax adjust`.
+- A customer who has been made inactive can be written off without being reactivated; the
+  customer stays inactive.
+- A partial write-off is a receipt with some cash and a discount to an expense account, or a
+  0.00 receipt for part of an invoice; the rest stays due.
+- To reverse a write-off, `payment unapply` it and `payment void` it, as any receipt. It is
+  not corrected in place.
+- A write-off an agent made is listed on `report entries-to-review` as `write_off`, and the
+  agent's result warns that it will be.
+
+## A customer's check comes back
+
+`payment bounce` is the anchor's Record Bounced Check. Name the deposited receipt, the date
+the bank returned it, the bank's fee (`bank_fee`: amount and an expense account such as Bank
+Service Charges) and, if the business charges for it, a fee for the customer (`customer_fee`:
+amount and an Other Charge `item`, or the income `account` that an item posts to, such as
+Returned Check Charges). A reason is required.
+
+- The invoices the receipt paid are owed again, with their balances.
+- The bank account the deposit went into shows two lines on the return date: the returned
+  amount (a customer refund, "Returned check ...") and the bank's fee (a register entry), so a
+  statement import finds both. The original deposit and the receipt are not touched.
+- The customer fee is a new open invoice for the customer. Its number is `customer_fee.number`
+  or the next one.
+- `payment show` carries `bounce` ("bounced on ...") and `payment query` rows carry
+  `bounced_on` while the return stands.
+- A receipt that took an early-payment discount returns only its cash; the discount stays as
+  the customer's credit.
+- Everything is written together or nothing is. There is no un-bounce: void the returned-check
+  refund (`customer-refund void`) and the receipt is an ordinary unapplied receipt again; void
+  the fee entry and the fee invoice as any entry and invoice are. That refund is not corrected
+  in place, and a deposit holding a bounced receipt is not deleted until the refund is voided.
+- Not recordable: a receipt still in Undeposited Funds (unapply and void it), one applied
+  inside a closed period (reopening an invoice there would change a closed period), one
+  already partly refunded, and one that paid more than one customer or job.
 
 ## Recover an interrupted or stale shared selection
 

@@ -470,6 +470,7 @@ SECTIONS: tuple[Section, ...] = (
         ),
         tasks=(
             Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
+            Action("Record a bounced check", WRITE, ("payment bounce",), "/payment/bounce"),
             Action("Invoice a billing group", WRITE, ("batch-invoice post",), "/batch-invoice/post"),
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             _report("Customer statement", "statement"),

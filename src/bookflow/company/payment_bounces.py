@@ -151,6 +151,10 @@ def _fee_item(s, fee, field):
     items = c.items
     if fee.item is not None:
         row = defaults._row(s.company, 'item', fee.item)
+        if row['type'] not in FEE_ITEM_TYPES or row.get('charge_percent') is not None or not row.get('sales_enabled', True):
+            raise _invalid(field + '.item', f'"{row["full_name"]}" cannot bill a fixed fee (it is a {row["type"].replace("_", " ")} item'
+                           + (' charged as a percentage' if row.get('charge_percent') is not None else '')
+                           + '); name an Other Charge or service item with a fixed price')
         return row['id']
     account = account_service.resolve_account(s.company, fee.account)
     if account['type'] not in ('income', 'other_income'):

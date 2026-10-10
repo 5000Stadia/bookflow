@@ -255,6 +255,8 @@ DEMO_ARCS = {
     'DEMO-LINE-KINDS': 'a subtotal, a percentage discount and a group item on one invoice',
     'DEMO-ASK-': 'a payment waiting in Uncategorized Expense (Ask My Accountant) for its account',
     'DEMO-STADJ-': 'a sales tax adjustment: a penalty added to what one agency is owed',
+    'DEMO-BOUNCE-': 'a returned check: the invoice reopened, the bank fee, and the fee billed to the customer',
+    'DEMO-WO-': 'a bad debt written off with a receipt of 0.00 to a Bad Debt expense account',
     # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`

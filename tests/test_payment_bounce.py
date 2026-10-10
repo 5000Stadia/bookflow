@@ -316,3 +316,14 @@ def test_what_the_old_refusals_point_at_and_what_a_bounce_blocks(july):
     with pytest.raises(BookflowError) as blocked:
         run('deposit delete', dict(deposit=july['deposit_id'], expected_version=deposit['current']['version'], operation_key='dd'), reason='Fix')
     assert blocked.value.code == 'E_VALIDATION' and 'customer-refund void' in str(blocked.value.details) + blocked.value.message
+
+
+def test_a_statement_import_matches_the_deposit_the_returned_item_and_the_fee(july):
+    """The bank's July: the 805.20 deposit, then the returned 486.93 and the 12.00 fee as two lines."""
+    done = bounce(july, july['check'], customer_fee=None)
+    statement = ('Date,Description,Amount\n2026-07-02,DEPOSIT,805.20\n'
+                 '2026-07-09,RETURNED DEPOSITED ITEM,-486.93\n2026-07-09,RETURN ITEM FEE,-12.00\n')
+    result = july['run']('reconcile import', dict(account=july['bank'], content=statement))
+    assert [(row['date'], row['amount'], row['status']) for row in result['lines']] == [
+        ('2026-07-02', 80520, 'matched'), ('2026-07-09', -48693, 'matched'), ('2026-07-09', -1200, 'matched')], result['lines']
+    assert result['counts']['unmatched'] == 0 and done['bounce_id']

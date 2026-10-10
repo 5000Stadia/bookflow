@@ -231,7 +231,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input` | object | yes | no | — | — |
 | `prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Cash received, 0.00 or more. 0.00 is the anchor's write-off of a bad debt: no cash, every invoice written off named in `discounts` with its expected_version, `discount_account` an expense account such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}], "discount_account": "Bad Debt"}. Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
 | `prospective_pages[].request.input.applications` | object \| object \| object \| object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); mode "suggested" applies it as `payment suggest` would with the same strategy (default "exact_then_oldest"), so there is nothing to copy; mode "selection" uses a saved selection. Preview any of them with dry_run. Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] \| literal["suggested"] \| literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
@@ -242,11 +242,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.strategy` | literal["exact_then_oldest", "company"] | no | no | "exact_then_oldest" | The `payment suggest` strategy: "exact_then_oldest" takes an open invoice matching the amount exactly, otherwise the oldest open invoices first until the money runs out; "company" follows the company automatic-application preference (nothing is applied when it is off). Present in SuggestedApplications. Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -447,6 +447,234 @@ Example JSON output:
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payment bounce`
+
+Record a customer check the bank returned, as the anchor's Record Bounced Check, in one step. Name the deposited receipt, the date the bank returned it, the bank's fee as `bank_fee` {amount, account} (an expense account such as Bank Service Charges) and, if you charge for returned checks, `customer_fee` {amount, item or account} (an Other Charge item, or the income account such as Returned Check Charges that an item posts to). A reason is required. The invoices the receipt paid reopen with their balances; the returned amount and the bank's fee leave the bank account the deposit went into as two lines on the return date, so a statement import matches them; the customer's fee becomes an open invoice. The receipt and the deposit are not changed: the bank really did deposit the check. The receipt shows "bounced on ..." in `payment show`, and the returned cash is a customer refund (Returned check ...) in the customer's history. Everything is written together or nothing is. There is no un-bounce: reverse it with the normal corrections, `customer-refund void` (the receipt is then an ordinary unapplied receipt again) and voiding the fee entry and the fee invoice. A receipt still in Undeposited Funds never reached the bank: unapply and void it instead. Refused when the receipt was applied inside a closed period, when part of it was already refunded, or when it paid more than one customer or job. Dry run previews every document and gives `facts_fingerprint`. Example: {"payment": "3", "expected_version": 2, "date": "2026-07-09", "operation_key": "bounce-1182", "bank_fee": {"amount": "12.00", "account": "Bank Service Charges"}, "customer_fee": {"amount": "35.00", "account": "Returned Check Charges"}}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payment.bounce` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payment bounce 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --date 2026-07-09 --operation-key example-bounce-1 --bank-fee-amount 12.00 --bank-fee-account 'Bank Service Charges' --customer-fee-amount 35.00 --customer-fee-account 'Returned Check Charges' --company 'Demo Plumbing Co' --json --reason 'Bank returned the check unpaid'`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payment bounce", "input": {"payment": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "date": "2026-07-09", "operation_key": "example-bounce-1", "bank_fee": {"amount": "12.00", "account": "Bank Service Charges"}, "customer_fee": {"amount": "35.00", "account": "Returned Check Charges"}}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `payment` | `PAYMENT` | string | yes | no | — | The customer receipt whose check the bank returned.; minimum length 1 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | Receipt version from `payment show`.; minimum 1 |
+| `date` | `--date` | string | yes | no | — | Date the bank returned the check. The returned amount and both fees post on it.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `operation_key` | `--operation-key` | string | yes | no | — | A unique key for this bounce; asking again with it returns the first result instead of bouncing the check twice. The steps of the bounce derive their own keys from it, so it is at most 100 characters.; pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$" |
+| `bank_fee.amount` | `--bank-fee-amount` | string \| object | yes | no | — | The bank's fee, more than zero. |
+| `bank_fee.account` | `--bank-fee-account` | string | yes | no | — | Expense account the fee is charged to, such as Bank Service Charges. Not a bank, card, receivable or income account.; minimum length 1 |
+| `bank_fee.memo` | `--bank-fee-memo` | string \| null | no | yes | null | Memo on the fee entry; defaults to a line naming the check. |
+| `customer_fee.amount` | `--customer-fee-amount` | string \| object | yes | no | — | The fee charged to the customer, more than zero. |
+| `customer_fee.item` | `--customer-fee-item` | string \| null | no | yes | null | Item the fee is billed through, such as an Other Charge item named Returned Check Charge. Give this or `account`, not both. |
+| `customer_fee.account` | `--customer-fee-account` | string \| null | no | yes | null | Income account the fee is billed to, such as Returned Check Charges: the fee is billed through the active item that already posts to it. Give this or `item`, not both. |
+| `customer_fee.number` | `--customer-fee-number` | string \| null | no | yes | null | Invoice number for the fee; the next invoice number when omitted. |
+| `customer_fee.memo` | `--customer-fee-memo` | string \| null | no | yes | null | Memo on the fee invoice; defaults to a line naming the check. |
+| `bank_account` | `--bank-account` | string \| null | no | yes | null | Bank account the returned amount and the bank fee leave. Defaults to the account the receipt was deposited to; give it only to correct that. |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | `facts_fingerprint` from a dry run; the write is refused with E_PREVIEW_STALE if anything it depends on changed since. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payment.bounce`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+| `id` | string | yes | no | — | The receipt. |
+| `version` | integer | yes | no | — | Receipt version after the bounce. |
+| `bounce_id` | string \| null | yes | yes | — | The bounced-check record; null in a dry run. |
+| `bounced_on` | string | yes | no | — | — |
+| `operation_key` | string | yes | no | — | — |
+| `facts_fingerprint` | string | yes | no | — | — |
+| `returned` | object | yes | no | — | Cash the bank took back out of the deposit account. |
+| `returned.amount` | string | yes | no | — | — |
+| `returned.currency` | string | yes | no | — | — |
+| `returned.minor_units` | integer | yes | no | — | — |
+| `bank_account` | string | yes | no | — | — |
+| `reopened_invoices` | array[object] | yes | no | — | — |
+| `reopened_invoices[].invoice_id` | string | yes | no | — | — |
+| `reopened_invoices[].number` | string | yes | no | — | — |
+| `reopened_invoices[].reopened` | object | yes | no | — | What the receipt had paid on this invoice, now owed again. |
+| `reopened_invoices[].reopened.amount` | string | yes | no | — | — |
+| `reopened_invoices[].reopened.currency` | string | yes | no | — | — |
+| `reopened_invoices[].reopened.minor_units` | integer | yes | no | — | — |
+| `reopened_invoices[].due` | object | yes | no | — | What the invoice owes after the bounce. |
+| `reopened_invoices[].due.amount` | string | yes | no | — | — |
+| `reopened_invoices[].due.currency` | string | yes | no | — | — |
+| `reopened_invoices[].due.minor_units` | integer | yes | no | — | — |
+| `refund` | object | yes | no | — | The customer refund that takes the returned cash out of the bank. |
+| `refund.id` | string | yes | no | — | — |
+| `refund.number` | string | yes | no | — | — |
+| `refund.type` | string | yes | no | — | customer_refund, journal_entry or invoice. |
+| `refund.amount` | object | yes | no | — | — |
+| `refund.amount.amount` | string | yes | no | — | — |
+| `refund.amount.currency` | string | yes | no | — | — |
+| `refund.amount.minor_units` | integer | yes | no | — | — |
+| `refund.account` | string \| null | no | yes | null | The account or item the document charges, by name. |
+| `bank_fee` | object \| null | no | yes | null | — |
+| `bank_fee.id` | string | yes | no | — | — |
+| `bank_fee.number` | string | yes | no | — | — |
+| `bank_fee.type` | string | yes | no | — | customer_refund, journal_entry or invoice. |
+| `bank_fee.amount` | object | yes | no | — | — |
+| `bank_fee.amount.amount` | string | yes | no | — | — |
+| `bank_fee.amount.currency` | string | yes | no | — | — |
+| `bank_fee.amount.minor_units` | integer | yes | no | — | — |
+| `bank_fee.account` | string \| null | no | yes | null | The account or item the document charges, by name. |
+| `customer_fee` | object \| null | no | yes | null | — |
+| `customer_fee.id` | string | yes | no | — | — |
+| `customer_fee.number` | string | yes | no | — | — |
+| `customer_fee.type` | string | yes | no | — | customer_refund, journal_entry or invoice. |
+| `customer_fee.amount` | object | yes | no | — | — |
+| `customer_fee.amount.amount` | string | yes | no | — | — |
+| `customer_fee.amount.currency` | string | yes | no | — | — |
+| `customer_fee.amount.minor_units` | integer | yes | no | — | — |
+| `customer_fee.account` | string \| null | no | yes | null | The account or item the document charges, by name. |
+| `credit_left` | object | yes | no | — | Credit the receipt still holds for the customer after the bounce: an early-payment discount it took stays with the customer as credit. Zero when the check was cash only. |
+| `credit_left.amount` | string | yes | no | — | — |
+| `credit_left.currency` | string | yes | no | — | — |
+| `credit_left.minor_units` | integer | yes | no | — | — |
+| `summary` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "bank_account": "value",
+  "bank_fee": null,
+  "bounce_id": null,
+  "bounced_on": "value",
+  "changed": true,
+  "credit_left": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "customer_fee": null,
+  "dry_run": false,
+  "facts_fingerprint": "value",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "idempotent_replay": false,
+  "operation_key": "value",
+  "refund": {
+    "account": null,
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "number": "value",
+    "type": "value"
+  },
+  "reopened_invoices": [],
+  "returned": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "summary": "value",
+  "version": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_CREDIT_UNAVAILABLE` | That credit has already been applied or refunded; it is not worth what was asked for. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PAYMENT_OPERATION_KEY_REUSED` | This permanent operation key belongs to a different original request. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
@@ -1183,6 +1411,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].received_minor_units` | integer | yes | no | — | — |
 | `items[].applied_minor_units` | integer | yes | no | — | — |
 | `items[].unapplied_minor_units` | integer | yes | no | — | — |
+| `items[].bounced_on` | string \| null | no | yes | null | Date the bank returned this receipt's check, while that return stands (`payment bounce`). |
 | `total_count` | integer | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
 | `facts_fingerprint` | string | yes | no | — | — |
@@ -1234,7 +1463,7 @@ Example JSON output:
 
 ## `payment receive`
 
-Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), give applications {"mode": "suggested"}: the receipt applies exactly what `payment suggest` with strategy "exact_then_oldest" proposes (strategy "company" follows the company preference), and dry_run previews it; or copy chosen suggest rows into applications.items. With no applications the money stays as the customer's unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else "Discounts Given", created as an income account when missing) and credited to Accounts Receivable. `payment invoices` shows each invoice's discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice leaves the discount with the payment as the customer's credit; voiding the payment reverses it. Retains unapplied owned credit with exact-party AR ownership and immutable invoice applications.
+Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), give applications {"mode": "suggested"}: the receipt applies exactly what `payment suggest` with strategy "exact_then_oldest" proposes (strategy "company" follows the company preference), and dry_run previews it; or copy chosen suggest rows into applications.items. With no applications the money stays as the customer's unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else "Discounts Given", created as an income account when missing) and credited to Accounts Receivable. `payment invoices` shows each invoice's discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice leaves the discount with the payment as the customer's credit; voiding the payment reverses it. To write off a bad debt with no cash, as the anchor's Receive Payments for 0.00 does, give amount "0.00", list each invoice written off in `discounts` (invoice, amount, expected_version), name an expense account such as Bad Debt as `discount_account`, and give a reason: the invoices are settled, the bank is not touched, sales tax stays as it stood (a discount never changes it), and the customer may be inactive. A write-off is voided like any receipt, after `payment unapply`; an agent's write-off is listed on `report entries-to-review`. Retains unapplied owned credit with exact-party AR ownership and immutable invoice applications.
 
 reference is the customer's check/reference number (for example 1042); number is Bookflow's internal receipt number. deposit_to accepts a bank account or the system Undeposited Funds holding account. Recording a receipt into Undeposited Funds does not record a completed bank deposit.
 
@@ -1274,7 +1503,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `customer` | `--customer` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `amount` | `--amount` | string \| object | yes | no | — | — |
+| `amount` | `--amount` | string \| object | yes | no | — | Cash received, 0.00 or more. 0.00 is the anchor's write-off of a bad debt: no cash, every invoice written off named in `discounts` with its expected_version, `discount_account` an expense account such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}], "discount_account": "Bad Debt"}. |
 | `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
 | `applications.mode` | `--applications-mode` | literal["inline"] \| literal["selection"] \| literal["suggested"] | no | no | "inline" | — |
 | `applications.items[].invoice` | inside `--applications-items` JSON array | string | no | no | — | Present in InlineApplications.; minimum length 1; maximum length 1004 |
@@ -1286,7 +1515,7 @@ The same example as complete `bookflow_run` arguments:
 | `discounts[].invoice` | inside `--discounts` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `discounts[].amount` | inside `--discounts` JSON array | string \| object | yes | no | — | — |
 | `discounts[].expected_version` | inside `--discounts` JSON array | integer \| null | no | yes | null | — |
-| `discount_account` | `--discount-account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. |
+| `discount_account` | `--discount-account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. |
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `deposit_to` | `--deposit-to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit |
@@ -1478,7 +1707,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input` | object | yes | no | — | — |
 | `prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Cash received, 0.00 or more. 0.00 is the anchor's write-off of a bad debt: no cash, every invoice written off named in `discounts` with its expected_version, `discount_account` an expense account such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}], "discount_account": "Bad Debt"}. Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
 | `prospective_pages[].request.input.applications` | object \| object \| object \| object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); mode "suggested" applies it as `payment suggest` would with the same strategy (default "exact_then_oldest"), so there is nothing to copy; mode "selection" uses a saved selection. Preview any of them with dry_run. Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] \| literal["suggested"] \| literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
@@ -1489,11 +1718,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.strategy` | literal["exact_then_oldest", "company"] | no | no | "exact_then_oldest" | The `payment suggest` strategy: "exact_then_oldest" takes an open invoice matching the amount exactly, otherwise the oldest open invoices first until the money runs out; "company" follows the company automatic-application preference (nothing is applied when it is off). Present in SuggestedApplications. Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -2082,6 +2311,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.components[].available_minor_units` | integer | yes | no | — | — |
 | `current.component_count` | integer | yes | no | — | — |
 | `current.discount_minor_units` | integer | no | no | 0 | — |
+| `bounce` | object \| null | no | yes | null | Present while the bank's return of this receipt's check stands (`payment bounce`): the date ("bounced on ..."), the cash returned, the refund that took it out of the bank and the fee documents. It ends when that refund is voided. |
+| `bounce.bounce_id` | string | yes | no | — | — |
+| `bounce.bounced_on` | string | yes | no | — | — |
+| `bounce.returned` | object | yes | no | — | — |
+| `bounce.returned.amount` | string | yes | no | — | — |
+| `bounce.returned.currency` | string | yes | no | — | — |
+| `bounce.returned.minor_units` | integer | yes | no | — | — |
+| `bounce.refund_id` | string | yes | no | — | — |
+| `bounce.refund_number` | string | yes | no | — | — |
+| `bounce.bank_fee_id` | string \| null | yes | yes | — | — |
+| `bounce.bank_fee` | object \| null | yes | yes | — | — |
+| `bounce.bank_fee.amount` | string | yes | no | — | — |
+| `bounce.bank_fee.currency` | string | yes | no | — | — |
+| `bounce.bank_fee.minor_units` | integer | yes | no | — | — |
+| `bounce.customer_fee_invoice_id` | string \| null | yes | yes | — | — |
+| `bounce.customer_fee` | object \| null | yes | yes | — | — |
+| `bounce.customer_fee.amount` | string | yes | no | — | — |
+| `bounce.customer_fee.currency` | string | yes | no | — | — |
+| `bounce.customer_fee.minor_units` | integer | yes | no | — | — |
+| `bounce.reason` | string | yes | no | — | — |
+| `bounce.note` | string | yes | no | — | The words a reader sees beside the receipt, "bounced on ...". |
 
 Example JSON output:
 
@@ -2553,7 +2803,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input` | object | yes | no | — | — |
 | `prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Cash received, 0.00 or more. 0.00 is the anchor's write-off of a bad debt: no cash, every invoice written off named in `discounts` with its expected_version, `discount_account` an expense account such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}], "discount_account": "Bad Debt"}. Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
 | `prospective_pages[].request.input.applications` | object \| object \| object \| object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); mode "suggested" applies it as `payment suggest` would with the same strategy (default "exact_then_oldest"), so there is nothing to copy; mode "selection" uses a saved selection. Preview any of them with dry_run. Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] \| literal["suggested"] \| literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
@@ -2564,11 +2814,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.strategy` | literal["exact_then_oldest", "company"] | no | no | "exact_then_oldest" | The `payment suggest` strategy: "exact_then_oldest" takes an open invoice matching the amount exactly, otherwise the oldest open invoices first until the money runs out; "company" follows the company automatic-application preference (nothing is applied when it is off). Present in SuggestedApplications. Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -3010,7 +3260,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input` | object | yes | no | — | — |
 | `prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Cash received, 0.00 or more. 0.00 is the anchor's write-off of a bad debt: no cash, every invoice written off named in `discounts` with its expected_version, `discount_account` an expense account such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}], "discount_account": "Bad Debt"}. Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
 | `prospective_pages[].request.input.applications` | object \| object \| object \| object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); mode "suggested" applies it as `payment suggest` would with the same strategy (default "exact_then_oldest"), so there is nothing to copy; mode "selection" uses a saved selection. Preview any of them with dry_run. Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] \| literal["suggested"] \| literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
@@ -3021,11 +3271,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.strategy` | literal["exact_then_oldest", "company"] | no | no | "exact_then_oldest" | The `payment suggest` strategy: "exact_then_oldest" takes an open invoice matching the amount exactly, otherwise the oldest open invoices first until the money runs out; "company" follows the company automatic-application preference (nothing is applied when it is off). Present in SuggestedApplications. Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -3455,7 +3705,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input` | object | yes | no | — | — |
 | `prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Cash received, 0.00 or more. 0.00 is the anchor's write-off of a bad debt: no cash, every invoice written off named in `discounts` with its expected_version, `discount_account` an expense account such as Bad Debt, and a reason. A write-off may name an inactive customer, posts nothing to the bank and leaves sales tax as it stood. Example: {"customer": "Bauer Builders", "date": "2026-07-31", "amount": "0.00", "operation_key": "wo-1", "discounts": [{"invoice": "2388", "amount": "442.50", "expected_version": 1}], "discount_account": "Bad Debt"}. Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
 | `prospective_pages[].request.input.applications` | object \| object \| object \| object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Which invoices the cash pays: mode "inline" lists items (invoice, expected_version, amount); mode "suggested" applies it as `payment suggest` would with the same strategy (default "exact_then_oldest"), so there is nothing to copy; mode "selection" uses a saved selection. Preview any of them with dry_run. Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] \| literal["suggested"] \| literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
@@ -3466,11 +3716,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.applications.strategy` | literal["exact_then_oldest", "company"] | no | no | "exact_then_oldest" | The `payment suggest` strategy: "exact_then_oldest" takes an open invoice matching the amount exactly, otherwise the oldest open invoices first until the money runs out; "company" follows the company automatic-application preference (nothing is applied when it is off). Present in SuggestedApplications. Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole still records cash received. The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discounts` | array[object] | no | no | [] | Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it (if any) plus the discount; an invoice given no cash here needs its expected_version, and the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited to the discount account. Never taken unless listed: `payment invoices` shows each invoice's discount date and suggested discount. Example: a 1,000.00 invoice on 2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", ...} and discounts [{"invoice": "1043", "amount": "20.00"}]. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].invoice` | string | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
-| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Present in ReceivePreviewRequest. |
+| `prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else "Discounts Given", which is created as an income account if the chart lacks it. Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
