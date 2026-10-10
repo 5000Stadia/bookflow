@@ -1169,3 +1169,8 @@ EXAMPLES.update({
     "vendor unmerge": Example('bookflow vendor unmerge "Central Supply Co" --reason "Two suppliers after all"'
                               ' --company "Demo Plumbing Co" --json', {"merged": "Central Supply Co"}),
 })
+# R179: what a 1099 vendor was paid before the books began here, from the old books' 1099 Summary.
+EXAMPLES["vendor 1099-opening"] = Example(
+    'bookflow vendor 1099-opening "Delgado, Ray" --year 2026 --as-of 2026-06-30 --amount 7550.00'
+    ' --reason "Paid January to June in the old books" --company "Demo Plumbing Co" --json',
+    {"vendor": "Delgado, Ray", "year": 2026, "as_of": "2026-06-30", "amount": "7550.00"})

@@ -52,6 +52,7 @@ LAYOUTS = {
     "vendor-1099-summary": (("Vendor", "display_vendor_label", "label"),
                             ("Box", "box_label", T),
                             ("Payments", "payments", M),
+                            ("Of which before the move-in", "opening_payments", M),
                             ("Card payments not counted", "card_payments_excluded", M),
                             ("Meets threshold", "threshold_label", T)),
     "reconciliation-discrepancy": (("Reconciliation", "reconciliation_label", "label"),
@@ -83,6 +84,7 @@ TOTALS = {
     "vendor-1099-summary": (("reportable", "Reportable payments"), ("threshold", "Threshold"),
                             ("vendors_meeting_threshold", "Vendors at or over threshold"),
                             ("payments", "All payments to 1099 vendors"),
+                            ("opening_payments", "Of which before the move-in"),
                             ("card_payments_excluded", "Card payments not counted")),
     "reconciliation-discrepancy": (("reconciliations", "Reconciliations"),
                                    ("out_of_balance", "No longer tie"),
@@ -106,7 +108,7 @@ NOTES = {
     "reconciliation-discrepancy": "Each finished reconciliation of the account, with the statement's ending balance, its cleared balance as the transactions it cleared stand now, and the difference; under it, each of those transactions that was changed or voided after it was reconciled, at what it was reconciled and what it counts for now. A later reconciliation carries an earlier one's difference in its beginning balance. Change the transaction back, or re-do the reconciliation, to make it tie again.",
     "entries-to-review": "Entries anyone posted that an owner should look at: dated inside a statement already reconciled or a closed period but entered later, cleared by an agent on the very reconciliation it was entered during, touching Opening Balance Equity outside the move-in, or an agent's round, unexplained month-end amount into a bank account. Nothing was refused or changed. Open one to check it; mark it reviewed with review mark, which changes nothing in the entry.",
     "prior-balances": "Each finished reconciliation and the closing date reviewed an account balance as of a date. Where that balance has changed since, the first row shows it as it was when reviewed and as it is now; the rows under it are the entries that moved it, entered after the review but dated on or before it. Open one to see who entered it.",
-    "vendor-1099-summary": "Payments made in the calendar year to vendors marked eligible for a 1099, from bank accounts only: payments by credit card are reported by the card company, so they are shown but not counted. This is a report, not a filing.",
+    "vendor-1099-summary": "Payments made in the calendar year to vendors marked eligible for a 1099, from bank accounts only: payments by credit card are reported by the card company, so they are shown but not counted. What a vendor was paid before the books began here, brought from the old books' 1099 Summary, counts as paid on the move-in date. This is a report, not a filing.",
 }
 PO_STATUS = {"open": "Open", "partly_received": "Partly received"}
 BATCH = {"original": "", "reversal": "Reversal", "replacement": "Correction"}

@@ -51,6 +51,15 @@ in apply show what each part posts to the clearing account, so the two reconcile
 in pieces; apply needs the trial balance with all of them. [Moving a company in](cutover.md) lists
 the exports and each step, with the worked example in full.
 
+Give the rest of the old books with the same call when the owner has them: each bank and card
+account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail, Cleared:
+No), Undeposited Funds' QuickReport (Cleared: No) and the 1099 Summary for January 1 to the cutover.
+Then each uncleared check, deposit and charge comes in on its own with its number and payee, the
+first `reconcile start` on each account follows the old books' last reconciliation (name no opening),
+`deposit post` picks the checks waiting in Undeposited Funds from `deposit sources`, and the year's
+`report vendor-1099-summary` includes what was paid before the move-in. Never enter those items again
+by hand: they are already in, and entering them twice is the mistake the tie-out would show.
+
 ## Operator bootstrap
 
 Install the `bookflow-core` distribution first, or run from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise it creates and synchronizes a dedicated environment inside the disposable trial directory, then uses `uv run --frozen --no-sync`; the checkout's lockfile and shared environment remain unchanged. Every later command uses the selected array, so the rest of the instructions are identical in both environments.

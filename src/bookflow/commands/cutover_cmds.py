@@ -8,7 +8,9 @@ from bookflow.company.cutover_models import (
 
 _FILES = (" The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) "
           "and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging "
-          "Summaries and the Inventory Valuation Summary). Attach each export once and pass its id: "
+          "Summaries and the Inventory Valuation Summary), and for the rest of the old books each bank and card "
+          "account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail and Undeposited "
+          "Funds' QuickReport, Cleared: No) and the 1099 Summary for January 1 to the cutover. Attach each export once and pass its id: "
           "`attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then "
           "`files: [{\"attachment\": \"<id>\"}, ...]` on every call. Text works too (`{\"content\": ..., \"name\": ...}`): "
           "`cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the "
@@ -40,7 +42,11 @@ def _apply():
                                "items, post each open invoice, credit, bill and vendor credit for its open balance with "
                                "its own number and dates, bring in each item's opening stock, and post one opening "
                                "journal at the cutover date for every other trial-balance account against a clearing "
-                               "account that ends at 0.00. Runs the ordinary commands, each write carrying the source "
+                               "account that ends at 0.00. Given the rest of the old books, it also brings each uncleared "
+                               "check, deposit and charge as its own document, leaves each account's last reconciliation as "
+                               "the opening the next `reconcile start` follows, brings the receipts waiting in Undeposited "
+                               "Funds for `deposit post` to pick, and sets each 1099 vendor's payments so far this year "
+                               "(`vendor 1099-opening`). Runs the ordinary commands, each write carrying the source "
                                "reference `cutover:` plus its outside id, so a rerun makes only what is missing. "
                                "Refused while the plan has blocking exceptions." + _FILES),
                   input_model=CutoverApplyInput, output_model=CutoverApplyOutput, writes={"company"},
@@ -57,7 +63,9 @@ cutover_apply = _apply()
 @command("cutover tie-out", scope="company", required_role="member", capability="reports",
          description=("Compare the books with the old books as of the cutover date: the trial balance account by "
                       "account, and receivables and payables aging customer by customer and vendor by vendor, column "
-                      "by column, plus the clearing account, which ties at 0.00. Lists every difference." + _FILES),
+                      "by column, plus the clearing account, which ties at 0.00; and, when given, each bank and card "
+                      "account against its statement plus what was in transit with its opening proven, the receipts "
+                      "waiting for deposit, and the 1099 payments so far this year. Lists every difference." + _FILES),
          input_model=CutoverTieOutInput, output_model=CutoverTieOutOutput,
          error_codes=["E_RECORD_NOT_FOUND", "E_IO", "E_DB_BUSY", "E_QUERY_STALE"])
 def tie_out_cutover(inp, ctx, s):

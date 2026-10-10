@@ -1800,3 +1800,14 @@ for _kind in ('customer', 'vendor'):
         'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
         'E_DIRECTIVE_INACTIVE': 'context directive inactive',
     }
+
+# What a 1099 vendor was paid before the books began here (R179): one figure per vendor and year.
+MATRIX['vendor 1099-opening'] = {
+    'E_RECORD_NOT_FOUND': 'no vendor carries that name or id',
+    'E_VALIDATION': 'a vendor not marked eligible for a 1099, an as_of outside the year, or a negative amount',
+    'E_VERSION_CONFLICT': 'expected_version is not the amount\'s current version',
+    'E_AMOUNT_PRECISION': 'more decimal places than the home currency has',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+    'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+}

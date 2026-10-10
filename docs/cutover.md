@@ -1,6 +1,6 @@
 # Moving a company in
 
-`cutover plan`, `cutover apply` and `cutover tie-out` bring a company in from its old books at a period boundary: its lists, its opening balances, and its open invoices and bills, from QuickBooks Desktop exports. The three commands take the same input, so the same arguments run each step.
+`cutover plan`, `cutover apply` and `cutover tie-out` bring a company in from its old books at a period boundary: its lists, its opening balances, and its open invoices and bills, from QuickBooks Desktop exports. Given a few more exports they bring the rest: each bank and card account's last reconciliation with every check, deposit and charge its statement had not shown yet, so the first reconciliation in Bookflow certifies against the next statement with nothing entered again; the receipts waiting in Undeposited Funds, so Make Deposits picks them; and what each 1099 vendor was paid so far this year, so the year's 1099 summary is whole. Customers keep their sales tax code and item. The three commands take the same input, so the same arguments run each step.
 
 ## Before the move-in
 
@@ -21,6 +21,9 @@ The cutover date is `as_of`: the date of the old books' trial balance. The openi
 | `unpaid_bills` | Reports > Vendors & Payables > Unpaid Bills Detail, Dates: All, as of the cutover date | when the trial balance carries payables |
 | `ar_aging`, `ap_aging` | A/R Aging Summary and A/P Aging Summary, as of the cutover date | no; `cutover tie-out` compares against them when given |
 | `inventory_valuation` | Reports > Inventory > Inventory Valuation Summary, as of the cutover date | when the trial balance carries inventory |
+| `reconciliation_summary` | Reports > Banking > Previous Reconciliation, Summary: the last statement each bank and card account was reconciled to, one file per account | no; with it the account comes in from that statement (below) |
+| `uncleared` | Reports > Custom Reports > Transaction Detail, Dates: All through the cutover date, Total by: Account list, Filters: Cleared No, over the bank and card accounts (the checks, deposits and charges no statement had shown yet); and Undeposited Funds' QuickReport (Lists > Chart of Accounts, right-click Undeposited Funds, Dates: All, Filters: Cleared No: the receipts waiting for deposit). One file or several | with a summary that lists uncleared transactions |
+| `vendor_1099` | Reports > Vendors & Payables > 1099 Summary, Dates: January 1 to the cutover date, 1099 Options: ignore thresholds | no; with it each 1099 vendor's payments so far come in |
 
 Each report is exported to a comma separated values file (Excel > Create New Worksheet > Create a comma separated values (.csv) file). The kind of each file is read from its own headings; `kind` names it when it cannot be.
 
@@ -49,7 +52,7 @@ Over MCP, attach each export first, then pass only attachment ids. The ids stay 
     "transport": {"input_file": "/home/me/exports/trial_balance.csv"}}
    ```
 
-   Each result's `attachment.id` is that file's id. Do the same for the IIF lists, the open invoices, the unpaid bills, the inventory valuation and the two aging summaries.
+   Each result's `attachment.id` is that file's id. Do the same for the IIF lists, the open invoices, the unpaid bills, the inventory valuation and the two aging summaries, and for the rest of the old books when the owner has them: each bank and card account's Reconciliation Summary, the uncleared transactions, Undeposited Funds' QuickReport and the 1099 Summary.
 3. Plan, writing nothing:
 
    ```json
@@ -59,9 +62,10 @@ Over MCP, attach each export first, then pass only attachment ids. The ids stay 
      {"attachment": "<unpaid_bills.csv id>"}, {"attachment": "<inventory_valuation.csv id>"}]}}
    ```
 
-   Read `summary` and `blocking` first: `blocking` has one line per blocking exception, naming its file, line and problem, and it is kept even when a long result is compacted. Fix each (export the file again, or add a `mappings` entry) and plan again until `ready` is true. A few files can be planned on their own to find a problem faster; without the trial balance the plan says so once, as a note, and `ready` stays false. `clearing.parts` shows what each part of the move-in posts to the clearing account (the opening journal, the invoices and credit memos, the bills and vendor credits, the opening stock and the opening sales tax) and `clearing.net` is 0.00 when they tie.
+   Read `summary` and `blocking` first: `blocking` has one line per blocking exception, naming its file, line and problem, and it is kept even when a long result is compacted. Fix each (export the file again, or add a `mappings` entry) and plan again until `ready` is true. A few files can be planned on their own to find a problem faster; without the trial balance the plan says so once, as a note, and `ready` stays false. `clearing.parts` shows what each part of the move-in posts to the clearing account (the opening journal, the invoices and credit memos, the bills and vendor credits, the opening stock, the opening sales tax, the uncleared items and the receipts waiting for deposit) and `clearing.net` is 0.00 when they tie.
 4. Move in with the same input and a reason: `{"command": "cutover apply", "reason": "Move in from the old books", "input": {...the same as_of and files...}}`. Its `clearing.parts` are built the same way as the plan's, so the two reconcile part by part. Running it again makes nothing new: every record already made is `already_in`.
-5. Tie out with the same files plus the two aging summaries: `{"command": "cutover tie-out", "input": {"as_of": "2026-09-30", "files": [...the same ids..., {"attachment": "<ar_aging.csv id>"}, {"attachment": "<ap_aging.csv id>"}]}}`. `tied` is true when the trial balance, receivables, payables, stock and lists match and the clearing account is 0.00; otherwise its rows name each difference.
+5. Tie out with the same files plus the two aging summaries: `{"command": "cutover tie-out", "input": {"as_of": "2026-09-30", "files": [...the same ids..., {"attachment": "<ar_aging.csv id>"}, {"attachment": "<ap_aging.csv id>"}]}}`. `tied` is true when the trial balance, receivables, payables, stock and lists match, the clearing account is 0.00, and each bank and card account brought in from its last reconciliation ties with its uncleared items in and its opening proven; otherwise its rows name each difference.
+6. The first reconciliation after the move-in: `{"command": "reconcile start", "input": {"account": "Checking", "statement_date": "2026-10-31", "ending_balance": "...", "operation_key": "..."}}` follows the opening the move-in left, so it begins at the last reconciled statement's ending balance with the uncleared items outstanding; import the statement (`reconcile import`), preview and finish as for any statement.
 
 When the MCP server has no input directory, give a file once as its text (`{"content": "...", "name": "trial_balance.csv"}`): `cutover apply` keeps it as an attachment and returns its id in `files[].attachment` for every later call. Copy the text exactly; a retyped row with a tab added or dropped is refused as `row_width` or `row_shifted`.
 
@@ -70,9 +74,9 @@ When the MCP server has no input directory, give a file once as its text (`{"con
 Reads the files and returns, writing nothing:
 
 - `mappings`: every old-books account, customer, job, vendor, item and terms name, with the Bookflow record it stands for or `create`. An account maps by its system role (receivables, payables, undeposited funds, inventory, sales tax payable, opening balance equity, retained earnings, cost of goods sold), then by full name and type, then is made from the account list with its number. A number already used by an account of another name is an exception.
-- `steps`: every write in order: accounts, terms, customers and jobs, vendors, items, the clearing account and the `Opening balance` item, invoices and credit memos, bills and vendor credits, opening stock, the opening journal, then deactivating what was inactive in the old books. Each step names its outside id.
+- `steps`: every write in order: accounts, terms, vendors, items, customers and jobs (after the items, since a customer's sales tax item is one), the clearing account and the `Opening balance` item, invoices and credit memos, bills and vendor credits, opening stock, uncleared items, receipts waiting for deposit, the opening journal (and a statement-date journal when a last reconciled statement ends before the cutover), each account's last reconciliation, the 1099 payments so far, then deactivating what was inactive in the old books. Each step names its outside id.
 - `journal`: the opening journal's lines.
-- `clearing`: the clearing account's parts (the opening journal's balancing line, the invoices and credit memos, the bills and vendor credits, the opening stock and the opening sales tax adjustment), each debit positive with the records that carry it, and their `net`, 0.00 once everything ties. `cutover apply` returns the same parts.
+- `clearing`: the clearing account's parts (the opening journal's balancing line, the invoices and credit memos, the bills and vendor credits, the opening stock, the opening sales tax adjustment, the uncleared items and the receipts waiting for deposit), each debit positive with the records that carry it, and their `net`, 0.00 once everything ties. `cutover apply` returns the same parts.
 - `blocking`: each blocking exception as one line, `FILE line N: code: problem`, ahead of the rest of the result.
 - `checks`: the trial balance's debits against its credits, its receivables against the open invoices and credits, its payables against the unpaid bills and credits, its inventory against the items' asset values.
 - `counts`, first: records and totals by kind (invoices, credit memos, bills, vendor credits, stock and the journal carry their total amount), so the whole run reads at a glance even when the step list is long.
@@ -95,8 +99,16 @@ What it posts:
 | A bill credit | A vendor credit for its amount on the clearing account |
 | An item's stock | An inventory adjustment dated `as_of`: its quantity on hand and asset value, against the clearing account |
 | Sales Tax Payable, when the old books' sales tax items name one agency | A sales tax adjustment (`sales-tax adjust`) dated `as_of` for that agency against the clearing account, so `sales-tax liability` shows it under the agency and `sales-tax pay` pays it |
+| A customer's sales tax code and item (the list's SALESTAXCODE or TAXABLE, and TAXITEM) | The customer's own, so its invoices take them; a job takes only what differs from its customer's and inherits the rest. A tax-exempt customer comes in with the non-taxable code and no item |
+| A bank or card account given its Reconciliation Summary | An opening journal line for the statement's ending balance (the summary's Cleared Balance), not the trial balance's figure; dated the statement's own day, in a journal of its own, when the statement ends before `as_of` |
+| A check, deposit or charge no statement had shown yet | Its own document against the clearing account, dated, numbered and with its payee as in the old books: a check (`check post`) for a numbered check, a card charge or card credit on a card, a register entry (`register post`) for a deposit or anything else |
+| The account's last reconciliation | An opening reconciliation draft at the statement's date and ending balance, its journal line `covered` and each uncleared item dated by then `outstanding`, so it proves. `reconcile start` on the account follows it; it is certified with that first statement, as every opening is |
+| A receipt waiting in Undeposited Funds | A sales receipt into Undeposited Funds from its customer, dated and referenced (check number) as in the old books, of one `Opening balance` line, so `deposit post` picks it. Without Undeposited Funds' QuickReport the balance comes in as one such receipt from the customer `Opening balance` |
+| A 1099 vendor's payments so far this year (the 1099 Summary) | Its opening 1099 amount for the year through `as_of` (`vendor 1099-opening`): the old books' figure less what the move-in brings in as paid to it that year (its uncleared checks, which the 1099 summary counts on their own dates), so the year's summary equals the old books' as of the cutover |
 
-The clearing account is `Cutover Clearing`, an other current asset account made on first use, or the account named by `clearing_account`. It is 0.00 exactly when the documents, the stock and the opening sales tax adjustment equal the trial balance's receivables, payables, inventory and sales tax payable. Receivables and payables are never lines of the opening journal.
+The clearing account is `Cutover Clearing`, an other current asset account made on first use, or the account named by `clearing_account`. It is 0.00 exactly when the documents, the stock, the opening sales tax adjustment, the uncleared items and the receipts equal the trial balance's receivables, payables, inventory, sales tax payable, bank and card balances and Undeposited Funds. Receivables and payables are never lines of the opening journal, and neither is Undeposited Funds when its receipts come in.
+
+Each bank and card account given its Reconciliation Summary must tie: the statement's ending balance plus deposits in transit less outstanding checks (on a card, plus charges not yet posted less payments and credits) is the trial balance's figure, and the uncleared items dated by the statement add up to what the summary lists as uncleared. A bank or card account given neither file comes in as one amount, as before, and the plan says so in one note; its first reconciliation starts with `reconcile opening start`.
 
 ## `cutover tie-out`
 
@@ -106,10 +118,17 @@ Compares the books as of `as_of` with the old books:
 - `receivables`: every customer and job's aging, total and each column (current, 1-30, 31-60, 61-90, over 90), against the A/R Aging Summary file, or the open invoices when no aging file is given.
 - `payables`: every vendor's aging against the A/P Aging Summary file, or the unpaid bills.
 - `inventory`: every item's quantity on hand and asset value against the Inventory Valuation Summary.
-- `lists`: what came in against the IIF lists, field by field: active or inactive, account type and number, job status and description, customer and vendor terms and credit limit, 1099 eligibility, item type, price and cost, and terms days and discount. Differences by design (an account matched to one here that keeps its own number, an item the move-in skips) are `notes`.
+- `lists`: what came in against the IIF lists, field by field: active or inactive, account type and number, job status and description, customer and vendor terms and credit limit, customer sales tax code and item, 1099 eligibility, item type, price and cost, and terms days and discount. Differences by design (an account matched to one here that keeps its own number, an item the move-in skips) are `notes`.
+- `bank`: each bank and card account brought in from its last reconciliation or its uncleared items: the statement's ending balance, the uncleared items that raise and lower it, the balance they come to against the balance here, the uncleared items found here, and the opening the next `reconcile start` follows (`draft`, with `opening_proven` when it proves, or `certified` once the first statement is finished).
+- `undeposited`: what the old books held in Undeposited Funds against the receipts here that `deposit post` can pick.
+- `vendor_1099`: each vendor on the old books' 1099 Summary against `report vendor-1099-summary` here for January 1 to `as_of`.
 - `clearing`: the clearing account's balance.
 
-`tied` is true when every compared figure matches to the cent, every list field compared matches and the clearing account is 0.00. With `detail` `differences` (the default) only rows that do not match are listed; `all` lists every compared row.
+`tied` is true when every compared figure matches to the cent, every list field compared matches, the clearing account is 0.00, and each bank and card account ties with its uncleared items in and, given its Reconciliation Summary, its opening proven. With `detail` `differences` (the default) only rows that do not match are listed; `all` lists every compared row.
+
+## The year's 1099 payments
+
+`report vendor-1099-summary` counts what the books here show paid to each 1099 vendor and, for a company that moved in during the year, the opening amount the move-in set from the old books' 1099 Summary: paid from January 1 through the cutover date, it counts when the report's dates include that day, as an opening balance dated the cutover does, and is shown on its own as `opening_payments`. A person or agent sets or corrects it with `vendor 1099-opening` (vendor, year, as_of, amount; 0.00 clears it).
 
 ## Exceptions
 
@@ -134,7 +153,22 @@ Compares the books as of `as_of` with the old books:
 | `account_number_dropped` | warning | An account comes in without its number |
 | `unknown_terms`, `unknown_class` | warning | A terms or class name is not in this company's lists; the document keeps its due date |
 | `item_skipped` | warning | A group, assembly, payment or sales tax group item, or an item whose account Bookflow does not allow, is not brought in |
-| `undeposited_funds` | warning | The balance comes in as one opening amount that Make Deposits cannot pick |
+| `undeposited_funds` | warning | No Undeposited Funds QuickReport was given, so the balance comes in as one receipt from the customer `Opening balance` that Make Deposits picks whole (a credit balance, which no receipt can carry, stays one opening amount) |
+| `undeposited_do_not_tie` | blocking | The receipts in Undeposited Funds' QuickReport do not add up to the trial balance's Undeposited Funds |
+| `undeposited_not_a_receipt` | blocking | A row of Undeposited Funds' QuickReport takes money out of it |
+| `receipt_payer_unknown` | warning | A receipt waiting for deposit names a payer that is no customer; it comes in from `Opening balance` with the payer in its memo |
+| `missing_uncleared_items` | blocking | A Reconciliation Summary lists uncleared transactions and no uncleared items were given |
+| `uncleared_do_not_tie` | blocking | A statement's ending balance and the account's uncleared items do not come to the trial balance's figure, or the items dated by the statement do not add up to what its summary lists as uncleared |
+| `several_reconciliation_summaries`, `statement_after_cutover` | blocking | An account has more than one Reconciliation Summary, or its reconciled statement is dated after `as_of` |
+| `not_a_bank_account`, `item_without_account`, `item_without_date`, `cleared_row` | blocking | A reconciliation or uncleared row belongs to an account that is no bank or card account (or Undeposited Funds), is under no account heading, has no date, or is marked cleared, so the report was not filtered to what has not cleared |
+| `items_after_cutover` | warning | Uncleared rows dated after `as_of` stay out: they belong to the new books |
+| `payee_not_found` | warning | An uncleared item's payee is in no name list that comes in; the name goes in the item's memo |
+| `no_reconciliation` | note | Bank and card accounts given neither a Reconciliation Summary nor uncleared items come in as one amount each |
+| `no_reconciliation_summary` | note | An account's uncleared items came without its Reconciliation Summary, so the first reconciliation starts with `reconcile opening start` |
+| `reconciliation_exists`, `opening_draft_exists` | warning | The account is reconciled here already, or has an opening draft the move-in did not make, so the old books' last reconciliation does not come in as another |
+| `customer_tax_item_skipped` | warning | A customer's sales tax item (TAXITEM) does not come in, such as a sales tax group; its invoices take the company's default |
+| `several_1099_summaries`, `vendor_1099_dates`, `vendor_1099_negative`, `vendor_1099_below_payments` | blocking | More than one 1099 Summary, one that does not cover January 1 to `as_of`, a negative figure, or a figure smaller than the vendor's uncleared checks |
+| `not_1099_vendor`, `vendor_1099_opening_exists`, `vendor_1099_changed` | warning | A vendor on the 1099 Summary is not marked eligible for a 1099, already has an opening amount here the move-in did not set, or now shows another figure than the move-in brought |
 | `sales_tax_payable` | warning | The old books' sales tax items name several agencies or none (or the one agency is an existing vendor not flagged as a tax agency), so the opening sales tax owed comes in as one journal amount not tied to an agency and `sales-tax pay` cannot pay it; pay it with a check or journal entry against Sales Tax Payable |
 | `row_width`, `row_shifted` | blocking | A list or report row has a field more or fewer than its headings, or a field in the wrong column |
 | `term_settings_differ` | blocking | A term here has other days or discount than the old books' term of that name |

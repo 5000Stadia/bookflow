@@ -7,7 +7,8 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 
 from bookflow.company.ledger_reports import MoneyOutput, iso_date
 
-FileKind = Literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation"]
+FileKind = Literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation",
+                   "reconciliation_summary", "uncleared", "vendor_1099"]
 IsoDate = Annotated[str, AfterValidator(iso_date)]
 
 
@@ -28,7 +29,10 @@ class CutoverFile(_Input):
         "customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the "
         "cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` "
         "and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory "
-        "Valuation Summary, required when the trial balance carries inventory)."))
+        "Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card "
+        "account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to "
+        "Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited "
+        "Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date)."))
 
     @model_validator(mode="after")
     def one_source(self):
@@ -103,7 +107,8 @@ class CutoverException(BaseModel):
 
 class CutoverCount(BaseModel):
     kind: str = Field(description="account, customer, vendor, item, term, invoice, credit_memo, bill, vendor_credit, "
-                                  "inventory_adjustment, sales_tax_adjustment, journal, deactivation")
+                                  "inventory_adjustment, uncleared_item, undeposited_receipt, sales_tax_adjustment, journal, "
+                                  "reconciliation_opening, vendor_1099_opening, deactivation")
     create: int = Field(description="Records this run makes")
     already_in: int = Field(description="Records an earlier run of the cutover made, found by their outside id")
     matched: int = Field(description="Old-books records that are existing Bookflow records")
@@ -152,10 +157,11 @@ class CutoverCheck(BaseModel):
 
 class CutoverClearingPart(BaseModel):
     part: Literal["opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock",
-                  "opening_sales_tax"] = Field(description=(
-        "`opening_journal`: the journal's balancing line; `invoices_and_credit_memos` and `bills_and_vendor_credits`: "
+                  "opening_sales_tax", "uncleared_items", "undeposited_receipts"] = Field(description=(
+        "`opening_journal`: the journals' balancing lines; `invoices_and_credit_memos` and `bills_and_vendor_credits`: "
         "the open documents; `opening_stock`: the inventory adjustments; `opening_sales_tax`: the `sales-tax adjust` "
-        "that brings the agency's balance in"))
+        "that brings the agency's balance in; `uncleared_items`: the checks, deposits and charges no statement had "
+        "shown; `undeposited_receipts`: the receipts waiting in Undeposited Funds"))
     amount: MoneyOutput = Field(description="What this part posts to the clearing account, debit positive")
     records: int = Field(description="The records that carry it, made or already in")
 
@@ -242,11 +248,41 @@ class CutoverStockSection(BaseModel):
     rows: list[CutoverStockRow]
 
 
+class CutoverBankRow(BaseModel):
+    name: str = Field(description="The bank or card account")
+    record_id: str | None = Field(description="The Bookflow account compared; null when nothing in the books stands for it")
+    statement_date: str | None = Field(description="The last statement the old books reconciled; null when only uncleared items were given")
+    statement_balance: MoneyOutput = Field(description=(
+        "That statement's ending balance, in the account's own sign: money in the bank, what is owed on a card"))
+    uncleared_increase: MoneyOutput = Field(description=(
+        "Uncleared items that raise the balance: deposits in transit on a bank account, charges not yet posted on a card"))
+    uncleared_decrease: MoneyOutput = Field(description=(
+        "Uncleared items that lower it: outstanding checks and payments on a bank account, payments and credits not yet posted on a card"))
+    expected_balance: MoneyOutput = Field(description="statement_balance + uncleared_increase - uncleared_decrease")
+    books_balance: MoneyOutput = Field(description="The account's balance here as of the cutover date, in its own sign")
+    difference: MoneyOutput = Field(description="expected_balance less books_balance; 0.00 ties")
+    items_source: int = Field(description="Uncleared items the old books list for the account, dated by the cutover")
+    items_books: int = Field(description="Of those, the ones the move-in brought in here")
+    opening: Literal["draft", "certified", "none"] = Field(description=(
+        "The last reconciliation here: `draft` an opening the next `reconcile start` follows, `certified` once the first "
+        "statement after it is finished, `none` when no Reconciliation Summary was given or it did not come in"))
+    opening_proven: bool | None = Field(description=(
+        "For a draft: whether it proves, every movement by its date covered or outstanding and the covered ones equal to the "
+        "statement balance, so `E_RECONCILIATION_OPENING_UNPROVEN` does not fire; null for no draft"))
+    tied: bool = Field(description="The balance ties, every uncleared item is in, and a given last reconciliation is a proven draft or certified")
+
+
+class CutoverBankSection(BaseModel):
+    source: str = Field(description="What the old books' side was read from, or `none` when no bank or card account was given in detail")
+    differences: int = Field(description="Accounts that do not tie")
+    rows: list[CutoverBankRow] = Field(description="Every bank and card account brought in from its last reconciliation or its uncleared items")
+
+
 class CutoverListRow(BaseModel):
     list: Literal["account", "customer", "vendor", "item", "term"]
     name: str = Field(description="The record as the old books name it")
     record_id: str | None = Field(description="The Bookflow record compared; null when none stands for it")
-    field: str = Field(description="active, type, number, job_status, job_description, terms, credit_limit, eligible_1099, price, cost, due_days, discount_percent or discount_days")
+    field: str = Field(description="active, type, number, job_status, job_description, terms, credit_limit, sales_tax_code, sales_tax_item, eligible_1099, price, cost, due_days, discount_percent or discount_days")
     source: str | None = Field(description="The old books' value")
     books: str | None = Field(description="The value here")
 
@@ -262,12 +298,22 @@ class CutoverListSection(BaseModel):
 class CutoverTieOutOutput(BaseModel):
     as_of: str
     tied: bool = Field(description=(
-        "True when every compared figure ties to the cent, the clearing account is 0.00, and every list field compared matches"))
+        "True when every compared figure ties to the cent, the clearing account is 0.00, every list field compared matches, "
+        "and every bank and card account given in detail ties with its uncleared items in and its last reconciliation proven"))
     summary: str
     trial_balance: CutoverTieSection
     receivables: CutoverTieSection
     payables: CutoverTieSection
     inventory: CutoverStockSection
     lists: CutoverListSection
+    bank: CutoverBankSection = Field(description=(
+        "Each bank and card account given its last reconciliation or its uncleared items: the balance here against the "
+        "statement's ending balance plus deposits in transit less outstanding checks (on a card, plus charges not yet posted "
+        "less payments and credits), its uncleared items, and the opening the first reconciliation follows"))
+    undeposited: CutoverTieSection = Field(description=(
+        "Undeposited Funds: what the old books held waiting for deposit against the receipts here Make Deposits can pick"))
+    vendor_1099: CutoverTieSection = Field(description=(
+        "Each vendor on the old books' 1099 Summary: what it shows paid from January 1 to the cutover date against this "
+        "company's 1099 summary for the same dates"))
     clearing: MoneyOutput = Field(description="The clearing account's balance as of the cutover date; 0.00 ties")
     exceptions: list[CutoverException] = Field(description="Problems that kept a figure from being compared")
