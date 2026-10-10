@@ -179,7 +179,7 @@ class PaymentReceiveInput(StrictModel):
     discounts: list[InvoiceDiscount] = Field(default_factory=list, max_length=200, description=(
         'Early-payment discounts, one per invoice. The invoice is settled by the cash applied to it '
         '(if any) plus the discount; an invoice given no cash here needs its expected_version, and '
-        'the receipt as a whole still records cash received. The discount is debited '
+        'the receipt as a whole records cash received unless it is a write-off (amount 0.00). The discount is debited '
         'to the discount account. Never taken unless listed: `payment invoices` shows each '
         'invoice\'s discount date and suggested discount. Example: a 1,000.00 invoice on '
         '2% 10 Net 30 paid in time takes applications {"invoice": "1043", "amount": "980.00", '

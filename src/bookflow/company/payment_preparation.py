@@ -392,7 +392,10 @@ def payment_page(s, inp):
     discounts = dict(s.company.conn.execute(sa.select(c.payment_discounts.c.transaction_id,
         sa.func.sum(c.payment_discounts.c.amount_minor_units)).where(c.payment_discounts.c.transaction_id.in_(ids))
         .group_by(c.payment_discounts.c.transaction_id)).all()) if ids else {}
+    from bookflow.company import payment_bounces
+    bounced = payment_bounces.bounced_on(s, ids)
     for row in out['items']:
+        row['bounced_on'] = bounced.get(row['id'])
         row['applied_minor_units'] = amounts.get(row['id'], 0)
         row['unapplied_minor_units'] = (row['received_minor_units'] + discounts.get(row['id'], 0) - row['applied_minor_units']
                                         - paid_back.get(row['id'], 0)) if row['status'] == 'posted' else 0

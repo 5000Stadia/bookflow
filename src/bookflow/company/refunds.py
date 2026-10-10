@@ -583,7 +583,7 @@ def _semantic(profile):
     return value
 
 
-def _resolve(s, inp, *, previous=None):
+def _resolve(s, inp, *, previous=None, released=None):
     """Everything the refund is made of: what was supplied, over what the revision captured.
 
     One reader for both verbs. A new refund has nothing to fall back on and every field is the
@@ -616,7 +616,10 @@ def _resolve(s, inp, *, previous=None):
         number_selector = inp.number if 'number' in fields else None
         issuer = json.loads(revision['issuer_snapshot'])
     else:
-        released, entries = {}, _entered(inp.sources, currency)
+        # `released` is capacity another step of the same write hands back before this refund
+        # takes it (a returned check unapplies a receipt, then pays its cash out of the bank);
+        # a plain refund has none.
+        released, entries = dict(released or {}), _entered(inp.sources, currency)
         explicit = any(item.amount is not None for item in inp.sources)
         date, memo, reference, check = inp.date, inp.memo, inp.reference, inp.check_number
         funding_selector, method_selector = inp.funding_account, inp.method
@@ -812,8 +815,8 @@ def _unchanged_plan(s, inp, previous):
                 dict(input=inp, operation='update', changed=False))
 
 
-def prepare_post(s, ctx, inp):
-    return _compose(s, ctx, inp, _resolve(s, inp))
+def prepare_post(s, ctx, inp, released=None):
+    return _compose(s, ctx, inp, _resolve(s, inp, released=released))
 
 
 def prepare_update(s, ctx, inp):
@@ -825,6 +828,11 @@ def prepare_update(s, ctx, inp):
         raise BookflowError('E_APPLICATION_INACTIVE', details={
             'refund_id': header['id'], 'status': header['status'],
             'next': 'A voided refund paid nothing; write the corrected refund instead.'})
+    from bookflow.company import payment_bounces
+    if payment_bounces.bounce_of_refund(s, header['id']) is not None:
+        raise _invalid('refund', 'this refund is the cash of a returned check (`payment bounce`) and is not corrected in '
+                       'place; `customer-refund void` it, which ends the bounce, and record the return again with the '
+                       'right date')
     _reconciled(s, header['id'])
     revision = journals.revision(s, header)
     previous = dict(header=header, revision=revision, profile=profile_row(s, revision))

@@ -69,14 +69,25 @@ def require_unclaimed(s, source):
     if claim is None:
         return
     _authorize_claim(s, source, claim)
+    reason = ('This receipt is banked on a deposit, so it cannot be changed or voided while it is there. '
+              'Run `deposit delete` on the deposit (preview first; it returns every receipt on it to Undeposited '
+              'Funds and reverses the bank effect), change or void this receipt, then `deposit post` the '
+              'receipts that still belong together. A deposit already on a certified reconciliation must be '
+              'released from it first.')
+    if _is_payment(s, source):
+        # A check the bank sent back is not a mistake in the books: the deposit really happened.
+        reason += (' If the bank returned the customer\'s check, do not delete the deposit: `payment bounce` records '
+                   'the return in one step (the invoices reopen, the returned amount and the bank\'s fee come out '
+                   'of the bank, the customer can be billed a fee) and leaves the deposit as it was.')
     raise BookflowError('E_DEPOSIT_DEPENDENCY', details={
         'source': source, 'deposit': claim['transaction_id'],
-        'next': 'deposit delete',
-        'reason': ('This receipt is banked on a deposit, so it cannot be changed or voided while it is there. '
-                   'Run `deposit delete` on the deposit (preview first; it returns every receipt on it to Undeposited '
-                   'Funds and reverses the bank effect), change or void this receipt, then `deposit post` the '
-                   'receipts that still belong together. A deposit already on a certified reconciliation must be '
-                   'released from it first.')})
+        'next': 'deposit delete', 'reason': reason})
+
+
+def _is_payment(s, source):
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    return s.company.conn.execute(sa.select(c.transactions.c.type).where(c.transactions.c.id == source)).scalar() == 'payment'
 
 
 def claim_details(s, source, claim):

@@ -797,6 +797,28 @@ MATRIX['payment delete'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+# A returned check is four writes in one transaction (the receipt's unapply, a customer refund, a register
+# entry for the bank's fee and an invoice for the customer's), so it can be refused for what any of them can.
+MATRIX['payment bounce'] = {
+    'E_RECORD_NOT_FOUND': 'unknown receipt, fee account or fee item',
+    'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
+    'E_VALIDATION': 'the receipt is still in Undeposited Funds, already bounced, took no cash, paid more than one customer or job, or is dated after the return; a fee is not more than zero, its account is the wrong type, or the customer fee names neither or both of item and account',
+    'E_VALUE_RANGE': 'a fee amount is zero or negative, or a resulting version exceeds signed 64-bit range',
+    'E_AMOUNT_PRECISION': 'a fee amount has more decimal places than the currency allows',
+    'E_REASON_REQUIRED': 'the bounce has no reason, or an agent/system write supplies neither reason nor directive',
+    'E_PERIOD_CLOSED': 'the return date, or the date the receipt was applied to an invoice, is on or before the closing date',
+    'E_INACTIVE_REFERENCE': 'the bank account, fee account, fee item or the customer named for a fee invoice is inactive',
+    'E_APPLICATION_INACTIVE': 'the receipt is voided',
+    'E_APPLICATION_INCOMPATIBLE': 'the receipt still holds money for more than one customer or job',
+    'E_CREDIT_UNAVAILABLE': 'the cash to take back is no longer on the receipt',
+    'E_HAS_REFUND': 'part of the receipt was already paid back to the customer; void that refund first',
+    'E_DUPLICATE_NUMBER': 'the supplied fee invoice number is already used',
+    'E_PREVIEW_STALE': 'expected_facts_fingerprint no longer matches the books',
+    'E_PAYMENT_OPERATION_KEY_REUSED': 'the operation_key belongs to a different receipt',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
 MATRIX['payment update'].update({
     'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',

@@ -54,6 +54,7 @@ ACCEPTED = {
     'sales-tax-adjustment-v1': (519, '03d9f30190f30e741521e98ac6044a6962e29d26f2a3be25f54f338c8174486f'),
     'restore-v1': (521, '0a94a8ee9ee2f15db64858e594ea131f2afeef36cb29f11e9509d84e19fa584c'),
     'party-merge-v1': (525, 'f42ffc267bd8651808375d39dfbfb7c2fa2613e5889151cd68dc6609b2174398'),
+    'bounced-check-v1': (526, '0b6616e4040e1986f3b010f4f2d8c92276ba12d741c28b474539755fa65ed68e'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -101,6 +102,7 @@ CHAIN_ADDITIONS = {
                                 'sales-tax adjustment void'},
     'restore-v1': {'invoice restore', 'journal restore'},
     'party-merge-v1': {'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge'},
+    'bounced-check-v1': {'payment bounce'},
 }
 
 _ANCESTOR_EDIT = """

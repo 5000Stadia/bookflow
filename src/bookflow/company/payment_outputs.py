@@ -12,6 +12,7 @@ from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.payment_models import PreviewRequest
 from bookflow.company.payment_summaries import PaymentSummary
 from bookflow.company.payment_deletion_models import PaymentDeletionInfo
+from bookflow.company.payment_bounce_models import PaymentBounceOnReceipt
 from bookflow.company.payment_models import InvoiceAmount
 
 
@@ -171,6 +172,18 @@ class PaymentOutput(CommonOut):
     current_revision_id: str
     revision: PaymentRevisionOutput
     current: PaymentCurrentOutput
+
+
+class PaymentShowOutput(PaymentOutput):
+    """`payment show`: the receipt, and while the bank's return of its check stands, that return.
+
+    A subclass, not a field of ``PaymentOutput``: that model is embedded in the deposit family's
+    pinned public codecs, which a field of the receipt read must not move.
+    """
+    bounce: PaymentBounceOnReceipt | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'Present while the bank\'s return of this receipt\'s check stands (`payment bounce`): the date '
+        '("bounced on ..."), the cash returned, the refund that took it out of the bank and the fee '
+        'documents. It ends when that refund is voided.'))
 
 
 class PaymentApplicationOutput(StrictModel):
@@ -532,6 +545,8 @@ class PaymentSummaryOutput(StrictModel):
     received_minor_units: int
     applied_minor_units: int
     unapplied_minor_units: int
+    bounced_on: str | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'Date the bank returned this receipt\'s check, while that return stands (`payment bounce`).'))
 
 
 class PaymentPageOutput(StrictModel):

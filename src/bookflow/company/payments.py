@@ -13,7 +13,7 @@ from bookflow.company import payment_operations as operations, early_discounts a
 from bookflow.company.payment_authority import authorize
 from bookflow.company.payment_models import PaymentContext
 from bookflow.company.payment_summaries import summarize
-from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput, PaymentRevisionOutput
+from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput, PaymentRevisionOutput, PaymentShowOutput
 from bookflow.company.sales_models import money, _invalid
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES as SETTLEABLE
 from bookflow.core import audit, clock
@@ -106,8 +106,11 @@ def show(s, inp):
             raise BookflowError('E_RECORD_NOT_FOUND')
         revision = rows[0]
         profile = effects.rows(s, c.payment_profiles, c.payment_profiles.c.revision_id == revision['id'])[0]
-    return PaymentOutput(**dict(header, **({'status': 'deleted'} if deletion else {})), deletion=deletion,
-        revision=revision_output(revision, profile), current=current_output(s, header['id']))
+    from bookflow.company import payment_bounces
+    bounce = payment_bounces.live_bounces(s, [header['id']]).get(header['id'])
+    return PaymentShowOutput(**dict(header, **({'status': 'deleted'} if deletion else {})), deletion=deletion,
+        revision=revision_output(revision, profile), current=current_output(s, header['id']),
+        bounce=payment_bounces.on_receipt(bounce) if bounce else None)
 
 
 def revision_output(revision, profile):

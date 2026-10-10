@@ -70,11 +70,15 @@ def _prepare_effect(s, ctx, inp, operation, provenance):
         # the cash off the books while a refund still stands on the part of it that settled no
         # invoice, and the customer's balance would be wrong by that amount for ever.
         if facts['consumptions']:
+            from bookflow.company import payment_bounces
+            bounce = payment_bounces.live_bounces(s, [old['id']]).get(old['id'])
             raise BookflowError('E_HAS_REFUND', details={
                 'payment_id': old['id'],
                 'refund_ids': sorted({row['transaction_id'] for row in facts['consumptions']}),
                 'action': 'void_the_refund_first',
-                'next': 'Void the refund that paid this overpayment back, then void the payment.'})
+                'next': ('Void the refund that paid this overpayment back, then void the payment.' if bounce is None else
+                         f"The bank returned this check (bounced on {bounce['bounce_date']}). To undo that, void its "
+                         f"returned-check refund {bounce['refund_number']} (`customer-refund void`), then void the payment.")})
         if changed:
             journals.open_dates(s, [revision['date']])
             batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
