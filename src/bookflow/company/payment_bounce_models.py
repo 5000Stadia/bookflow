@@ -11,7 +11,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from bookflow.company.journal_models import MoneyInput, _Date, _Input, _Number, _Selector, _Version
+from bookflow.company.journal_models import _Date, _Input, _Number, _Selector, _Version
 from bookflow.company.journal_outputs import JournalMoneyOutput
 from bookflow.core.models import WriteOutput
 
@@ -23,7 +23,7 @@ Fingerprint = Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')]
 class BankFeeInput(_Input):
     """The fee the bank charged for returning the check, taken out of the same bank account."""
 
-    amount: str | MoneyInput = Field(description='The bank\'s fee, more than zero.')
+    amount: str = Field(description='The bank\'s fee as a decimal string, more than zero, such as "12.00".')
     account: _Selector = Field(description=(
         'Expense account the fee is charged to, such as Bank Service Charges. Not a bank, card, '
         'receivable or income account.'))
@@ -33,7 +33,7 @@ class BankFeeInput(_Input):
 class CustomerFeeInput(_Input):
     """A fee billed back to the customer for the returned check, as an open invoice."""
 
-    amount: str | MoneyInput = Field(description='The fee charged to the customer, more than zero.')
+    amount: str = Field(description='The fee charged to the customer as a decimal string, more than zero, such as "35.00".')
     item: _Selector | None = Field(default=None, description=(
         'Item the fee is billed through, such as an Other Charge item named Returned Check Charge. '
         'Give this or `account`, not both.'))

@@ -193,8 +193,9 @@ through its discount date. `payment invoices` rows carry `discount_date` and
 A debt that will never be paid is written off the way the anchor writes it off: a receipt for
 0.00 whose open balance is taken as a discount to a Bad Debt account. `payment receive` with
 `amount` `"0.00"`, each invoice written off named in `discounts` (invoice, amount,
-`expected_version`), `discount_account` an expense account (type expense or other expense;
-the company's "Discounts Given" is an income account and is refused), and a reason.
+`expected_version`), `discount_account` the account it goes to (an expense account such as Bad Debt, or for a charge
+that is waived a discount account such as Sales Discounts; it is never defaulted for a receipt of
+0.00), and a reason.
 
 - No cash: the receipt posts debit Bad Debt, credit Accounts Receivable and nothing to the
   bank or Undeposited Funds; Make Deposits never offers it. It carries no payment method of

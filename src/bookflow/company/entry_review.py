@@ -22,8 +22,8 @@ and lets the owner mark one reviewed. The same flags reach an agent at write tim
 - ``round_unexplained``: an agent's journal entry with no memo putting a round amount (a whole
   multiple of 100) into a bank or card account in the last three days of a month.
 - ``write_off``: a customer receipt an agent entered that takes a balance as a discount to an
-  expense account (a bad debt written off, with or without cash). It moves an amount nobody paid
-  out of receivables and into expense, which is the owner's call to confirm.
+  expense account, or that received no cash at all (a bad debt written off, or a charge waived).
+  It moves an amount nobody paid out of receivables, which is the owner's call to confirm.
 
 Only live effects count: a voided or corrected document is judged by what it posts now. The
 order of events is the audit sequence, never a clock, so two writes in one millisecond still
@@ -52,7 +52,7 @@ WHY = {
     'cleared_on_arrival': 'Entered by an agent after the reconciliation was started, then cleared on that same reconciliation',
     'opening_balance_equity': 'Touches Opening Balance Equity outside the move-in',
     'round_unexplained': 'A round amount into a bank or card account at month end, by an agent, with no memo',
-    'write_off': 'A customer balance written off to an expense account by an agent',
+    'write_off': 'A customer balance written off, or a charge waived, by an agent',
 }
 # The move-in marker R166's cutover sets on every document it writes (as the write's
 # source reference), and the clearing account its balancing lines post to.
@@ -212,8 +212,9 @@ def _write_off(s, tx):
             JOIN transactions t ON t.id=d.transaction_id
             JOIN posting_batches b ON b.transaction_id=t.id
             JOIN audit_events be ON be.id=b.audit_event_id
+            JOIN transaction_revisions r ON r.id=t.current_revision_id
             WHERE {LIVE} AND {SCOPE} AND t.type='payment' AND be.actor_kind='agent'
-              AND a.type IN ('expense','other_expense')
+              AND (a.type IN ('expense','other_expense') OR r.total_minor_units=0)
             GROUP BY b.transaction_id, b.id, b.effective_date, a.full_name
             ORDER BY b.effective_date""", tx=tx):
         out.setdefault(row['transaction_id'], row)

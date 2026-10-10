@@ -256,7 +256,7 @@ def test_a_receipt_applied_in_a_closed_period_cannot_be_reopened(july):
     with pytest.raises(BookflowError) as refused:
         run('payment bounce', dict(payment=july['check']['id'], expected_version=shown['version'], date='2026-07-09',
                                    operation_key='closed'), reason='NSF')
-    assert refused.value.code == 'E_PERIOD_CLOSED'
+    assert refused.value.code == 'E_PERIOD_CLOSED' and 'closing date' in refused.value.details['next']
     assert due(july, july['sale']) == 0
 
 
@@ -327,3 +327,63 @@ def test_a_statement_import_matches_the_deposit_the_returned_item_and_the_fee(ju
     assert [(row['date'], row['amount'], row['status']) for row in result['lines']] == [
         ('2026-07-02', 80520, 'matched'), ('2026-07-09', -48693, 'matched'), ('2026-07-09', -1200, 'matched')], result['lines']
     assert result['counts']['unmatched'] == 0 and done['bounce_id']
+
+
+def test_the_cash_basis_follows_the_check_back_and_the_customer_paying_cash(july):
+    """Income is recognised when paid: the returned check takes its income back, and the cash that replaces it restores it."""
+    run, charges = july['run'], july['charges']
+
+    def income(basis):
+        report = run('report profit-and-loss', dict(date_from='2026-07-01', date_to='2026-07-31', basis=basis, limit=200))
+        return {row['account_id']: row['amount']['minor_units'] for row in report['rows'] if row['amount']['minor_units']}
+
+    # Both invoices were sold in June and paid in July: 486.93 + 318.27 = 805.20 of cash-basis income.
+    assert income('cash')[july['income']] == 80520
+    done = bounce(july, july['check'])
+    cash, accrual = income('cash'), income('accrual')
+    # The returned check's 486.93 is no longer paid, so only Kowalski's 318.27 is cash-basis income; the 12.00 fee is
+    # an expense on either basis. The 35.00 fee is billed but unpaid.
+    assert cash[july['income']] == 31827 and cash[july['service_charges']] == 1200 and charges not in cash
+    assert accrual.get(charges) == 3500
+    # Tom pays cash 521.93 on 07-16 and it settles the reopened invoice and the fee invoice.
+    fee = run('invoice show', dict(invoice=done['customer_fee']['id']))
+    paid = run('payment receive', dict(
+        customer=july['hendricks'], date='2026-07-16', amount='521.93', payment_method=july['methods']['Cash'], deposit_to=july['bank'],
+        operation_key='cash', applications=dict(mode='inline', items=[
+            dict(invoice=july['sale']['id'], expected_version=run('invoice show', dict(invoice=july['sale']['id']))['version'], amount='486.93'),
+            dict(invoice=fee['id'], expected_version=fee['version'], amount='35.00')])), reason='Paid cash')
+    assert paid['summary']['paid_in_full_count'] == 2
+    cash = income('cash')
+    assert cash[july['income']] == 80520 and cash[charges] == 3500
+    assert run('report ar-aging', dict(as_of='2026-07-31'))['totals']['total']['minor_units'] == 0
+    # Checking: 805.20 - 486.93 - 12.00 + 521.93 = 828.20.
+    assert by_id(july, checking=july['bank'])['checking'] == 82820
+
+
+def test_a_parents_check_for_one_jobs_invoice_bills_the_fee_to_that_job(books):
+    """The check came from the property manager and paid Job A's invoice: the refund and the fee follow the job."""
+    run = books['run']
+    parent = run('customer create', dict(name='Property Manager'))['id']
+    job = run('customer create', dict(name='Job A', parent_id=parent))['id']
+    sale = invoice(books, job, '300.00', '4001')
+    paid = run('payment receive', dict(
+        customer=parent, date='2026-07-01', amount='300.00', payment_method=books['methods']['Check'], reference='88',
+        deposit_to=books['bank'], operation_key='parent', applications=dict(mode='inline', items=[
+            dict(invoice=sale['id'], expected_version=1, amount='300.00')])), reason='Paid')
+    done = bounce(books, paid, bank_fee=None, customer_fee='20.00')
+    assert due(books, sale) == 30000
+    fee = run('invoice show', dict(invoice=done['customer_fee']['id']))
+    assert fee['customer_name'] == 'Property Manager:Job A' and fee['total']['minor_units'] == 2000
+    assert run('customer-refund show', dict(refund=done['refund']['id']))['customer_name'] == 'Property Manager:Job A'
+
+
+def test_every_document_the_bounce_writes_is_audited_under_the_same_request_and_reason(july):
+    """Who, through what, on whose behalf and why: one request, five events, one reason."""
+    done = bounce(july, july['check'], reason='Statement 07-09: returned item, check 1182')
+    events = july['run']('audit list', dict(limit=200))['items']
+    request = next(row['request_id'] for row in events if row['command'] == 'payment bounce')
+    mine = [row for row in events if row['request_id'] == request]
+    assert sorted(row['command'] for row in mine) == [
+        'customer-refund post', 'invoice post', 'payment bounce', 'payment unapply', 'register post']
+    assert {row['reason'] for row in mine} == {'Statement 07-09: returned item, check 1182'}
+    assert {row['interface'] for row in mine} == {'python'} and done['bounce_id']

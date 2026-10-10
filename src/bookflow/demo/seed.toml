@@ -2460,19 +2460,19 @@ input = { name = "Returned Check Example Customer" }
 command = "invoice post"
 capture = "bounce_invoice"
 reason = "Bill the customer whose check will come back"
-input = { date = "2026-12-13", number = "DEMO-BOUNCE-INV-1", customer = "${bounce_customer.id}", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "1", net_amount = "200.00" }] }
+input = { date = "2026-12-05", number = "DEMO-BOUNCE-INV-1", customer = "${bounce_customer.id}", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "1", net_amount = "200.00" }] }
 
 [[commands]]
 command = "payment receive"
 capture = "bounce_payment"
 reason = "The customer's check, deposited straight to Checking"
-input = { customer = "${bounce_customer.id}", date = "2026-12-14", amount = "200.00", number = "DEMO-BOUNCE-PAY-1", payment_method = "Check", reference = "5001", deposit_to = "Checking", operation_key = "DEMO-BOUNCE-PAY-1-receive", applications = { mode = "inline", items = [{ invoice = "${bounce_invoice.id}", expected_version = 1, amount = "200.00" }] } }
+input = { customer = "${bounce_customer.id}", date = "2026-12-06", amount = "200.00", number = "DEMO-BOUNCE-PAY-1", payment_method = "Check", reference = "5001", deposit_to = "Checking", operation_key = "DEMO-BOUNCE-PAY-1-receive", applications = { mode = "inline", items = [{ invoice = "${bounce_invoice.id}", expected_version = 1, amount = "200.00" }] } }
 
 [[commands]]
 command = "payment bounce"
 capture = "bounce_record"
 reason = "Bank returned check 5001 unpaid"
-input = { payment = "${bounce_payment.id}", expected_version = "${bounce_payment.version}", date = "2026-12-15", operation_key = "DEMO-BOUNCE-1", bank_fee = { amount = "15.00", account = "Bank Fees" }, customer_fee = { amount = "25.00", item = "${pay_item.id}", number = "DEMO-BOUNCE-FEE-1" } }
+input = { payment = "${bounce_payment.id}", expected_version = "${bounce_payment.version}", date = "2026-12-08", operation_key = "DEMO-BOUNCE-1", bank_fee = { amount = "15.00", account = "Bank Fees" }, customer_fee = { amount = "25.00", item = "${pay_item.id}", number = "DEMO-BOUNCE-FEE-1" } }
 
 # A bad debt written off with no cash (R177): the anchor's Receive Payments for 0.00 with the
 # balance taken as a discount to a Bad Debt expense account. The customer is inactive afterwards,
@@ -2493,7 +2493,7 @@ input = { name = "Write-off Example Customer" }
 command = "invoice post"
 capture = "write_off_invoice"
 reason = "Bill the customer that will never pay"
-input = { date = "2026-12-10", number = "DEMO-WO-INV-1", customer = "${write_off_customer.id}", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "1", net_amount = "150.00" }] }
+input = { date = "2026-12-03", number = "DEMO-WO-INV-1", customer = "${write_off_customer.id}", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "1", net_amount = "150.00" }] }
 
 [[commands]]
 command = "customer deactivate"
@@ -2504,4 +2504,4 @@ input = { customer = "${write_off_customer.id}", expected_version = "${write_off
 command = "payment receive"
 capture = "write_off_payment"
 reason = "Customer closed; the balance will never be paid"
-input = { customer = "${write_off_customer.id}", date = "2026-12-16", amount = "0.00", number = "DEMO-WO-PAY-1", operation_key = "DEMO-WO-PAY-1-receive", discounts = [{ invoice = "${write_off_invoice.id}", amount = "150.00", expected_version = 1 }], discount_account = "${bad_debt_account.id}" }
+input = { customer = "${write_off_customer.id}", date = "2026-12-11", amount = "0.00", number = "DEMO-WO-PAY-1", operation_key = "DEMO-WO-PAY-1-receive", discounts = [{ invoice = "${write_off_invoice.id}", amount = "150.00", expected_version = 1 }], discount_account = "${bad_debt_account.id}" }

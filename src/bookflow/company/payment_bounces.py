@@ -241,7 +241,7 @@ def _intent(s, ctx, inp):
     refund = CustomerRefundPostInput(
         date=inp.date, sources=[RefundSourceInput(payment=header['id'], amount=_plain(cash, currency))],
         funding_account=bank['id'], method=method['id'], reference=f'Returned {check_words}'[:128],
-        memo=memo, customer=payer['id'])
+        memo=memo, customer=key['party_id'])
     bank_fee = register = None
     if inp.bank_fee is not None:
         units = _fee_amount(inp.bank_fee.amount, currency, 'bank_fee.amount')
@@ -262,7 +262,7 @@ def _intent(s, ctx, inp):
         description = f'Returned {check_words} fee'
         extra = {'number': inp.customer_fee.number} if inp.customer_fee.number is not None else {}
         invoice = InvoicePostInput(
-            customer=payer['id'], date=inp.date, ar_account=profile['ar_account_id'],
+            customer=key['party_id'], date=inp.date, ar_account=profile['ar_account_id'],
             memo=(inp.customer_fee.memo or f'{description}; the check was returned by the bank on {inp.date}')[:2000],
             lines=[SalesLineInput(item=item_id, quantity='1', description=description,
                                   unit_price=_plain(units, currency))], **extra)
@@ -376,7 +376,17 @@ def prepare(s, ctx, inp, operation='bounce'):
     with one_authorization(s):
         intent = _intent(s, ctx, inp)
         currency = intent['currency']
-        unapply = payments.prepare(s, ctx, intent['unapply'], 'unapply') if intent['unapply'] else None
+        unapply = None
+        if intent['unapply']:
+            try:
+                unapply = payments.prepare(s, ctx, intent['unapply'], 'unapply')
+            except BookflowError as error:
+                if error.code == 'E_PERIOD_CLOSED':
+                    # The inverse of an application carries the application's own date.
+                    error.details['next'] = ('Reopening the invoices this receipt paid is dated when it paid them, which is on or '
+                                             'before the closing date. A person can move the closing date back to record the '
+                                             'return, or bill the customer for the returned amount on a new invoice.')
+                raise
         released = {('payment', intent['key']['id']): intent['applied']} if intent['applied'] else {}
         refund = refunds.prepare_post(s, ctx, intent['refund'], released=released)
         register = registers.prepare(s, ctx, intent['register'], 'post') if intent['register'] else None

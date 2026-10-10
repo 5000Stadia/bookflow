@@ -198,8 +198,8 @@ def posting_documents(client, company):
 # dict diff would have named the account and the amount.
 DEMO_POSITION = {
     'balances': {
-        'Checking': 653445,                # 657295 - 3850 DEMO-ASK-1
-        'Accounts Receivable': 61621,
+        'Checking': 651945,                # 657295 - 3850 DEMO-ASK-1 - 1500 DEMO-BOUNCE-1 (the bank's 15.00 fee; the 200.00 came and went)
+        'Accounts Receivable': 84121,      # 61621 + 20000 (DEMO-BOUNCE-INV-1 reopened) + 2500 (DEMO-BOUNCE-FEE-1)
         'Inventory Asset': 36184,
         'Accounts Payable': -7810,
         'Sales Tax Payable': -7856,         # -7646 - 210 DEMO-STADJ-1
@@ -215,16 +215,20 @@ DEMO_POSITION = {
         'Discounts Given': 1000,
         'Discounts Taken': -600,
         'Payment Example Bank': -262620,   # -282220 + 49000 - 29400
-        'Payment Example Income': -18000,
+        'Payment Example Income': -55500,  # -18000 - 20000 DEMO-BOUNCE-INV-1 - 2500 DEMO-BOUNCE-FEE-1 - 15000 DEMO-WO-INV-1
         # DEMO-ASK-1: 38.50 from checking waits in Ask My Accountant for its account.
         'Uncategorized Expense (Ask My Accountant)': 3850,
         # DEMO-STADJ-1 (R175): a 2.10 penalty added to the State Revenue Office's sales tax due.
         'Other Expense': 210,
+        # DEMO-BOUNCE-1 (R176): the bank's fee for returning a check.
+        'Bank Fees': 1500,
+        # DEMO-WO-PAY-1 (R177): a 150.00 invoice written off with a receipt of 0.00.
+        'Bad Debt': 15000,
     },
-    'trial_balance': 1126656,              # 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1)
-    'journal_entries': 20,                # + DEMO-ASK-1
-    'net_income': -47036,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1)
-    'total_equity': 452964,                # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1)
+    'trial_balance': 1164156,              # 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1) + 37500 (DEMO-BOUNCE-, DEMO-WO-: receivable +22500, Bank Fees +1500, Bad Debt +15000, Checking -1500)
+    'journal_entries': 21,                # + DEMO-ASK-1, + the bank's fee entry of DEMO-BOUNCE-1
+    'net_income': -26036,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-: income 375.00 less 15.00 bank fee and 150.00 bad debt)
+    'total_equity': 473964,                # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-)
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -257,7 +261,7 @@ DEMO_ARCS = {
     'DEMO-STADJ-': 'a sales tax adjustment: a penalty added to what one agency is owed',
     'DEMO-BOUNCE-': 'a returned check: the invoice reopened, the bank fee, and the fee billed to the customer',
     'DEMO-WO-': 'a bad debt written off with a receipt of 0.00 to a Bad Debt expense account',
-    # Ten documents take a bare series number rather than a DEMO- prefix, and they are NOT all
+    # Twelve documents take a bare series number rather than a DEMO- prefix, and they are NOT all
     # one series: each document type numbers from 1 independently. `1` is three separate
     # documents -- a deposit, a vendor bill and a journal-family document -- and `2` through `8`
     # are journal-family documents the buying months write without naming. The manifest used to
@@ -270,7 +274,7 @@ DEMO_ARCS = {
     # numbered DEMO-KIT-CHECK is journal-family `4`, and an item receipt's own number likewise
     # never reaches the ledger. That is why the service-kit restock shows up mostly as bare
     # numbers, and why only its sales receipt and its bill carry `DEMO-KIT-`.
-    '1': 'a deposit, a shipping vendor bill, and the first unnamed journal-family document',
+    '1': 'a deposit, a shipping vendor bill, the first unnamed journal-family document, and the first customer refund (the returned check of DEMO-BOUNCE-1)',
     '2': 'unnamed journal-family document from the buying month',
     '3': 'unnamed journal-family document from the buying month',
     '4': 'service kits paid by cheque: half a kit to stock plus a delivery expense',
@@ -278,6 +282,7 @@ DEMO_ARCS = {
     '6': 'service kits received against their order, before the vendor bill',
     '7': 'the purchase-price correction the service-kit bill makes to the received cost',
     '8': 'shipping-kit receipt: three units and their allocated shipping',
+    '9': "the bank's fee for the returned check of DEMO-BOUNCE-1",
 }
 
 # Arcs that deliberately post nothing. They are declared because they exist and are seeded, and

@@ -78,7 +78,7 @@ def write_off(books, rows, *, key='wo-1', date='2026-09-30', reason='Customer is
     raw = dict(customer=books['customer'], date=date, amount='0.00', operation_key=key,
                discounts=[dict(invoice=sale['id'], amount=amount, expected_version=version)
                           for sale, amount, version in rows],
-               discount_account=books['bad_debt'], **extra)
+               **{'discount_account': books['bad_debt'], **extra})
     return books['run']('payment receive', raw, reason=reason)
 
 
@@ -117,6 +117,14 @@ def test_the_inactive_customer_is_written_off_without_being_reactivated(books):
     assert balances(books) == {books['bad_debt']: 25000, books['income']: -25000}
 
 
+def test_a_waived_charge_goes_to_a_discount_account_as_the_fake_companys_august_does(books):
+    """Route 59's 49.00 trip charge is waived to Sales Discounts (an income account): the anchor allows it, and so does this."""
+    sale = invoice(books, '49.00', taxed=False)
+    discounts = books['run']('account create', dict(name='Sales Discounts', type='income'))['id']
+    write_off(books, [(sale, '49.00', 1)], reason='Waive the trip charge', discount_account=discounts)
+    assert due(books, sale) == 0 and balances(books)[discounts] == 4900
+
+
 def test_a_partial_write_off_and_a_write_off_after_cash_leave_the_rest_open(books):
     sale = invoice(books, '400.00', taxed=False)
     write_off(books, [(sale, '150.00', 1)])
@@ -141,8 +149,8 @@ def test_refusals_say_what_to_do(books):
     assert 'discounts' in refused(dict(base, discounts=[]))
     # No account named: the books do not guess where a bad debt goes.
     assert 'discount_account' in refused({k: v for k, v in base.items() if k != 'discount_account'})
-    # An income account is a discount, not a bad debt.
-    assert 'expense account' in refused(dict(base, discount_account=books['income']))
+    # A bank account is not somewhere a discount goes; the refusal names the kinds that are.
+    assert 'income, expense or cost of goods sold' in refused(dict(base, discount_account=books['bank']))
     # No reason.
     refused(base, reason=None, code='E_REASON_REQUIRED')
     # Cash applied alongside.

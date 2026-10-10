@@ -5256,8 +5256,8 @@ an event of its own date; that is not done here.
 0.00, the open balance taken as a discount to a Bad Debt account. Bookflow's receipt already carries
 discounts (`payment_discounts`: the component's capacity is cash plus discount, and the invoice is
 settled through one edge for both), so the same receipt with `amount` 0.00 is the write-off: no
-cash leg, a component of discount alone, `discount_account` an expense or other expense account, a
-reason, and `applications` empty. Nothing posts to the bank or Undeposited Funds, so Make Deposits
+cash leg, a component of discount alone, `discount_account` named (an expense account such as Bad Debt, or a discount account such as
+Sales Discounts for a waived charge; never defaulted), a reason, and `applications` empty. Nothing posts to the bank or Undeposited Funds, so Make Deposits
 (`deposit_sources._partition`) finds no cash to bank. The customer may be inactive (payer and invoice
 parties are read inactive-tolerant only on this path), the payment method defaults to the list's
 "Other", and the receipt is not corrected in place (`payment_corrections`). Sales tax is left as it

@@ -425,7 +425,8 @@ on `report entries-to-review`, so say why in it.
            "discount_account": "Bad Debt"}}
 ```
 
-`discount_account` must be an expense account; `applications` stays empty. To reverse it, `payment
+`discount_account` is required (an expense account such as Bad Debt; a discount account such as Sales
+Discounts for a charge that is waived, not a bad debt); `applications` stays empty. To reverse it, `payment
 unapply` then `payment void` the receipt.
 
 ## Customer-work vocabulary
@@ -636,6 +637,6 @@ The owner's `report entries-to-review` lists, from any command and any actor, en
 into a reconciled statement period or a closed period but entered later, entries an agent
 posted after a reconciliation was started and then cleared on it, entries touching Opening
 Balance Equity outside the move-in, an agent's round, unexplained month-end amounts into a
-bank account, and a customer balance an agent wrote off to an expense account (`write_off`). Your write's result carries a warning when it lands there. Nothing is refused;
+bank account, and a customer balance an agent wrote off, or a charge it waived, with a receipt of 0.00 (`write_off`). Your write's result carries a warning when it lands there. Nothing is refused;
 the owner reviews it (`review mark`, a person's step). `report prior-balances` shows any
 reconciled or closed balance that has moved since, with the entries that moved it.

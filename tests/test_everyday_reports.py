@@ -31,6 +31,9 @@ def _minor(money):
 #                                  less DEMO-PAY-P1 applied 30.00, 2026-10-05
 #                                  less DEMO-PAY-P2 40.00 (30.00 applied, 10.00
 #                                  left as the job's own credit), 2026-10-06     -10.00
+#   Returned Check Example Customer DEMO-BOUNCE-INV-1 200.00, paid by DEMO-BOUNCE-PAY-1,
+#                                  reopened by the returned check (refund 1), and the
+#                                  DEMO-BOUNCE-FEE-1 25.00 fee                       225.00
 #   Tax Rounding Example Customer  DEMO-TAX-LEGACY 0.10, -LINE 0.12, -TOTAL 0.11    0.33
 #   Tax Work Example Customer      DEMO-TAX-WORK-INV, 2026-11-12                   0.06
 #
@@ -40,6 +43,7 @@ CUSTOMER_BALANCES = [
     ("Line Kinds Example Customer", 47782),
     ("Payment Example Customer:Job A", 2000),
     ("Payment Example Customer:Job B", -1000),
+    ("Returned Check Example Customer", 22500),
     ("Tax Rounding Example Customer", 33),
     ("Tax Work Example Customer", 6),
 ]
@@ -56,6 +60,11 @@ CUSTOMER_DETAIL = [
     ("Payment Example Customer:Job B", "activity", "DEMO-PAY-P1", -3000, 3000),
     ("Payment Example Customer:Job B", "activity", "DEMO-PAY-P2", -4000, -1000),
     ("Payment Example Customer:Job B", "total", None, -1000, -1000),
+    ("Returned Check Example Customer", "activity", "DEMO-BOUNCE-INV-1", 20000, 20000),
+    ("Returned Check Example Customer", "activity", "DEMO-BOUNCE-PAY-1", -20000, 0),
+    ("Returned Check Example Customer", "activity", "1", 20000, 20000),
+    ("Returned Check Example Customer", "activity", "DEMO-BOUNCE-FEE-1", 2500, 22500),
+    ("Returned Check Example Customer", "total", None, 22500, 22500),
     ("Tax Rounding Example Customer", "activity", "DEMO-TAX-LEGACY", 10, 10),
     ("Tax Rounding Example Customer", "activity", "DEMO-TAX-LINE", 12, 22),
     ("Tax Rounding Example Customer", "activity", "DEMO-TAX-TOTAL", 11, 33),
@@ -377,8 +386,8 @@ def test_1099_summary_opens_on_the_last_calendar_year():
 # Each page opens already run on the filters its link carries, shows the report's own
 # headline figure, and offers the whole report as print and CSV.
 PAGES = {
-    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "616.21"),
-    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "616.21"),
+    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "841.21"),
+    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "841.21"),
     "vendor-balance-summary": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "vendor-balance-detail": ({"f:as_of": DEMO_AS_OF}, "78.10"),
     "open-purchase-orders": ({"f:date_to": DEMO_AS_OF}, "56.00"),

@@ -37,7 +37,6 @@ TABLE_KINDS = (
     ('applications', 'application', 'id'),
     ('application_allocations', 'application_allocation', 'id'),
 )
-WRITE_OFF_ACCOUNT_TYPES = ('expense', 'other_expense')
 PREFERENCES = ('automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments')
 
 
@@ -340,7 +339,9 @@ def _profile(s, inp, context_, *, write_off=False):
         raise
     info = defaults._info(s.company)
     destination = inp.deposit_to
-    if destination is None and info['use_undeposited_funds_for_payments']:
+    if destination is None and (info['use_undeposited_funds_for_payments'] or write_off):
+        # A write-off banks nothing, so the company's choice of where cash goes does not matter;
+        # the account recorded is simply the one a receipt would use by default.
         destination = s.company.conn.execute(sa.select(c.accounts.c.id).where(c.accounts.c.system_role == 'undeposited_funds')).scalar_one_or_none()
     account = defaults._account(s.company, destination, 'deposit_to', {'bank', 'other_current_asset'})
     raw_account = defaults._row(s.company, 'account', account.id)
@@ -383,20 +384,14 @@ def _write_off_intent(inp, ctx):
         raise _invalid('amount', 'cash received must be positive; to write off a bad debt without cash '
                        'receive 0.00 and list the invoices written off in `discounts`, with `discount_account` '
                        'an expense account such as Bad Debt')
-    if inp.applications.mode != 'inline' or inp.applications.items:
+    if inp.applications.mode == 'suggested' or (inp.applications.mode == 'inline' and inp.applications.items):
         raise _invalid('applications', 'a write-off receives no cash, so it applies none; name each invoice '
                        'written off in `discounts` with its expected_version')
     if inp.discount_account is None:
-        raise _invalid('discount_account', 'a write-off names the expense account the balance is written off '
-                       'to, such as Bad Debt')
+        raise _invalid('discount_account', 'a write-off names the account the balance is written off to, '
+                       'an expense account such as Bad Debt (or a discount account such as Sales Discounts for a '
+                       'charge that is waived)')
     require_reason(ctx.reason)
-
-
-def _write_off_account(account, targets, inp):
-    """The balance written off goes to an expense: anything else is a discount, not a bad debt."""
-    if account.type not in WRITE_OFF_ACCOUNT_TYPES:
-        raise _invalid('discount_account', f'"{account.full_name}" is a {account.type.replace("_", " ")} account; '
-                       'a write-off with no cash is taken to an expense account such as Bad Debt')
 
 
 def prepare(s, ctx, inp, operation):
@@ -470,8 +465,6 @@ def _prepare(s, ctx, inp, operation):
         if discounted:
             facts_, account_mutation = early.resolve_account(s, ctx, 'customer', inp.discount_account, at=at)
             discount_account = defaults.Account(**facts_)
-        if write_off:
-            _write_off_account(discount_account, targets, inp)
         # A discount is capacity beside the cash: the component of the invoice's customer carries
         # both, which is what lets every open-balance reader settle the invoice unchanged.
         components = calc.receipt_components(context_['customer_id'], amount + discounted,
