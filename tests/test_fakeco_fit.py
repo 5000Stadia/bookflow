@@ -3,7 +3,8 @@
 tests/fixtures/fakeco/ is written by tests/fakeco.py (see its README). The first test holds the
 committed files to exactly what the generator writes, so the key and the files never drift apart.
 The second keeps July the way a person would through the Python client (tests/fakeco_replay.py):
-the move-in from the old books' exports, every July event, a reconciliation of checking (OFX),
+the move-in from the old books' exports (with the June reconciliations, uncleared items, waiting
+receipts and the 1099 Summary), every July event, a reconciliation of checking (OFX),
 savings and the Visa card (CSV) to their statements, and the closing date. The books must then
 agree with the key to the cent.
 """
@@ -58,6 +59,27 @@ def test_july_kept_in_bookflow_matches_the_answer_key(tmp_path, monkeypatch):
         assert totals["positive_count"] + totals["negative_count"] == len(want["cleared"]), account
         outstanding = sorted(abs(row["amount"]) for row in done["outstanding"])
         assert outstanding == sorted(abs(fakeco.cents(row["amount"])) for row in want["outstanding"]), (account, card)
+
+    # The year's 1099 summary is the whole year's: January to June from the old books, July from Bookflow.
+    year = replay.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
+    assert [(row["display_vendor_label"], row["payments"]["minor_units"], row["opening_payments"]["minor_units"])
+            for row in year["rows"]] == [("Delgado, Ray", 845000 + 255000, 755000)]
+
+    # Once July is reconciled and closed, the move-in run again makes nothing, and what it brought still ties as of
+    # the cutover: each opening is now certified, the receipts were deposited, the 1099 figure stands (R179).
+    given = [{"attachment": f["attachment"]} for f in replay.cutover["plan"]["files"]]
+    again = replay.run("cutover apply", dict(as_of=fakeco_replay.AS_OF, files=given, mappings=fakeco_replay.MAPPINGS),
+                       reason="Run the move-in again")
+    assert again["created"] == 0 and "reconciliation_exists" not in {e["code"] for e in again["exceptions"]}
+    tie = replay.run("cutover tie-out", dict(as_of=fakeco_replay.AS_OF, files=given, mappings=fakeco_replay.MAPPINGS))
+    assert [(row["name"], row["opening"], row["tied"]) for row in tie["bank"]["rows"]] == [
+        ("Checking", "certified", True), ("Savings", "certified", True), ("Visa Business Card", "certified", True)]
+    assert (tie["undeposited"]["differences"], tie["vendor_1099"]["differences"],
+            tie["trial_balance"]["differences"]) == (0, 0, 0)
+
+    # No workaround is left in July that a v1.6 command now covers (R176-R179).
+    workarounds = {row.kind for row in replay.fit.values() if row.status == "workaround"}
+    assert workarounds == {"Other names list (owner)", "Group item (Smoke Alarm Package)"}, workarounds
 
     # The person closed July: nothing more can be posted into it.
     assert replay.run("company show")["info"]["closing_date"] == "2026-07-31"

@@ -1,6 +1,8 @@
 """Keep Harbor Electric's July in Bookflow through the Python client, as a person would, and read the books back.
 
-`Replay` moves the old books in with the cutover commands, posts every July event from
+`Replay` moves the old books in with the cutover commands (the lists, trial balance and open documents, and with
+them the June reconciliations, the items the June statements had not shown yet, the receipts waiting in Undeposited
+Funds and the 1099 Summary for January to June), posts every July event from
 tests/fixtures/fakeco/answer/events.json through public commands, reconciles checking to the July OFX
 statement with `reconcile import`, and sets the closing date as the person. Every kind of transaction
 it meets is recorded in `fit` with the commands that kept it and how well Bookflow fits it: `does` (an
@@ -34,6 +36,9 @@ COMPANY = "Harbor Electric"
 AS_OF = "2026-06-30"
 CORE_FILES = ("lists.iif", "trial_balance.csv", "open_invoices.csv", "unpaid_bills.csv", "inventory_valuation.csv")
 AGING_FILES = ("ar_aging.csv", "ap_aging.csv")
+SUMMARIES = ("reconciliation_summary_checking_2026-06.csv", "reconciliation_summary_savings_2026-06.csv",
+             "reconciliation_summary_visa_2026-06.csv")
+REST = SUMMARIES + ("uncleared_2026-06-30.csv", "undeposited_funds_2026-06-30.csv", "vendor_1099_summary_2026-06.csv")
 # The general chart already numbers two accounts the old books number differently: Bank Fees is the old books'
 # Bank Service Charges, and Interest Expense (9100 in the old books, Other Expense here) is made new with `create`:
 # the plan warns that it comes in without its number, and the tie-out finds it by what the move-in recorded.
@@ -68,7 +73,6 @@ class Replay:
         self.made: dict[str, dict] = {}  # event id -> what Bookflow made for it
         self.invoices: dict[str, str] = {}  # invoice, credit memo or sales receipt number -> id
         self.bills: dict[tuple[str, str], str] = {}  # (vendor, reference) -> bill or vendor credit id
-        self.redirect: dict[str, str] = {}  # an invoice number the key uses -> the one Bookflow holds instead
         self.events = json.loads((FIXTURE / "answer" / "events.json").read_text())
         self.by_id = {ev["id"]: ev for ev in self.events}
 
@@ -86,7 +90,6 @@ class Replay:
             row.events.append(event)
 
     def invoice_id(self, number: str) -> str:
-        number = self.redirect.get(number, number)
         if number not in self.invoices:
             found = [row for row in self.run("invoice query", dict(number=number, limit=10))["items"]
                      if row["number"] == number]
@@ -135,25 +138,28 @@ class Replay:
         return files
 
     def move_in(self) -> dict:
-        core = self.attach(CORE_FILES)
+        files = self.attach(CORE_FILES + REST)
         agings = self.attach(AGING_FILES)
-        plan = self.run("cutover plan", dict(as_of=AS_OF, files=core, mappings=MAPPINGS))
+        plan = self.run("cutover plan", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
         assert plan["ready"], plan["blocking"]
-        applied = self.run("cutover apply", dict(as_of=AS_OF, files=core, mappings=MAPPINGS),
+        applied = self.run("cutover apply", dict(as_of=AS_OF, files=files, mappings=MAPPINGS),
                            reason="Move in from the old books")
-        tie = self.run("cutover tie-out", dict(as_of=AS_OF, files=core + agings, mappings=MAPPINGS))
+        tie = self.run("cutover tie-out", dict(as_of=AS_OF, files=files + agings, mappings=MAPPINGS))
         self.cutover = dict(plan=plan, applied=applied, tie=tie)
+        # the opening journals the June reconciliations cover, and each account's opening draft
+        self.journals = {step["record_id"] for step in applied["steps"] if step["kind"] == "journal"}
+        self.openings = {step["name"].split(" · ", 1)[1]: step["record_id"] for step in applied["steps"]
+                         if step["kind"] == "reconciliation_opening"}
         return self.cutover
 
     # ---------------------------------------------------------------- after the move-in
     def settle_in(self):
         """What a person sets up once the lists are in, before the first new entry."""
-        tax_item = self.run("item show", dict(item=D.COMPANY["tax_item"]))["id"]
-        self.run("company update", dict(default_sales_tax_item_id=tax_item))
-        self.note("Customer sales tax item (IIF TAXITEM)", "workaround", ["company update"],
-                  "the move-in leaves every customer's sales tax item empty, so the first invoice is refused until "
-                  "the company default sales tax item is set (`company update default_sales_tax_item_id`)",
-                  "each customer keeps the tax item the list gives it and its invoices take it")
+        ruth = self.run("customer show", dict(customer="Abernathy, Ruth"))
+        assert ruth["sales_tax_item_id"] == self.run("item show", dict(item=D.COMPANY["tax_item"]))["id"], ruth
+        self.note("Customer sales tax item (IIF TAXITEM)", "does", ["cutover apply"],
+                  "each customer keeps the tax item the list gives it (a job takes its customer's, an exempt customer "
+                  "none), and the sole tax item becomes the company default; the first invoice needs nothing named")
         owner, = D.OTHER_NAMES.items()
         name, info = owner
         self.run("other-name create", dict(name=name, first_name="Mike", last_name="Harbor", phone=info["phone"]))
@@ -162,46 +168,6 @@ class Replay:
                   "the other names list comes over with the rest")
         self.account_ids = {row["full_name"]: row["id"] for row in self.run("account list")["items"]}
         self.non_taxable = next(row["id"] for row in self.run("sales-tax-code list")["items"] if row["code"] == "Non")
-
-    def opening_detail(self):
-        """The June statements did not show every entry the old books held. The move-in brings checking and
-        the card in as one amount each, so the items the statements did not show yet are put in one by one,
-        against Cutover Clearing, beside one entry that moves the rest of the opening amount the other way."""
-        clearing = "Cutover Clearing"
-        for account in ("Checking", "Visa Business Card"):
-            items = [u for u in D.UNCLEARED if u[0] == account]
-            card = account == "Visa Business Card"
-            net = sum(cents(u[6]) for u in items)  # checking: money in; card: what is owed
-            # checking (money in) goes up by the checks still to clear and down by the deposit; the card (owed)
-            # goes down by the charges still to post: the amount the uncleared items then move back
-            back = -net if not card else net
-            lines = [dict(account=account, side="debit" if back > 0 else "credit", amount=money(abs(back))),
-                     dict(account=clearing, side="credit" if back > 0 else "debit", amount=money(abs(back)))]
-            made = self.run("journal post", dict(date=AS_OF, memo=f"{account}: the June statement's balance, before "
-                                                 "the items it did not show yet", lines=lines))
-            self.made[f"opening:{account}"] = made
-            for _, kind, when, number, name, memo, amount, _ in items:
-                value = cents(amount)
-                if card:
-                    self.run("card-charge post", dict(account=account, date=when, amount=money(value), memo=memo,
-                                                      **({"pay_to": self.party(name)} if name else {}),
-                                                      expenses=[dict(account=clearing, amount=money(value), memo=memo)]))
-                elif value < 0:  # no payee: the payment is already in the old books' vendor and 1099 totals
-                    self.run("check post", dict(account=account, number=number, date=when, amount=money(-value),
-                                                memo=f"{name}: {memo} (written before the move-in)",
-                                                expenses=[dict(account=clearing, amount=money(-value), memo=memo)]))
-                else:
-                    self.run("register post", dict(account=account, date=when, direction="increase",
-                                                   amount=money(value), memo=memo, category=clearing))
-        self.note("Outstanding checks, deposit in transit and unposted card charges at the cutover", "workaround",
-                  ["journal post", "check post", "register post", "card-charge post"],
-                  "the move-in brings checking and the card in as one opening amount each, so a first "
-                  "reconciliation cannot clear June's outstanding items one by one; each is entered again against "
-                  "Cutover Clearing, beside a journal moving the same total back (checks without a payee, so the "
-                  "old books' vendor and 1099 totals are not counted twice), and the opening reconciliation covers "
-                  "the June statement balance and leaves them outstanding",
-                  "the new company is set up from the last statement balance with each outstanding item entered "
-                  "on its own, so the first reconciliation clears them")
 
     # ---------------------------------------------------------------- July, event by event
     def july(self, until: str = "2026-07-31"):
@@ -313,7 +279,7 @@ class Replay:
     def _payment(self, ev: dict):
         applications, discounts = defaultdict(int), {}
         for row in ev["applied"]:
-            number = self.redirect.get(row["invoice"], row["invoice"])
+            number = row["invoice"]
             applications[number] += cents(row["amount"])
             if cents(row["discount"]):
                 discounts[number] = row["discount"]
@@ -344,19 +310,18 @@ class Replay:
 
     def _deposit(self, ev: dict):
         if all(row["source"].startswith("uf:") for row in ev["items"]):
-            # Undeposited Funds came in as one opening amount: a deposit cannot draw on it (an `additional` line
-            # from Undeposited Funds is refused, with the reason and the journal to use), so that advice is followed.
-            checks = ", ".join(f"{row['source'][3:]} {row['amount']}" for row in ev["items"])
-            made = self.run("journal post", dict(date=ev["date"], memo=f"Deposit of checks received before the move-in: "
-                                                 f"{checks}", lines=[
-                dict(account="Checking", side="debit", amount=ev["total"]),
-                dict(account="Undeposited Funds", side="credit", amount=ev["total"])]))
-            self.made[ev["id"]] = made
-            self.note("Deposit of checks received before the cutover", "workaround", ["journal post"],
-                      "the move-in brings Undeposited Funds in as one amount that Make Deposits cannot pick, and a "
-                      "deposit line drawn from Undeposited Funds is refused with the reason and the journal to use; "
-                      "the cutover's advice is a journal from Undeposited Funds to Checking",
-                      "the two receipts sit in Undeposited Funds and Make Deposits picks them", event=ev["id"])
+            # the move-in brought each check waiting in Undeposited Funds as its own receipt: Make Deposits picks them
+            names = {row["source"][3:] for row in ev["items"]}
+            picked = [row for row in self.run("deposit sources", dict(date=ev["date"]))["items"]
+                      if row["received_from"] in names]
+            assert len(picked) == len(ev["items"]), picked
+            self.made[ev["id"]] = self.run("deposit post", dict(operation_key=new_id(), document=dict(
+                mode="inline", deposit_to="Checking", date=ev["date"],
+                sources=[dict(source_type=row["source_type"], source=row["source"],
+                              expected_version=row["expected_version"]) for row in picked])))
+            self.note("Deposit of checks received before the cutover", "does", ["cutover apply", "deposit post"],
+                      "the move-in brings each receipt the Undeposited Funds report lists as its own receipt, and "
+                      "the deposit picks them from `deposit sources`", event=ev["id"])
             return
         sources, additional = [], []
         for row in ev["items"]:
@@ -534,46 +499,29 @@ class Replay:
                   "subscription too)", event=ev["id"])
 
     def _bounced_check(self, ev: dict):
-        payment = self.by_id[ev["payment"]]
-        clearing = "Returned Checks Clearing"
-        if "Returned Check Charges" not in self.account_ids:
-            income = self.run("account create", dict(name="Returned Check Charges", number="4800", type="income"))
-            self.account_ids["Returned Check Charges"] = income["id"]
-            holding = self.run("account create", dict(name=clearing, type="other_current_asset",
-                                                      description="A customer's returned check, until it is invoiced"))
-            self.account_ids[clearing] = holding["id"]
-            self.run("item create", dict(name="Returned Check Fee", type="other_charge", sales_tax_code_id=self.non_taxable,
-                                         description="Returned check fee", price="35.00", income_account_id=income["id"]))
-            # An item cannot post to a bank account (income_account_id refuses type bank), so the returned
-            # check is invoiced through a clearing account and taken out of checking by a register entry.
-            self.run("item create", dict(name="Returned Check", type="other_charge", sales_tax_code_id=self.non_taxable,
-                                         description="Customer check returned unpaid", price="0.00",
-                                         income_account_id=holding["id"]))
-        lines = [dict(item="Returned Check", quantity="1", unit_price=ev["amount"],
-                      description=f"Check #{payment['ref']} returned unpaid (it paid invoice "
-                                  f"{', '.join(row['invoice'] for row in payment['applied'])})"),
-                 dict(item="Returned Check Fee", quantity="1", unit_price=ev["customer_fee"])]
-        invoice = self.run("invoice post", dict(customer=ev["customer"], date=ev["date"], number=ev["fee_number"],
-                                                lines=lines, terms="Due on receipt"))
-        assert invoice["total"]["minor_units"] == cents(ev["amount"]) + cents(ev["customer_fee"]), invoice["total"]
-        self.invoices[ev["fee_number"]] = invoice["id"]
-        for applied in payment["applied"]:
-            self.redirect[applied["invoice"]] = ev["fee_number"]
-        returned = self.run("register post", dict(account="Checking", date=ev["date"], direction="decrease",
-                                                  amount=ev["amount"], payee=self.party(ev["customer"], "customer"),
-                                                  memo=f"Returned check #{payment['ref']}", category=clearing))
-        fee = self.run("register post", dict(account="Checking", date=ev["date"], direction="decrease",
-                                             amount=ev["bank_fee"], payee=self.party("Cedar Prairie Bank"),
-                                             memo="Return item fee", category="Bank Fees"))
-        self.made[ev["id"]] = dict(invoice=invoice, returned=returned, fee=fee)
-        self.note("Bounced customer check (returned item, bank fee, fee charged to the customer)", "workaround",
-                  ["account create", "item create", "invoice post", "register post"],
-                  "the customer is invoiced the returned check (an other-charge item on a clearing account, since an "
-                  "item cannot post to a bank account) and the returned-check fee; a register entry takes the "
-                  "check out of checking against the clearing account and another enters the bank's fee; the "
-                  "customer's cash is applied to that invoice (R148 bounced payments is in Later)",
-                  "Receive Payments > Record Bounced Check reopens the paid invoice, enters the bank fee and invoices "
-                  "the customer's fee in one step", event=ev["id"])
+        fee_account = "Returned Check Charges"
+        if fee_account not in self.account_ids:
+            # what a person sets up once for the customer's fee: an income account and the item that bills to it
+            income = self.run("account create", dict(name=fee_account, number="4800", type="income"))
+            self.account_ids[fee_account] = income["id"]
+            self.run("item create", dict(name="Returned Check Charge", type="other_charge",
+                                         sales_tax_code_id=self.non_taxable, description="Returned check fee",
+                                         price=ev["customer_fee"], income_account_id=income["id"]))
+        payment = self.made[ev["payment"]]
+        payment_id = payment.get("payment_id") or payment.get("id") or payment["payment"]["id"]
+        version = self.run("payment show", dict(payment=payment_id))["version"]
+        made = self.run("payment bounce", dict(
+            payment=payment_id, expected_version=version, date=ev["date"], operation_key=new_id(),
+            bank_fee_amount=ev["bank_fee"], bank_fee_account=NAMES["Bank Service Charges"],
+            customer_fee_amount=ev["customer_fee"], customer_fee_account=fee_account,
+            customer_fee_number=ev["fee_number"]))
+        self.made[ev["id"]] = made
+        self.note("Bounced customer check (returned item, bank fee, fee charged to the customer)", "does",
+                  ["payment bounce"],
+                  "one `payment bounce` reopens the invoice the check paid, takes the check and the bank's fee out of "
+                  "checking on the return date and invoices the customer's 35.00 fee as invoice 2393 (the fee item "
+                  "and its Returned Check Charges account set up once with `account create` and `item create`)",
+                  event=ev["id"])
 
     def _inventory_adjust(self, ev: dict):
         made = self.run("inventory adjust", dict(item=ev["item"], date=ev["date"], quantity_change=ev["quantity"],
@@ -587,77 +535,31 @@ class Replay:
         return {row["item_name"]: (row["quantity_on_hand"], row["asset_value"]["minor_units"]) for row in rows}
 
     def _vendor_credit(self, ev: dict):
-        clearing = "Vendor Returns Clearing"
-        if clearing not in self.account_ids:
-            made = self.run("account create", dict(name=clearing, type="other_current_asset",
-                                                   description="Stock sent back to a vendor, until its credit is entered"))
-            self.account_ids[clearing] = made["id"]
-        for row in ev["lines"]:
-            before = self.stock(ev["date"])[row["item"]][1]
-            self.run("inventory adjust", dict(item=row["item"], date=ev["date"], quantity_change=f"-{row['quantity']}",
-                                              adjustment_account=clearing,
-                                              memo=f"Returned to {ev['vendor']}, {ev['number']}"))
-            taken = before - self.stock(ev["date"])[row["item"]][1]
-            rest = cents(row["amount"]) - taken  # the credit is worth more (or less) than the average took off
-            if rest:
-                self.run("inventory adjust", dict(item=row["item"], date=ev["date"], value_change=money(abs(rest)),
-                                                  negative_value=rest > 0, adjustment_account=clearing,
-                                                  memo=f"Credited value of the units returned, {ev['number']}"))
-        made = self.run("vendor-credit post", dict(vendor=ev["vendor"], date=ev["date"], supplier_reference=ev["number"],
-                                                   expenses=[dict(account=clearing, amount=ev["total"],
-                                                                  memo="Returned stock")]))
+        made = self.run("vendor-credit post", dict(
+            vendor=ev["vendor"], date=ev["date"], supplier_reference=ev["number"], memo=ev["note"][:200],
+            items=[dict(item=row["item"], quantity=row["quantity"], unit_cost=row["cost"]) for row in ev["lines"]]))
+        assert made["total"]["amount"] == ev["total"], (ev["id"], made["total"], ev["total"])
         self.bills[(ev["vendor"], ev["number"])] = made["id"]
         self.made[ev["id"]] = made
-        self.note("Stock returned to the supplier for credit", "workaround", ["inventory adjust", "vendor-credit post"],
-                  "vendor credits have no item rows, and a quantity decrease cannot carry the credited value, so the "
-                  "stock comes off at its average into a clearing account, a value adjustment takes off the rest of "
-                  "the credited value, and the vendor credit takes the clearing account back",
-                  "a vendor credit with item rows takes the quantity and the credited value off stock", event=ev["id"])
+        self.note("Stock returned to the supplier for credit", "does", ["vendor-credit post"],
+                  "a vendor credit with item rows takes the quantity off the shelf at the credited cost", event=ev["id"])
 
     def _write_off(self, ev: dict):
-        """A write-off. A receipt must carry cash ('cash received must be positive'), so the anchor's zero receipt
-        with the balance as a discount to Bad Debt is refused, and no item can post to an expense account; the
-        balance is credited through a clearing account instead."""
-        clearing = "Write-off Clearing"
-        target = NAMES.get(ev["account"], ev["account"])
-        if clearing not in self.account_ids:
-            made = self.run("account create", dict(name=clearing, type="other_current_asset",
-                                                   description="Customer balances written off, until moved to their account"))
-            self.account_ids[clearing] = made["id"]
-            self.run("item create", dict(name="Write-off", type="other_charge", price="0.00", sales_tax_code_id=self.non_taxable,
-                                         description="Balance written off", income_account_id=made["id"]))
+        """A write-off, the anchor's way: a receipt of 0.00 with the balance taken as a discount to the account."""
         invoice = self.invoice_id(ev["invoice"])
-        inactive = not self.run("customer show", dict(customer=ev["customer"]))["active"]
-        if inactive:  # a new document must name an active customer
-            self.run("customer activate", dict(customer=ev["customer"]))
-        credit = self.run("credit-memo post", dict(customer=ev["customer"], date=ev["date"], memo=ev["note"][:200],
-                                                   lines=[dict(item="Write-off", quantity="1", unit_price=ev["amount"],
-                                                               description=f"Invoice {ev['invoice']} written off")]))
-        self.run("customer-credit apply", dict(
-            credit_memo=credit["id"], expected_version=credit["version"], date=ev["date"],
-            applications=[dict(invoice=invoice, amount=ev["amount"],
-                               expected_version=self.run("invoice show", dict(invoice=invoice))["version"])]))
-        journal = self.run("journal post", dict(date=ev["date"], memo=f"Invoice {ev['invoice']} written off", lines=[
-            dict(account=target, side="debit", amount=ev["amount"]),
-            dict(account=clearing, side="credit", amount=ev["amount"])]))
-        if inactive:
-            self.run("customer deactivate", dict(customer=ev["customer"]))
-        self.made[ev["id"]] = dict(credit=credit, journal=journal)
+        made = self.run("payment receive", dict(
+            customer=ev["customer"], date=ev["date"], amount="0.00", operation_key=new_id(), memo=ev["note"][:200],
+            discounts=[dict(invoice=invoice, amount=ev["amount"],
+                            expected_version=self.run("invoice show", dict(invoice=invoice))["version"])],
+            discount_account=NAMES.get(ev["account"], ev["account"])))
+        self.made[ev["id"]] = made
         if ev["account"] == "Bad Debt":
-            self.note("Bad debt written off (inactive customer)", "workaround",
-                      ["account create", "item create", "customer activate", "credit-memo post", "customer-credit apply",
-                       "journal post", "customer deactivate"],
-                      "a receipt must carry cash, so the anchor's zero receipt with a discount to Bad Debt is refused, "
-                      "and an item cannot post to an expense account; a 'Write-off' item on a clearing account "
-                      "credits the invoice through a credit memo and a journal moves the amount to Bad Debt; the "
-                      "inactive customer is activated for it and deactivated again (R148 is in Later)",
-                      "Receive Payments with no cash and the balance as a discount to Bad Debt (or a credit memo with a "
-                      "Bad Debt item), 'use it once' for the inactive name", event=ev["id"])
+            self.note("Bad debt written off (inactive customer)", "does", ["payment receive"],
+                      "a receipt of 0.00 with the invoice's balance as a discount to Bad Debt; the inactive customer "
+                      "stays inactive", event=ev["id"])
         else:
-            self.note("Small balance waived (trip charge the customer disputed)", "workaround",
-                      ["credit-memo post", "customer-credit apply", "journal post"],
-                      "as the bad debt: credit memo through the write-off clearing account, journal to the discount "
-                      "account", "a zero receipt with the balance as a discount", event=ev["id"])
+            self.note("Small balance waived (trip charge the customer disputed)", "does", ["payment receive"],
+                      "a receipt of 0.00 with the balance as a discount to Sales Discounts", event=ev["id"])
 
     # ---------------------------------------------------------------- what only the statement knows
     def statement_only(self, ev: dict):
@@ -691,29 +593,15 @@ class Replay:
         return self.run("reconcile mark", dict(draft=draft["id"], operation_key=new_id(),
                                                expected_version=draft["version"], entries=entries))["draft"]
 
-    def open_reconciliation(self, account: str, statement: str, ending: str, june: str) -> dict:
-        """The first reconciliation of `account`: an opening at the June statement that covers what that statement
-        showed and leaves the old books' uncleared items outstanding, then the July statement's draft."""
-        opening = self.run("reconcile opening start", dict(
-            operation_key=new_id(), account=account, opening_date=AS_OF, entered_balance=june,
-            evidence=dict(format=1, statement_reference=f"June 2026 {account} statement",
-                          entered_text="Ending balance of the last statement the old books reconciled"),
-            references=[]))["draft"]
-        card = account == "Visa Business Card"
-        uncleared = {(when, cents(amount)) for acct, _, when, _, _, _, amount, _ in D.UNCLEARED if acct == account}
-        entries = []
-        for row in self.candidates(opening["id"]):
-            if row["date"] > AS_OF:
-                continue
-            amount = -row["amount"] if card else row["amount"]
-            outstanding = (row["date"], amount) in uncleared or (row["date"], -amount) in uncleared
-            entries.append(dict(movement=row["movement"], group_fingerprint=row["group_fingerprint"],
-                                action="outstanding" if outstanding else "covered"))
-        opening = self.mark(opening, entries)
-        self.covered = {entry["group_fingerprint"] for entry in entries if entry["action"] == "covered"}
-        draft = self.run("reconcile start", dict(operation_key=new_id(), account=account, statement_date=statement,
-                                                 ending_balance=ending, opening_draft_id=opening["id"]))["draft"]
-        return draft
+    def open_reconciliation(self, account: str, statement: str, ending: str) -> dict:
+        """The first reconciliation of `account`: the move-in brought the June reconciliation as an opening draft
+        that covers the opening journal and leaves June's uncleared items outstanding; the July statement's draft
+        opens from it without naming it."""
+        opening = next(draft for label, draft in self.openings.items() if label.endswith(account))
+        self.covered = {row["group_fingerprint"] for row in self.candidates(opening)
+                        if row["movement"]["transaction_id"] in self.journals}
+        return self.run("reconcile start", dict(operation_key=new_id(), account=account, statement_date=statement,
+                                                ending_balance=ending))["draft"]
 
     def statement_file(self, name: str, *, attached: bool) -> dict:
         """The July statement as `reconcile import` takes it: its text, or the id of an attachment holding it."""
@@ -726,11 +614,11 @@ class Replay:
                                                     caption="Bank statement"), input_stream=body)
         return dict(attachment=added["attachment"]["id"])
 
-    def reconcile(self, account: str, content: dict, statement: str, ending: str, june: str,
+    def reconcile(self, account: str, content: dict, statement: str, ending: str,
                   csv_mapping: dict | None = None) -> dict:
         """Reconcile `account` to one statement file: import, tick by hand what the import cannot pair, enter what
         only the statement knows, import again, and finish once the difference is zero."""
-        draft = self.open_reconciliation(account, statement, ending, june)
+        draft = self.open_reconciliation(account, statement, ending)
         extra = {"csv_mapping": csv_mapping} if csv_mapping else {}
         first = self.run("reconcile import", dict(account=account, **content, draft=draft["id"], **extra))
         self.imports = [first]
@@ -781,7 +669,6 @@ class Replay:
         self.move_in()
         self.cutover_notes()
         self.settle_in()
-        self.opening_detail()
         self.july()
         k = key("2026-07-31")["reconciliations"]
         results = {}
@@ -790,17 +677,18 @@ class Replay:
                                        ("Visa Business Card", "visa-2026-07.csv", None)):
             rec = k[account]
             results[account] = self.reconcile(account, self.statement_file(name, attached=account == "Checking"), rec["statement_date"],
-                                              rec["ending_balance"], fakeco_data_june(account), mapping)
+                                              rec["ending_balance"], mapping)
         self.reconciliation_notes(results)
         ten99 = self.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
         paid = "; ".join(f"{row['display_vendor_label']} {row['payments']['amount']}" for row in ten99["rows"])
         self.note("1099 subcontractor paid by bill and check", "does", ["bill post", "bill pay",
                                                                          "report vendor-1099-summary"],
                   f"the move-in keeps the vendor's 1099 flag; the summary shows his July payments ({paid})")
-        self.note("1099 totals for the year at a mid-year move-in", "missing", ["report vendor-1099-summary"],
-                  "the move-in brings no payment history and there is no place for a vendor's 1099 amount paid "
-                  "before the cutover, so the 2026 summary lacks January to June; the old books' report has to be "
-                  "added by hand at filing", "the whole year is in one file, so the 1099 summary is the year's")
+        self.note("1099 totals for the year at a mid-year move-in", "does", ["cutover apply", "vendor 1099-opening",
+                                                                            "report vendor-1099-summary"],
+                  "the move-in reads the old books' 1099 Summary for January to June and keeps it as the vendor's "
+                  "opening 1099 amount (`vendor 1099-opening`), less the uncleared check it brings on its own date, "
+                  "so the 2026 summary is the whole year's")
         closed = self.close("2026-07-31")
         self.note("Closing date set by the person after the month is reconciled", "does", ["company update"],
                   "closing_date 2026-07-31 through the person's own client; an entry dated in July is refused "
@@ -818,6 +706,12 @@ class Replay:
         self.note("Opening balances, open invoices and credit memo, unpaid bills and vendor credit, stock", "does",
                   ["cutover apply", "cutover tie-out"],
                   "trial balance, A/R and A/P agings and stock tie to the cent; Cutover Clearing 0.00")
+        self.note("Outstanding checks, deposit in transit and unposted card charges at the cutover", "does",
+                  ["cutover apply", "cutover tie-out", "reconcile start"],
+                  "the move-in reads the June Reconciliation Summaries and the uncleared items report: each account "
+                  "opens at its June statement balance with each uncleared check, deposit and charge entered on its "
+                  "own (the checks under their payees and numbers) and the June reconciliation kept as the opening, "
+                  "so July's reconciliation starts from it and clears them")
         self.note("June sales tax owed to the state at the cutover", "does", ["cutover apply", "sales-tax pay"],
                   "comes in as a sales tax adjustment under the Illinois Department of Revenue and is paid with "
                   "`sales-tax pay` on July 20")
@@ -865,8 +759,9 @@ class Replay:
                   "purchases, the return and the payment pair by amount and date; the CSV has no balance, so the "
                   "statement's new balance is typed from its summary")
         self.note("Statement reconciled to a zero difference and certified", "does",
-                  ["reconcile opening start", "reconcile start", "reconcile preview", "reconcile finish"],
-                  "checking, savings and the Visa each certified at the July statement balance")
+                  ["reconcile start", "reconcile preview", "reconcile finish"],
+                  "checking, savings and the Visa each certified at the July statement balance, each opening from "
+                  "the June reconciliation the move-in brought")
 
     # ---------------------------------------------------------------- reading the books back
     def books(self, as_of: str) -> dict:
@@ -903,10 +798,6 @@ class Replay:
                  for row in pages("report inventory-valuation", dict(as_of=as_of))}
         return dict(trial_balance=tb, receivables=aging("report ar-aging", "display_customer_label"),
                     payables=aging("report ap-aging", "display_vendor_label"), sales_tax=tax, stock=stock)
-
-
-def fakeco_data_june(account: str) -> str:
-    return D.JUNE_STATEMENTS[account]
 
 
 def key(as_of: str) -> dict:
