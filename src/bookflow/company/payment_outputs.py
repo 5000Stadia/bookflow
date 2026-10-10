@@ -174,6 +174,13 @@ class PaymentOutput(CommonOut):
     current: PaymentCurrentOutput
 
 
+class PaymentWriteOffOnReceipt(StrictModel):
+    """What a 0.00 receipt that wrote off a debt shows instead of a method and a deposit account."""
+    account: Reference = Field(description='The account the balance was written off to, such as Bad Debt.')
+    amount: JournalMoneyOutput = Field(description='The balance written off, across every invoice.')
+    note: str = Field(description='The words a reader sees for the receipt: "No cash — written off to ...".')
+
+
 class PaymentShowOutput(PaymentOutput):
     """`payment show`: the receipt, and while the bank's return of its check stands, that return.
 
@@ -184,6 +191,10 @@ class PaymentShowOutput(PaymentOutput):
         'Present while the bank\'s return of this receipt\'s check stands (`payment bounce`): the date '
         '("bounced on ..."), the cash returned, the refund that took it out of the bank and the fee '
         'documents. It ends when that refund is voided.'))
+    write_off: PaymentWriteOffOnReceipt | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'Present on a 0.00 receipt that wrote off a bad debt (`payment receive` with discounts and no cash): '
+        'the account written off to and the amount. No cash moved, so the receipt\'s method and deposit '
+        'account are nominal and the receipt is never deposited.'))
 
 
 class PaymentApplicationOutput(StrictModel):

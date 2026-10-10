@@ -23,6 +23,7 @@
   let selectedApplications = new Set();
   // Early-payment discounts typed on this page, by invoice id; sent with `payment receive` only.
   const discounts = new Map();
+  let methodFromCustomer = false;
   let destinationOverride = !config.preferences.use_undeposited_funds_for_payments, defaultDestination = null;
   let key = 'WB-' + crypto.randomUUID();
   let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null, reviewEpoch = 0;
@@ -334,6 +335,9 @@
     if(mode==='receive'||mode==='update') {
       for(const [field,id] of [['number','number'],['payment_method','method'],['deposit_to','destination'],['reference','reference'],['memo','memo']]) {
         if(field==='deposit_to'&&mode==='receive'&&!destinationOverride) continue;
+        // A 0.00 receipt is a write-off: no cash, so no method. The customer's usual method, filled in
+        // for convenience, is not sent; the command then records the list's own Other.
+        if(field==='payment_method'&&mode==='receive'&&methodFromCustomer&&isWriteOff()) continue;
         if(field==='deposit_to'&&mode==='receive'&&!$(id).value) throw {message:'Choose a bank or Undeposited Funds destination before previewing.'};
         if($(id).value) input[field]=$(id).value;
         else if(mode==='update'&&['reference','memo'].includes(field)) input[field]=null;
@@ -449,7 +453,7 @@
     customerPending=false;
     $('customer-results').replaceChildren();
     const preferred=customer.payment_method?.id;
-    if(preferred&&!$('method').value) $('method').value=preferred;
+    if(preferred&&!$('method').value) {$('method').value=preferred;methodFromCustomer=true;}
   }
   async function reviewCurrent() {
     invalidate();
@@ -697,7 +701,7 @@
     if(!confirming) {$('form').hidden=true;$('title').textContent='Payment '+record.number+(record.deletion?' — deleted':'');}
     $('record').hidden=false;
     const section=$('record'),r=record.revision,c=record.current;section.replaceChildren(el('h2','Internal payment receipt · revision '+r.revision_number),
-      el('p',`${r.profile.payer.label} · ${exact.longday(r.date)} · ${shown(r.total)}`),el('p',`${r.profile.payment_method.label} · ${r.reference||'No reference'} · ${r.profile.deposit_account.full_name}`),el('p',r.memo||''),
+      el('p',`${r.profile.payer.label} · ${exact.longday(r.date)} · ${shown(r.total)}`),record.write_off?el('p',`${record.write_off.note} · ${shown(record.write_off.amount)}`):el('p',`${r.profile.payment_method.label} · ${r.reference||'No reference'} · ${r.profile.deposit_account.full_name}`),el('p',r.memo||''),
       el('p',r.id===record.current_revision_id?'Latest recorded receipt facts.':'Historical receipt facts; actions use current settlement below.'),
       el('h3','Current settlement'),el('p',`${record.status}. Applied ${cash(c.applied_minor_units,c.currency)}; unapplied credit ${cash(c.available_minor_units,c.currency)}.`
         +(c.discount_minor_units?` Early-payment discounts taken: ${cash(c.discount_minor_units,c.currency)}.`:'')));
@@ -771,8 +775,9 @@
   }
   // A receipt for 0.00 is a bad-debt write-off (`payment receive`): it names the expense account the
   // balance goes to and, like every correction, gives its reason, so those two fields appear with it.
+  function isWriteOff() {return mode==='receive'&&/^\s*0*(\.0*)?\s*$/.test($('amount').value)&&$('amount').value.trim()!=='';}
   function syncWriteOff() {
-    const zero=mode==='receive'&&/^\s*0*(\.0*)?\s*$/.test($('amount').value)&&$('amount').value.trim()!=='';
+    const zero=isWriteOff();
     $('discount-account-label').hidden=mode!=='receive';
     if(mode==='receive') {$('reason-label').hidden=!zero;$('reason').required=zero;}
   }
@@ -860,6 +865,7 @@
     note('Choose a matching customer. The previous preview cannot be saved; any prior shared selection remains in Saved selections.');
   });
   for(const id of ['number','method','destination','memo','reference','reason','date','ar']) $(id).addEventListener('change',invalidate);
+  $('method').addEventListener('change',()=>{methodFromCustomer=false;});
   $('more').addEventListener('click',()=>perform(async()=>loadInvoices(nextCursor)));
   $('auto').addEventListener('click',()=>perform(autoApply));$('calculate').addEventListener('click',()=>perform(calculate));
   $('clear').addEventListener('click',()=>perform(async()=>{if(draft) {context();if(draftAttempt) throw {code:'E_VERSION_CONFLICT',message:'Review the retained edits before clearing this shared draft.'};draft=await command('payment selection clear',{selection:draft.id,expected_version:draft.version});invalidate();await reloadDraft();note('Draft selections cleared. No recorded application changed.');}}));

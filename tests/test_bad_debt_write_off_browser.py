@@ -19,7 +19,9 @@ def test_receive_payments_writes_a_balance_off_to_bad_debt(register_browser):
     b.viewport(1280, 900)
     income = run('account create', dict(name='Write-off browser income', type='income'))['id']
     run('account create', dict(name='Browser Bad Debt', type='expense'))
-    payer = run('customer create', dict(name='Write-off Browser Customer'))['id']
+    # The customer usually pays by a method of kind "other": the write-off must not take it.
+    wallet = run('payment-method create', dict(name='Browser Wallet', kind='other'))['id']
+    payer = run('customer create', dict(name='Write-off Browser Customer', preferred_payment_method_id=wallet))['id']
     exempt = next(row['id'] for row in run('sales-tax-code list', {})['items'] if not row['taxable'])
     item = run('item create', dict(name='Write-off browser labor', type='service', sales_enabled=True,
                                    income_account_id=income, price='100', description='Work',
@@ -48,6 +50,16 @@ def test_receive_payments_writes_a_balance_off_to_bad_debt(register_browser):
     assert receipt['received_minor_units'] == 0
     shown = run('payment show', dict(payment=receipt['id']))
     assert shown['current']['discount_minor_units'] == 30000 and shown['current']['available_minor_units'] == 0
+    assert shown['revision']['profile']['payment_method']['label'] == 'Other'
+    assert shown['write_off']['note'] == 'No cash — written off to Browser Bad Debt'
+    b.navigate(f"{env.site.base_url}/c/{env.site.company_id}/receive-payments?payment={receipt['id']}")
+    b.wait_for("document.querySelector('#payment-record')&&!document.querySelector('#payment-record').hidden&&document.querySelector('#payment-record').innerText.includes('No cash')")
+    window_text = b.evaluate("document.querySelector('#payment-record').innerText")
+    assert 'No cash — written off to Browser Bad Debt' in window_text and 'Undeposited Funds' not in window_text, window_text
+    b.navigate(f"{env.site.base_url}/c/{env.site.company_id}/payment/{receipt['id']}")
+    b.wait_for("!!document.querySelector('#payment-write-off')")
+    detail = b.evaluate("document.querySelector('.workspace-card').innerText")
+    assert 'No cash — written off to Browser Bad Debt' in detail and 'Undeposited Funds' not in detail, detail
     names = {row['current_account_name']: row['debit']['minor_units'] - row['credit']['minor_units']
              for row in run('report trial-balance', dict(date_to='2026-12-31', limit=200))['rows']}
     assert names['Browser Bad Debt'] == 30000

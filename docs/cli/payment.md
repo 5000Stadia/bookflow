@@ -2350,6 +2350,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `bounce.customer_fee.minor_units` | integer | yes | no | — | — |
 | `bounce.reason` | string | yes | no | — | — |
 | `bounce.note` | string | yes | no | — | The words a reader sees beside the receipt, "bounced on ...". |
+| `write_off` | object \| null | no | yes | null | Present on a 0.00 receipt that wrote off a bad debt (`payment receive` with discounts and no cash): the account written off to and the amount. No cash moved, so the receipt's method and deposit account are nominal and the receipt is never deposited. |
+| `write_off.account` | object | yes | no | — | The account the balance was written off to, such as Bad Debt. |
+| `write_off.account.id` | string | yes | no | — | — |
+| `write_off.account.label` | string | yes | no | — | — |
+| `write_off.account.version` | integer | yes | no | — | — |
+| `write_off.amount` | object | yes | no | — | The balance written off, across every invoice. |
+| `write_off.amount.amount` | string | yes | no | — | — |
+| `write_off.amount.currency` | string | yes | no | — | — |
+| `write_off.amount.minor_units` | integer | yes | no | — | — |
+| `write_off.note` | string | yes | no | — | The words a reader sees for the receipt: "No cash — written off to ...". |
 
 Example JSON output:
 

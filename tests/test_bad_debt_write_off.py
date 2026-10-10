@@ -221,3 +221,44 @@ def test_an_agents_write_off_warns_it_and_lands_on_the_owners_review_list(hosted
     mine = person.ok('payment receive', dict(raw, operation_key='owner-wo',
         discounts=[dict(invoice=other['id'], amount='50.00', expected_version=1)]))
     assert _row(_review(person), mine['id']) is None
+
+
+def test_a_write_off_takes_other_says_no_cash_and_does_not_warn_about_terms(books):
+    """A write-off has no cash, no method and no deposit: the customer's usual method and a
+    Mobile Wallet of kind "other" both give way to the list's own Other, `payment show` says
+    where the balance went instead of naming Undeposited Funds, and an invoice whose terms
+    offer no early-payment discount draws no discount warning (the write-off is not one)."""
+    run = books['run']
+    assert 'Other' in books['methods'], books['methods']
+    wallet = run('payment-method create', dict(name='Mobile Wallet', kind='other'))['id']
+    customer = run('customer create', dict(name='Wallet Payer', preferred_payment_method_id=wallet))['id']
+    sale = run('invoice post', dict(customer=customer, date='2026-03-01', lines=[dict(
+        item=books['item'], quantity='1', unit_price='300.00', tax_code=books['exempt'])]), reason='Bill')
+    raw = dict(customer=customer, date='2026-09-30', amount='0.00', operation_key='wo-other',
+               discount_account=books['bad_debt'],
+               discounts=[dict(invoice=sale['id'], amount='300.00', expected_version=sale['version'])])
+    preview = run('payment receive', raw, reason='Customer closed', dry_run=True)
+    assert not any('early-payment discount' in w for w in preview.get('warnings', [])), preview.get('warnings')
+    done = run('payment receive', raw, reason='Customer closed')
+    assert not any('early-payment discount' in w for w in done.get('warnings', [])), done.get('warnings')
+    shown = run('payment show', dict(payment=done['id']))
+    assert shown['revision']['profile']['payment_method']['label'] == 'Other'
+    assert shown['write_off']['note'] == 'No cash — written off to Bad Debt'
+    assert shown['write_off']['amount']['minor_units'] == 30000 and shown['write_off']['account']['id'] == books['bad_debt']
+    # A method given explicitly is still recorded.
+    second = run('invoice post', dict(customer=customer, date='2026-03-02', lines=[dict(
+        item=books['item'], quantity='1', unit_price='50.00', tax_code=books['exempt'])]), reason='Bill')
+    explicit = run('payment receive', dict(raw, operation_key='wo-explicit', payment_method=wallet, discounts=[
+        dict(invoice=second['id'], amount='50.00', expected_version=second['version'])]), reason='Customer closed')
+    assert run('payment show', dict(payment=explicit['id']))['revision']['profile']['payment_method']['id'] == wallet
+    # An ordinary receipt is not a write-off and carries no such block.
+    third = run('invoice post', dict(customer=customer, date='2026-03-03', lines=[dict(
+        item=books['item'], quantity='1', unit_price='20.00', tax_code=books['exempt'])]), reason='Bill')
+    cash = run('payment receive', dict(customer=customer, date='2026-09-30', amount='10.00', operation_key='cash-1',
+        deposit_to=books['bank'], applications=dict(mode='inline', items=[
+            dict(invoice=third['id'], expected_version=third['version'], amount='10.00')]),
+        discount_account=books['bad_debt'],
+        discounts=[dict(invoice=third['id'], amount='1.00', expected_version=third['version'])]))
+    # ...and a discount on an invoice without discount terms still warns there.
+    assert any('has no early-payment discount in its terms' in w for w in cash['warnings']), cash['warnings']
+    assert 'write_off' not in run('payment show', dict(payment=cash['id']))
