@@ -585,9 +585,11 @@ def refund_editable_values(record):
 def vendor_credit_editable_values(record):
     """Project the vendor credit correction controls from what its own revision captured.
 
-    The bill's projection with the bill's own columns removed: a credit has no terms, no due
-    date and no Items tab, and its rows carry no ``billable`` flag because a credit is not a
-    cost to pass on. Every value is read off the saved document in the exact shape
+    The bill's projection with the bill's own columns removed: a credit has no terms and no due
+    date, and its Expenses rows carry no ``billable`` flag because a credit is not a cost to
+    pass on. Its Items tab is the bill's, baselined the same way and for the same reason: each
+    grid is baselined separately and states exactly one of ``unit_cost`` and ``amount``, the
+    one the row was entered on. Every value is read off the saved document in the exact shape
     ``vendor-credit update`` declares, because the correction form submits only the leaves
     that differ from these -- so a person who opens the correction and saves it without
     typing anything writes nothing at all, and one who corrects a date does not lose the
@@ -615,13 +617,24 @@ def vendor_credit_editable_values(record):
     values = {'date': revision['date'], 'number': revision['number'], 'memo': revision['memo'],
               'vendor': profile['vendor']['id'], 'ap_account': profile['ap_account']['id'],
               'supplier_reference': profile.get('supplier_reference'),
-              'class_id': header_class, 'expenses': []}
+              'class_id': header_class, 'expenses': [], 'items': []}
     for line in revision['expenses']:
         row = {'line_id': line['line_id'], 'account': line['account_id'],
                'amount': line['amount']['amount'], 'memo': line['memo'],
                'customer': line['customer_id']}
         row.update(Bills._line_class(line, header_class))
         values['expenses'].append(row)
+    # ``revision['items']`` by key, never ``revision.items``: the revision is a plain dict here.
+    for line in revision['items']:
+        row = {'line_id': line['line_id'], 'item': line['item_id'],
+               'description': line['description'], 'quantity': line['quantity'],
+               'customer': line['customer_id'], 'billable': line['billable']}
+        if line['unit_cost'] is None:
+            row['amount'] = line['amount']['amount']
+        else:
+            row['unit_cost'] = line['unit_cost']['amount']
+        row.update(Bills._line_class(line, header_class))
+        values['items'].append(row)
     return values
 
 

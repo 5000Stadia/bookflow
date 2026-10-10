@@ -193,7 +193,14 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # all required or context, so no optional branch is new. Re-measured on the merged tree: still 2931.
     # 2931 -> 2933: reconcile import 3 -> 5. It reads a statement kept as an attachment, so `content` is now
     # optional (+1, its null branch) and `attachment` is a new optional string (+1, its null branch).
-    assert sum(len(group["paths"]) for group in mapped)==2933
+    # 2933 -> 2952 (R178, vendor credit item rows), measured per command on both trees, as path sets
+    # differenced: vendor-credit post 11 -> 21 (+10) and update 15 -> 24 (+9). Both gain the bill's
+    # Items grid, nine nodes: the nullable /items collection and its rows' optional amount (the
+    # string|money group and the MoneyInput's own amount), class_id, customer, description, line_id
+    # and unit_cost (with its own money group). Post gains one more: its Expenses grid is now
+    # optional too, so /expenses/[]/... moves to /expenses/anyOf/0/[]/... (six nodes renamed) under
+    # a new nullable /expenses node. No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2952
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

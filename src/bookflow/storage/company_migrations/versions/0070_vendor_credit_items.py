@@ -45,6 +45,24 @@ GUARDS = (
 )
 INDEXES = ()
 
+# What each rebuilt table's stored text gains, as (before, after) pairs. Not used by upgrade();
+# a test that needs the co0068 file back from a head file with these tables empty runs them
+# backwards instead of keeping a second copy of the old text.
+REWIND = {
+    'vendor_credit_profiles': (
+        ('expense_total_minor_units BIGINT NOT NULL, \n\tprofile_snapshot',
+         'expense_total_minor_units BIGINT NOT NULL, \n\titem_total_minor_units BIGINT NOT NULL, \n\tprofile_snapshot'),
+        ("CONSTRAINT ck_vendor_credit_expense_total_minor_units_positive CHECK (typeof(expense_total_minor_units) = 'integer' AND expense_total_minor_units > 0), \n\tCONSTRAINT ck_vendor_credit_profile_snapshot_object",
+         "CONSTRAINT ck_vendor_credit_expense_total_minor_units_nonnegative CHECK (typeof(expense_total_minor_units) = 'integer' AND expense_total_minor_units >= 0), \n\tCONSTRAINT ck_vendor_credit_item_total_minor_units_nonnegative CHECK (typeof(item_total_minor_units) = 'integer' AND item_total_minor_units >= 0), \n\tCONSTRAINT ck_vendor_credit_profile_snapshot_object"),
+    ),
+    'inventory_movements': (
+        ("kind IN ('receipt', 'issue', 'value', 'recost', 'reversal')",
+         "kind IN ('receipt', 'issue', 'value', 'vendor_return', 'recost', 'reversal')"),
+        ("OR (kind = 'recost' AND quantity_microunits = 0",
+         "OR (kind = 'vendor_return' AND quantity_microunits < 0 AND value_minor_units <= 0 AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR (kind = 'recost' AND quantity_microunits = 0"),
+    ),
+}
+
 
 def upgrade():
     connection = op.get_bind()

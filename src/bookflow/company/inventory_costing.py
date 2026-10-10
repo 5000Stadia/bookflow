@@ -363,7 +363,7 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 raise StockRefusal(
                     'negative_stock', row, quantity_microunits=quantity,
                     problem=('only ' + format_quantity_micro_units(max(quantity, 0))
-                             + ' on hand, so that many cannot go back to the vendor'))
+                             + ' on hand, so no more than that can go back to the vendor'))
             if issue == quantity and value + int(row['value_minor_units']) != 0:
                 from bookflow.core.money import Money
                 worth = Money(value, row['currency'])

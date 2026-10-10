@@ -40,6 +40,7 @@ _VENDOR_CREDIT_FORM = CreditFormDefinition(tuple(ReferenceDefinition(field, targ
     ('vendor', 'vendor'), ('ap_account', 'account'), ('class_id', 'class'),
     ('expenses.account', 'account'), ('expenses.customer', 'customer'),
     ('expenses.class_id', 'class'),
+    ('items.item', 'item'), ('items.customer', 'customer'), ('items.class_id', 'class'),
 )))
 
 FORM_DEFINITIONS = {'credit-memo': _CREDIT_MEMO_FORM,

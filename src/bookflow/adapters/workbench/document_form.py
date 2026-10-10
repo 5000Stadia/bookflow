@@ -176,9 +176,9 @@ VENDOR_CREDIT_PRIMARY = ('vendor', 'date', 'number', 'supplier_reference')
 VENDOR_CREDIT_TERMS = ('ap_account', 'class_id')
 VENDOR_CREDIT_FOOTER = ('memo',)
 
-# The vendor credit's grid is the bill's Expenses grid with Billable removed: passing a cost
-# on to a customer is a rebilling decision, and a credit does not make it. Naming the customer
-# or job still attributes the credit to it, so job costing nets.
+# The vendor credit's Expenses grid is the bill's with Billable removed: passing a cost on to a
+# customer is a rebilling decision, and a credit does not make it. Naming the customer or job
+# still attributes the credit to it, so job costing nets. Its Items grid is the bill's.
 VENDOR_CREDIT_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
                       ('customer', 'Customer:Job'), ('class_id', 'Class'))
 # The bill's Items grid: the second tab of the same band. It names no account, because the
@@ -199,6 +199,18 @@ BILL_ITEM_HINTS = {
     'quantity': 'How many were bought',
     'unit_cost': 'What one costs; quantity x cost is the amount',
     'amount': 'The whole line, when you would rather type it than derive it from a cost',
+}
+
+# The vendor credit's Items grid is the bill's, with the words turned round: an item is what was
+# sent back here, and the cost is what the vendor credited for one. A stocked item takes the
+# quantity off the shelf at that cost, so the average cost of what stays can move.
+VENDOR_CREDIT_ITEM_GRID = BILL_ITEM_GRID
+VENDOR_CREDIT_ITEM_HINTS = {
+    'item': 'What is going back to the vendor',
+    'description': 'What this line was for',
+    'quantity': 'How many are going back',
+    'unit_cost': 'What the vendor credits for one; quantity x cost is the amount',
+    'amount': 'The whole credit for the line, when you would rather type it than derive it from a cost',
 }
 
 # What each column head means, written for the person who has to tell two of them apart.
@@ -646,10 +658,13 @@ def layout(noun, leaves, hidden=()):
         primary_lines = by_path.get(primary_path)
         if primary_lines is not None:
             grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}, hidden))
-        if (bill or money_out) and not matched:
+        if (bill or money_out or vendor_credit) and not matched:
             item_lines = by_path.get('items')
             if item_lines is not None:
-                grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS, hidden))
+                grids.append(_grid('items', 'Items', item_lines,
+                                   VENDOR_CREDIT_ITEM_GRID if vendor_credit else BILL_ITEM_GRID,
+                                   VENDOR_CREDIT_ITEM_HINTS if vendor_credit else BILL_ITEM_HINTS,
+                                   hidden))
     for band in grids:
         placed.add(band['lines']['path'])
     lines = grids[0]['lines'] if grids else None
@@ -828,8 +843,14 @@ def vendor_credit_totals(result):
     if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
         return [], None, None
     currency = result['currency']
-    rows = [_row('Credited lines', f"{result['expense_total']['amount']} {currency}", money=True),
-            _row('Taken off what you owe', f"{result['total']['amount']} {currency}", True, money=True)]
+    items = (result.get('item_total') or {}).get('minor_units')
+    rows = []
+    if result['expense_total']['minor_units'] or not items:
+        rows.append(_row('Credited lines' if not items else 'Credited expenses',
+                         f"{result['expense_total']['amount']} {currency}", money=True))
+    if items:
+        rows.append(_row('Credited items', f"{result['item_total']['amount']} {currency}", money=True))
+    rows.append(_row('Taken off what you owe', f"{result['total']['amount']} {currency}", True, money=True))
     settlement = result.get('settlement_current')
     said = ('Accounts Payable is debited the total, so the vendor is owed that much less. '
             'Nothing is settled here: apply it to a bill to say which bill it answers.')

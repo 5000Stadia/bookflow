@@ -158,7 +158,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
 
     # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 only added tables; putting the old CHECK back
     # and dropping the index, triggers and tables is the exact co0062 file. co0067 widened two CHECKs and one trigger
-    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068 only added a table. The demo holds a sales tax
+    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068 only added a table, and co0070 widened two empty ones and added another. The demo holds a sales tax
     # adjustment (DEMO-STADJ-1), which no co0062 file can, so the older archive is made from a company without one.
     client.organization.new(name="Older Books Organization")
     company = client.company.new(legal_name="Older Books", home_currency="USD", timezone="UTC",
@@ -171,6 +171,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     import importlib
     co0063 = importlib.import_module("bookflow.storage.company_migrations.versions.0063_card_credits")
     co0067 = importlib.import_module("bookflow.storage.company_migrations.versions.0067_sales_tax_adjustments")
+    co0070 = importlib.import_module("bookflow.storage.company_migrations.versions.0070_vendor_credit_items")
 
     def older(conn):
         conn.execute("PRAGMA writable_schema=ON")
@@ -188,12 +189,19 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             conn.execute(f"DROP TABLE {table}")  # co0066's, with their triggers
         conn.execute("DROP TABLE sales_tax_adjustment_profiles")  # co0067's, with its triggers
         conn.execute("DROP TABLE party_merges")  # co0068's, with its triggers
+        # co0070 added a table and widened two empty ones (a CHECK and a column each): its own text, run backwards.
+        conn.execute("PRAGMA writable_schema=ON")
+        for table, pairs in co0070.REWIND.items():
+            for old_text, new_text in pairs:
+                assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = ?", (new_text, old_text, table)).rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
+        conn.execute("DROP TABLE vendor_credit_item_lines")
         conn.execute("UPDATE alembic_version SET version_num = 'co0062'")
 
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0068"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0070"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))
