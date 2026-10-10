@@ -94,7 +94,7 @@ def validate(plan, s, ctx):
     require(len(pending['transaction_revisions']) == len(pending['document_lines']) == len(pending['posting_batches']) == 1, 'receipt shape')
     revision = pending['transaction_revisions'][0]
     amount = revision['total_minor_units']
-    require(type(amount) is int and amount > 0, 'receipt total')
+    require(type(amount) is int and amount >= 0, 'receipt total')
     keys = {row['id']: row for row in pending['payment_component_keys']}
     capacities = {row['component_key_id']: row for row in pending['payment_components']}
     require(set(keys) == set(capacities), 'component key ownership')
@@ -118,6 +118,8 @@ def validate(plan, s, ctx):
                 'discount is not part of its own application')
         discounted[keys[row['component_key_id']]['party_id']] += row['amount_minor_units']
     discount_total = sum(discounted.values())
+    # A receipt with no cash is a write-off: it is nothing but discounts.
+    require(amount > 0 or discount_total > 0, 'a receipt of nothing needs a write-off')
     residual = amount + discount_total - sum(expected.values())
     require(residual >= 0, 'cash exceeded')
     expected[data['context']['customer_id']] += residual
@@ -128,14 +130,19 @@ def validate(plan, s, ctx):
     require(sum(row['debit_minor_units'] for row in legs) == sum(row['credit_minor_units'] for row in legs) == amount + discount_total, 'unbalanced cash receipt')
     profile = pending['payment_profiles'][0]
     cash_legs = [row for row in legs if row['debit_minor_units'] > 0 and row['account_id'] == profile['deposit_account_id']]
-    require(len(cash_legs) == 1 and cash_legs[0]['debit_minor_units'] == amount, 'receipt needs one cash debit')
+    if amount:
+        require(len(cash_legs) == 1 and cash_legs[0]['debit_minor_units'] == amount, 'receipt needs one cash debit')
+    else:
+        # A write-off puts nothing in the bank and posts no cash leg.
+        require(not cash_legs, 'a write-off posts no cash debit')
+    cash_leg = cash_legs[0] if amount else None
     discount_accounts = {row['discount_account_id'] for row in discounts}
     require(len(discount_accounts) <= 1, 'one discount account per receipt')
     for leg in legs:
         require((leg['debit_minor_units'] > 0) != (leg['credit_minor_units'] > 0), 'zero or two-sided leg')
         own = [source for source in sources if source['posting_line_id'] == leg['id']]
         require(sum(row['amount_minor_units'] for row in own) == leg['debit_minor_units'] + leg['credit_minor_units'], 'posting attribution sum')
-        if leg['debit_minor_units'] and leg is not cash_legs[0]:
+        if leg['debit_minor_units'] and leg is not cash_leg:
             require(leg['account_id'] in discount_accounts and leg['name_type'] == 'customer'
                     and leg['debit_minor_units'] == discounted.get(leg['name_id']), 'discount debit differs')
         elif leg['debit_minor_units']:
@@ -151,7 +158,7 @@ def validate(plan, s, ctx):
         party = keys[component['component_key_id']]['party_id']
         debit = [row for row in own if row['posting_line_id'] in debit_ids]
         credit = [row for row in own if row['posting_line_id'] not in debit_ids]
-        cash = [row for row in debit if row['posting_line_id'] == cash_legs[0]['id']]
+        cash = [row for row in debit if cash_leg and row['posting_line_id'] == cash_leg['id']]
         paid_in = component['amount_minor_units'] - discounted.get(party, 0)
         require(len(credit) == 1 and credit[0]['amount_minor_units'] == component['amount_minor_units']
                 and paid_in >= 0 and [row['amount_minor_units'] for row in cash] == ([paid_in] if paid_in else [])

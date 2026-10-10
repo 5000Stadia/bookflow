@@ -18,7 +18,7 @@ from bookflow.core.registry import Plan, Applied, Touched
 from bookflow.hub.users import common
 
 
-def context(s, inp):
+def context(s, inp, *, payer_active=True):
     info = defaults._info(s.company)
     if inp.mode == 'existing_credit':
         facts = query.payment_facts(s, inp.payment)
@@ -28,7 +28,7 @@ def context(s, inp):
         if facts['header']['status'] != 'posted':
             raise BookflowError('E_APPLICATION_INACTIVE')
     else:
-        payer = defaults._row(s.company, 'customer', inp.customer)['id']
+        payer = defaults._row(s.company, 'customer', inp.customer, active=payer_active)['id']
         ar = inp.ar_account
         if ar is None:
             candidates = s.company.conn.execute(sa.select(c.accounts.c.id).where(
