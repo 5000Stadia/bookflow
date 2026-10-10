@@ -141,7 +141,7 @@ _Rate = Annotated[str, BeforeValidator(canonical_rate)]
 
 class JournalLineInput(_Input):
     line_id: _Selector | None = None
-    account: _Selector
+    account: _Selector = Field(description="The account: its ID, full name, or account number (such as 6210)")
     side: Literal["debit", "credit"]
     amount: str | MoneyInput
     name_type: Literal["customer", "vendor", "employee", "other_name"] | None = None

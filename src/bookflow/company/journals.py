@@ -182,7 +182,7 @@ def active(row, kind):
 
 
 def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=None, refresh_rates=False, rate_cache=None, owner=None):
-    account = active(accounts.resolve_account(s.company, inp.account), 'account')
+    account = active(accounts.resolve_account(s.company, inp.account, by_number=True), 'account')
     if account['type'] == 'non_posting':
         raise invalid('account', 'must be a posting account')
     role = account.get('system_role')

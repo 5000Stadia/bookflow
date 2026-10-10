@@ -358,7 +358,7 @@ The same example as complete `bookflow_run` arguments:
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].account` | inside `--lines` JSON array | string | yes | no | — | minimum length 1 |
+| `lines[].account` | inside `--lines` JSON array | string | yes | no | — | The account: its ID, full name, or account number (such as 6210); minimum length 1 |
 | `lines[].side` | inside `--lines` JSON array | literal["debit", "credit"] | yes | no | — | — |
 | `lines[].amount` | inside `--lines` JSON array | string \| object | yes | no | — | — |
 | `lines[].name_type` | inside `--lines` JSON array | literal["customer", "vendor", "employee", "other_name"] \| null | no | yes | null | — |
@@ -1354,7 +1354,7 @@ The same example as complete `bookflow_run` arguments:
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].account` | inside `--lines` JSON array | string | yes | no | — | minimum length 1 |
+| `lines[].account` | inside `--lines` JSON array | string | yes | no | — | The account: its ID, full name, or account number (such as 6210); minimum length 1 |
 | `lines[].side` | inside `--lines` JSON array | literal["debit", "credit"] | yes | no | — | — |
 | `lines[].amount` | inside `--lines` JSON array | string \| object | yes | no | — | — |
 | `lines[].name_type` | inside `--lines` JSON array | literal["customer", "vendor", "employee", "other_name"] \| null | no | yes | null | — |

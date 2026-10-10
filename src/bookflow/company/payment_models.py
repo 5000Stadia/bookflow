@@ -188,7 +188,8 @@ class PaymentReceiveInput(StrictModel):
         '...} and discounts [{"invoice": "1043", "amount": "20.00"}].'))
     discount_account: Selector | None = Field(default=None, description=(
         'Account debited for the discounts; defaults to the company customer discount account, '
-        'else "Discounts Given", which is created as an income account if the chart lacks it. '
+        'else an active account named "Discounts Given"; with none of these the receipt is refused '
+        'and the error lists the discount accounts in the chart (nothing is created). '
         'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt.'))
     payment_method: Selector | None = None
     ar_account: Selector | None = None

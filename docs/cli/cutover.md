@@ -179,6 +179,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `mappings.vendors` | object[string, string] | yes | no | — | Every old-books vendor to its Bookflow ID, or `create` |
 | `mappings.items` | object[string, string] | yes | no | — | Every old-books item to its Bookflow ID, or `create` |
 | `mappings.terms` | object[string, string] | yes | no | — | Every old-books terms name to its Bookflow ID, or `create` |
+| `has_more` | boolean | no | no | false | `cutover plan` only: more steps follow this page; pass next_cursor as cursor, with the same input, for them. |
+| `next_cursor` | string \| null | no | yes | null | The cursor for the steps after this page; null on the last page. |
 | `created` | integer | yes | no | — | Records this run made |
 | `already_in` | integer | yes | no | — | Records earlier runs had made |
 | `clearing_account_id` | string \| null | yes | yes | — | The clearing account |
@@ -200,6 +202,7 @@ Example JSON output:
   "dry_run": false,
   "exceptions": [],
   "files": [],
+  "has_more": false,
   "journal": null,
   "mappings": {
     "accounts": {},
@@ -208,6 +211,7 @@ Example JSON output:
     "terms": {},
     "vendors": {}
   },
+  "next_cursor": null,
   "ready": false,
   "source": null,
   "steps": [],
@@ -251,7 +255,7 @@ Example JSON output:
 
 ## `cutover plan`
 
-Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), and for the rest of the old books each bank and card account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail and Undeposited Funds' QuickReport, Cleared: No) and the 1099 Summary for January 1 to the cutover. Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
+Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here to import or migrate its accounts, customers, vendors, items, opening balances and open invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. Reads the export files and returns what a move-in at the cutover date would make: the resolved mapping of every account, customer, vendor, item and term, every write in order, the opening journal, the tie checks and every exception. Writes nothing. A long plan can be read in pages: pass `limit`, and while `has_more` is true pass `next_cursor` back as `cursor` with the same input; the counts, blocking lines, exceptions and checks always cover the whole plan. The files are the old books' exports: IIF list exports (chart of accounts, customers, vendors, items) and report CSVs (Trial Balance, Open Invoices, Unpaid Bills Detail, optionally the A/R and A/P Aging Summaries and the Inventory Valuation Summary), and for the rest of the old books each bank and card account's Reconciliation Summary, the transactions that had not cleared (Transaction Detail and Undeposited Funds' QuickReport, Cleared: No) and the 1099 Summary for January 1 to the cutover. Attach each export once and pass its id: `attachment add company_info <company id> FILE` (over MCP the file goes in transport.input_file), then `files: [{"attachment": "<id>"}, ...]` on every call. Text works too (`{"content": ..., "name": ...}`): `cutover apply` keeps each text file as an attachment and returns its id in `files`, so later calls pass the id instead of the text.
 
 | Contract | Value |
 |---|---|
@@ -291,6 +295,8 @@ The same example as complete `bookflow_run` arguments:
 | `mappings.terms` | `--mappings-terms` | object[string, string] | no | no | {} | Old-books terms name to a Bookflow term (ID or name), or `create`. |
 | `clearing_account` | `--clearing-account` | string \| null | no | yes | null | The account the opening journal balances against and the open documents post to; it is 0.00 once everything ties. Omitted: `Cutover Clearing`, an other current asset account, made on first use. |
 | `journal_number` | `--journal-number` | string \| null | no | yes | null | Number of the opening journal; omitted, the next journal number. |
+| `limit` | `--limit` | integer \| null | no | yes | null | Steps to return in this result, from the cursor on; omitted, every step comes back. The counts, blocking, exceptions, checks, clearing, journal and mappings always cover the whole plan, whichever page you read. |
+| `cursor` | `--cursor` | string \| null | no | yes | null | next_cursor from an earlier `cutover plan` with the same input: the steps after those it returned. |
 
 ### Command and context options
 
@@ -414,6 +420,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `mappings.vendors` | object[string, string] | yes | no | — | Every old-books vendor to its Bookflow ID, or `create` |
 | `mappings.items` | object[string, string] | yes | no | — | Every old-books item to its Bookflow ID, or `create` |
 | `mappings.terms` | object[string, string] | yes | no | — | Every old-books terms name to its Bookflow ID, or `create` |
+| `has_more` | boolean | no | no | false | `cutover plan` only: more steps follow this page; pass next_cursor as cursor, with the same input, for them. |
+| `next_cursor` | string \| null | no | yes | null | The cursor for the steps after this page; null on the last page. |
 
 Example JSON output:
 
@@ -427,6 +435,7 @@ Example JSON output:
   "dry_run": false,
   "exceptions": [],
   "files": [],
+  "has_more": false,
   "journal": null,
   "mappings": {
     "accounts": {},
@@ -435,6 +444,7 @@ Example JSON output:
     "terms": {},
     "vendors": {}
   },
+  "next_cursor": null,
   "ready": false,
   "source": null,
   "steps": [],

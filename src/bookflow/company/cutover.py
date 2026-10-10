@@ -25,6 +25,7 @@ it stopped.
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -2336,9 +2337,43 @@ def plan_output(built: Built, inp, model=CutoverPlanOutput, **extra) -> Any:
                  steps=[_step_out(built, n, step) for n, step in enumerate(built.steps, start=1)], **extra)
 
 
+def _page_key(inp) -> str:
+    """What a cursor belongs to: the plan's whole input, less the paging itself."""
+    import hashlib
+    whole = inp.model_dump(mode="json", exclude={"limit", "cursor"})
+    return hashlib.sha256(json.dumps(whole, sort_keys=True).encode("utf-8")).hexdigest()[:32]
+
+
+def _page(out, inp):
+    """The steps this result returns, and the cursor for the rest; everything else stays whole."""
+    import base64
+    limit, cursor = getattr(inp, "limit", None), getattr(inp, "cursor", None)
+    if limit is None and cursor is None:
+        return out
+    steps, key, start = out.steps, _page_key(inp), 0
+    if cursor is not None:
+        try:
+            raw = cursor.encode("ascii")
+            value = json.loads(base64.urlsafe_b64decode(raw + b"=" * (-len(raw) % 4)))
+            start, given = value["o"], value["p"]
+            valid = type(start) is int and 0 < start <= len(steps) and given == key
+        except (ValueError, UnicodeError, KeyError, TypeError):
+            valid = False
+        if not valid:
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": "cursor", "problem": (
+                "not a cursor from a `cutover plan` with this same input; start again without a cursor")}]})
+    end = len(steps) if limit is None else min(len(steps), start + limit)
+    more = end < len(steps)
+    token = base64.urlsafe_b64encode(json.dumps({"o": end, "p": key}).encode()).decode().rstrip("=") if more else None
+    if more or start:
+        out.warnings.append(f"This result holds steps {start + 1} to {end} of {len(steps)}"
+                            + ("; pass next_cursor as cursor, with the same input, for the rest." if more else "."))
+    return out.model_copy(update={"steps": steps[start:end], "has_more": more, "next_cursor": token})
+
+
 def plan(s, ctx, inp) -> Plan:
     built = build(s, inp, journal_number=getattr(inp, "journal_number", None), piece=True)
-    return Plan(plan_output(built, inp))
+    return Plan(_page(plan_output(built, inp), inp))
 
 
 # ------------------------------------------------------------------ apply

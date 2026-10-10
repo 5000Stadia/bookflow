@@ -377,3 +377,35 @@ def test_a_number_mismatch_names_the_entry_it_may_duplicate():
     assert result.status == 'unmatched' and 'possibly already entered as 4481 on 2026-07-05' in result.reason
     far, = files.match([files.Line('l', '2026-09-08', -115000, number='4482')], books)
     assert 'enter it' in far.reason and 'possibly' not in far.reason
+
+
+def test_a_check_matched_by_number_is_not_listed_as_cleared_without_a_line(client):
+    """R170 blind July: a check paired by its written number was listed by `reconcile preview` as cleared
+    without a statement line, because the preview compared the line with the check's internal reference
+    ('11' or the like) instead of the number it was written with (4481)."""
+    opening(client)
+    run(client, 'check post', dict(account='Checking', number='4481', date='2026-09-05', amount='77.00',
+                                   expenses=[dict(account='Bank Fees', amount='77.00')]))
+    csv = ('Date,Description,Amount,Check,Balance\n'
+           '2026-09-08,CHECK 4481,-77.00,4481,-77.00\n')
+    started = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True))
+    line, = started['lines']
+    assert line['status'] == 'matched' and line['reason'] == 'same amount and check number'
+    assert started['cleared_without_line'] == []
+    draft = started['draft']
+    preview = run(client, 'reconcile preview', dict(draft=draft['id'], expected_version=draft['version']))
+    assert preview['cleared_without_statement_line'] == []
+
+
+def test_a_dry_run_import_says_its_draft_id_is_proposed(client):
+    """The dry run's draft id describes the prospective save; the real import starts its own."""
+    opening(client)
+    run(client, 'check post', dict(account='Checking', number='4481', date='2026-09-05', amount='77.00',
+                                   expenses=[dict(account='Bank Fees', amount='77.00')]))
+    csv = ('Date,Description,Amount,Check,Balance\n'
+           '2026-09-08,CHECK 4481,-77.00,4481,-77.00\n')
+    preview = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True), dry_run=True)
+    assert preview['draft_started']
+    assert f"draft {preview['draft']['id']} is a proposed id" in preview['next_step']
+    real = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True))
+    assert 'proposed id' not in real['next_step']

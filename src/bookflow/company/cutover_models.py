@@ -74,6 +74,14 @@ class CutoverApplyInput(CutoverInput):
         "Number of the opening journal; omitted, the next journal number."))
 
 
+class CutoverPlanInput(CutoverApplyInput):
+    limit: int | None = Field(None, strict=True, ge=1, le=1000, description=(
+        "Steps to return in this result, from the cursor on; omitted, every step comes back. The counts, blocking, "
+        "exceptions, checks, clearing, journal and mappings always cover the whole plan, whichever page you read."))
+    cursor: str | None = Field(None, max_length=512, description=(
+        "next_cursor from an earlier `cutover plan` with the same input: the steps after those it returned."))
+
+
 class CutoverTieOutInput(CutoverInput):
     detail: Literal["differences", "all"] = Field("differences", description=(
         "`differences` lists only rows that do not match; `all` lists every compared row."))
@@ -202,6 +210,9 @@ class CutoverPlanOutput(BaseModel):
     journal: CutoverJournal | None = Field(description="The opening journal; null when the trial balance carries only document-owned accounts")
     steps: list[CutoverStep] = Field(description="Every write in order, with what each one makes")
     mappings: CutoverMappingsOutput = Field(description="The complete resolved mapping, in the input's shape")
+    has_more: bool = Field(False, description=(
+        "`cutover plan` only: more steps follow this page; pass next_cursor as cursor, with the same input, for them."))
+    next_cursor: str | None = Field(None, description="The cursor for the steps after this page; null on the last page.")
 
 
 class CutoverApplyOutput(CutoverPlanOutput):

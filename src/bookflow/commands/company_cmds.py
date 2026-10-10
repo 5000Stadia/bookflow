@@ -218,8 +218,8 @@ class CompanyUpdateInput(BaseModel):
     automatically_apply_payments: bool = Field(None, strict=True, description="Suggest exact-match then oldest invoice allocations; omission preserves, null rejects")
     automatically_calculate_payments: bool = Field(None, strict=True, description="Calculate selected invoice amounts; omission preserves, null rejects")
     use_undeposited_funds_for_payments: bool = Field(None, strict=True, description="Default receipts to Undeposited Funds; omission preserves, null rejects")
-    customer_discount_account_id: str | None = Field(None, description="Account debited for early-payment discounts given on receipts; null means Discounts Given, created when first needed")
-    vendor_discount_account_id: str | None = Field(None, description="Account credited for early-payment discounts taken on bill payments; null means Discounts Taken, created when first needed")
+    customer_discount_account_id: str | None = Field(None, description="Account debited for early-payment discounts given on receipts; null means an active account named Discounts Given; with none a discount is refused until one is named")
+    vendor_discount_account_id: str | None = Field(None, description="Account credited for early-payment discounts taken on bill payments; null means an active account named Discounts Taken; with none a discount is refused until one is named")
     negative_number_style: Literal["minus", "parentheses"] | None = Field(None, description="How reports, lists and forms show a negative amount: minus (-40.00) or parentheses ((40.00)). Display only; JSON, exports and inputs keep the minus sign.")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", mode="before")

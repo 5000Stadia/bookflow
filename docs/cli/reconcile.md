@@ -586,7 +586,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `draft.evidence_references[].transaction_id` | string | yes | no | — | — |
 | `draft.evidence_references[].attachment_id` | string | no | no | — | Present in AttachmentEvidence. |
 | `draft.evidence_references[].attachment_link_id` | string | no | no | — | Present in AttachmentEvidence. |
-| `draft_started` | boolean | yes | no | — | — |
+| `draft_started` | boolean | yes | no | — | This import starts the draft. On a dry run its id is proposed: the real import starts it under a new id. |
 | `lines` | array[object] | yes | no | — | — |
 | `lines[].line_id` | string | yes | no | — | FITID-based, or a stable hash of the line when the bank gave no FITID. |
 | `lines[].fitid` | string \| null | yes | yes | — | — |

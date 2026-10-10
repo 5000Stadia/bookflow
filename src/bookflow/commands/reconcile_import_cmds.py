@@ -145,7 +145,8 @@ class ImportOutput(m.Model):
     ending_balance: m.Units | None = Field(description='Minor units, in the reconciliation\'s sign (what a card owes is positive).')
     counts: ImportCounts
     draft: m.Draft | None
-    draft_started: bool
+    draft_started: bool = Field(description=(
+        'This import starts the draft. On a dry run its id is proposed: the real import starts it under a new id.'))
     lines: tuple[ImportedLine, ...]
     cleared_without_line: tuple[Suggestion, ...] = Field(description=(
         'Movements ticked on the draft that no line of this statement accounts for: cleared '
@@ -406,6 +407,11 @@ def _prepare(inp, ctx, s, ids):
             step = (f'{len(unsupported)} ticked movement(s) match no line of this statement (cleared without '
                     'a statement line): untick each one the bank did not show, with `reconcile mark` '
                     'action unmark, unless you know why it is missing. ' + step)
+    if started is not None and getattr(s, 'dry_run', False):
+        # As for every dry run, an id the preview shows describes the prospective save: the real
+        # import starts the draft under an id of its own, which its result returns.
+        step = (f'Dry run: draft {value.id} is a proposed id, not a saved draft; the real import starts the '
+                'draft under a new id, which its result returns -- use that one. ' + step)
     page, first, more, next_cursor = _page(out_lines, inp, text, account_id)
     if more or first:
         step = (f'This result holds lines {first + 1} to {first + len(page)} of {len(out_lines)}'

@@ -363,7 +363,10 @@ def _row(db: Database, record_id: str) -> dict[str, Any]:
     return dict(found)
 
 
-def resolve_account(db: Database, selector: Any) -> dict[str, Any]:
+def resolve_account(db: Database, selector: Any, *, by_number: bool = False) -> dict[str, Any]:
+    """An account by ID, then full name; with ``by_number``, then by account number, as the
+    anchor's journal entry accepts a typed number. Without it, a selector that is some account's
+    number is refused with that account named, so the caller can pass its full name or ID."""
     definition = get_list_definition("account")
     assert definition is not None
     try:
@@ -374,7 +377,25 @@ def resolve_account(db: Database, selector: Any) -> dict[str, Any]:
                 "E_RECORD_NOT_FOUND",
                 details={"selector": None, "suggestions": []},
             ) from None
+        numbered = _by_number(db, selector) if exc.code == "E_RECORD_NOT_FOUND" else None
+        if numbered is not None:
+            if by_number:
+                return numbered
+            exc.details["suggestions"] = [numbered["full_name"]]
+            exc.details["account_number"] = {"number": numbered["number"], "id": numbered["id"],
+                                             "full_name": numbered["full_name"]}
+            exc.message = (f"No account is named {selector.strip()!r}; it is the number of "
+                           f"{numbered['full_name']!r} (id {numbered['id']}). Name an account by its "
+                           f"full name or ID here; `account list` shows them all.")
         raise
+
+
+def _by_number(db: Database, selector: Any) -> dict[str, Any] | None:
+    if not isinstance(selector, str) or not _NUMBER.fullmatch(selector.strip()):
+        return None
+    row = list_service._connection(db).execute(sa.select(schema.accounts).where(
+        schema.accounts.c.number_key == selector.strip())).mappings().first()
+    return dict(row) if row is not None else None
 
 
 def _active_reference(
