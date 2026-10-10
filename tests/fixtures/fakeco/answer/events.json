@@ -1,5 +1,73 @@
 [
  {
+  "id": "J08",
+  "kind": "invoice",
+  "date": "2026-07-01",
+  "number": "2387",
+  "customer": "Ridgeline Realty Management:Unit Turnovers",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Unit 3B make-ready",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "6",
+    "rate": "28.00",
+    "amount": "168.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "69.66"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "2",
+    "rate": "32.50",
+    "amount": "65.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.73"
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "2",
+    "rate": "69.00",
+    "amount": "138.00",
+    "desc": "Hardwired smoke/CO combination alarm",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "77.58"
+   }
+  ],
+  "note": "Unit 3B turnover for Ridgeline: 3 hrs, 6 wafer lights, 2 GFCIs, 2 smoke/COs from stock.",
+  "taxable": "371.00",
+  "tax": "32.46",
+  "total": "718.46",
+  "issued": {
+   "LED Wafer Light 6in": [
+    "6",
+    "69.66"
+   ],
+   "GFCI Receptacle 20A": [
+    "2",
+    "35.73"
+   ],
+   "Smoke/CO Detector": [
+    "2",
+    "77.58"
+   ]
+  },
+  "terms": "Net 30",
+  "due": "2026-07-31"
+ },
+ {
   "id": "J01",
   "kind": "deposit",
   "date": "2026-07-01",
@@ -139,113 +207,102 @@
   "discount": "0.00"
  },
  {
-  "id": "J08",
+  "id": "J13",
   "kind": "invoice",
-  "date": "2026-07-01",
-  "number": "2387",
-  "customer": "Ridgeline Realty Management:Unit Turnovers",
+  "date": "2026-07-02",
+  "number": "2388",
+  "customer": "Okafor, Chidi",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Dead outlets, kitchen",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "3",
+    "rate": "32.50",
+    "amount": "97.50",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "53.59"
+   }
+  ],
+  "note": "Okafor service call, paid on the spot.",
+  "taxable": "97.50",
+  "tax": "8.53",
+  "total": "346.03",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "3",
+    "53.59"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-02"
+ },
+ {
+  "id": "J15",
+  "kind": "invoice",
+  "date": "2026-07-02",
+  "number": "2389",
+  "customer": "Dubois, Marc",
   "lines": [
    {
     "item": "Labor",
-    "quantity": "3",
+    "quantity": "4",
     "rate": "105.00",
-    "amount": "315.00",
-    "desc": "Unit 3B make-ready",
+    "amount": "420.00",
+    "desc": "Basement circuits",
     "taxable": false,
     "account": "Installation Income"
    },
    {
-    "item": "LED Wafer Light 6in",
-    "quantity": "6",
-    "rate": "28.00",
-    "amount": "168.00",
-    "desc": "6 in LED wafer downlight, selectable color",
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "136.42",
+    "amount": "136.42",
+    "desc": "Box, cable, fittings",
     "taxable": true,
-    "account": "Materials Income",
-    "cost": "69.66"
+    "account": "Materials Income"
    },
    {
-    "item": "GFCI Receptacle 20A",
+    "item": "Breaker 20A 1P",
     "quantity": "2",
-    "rate": "32.50",
-    "amount": "65.00",
-    "desc": "20A tamper-resistant GFCI receptacle",
+    "rate": "14.95",
+    "amount": "29.90",
+    "desc": "20 amp single-pole breaker",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "35.73"
-   },
-   {
-    "item": "Smoke/CO Detector",
-    "quantity": "2",
-    "rate": "69.00",
-    "amount": "138.00",
-    "desc": "Hardwired smoke/CO combination alarm",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "77.58"
+    "cost": "16.83"
    }
   ],
-  "note": "Unit 3B turnover for Ridgeline: 3 hrs, 6 wafer lights, 2 GFCIs, 2 smoke/COs from stock.",
-  "taxable": "371.00",
-  "tax": "32.46",
-  "total": "718.46",
+  "note": "Marc Dubois, basement circuits (Net 15).",
+  "taxable": "166.32",
+  "tax": "14.55",
+  "total": "600.87",
   "issued": {
-   "LED Wafer Light 6in": [
-    "6",
-    "69.66"
-   ],
-   "GFCI Receptacle 20A": [
+   "Breaker 20A 1P": [
     "2",
-    "35.73"
-   ],
-   "Smoke/CO Detector": [
-    "2",
-    "77.58"
+    "16.83"
    ]
   },
-  "terms": "Net 30",
-  "due": "2026-07-31"
- },
- {
-  "id": "J09",
-  "kind": "deposit",
-  "date": "2026-07-02",
-  "cleared": "2026-07-02",
-  "payments": [
-   "J06",
-   "J07"
-  ],
-  "note": "Deposited Hendricks and Kowalski.",
-  "total": "805.20",
-  "items": [
-   {
-    "source": "J06",
-    "amount": "486.93"
-   },
-   {
-    "source": "J07",
-    "amount": "318.27"
-   }
-  ]
- },
- {
-  "id": "J10",
-  "kind": "bill_payment",
-  "date": "2026-07-02",
-  "vendor": "Delgado, Ray",
-  "method": "Check",
-  "number": "4476",
-  "bills": [
-   {
-    "bill": "0627",
-    "amount": "1400.00",
-    "discount": "0.00"
-   }
-  ],
-  "cleared": "2026-07-08",
-  "note": "Paid Ray for the Lot 14 work (his invoice 0627).",
-  "total": "1400.00",
-  "discount": "0.00"
+  "terms": "Net 15",
+  "due": "2026-07-17"
  },
  {
   "id": "J11",
@@ -342,6 +399,47 @@
   ]
  },
  {
+  "id": "J09",
+  "kind": "deposit",
+  "date": "2026-07-02",
+  "cleared": "2026-07-02",
+  "payments": [
+   "J06",
+   "J07"
+  ],
+  "note": "Deposited Hendricks and Kowalski.",
+  "total": "805.20",
+  "items": [
+   {
+    "source": "J06",
+    "amount": "486.93"
+   },
+   {
+    "source": "J07",
+    "amount": "318.27"
+   }
+  ]
+ },
+ {
+  "id": "J10",
+  "kind": "bill_payment",
+  "date": "2026-07-02",
+  "vendor": "Delgado, Ray",
+  "method": "Check",
+  "number": "4476",
+  "bills": [
+   {
+    "bill": "0627",
+    "amount": "1400.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-08",
+  "note": "Paid Ray for the Lot 14 work (his invoice 0627).",
+  "total": "1400.00",
+  "discount": "0.00"
+ },
+ {
   "id": "J12",
   "kind": "card_charge",
   "date": "2026-07-02",
@@ -358,55 +456,6 @@
   "category": "Home",
   "note": "Plainfield Hardware, fittings for the Dubois job.",
   "total": "47.83"
- },
- {
-  "id": "J13",
-  "kind": "invoice",
-  "date": "2026-07-02",
-  "number": "2388",
-  "customer": "Okafor, Chidi",
-  "lines": [
-   {
-    "item": "Service Call",
-    "quantity": "1",
-    "rate": "145.00",
-    "amount": "145.00",
-    "desc": "Dead outlets, kitchen",
-    "taxable": false,
-    "account": "Service Income"
-   },
-   {
-    "item": "Additional Hour",
-    "quantity": "1",
-    "rate": "95.00",
-    "amount": "95.00",
-    "desc": "Service, each additional hour",
-    "taxable": false,
-    "account": "Service Income"
-   },
-   {
-    "item": "GFCI Receptacle 20A",
-    "quantity": "3",
-    "rate": "32.50",
-    "amount": "97.50",
-    "desc": "20A tamper-resistant GFCI receptacle",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "53.95"
-   }
-  ],
-  "note": "Okafor service call, paid on the spot.",
-  "taxable": "97.50",
-  "tax": "8.53",
-  "total": "346.03",
-  "issued": {
-   "GFCI Receptacle 20A": [
-    "3",
-    "53.95"
-   ]
-  },
-  "terms": "Due on receipt",
-  "due": "2026-07-02"
  },
  {
   "id": "J14",
@@ -431,55 +480,6 @@
    }
   ],
   "discount": "0.00"
- },
- {
-  "id": "J15",
-  "kind": "invoice",
-  "date": "2026-07-02",
-  "number": "2389",
-  "customer": "Dubois, Marc",
-  "lines": [
-   {
-    "item": "Labor",
-    "quantity": "4",
-    "rate": "105.00",
-    "amount": "420.00",
-    "desc": "Basement circuits",
-    "taxable": false,
-    "account": "Installation Income"
-   },
-   {
-    "item": "Materials",
-    "quantity": "1",
-    "rate": "136.42",
-    "amount": "136.42",
-    "desc": "Box, cable, fittings",
-    "taxable": true,
-    "account": "Materials Income"
-   },
-   {
-    "item": "Breaker 20A 1P",
-    "quantity": "2",
-    "rate": "14.95",
-    "amount": "29.90",
-    "desc": "20 amp single-pole breaker",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "16.98"
-   }
-  ],
-  "note": "Marc Dubois, basement circuits (Net 15).",
-  "taxable": "166.32",
-  "tax": "14.55",
-  "total": "600.87",
-  "issued": {
-   "Breaker 20A 1P": [
-    "2",
-    "16.98"
-   ]
-  },
-  "terms": "Net 15",
-  "due": "2026-07-17"
  },
  {
   "id": "J16",
@@ -649,25 +649,6 @@
   "total": "95.00"
  },
  {
-  "id": "J23",
-  "kind": "bill_payment",
-  "date": "2026-07-07",
-  "vendor": "Will County Equipment Rental",
-  "method": "Check",
-  "number": "4477",
-  "bills": [
-   {
-    "bill": "R-55120",
-    "amount": "465.00",
-    "discount": "0.00"
-   }
-  ],
-  "cleared": "2026-07-13",
-  "note": "Paid the June lift rental.",
-  "total": "465.00",
-  "discount": "0.00"
- },
- {
   "id": "J24",
   "kind": "invoice",
   "date": "2026-07-07",
@@ -709,7 +690,7 @@
     "desc": "20 amp single-pole breaker",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "67.92"
+    "cost": "67.94"
    },
    {
     "item": "Breaker 20A AFCI",
@@ -738,7 +719,7 @@
   "issued": {
    "Breaker 20A 1P": [
     "8",
-    "67.92"
+    "67.94"
    ],
    "Breaker 20A AFCI": [
     "4",
@@ -816,6 +797,25 @@
   "due": "2026-08-06"
  },
  {
+  "id": "J23",
+  "kind": "bill_payment",
+  "date": "2026-07-07",
+  "vendor": "Will County Equipment Rental",
+  "method": "Check",
+  "number": "4477",
+  "bills": [
+   {
+    "bill": "R-55120",
+    "amount": "465.00",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-13",
+  "note": "Paid the June lift rental.",
+  "total": "465.00",
+  "discount": "0.00"
+ },
+ {
   "id": "J26",
   "kind": "payment",
   "date": "2026-07-08",
@@ -881,6 +881,33 @@
   "note": "Finally paid Lund & Ostrowski's April bill.",
   "total": "650.00",
   "discount": "0.00"
+ },
+ {
+  "id": "J32",
+  "kind": "bill",
+  "date": "2026-07-09",
+  "vendor": "Midland Electric Supply",
+  "number": "S1190012.001",
+  "expenses": [
+   [
+    "Job Materials",
+    "1318.62",
+    "Wire, boxes, fittings",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Midland bill for the 205 N Chicago St job.",
+  "total": "1318.62",
+  "terms": "2% 10 Net 30",
+  "due": "2026-08-08",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "1318.62",
+    "memo": "Wire, boxes, fittings",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
  },
  {
   "id": "J28",
@@ -993,33 +1020,6 @@
   "ref": "1182"
  },
  {
-  "id": "J32",
-  "kind": "bill",
-  "date": "2026-07-09",
-  "vendor": "Midland Electric Supply",
-  "number": "S1190012.001",
-  "expenses": [
-   [
-    "Job Materials",
-    "1318.62",
-    "Wire, boxes, fittings",
-    "Ridgeline Realty Management:205 N Chicago St"
-   ]
-  ],
-  "note": "Midland bill for the 205 N Chicago St job.",
-  "total": "1318.62",
-  "terms": "2% 10 Net 30",
-  "due": "2026-08-08",
-  "lines": [
-   {
-    "account": "Job Materials",
-    "amount": "1318.62",
-    "memo": "Wire, boxes, fittings",
-    "job": "Ridgeline Realty Management:205 N Chicago St"
-   }
-  ]
- },
- {
   "id": "J33",
   "kind": "card_charge",
   "date": "2026-07-09",
@@ -1036,45 +1036,6 @@
   "category": "Food & Drink",
   "note": "Lunch with Luis at the diner.",
   "total": "38.40"
- },
- {
-  "id": "J34",
-  "kind": "bill_payment",
-  "date": "2026-07-10",
-  "vendor": "Illinois Valley Gas & Electric",
-  "method": "ACH",
-  "number": null,
-  "bills": [
-   {
-    "bill": "6619-0442 JUN",
-    "amount": "386.21",
-    "discount": "0.00"
-   }
-  ],
-  "cleared": "2026-07-10",
-  "desc": "IL VALLEY G&E AUTOPAY",
-  "note": "Gas & electric autopay took the June bill.",
-  "total": "386.21",
-  "discount": "0.00"
- },
- {
-  "id": "J35",
-  "kind": "bill_payment",
-  "date": "2026-07-10",
-  "vendor": "Midland Electric Supply",
-  "method": "Check",
-  "number": "4479",
-  "bills": [
-   {
-    "bill": "S1189377.001",
-    "amount": "2904.90",
-    "discount": "59.28"
-   }
-  ],
-  "cleared": "2026-07-16",
-  "note": "Paid the Midland stock order inside 10 days, 2% off.",
-  "total": "2904.90",
-  "discount": "59.28"
  },
  {
   "id": "J36",
@@ -1150,6 +1111,45 @@
   }
  },
  {
+  "id": "J34",
+  "kind": "bill_payment",
+  "date": "2026-07-10",
+  "vendor": "Illinois Valley Gas & Electric",
+  "method": "ACH",
+  "number": null,
+  "bills": [
+   {
+    "bill": "6619-0442 JUN",
+    "amount": "386.21",
+    "discount": "0.00"
+   }
+  ],
+  "cleared": "2026-07-10",
+  "desc": "IL VALLEY G&E AUTOPAY",
+  "note": "Gas & electric autopay took the June bill.",
+  "total": "386.21",
+  "discount": "0.00"
+ },
+ {
+  "id": "J35",
+  "kind": "bill_payment",
+  "date": "2026-07-10",
+  "vendor": "Midland Electric Supply",
+  "method": "Check",
+  "number": "4479",
+  "bills": [
+   {
+    "bill": "S1189377.001",
+    "amount": "2904.90",
+    "discount": "59.28"
+   }
+  ],
+  "cleared": "2026-07-16",
+  "note": "Paid the Midland stock order inside 10 days, 2% off.",
+  "total": "2904.90",
+  "discount": "59.28"
+ },
+ {
   "id": "J101",
   "kind": "card_charge",
   "date": "2026-07-12",
@@ -1166,57 +1166,6 @@
   "category": "Bills & Utilities",
   "note": "Valley Broadband autopay on the card.",
   "total": "189.99"
- },
- {
-  "id": "J38",
-  "kind": "payment",
-  "date": "2026-07-13",
-  "customer": "Morales, Ana",
-  "ref": "1415",
-  "method": "Check",
-  "apply": [
-   [
-    "2385",
-    null
-   ]
-  ],
-  "note": "Ana Morales paid 2385.",
-  "amount": "1186.42",
-  "applied": [
-   {
-    "invoice": "2385",
-    "amount": "1186.42",
-    "discount": "0.00"
-   }
-  ],
-  "discount": "0.00"
- },
- {
-  "id": "J39",
-  "kind": "bill",
-  "date": "2026-07-13",
-  "vendor": "Will County Equipment Rental",
-  "number": "R-56031",
-  "expenses": [
-   [
-    "Equipment Rental",
-    "585.00",
-    "Scissor lift, one week",
-    "Heritage Medical Suites"
-   ]
-  ],
-  "note": "Scissor lift for the Heritage Medical job, one week.",
-  "total": "585.00",
-  "terms": "Net 30",
-  "due": "2026-08-12",
-  "lines": [
-   {
-    "account": "Equipment Rental",
-    "amount": "585.00",
-    "memo": "Scissor lift, one week",
-    "job": "Heritage Medical Suites"
-   }
-  ]
  },
  {
   "id": "J40",
@@ -1275,6 +1224,106 @@
   },
   "terms": "Net 30",
   "due": "2026-08-12"
+ },
+ {
+  "id": "J39",
+  "kind": "bill",
+  "date": "2026-07-13",
+  "vendor": "Will County Equipment Rental",
+  "number": "R-56031",
+  "expenses": [
+   [
+    "Equipment Rental",
+    "585.00",
+    "Scissor lift, one week",
+    "Heritage Medical Suites"
+   ]
+  ],
+  "note": "Scissor lift for the Heritage Medical job, one week.",
+  "total": "585.00",
+  "terms": "Net 30",
+  "due": "2026-08-12",
+  "lines": [
+   {
+    "account": "Equipment Rental",
+    "amount": "585.00",
+    "memo": "Scissor lift, one week",
+    "job": "Heritage Medical Suites"
+   }
+  ]
+ },
+ {
+  "id": "J38",
+  "kind": "payment",
+  "date": "2026-07-13",
+  "customer": "Morales, Ana",
+  "ref": "1415",
+  "method": "Check",
+  "apply": [
+   [
+    "2385",
+    null
+   ]
+  ],
+  "note": "Ana Morales paid 2385.",
+  "amount": "1186.42",
+  "applied": [
+   {
+    "invoice": "2385",
+    "amount": "1186.42",
+    "discount": "0.00"
+   }
+  ],
+  "discount": "0.00"
+ },
+ {
+  "id": "J45",
+  "kind": "invoice",
+  "date": "2026-07-14",
+  "number": "2396",
+  "customer": "O'Brien, Kathleen",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Tripping bathroom circuit",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Additional Hour",
+    "quantity": "1",
+    "rate": "95.00",
+    "amount": "95.00",
+    "desc": "Service, each additional hour",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "2",
+    "rate": "32.50",
+    "amount": "65.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.98"
+   }
+  ],
+  "note": "Kathleen O'Brien service call - she said she'd mail a check.",
+  "taxable": "65.00",
+  "tax": "5.69",
+  "total": "310.69",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "2",
+    "35.98"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-14"
  },
  {
   "id": "J41",
@@ -1361,53 +1410,71 @@
   "total": "112.64"
  },
  {
-  "id": "J45",
+  "id": "J48",
   "kind": "invoice",
-  "date": "2026-07-14",
-  "number": "2396",
-  "customer": "O'Brien, Kathleen",
+  "date": "2026-07-15",
+  "number": "2397",
+  "customer": "Kaminski, Ted",
   "lines": [
    {
     "item": "Service Call",
     "quantity": "1",
     "rate": "145.00",
     "amount": "145.00",
-    "desc": "Tripping bathroom circuit",
-    "taxable": false,
-    "account": "Service Income"
-   },
-   {
-    "item": "Additional Hour",
-    "quantity": "1",
-    "rate": "95.00",
-    "amount": "95.00",
-    "desc": "Service, each additional hour",
+    "desc": "Garage outlet",
     "taxable": false,
     "account": "Service Income"
    },
    {
     "item": "GFCI Receptacle 20A",
-    "quantity": "2",
+    "quantity": "1",
     "rate": "32.50",
-    "amount": "65.00",
+    "amount": "32.50",
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "35.96"
+    "cost": "17.99"
    }
   ],
-  "note": "Kathleen O'Brien service call - she said she'd mail a check.",
-  "taxable": "65.00",
-  "tax": "5.69",
-  "total": "310.69",
+  "note": "Ted Kaminski service call. He still had the $150 credit from May - used it on this one.",
+  "taxable": "32.50",
+  "tax": "2.84",
+  "total": "180.34",
   "issued": {
    "GFCI Receptacle 20A": [
-    "2",
-    "35.96"
+    "1",
+    "17.99"
    ]
   },
   "terms": "Due on receipt",
-  "due": "2026-07-14"
+  "due": "2026-07-15"
+ },
+ {
+  "id": "J50",
+  "kind": "bill",
+  "date": "2026-07-15",
+  "vendor": "Lund & Ostrowski CPAs",
+  "number": "2026-0611",
+  "expenses": [
+   [
+    "Professional Fees",
+    "425.00",
+    "Q2 bookkeeping review",
+    null
+   ]
+  ],
+  "note": "Lund & Ostrowski bill for the Q2 review.",
+  "total": "425.00",
+  "terms": "Net 30",
+  "due": "2026-08-14",
+  "lines": [
+   {
+    "account": "Professional Fees",
+    "amount": "425.00",
+    "memo": "Q2 bookkeeping review",
+    "job": null
+   }
+  ]
  },
  {
   "id": "J46",
@@ -1456,46 +1523,6 @@
   "total": "2000.00"
  },
  {
-  "id": "J48",
-  "kind": "invoice",
-  "date": "2026-07-15",
-  "number": "2397",
-  "customer": "Kaminski, Ted",
-  "lines": [
-   {
-    "item": "Service Call",
-    "quantity": "1",
-    "rate": "145.00",
-    "amount": "145.00",
-    "desc": "Garage outlet",
-    "taxable": false,
-    "account": "Service Income"
-   },
-   {
-    "item": "GFCI Receptacle 20A",
-    "quantity": "1",
-    "rate": "32.50",
-    "amount": "32.50",
-    "desc": "20A tamper-resistant GFCI receptacle",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "17.98"
-   }
-  ],
-  "note": "Ted Kaminski service call. He still had the $150 credit from May - used it on this one.",
-  "taxable": "32.50",
-  "tax": "2.84",
-  "total": "180.34",
-  "issued": {
-   "GFCI Receptacle 20A": [
-    "1",
-    "17.98"
-   ]
-  },
-  "terms": "Due on receipt",
-  "due": "2026-07-15"
- },
- {
   "id": "J49",
   "kind": "credit_apply",
   "date": "2026-07-15",
@@ -1505,28 +1532,55 @@
   "note": "Applied Ted Kaminski's credit memo 2350 to 2397."
  },
  {
-  "id": "J50",
+  "id": "J54",
   "kind": "bill",
-  "date": "2026-07-15",
-  "vendor": "Lund & Ostrowski CPAs",
-  "number": "2026-0611",
-  "expenses": [
+  "date": "2026-07-16",
+  "vendor": "Midland Electric Supply",
+  "number": "S1190655.001",
+  "items": [
    [
-    "Professional Fees",
-    "425.00",
-    "Q2 bookkeeping review",
+    "LED Wafer Light 6in",
+    "24",
+    "11.85",
+    null
+   ],
+   [
+    "Surge Protector",
+    "4",
+    "131.20",
+    null
+   ],
+   [
+    "Smoke/CO Detector",
+    "12",
+    "39.10",
     null
    ]
   ],
-  "note": "Lund & Ostrowski bill for the Q2 review.",
-  "total": "425.00",
-  "terms": "Net 30",
-  "due": "2026-08-14",
+  "note": "Midland restock: wafers, surge protectors, smoke/COs.",
+  "total": "1278.40",
+  "terms": "2% 10 Net 30",
+  "due": "2026-08-15",
   "lines": [
    {
-    "account": "Professional Fees",
-    "amount": "425.00",
-    "memo": "Q2 bookkeeping review",
+    "item": "LED Wafer Light 6in",
+    "quantity": "24",
+    "cost": "11.85",
+    "amount": "284.40",
+    "job": null
+   },
+   {
+    "item": "Surge Protector",
+    "quantity": "4",
+    "cost": "131.20",
+    "amount": "524.80",
+    "job": null
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "12",
+    "cost": "39.10",
+    "amount": "469.20",
     "job": null
    }
   ]
@@ -1616,60 +1670,6 @@
   ]
  },
  {
-  "id": "J54",
-  "kind": "bill",
-  "date": "2026-07-16",
-  "vendor": "Midland Electric Supply",
-  "number": "S1190655.001",
-  "items": [
-   [
-    "LED Wafer Light 6in",
-    "24",
-    "11.85",
-    null
-   ],
-   [
-    "Surge Protector",
-    "4",
-    "131.20",
-    null
-   ],
-   [
-    "Smoke/CO Detector",
-    "12",
-    "39.10",
-    null
-   ]
-  ],
-  "note": "Midland restock: wafers, surge protectors, smoke/COs.",
-  "total": "1278.40",
-  "terms": "2% 10 Net 30",
-  "due": "2026-08-15",
-  "lines": [
-   {
-    "item": "LED Wafer Light 6in",
-    "quantity": "24",
-    "cost": "11.85",
-    "amount": "284.40",
-    "job": null
-   },
-   {
-    "item": "Surge Protector",
-    "quantity": "4",
-    "cost": "131.20",
-    "amount": "524.80",
-    "job": null
-   },
-   {
-    "item": "Smoke/CO Detector",
-    "quantity": "12",
-    "cost": "39.10",
-    "amount": "469.20",
-    "job": null
-   }
-  ]
- },
- {
   "id": "J55",
   "kind": "card_charge",
   "date": "2026-07-16",
@@ -1686,24 +1686,6 @@
   "category": "Shopping",
   "note": "Office supplies.",
   "total": "74.18"
- },
- {
-  "id": "J56",
-  "kind": "card_charge",
-  "date": "2026-07-17",
-  "payee": "Midland Elec. Supply",
-  "lines": [
-   [
-    "Job Materials",
-    "36.48",
-    "Wire connectors, Okafor follow-up"
-   ]
-  ],
-  "cleared": "2026-07-20",
-  "desc": "MIDLAND ELEC SUPPLY #2",
-  "category": "Home",
-  "note": "Midland counter, wire connectors for the Okafor follow-up, on the card.",
-  "total": "36.48"
  },
  {
   "id": "J57",
@@ -1730,6 +1712,75 @@
   "total": "7440.00",
   "issued": {},
   "due": "2026-08-16"
+ },
+ {
+  "id": "J56",
+  "kind": "card_charge",
+  "date": "2026-07-17",
+  "payee": "Midland Elec. Supply",
+  "lines": [
+   [
+    "Job Materials",
+    "36.48",
+    "Wire connectors, Okafor follow-up"
+   ]
+  ],
+  "cleared": "2026-07-20",
+  "desc": "MIDLAND ELEC SUPPLY #2",
+  "category": "Home",
+  "note": "Midland counter, wire connectors for the Okafor follow-up, on the card.",
+  "total": "36.48"
+ },
+ {
+  "id": "J60",
+  "kind": "credit_memo",
+  "date": "2026-07-20",
+  "number": "2399",
+  "customer": "Lindqvist, Erik",
+  "source_invoice": "2390",
+  "lines": [
+   {
+    "item": "EV Charger 48A",
+    "quantity": "1",
+    "rate": "899.00",
+    "amount": "899.00",
+    "desc": "Returned unopened",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "576.50"
+   }
+  ],
+  "note": "Erik Lindqvist's HOA said no to the charger. He brought it back unopened; it's back on the shelf.",
+  "taxable": "899.00",
+  "tax": "78.66",
+  "total": "977.66"
+ },
+ {
+  "id": "J62",
+  "kind": "bill",
+  "date": "2026-07-20",
+  "vendor": "Illinois Valley Gas & Electric",
+  "number": "6619-0442 JUL",
+  "terms": "Net 21",
+  "expenses": [
+   [
+    "Utilities:Gas and Electric",
+    "412.67",
+    "Shop, July",
+    null
+   ]
+  ],
+  "note": "Gas & electric bill for July (autopay on the due date).",
+  "total": "412.67",
+  "due": "2026-08-10",
+  "lines": [
+   {
+    "account": "Utilities:Gas and Electric",
+    "amount": "412.67",
+    "memo": "Shop, July",
+    "job": null
+   }
+  ]
  },
  {
   "id": "J58",
@@ -1767,30 +1818,6 @@
   "note": "Filed and paid the June sales tax online, 1,187.34."
  },
  {
-  "id": "J60",
-  "kind": "credit_memo",
-  "date": "2026-07-20",
-  "number": "2399",
-  "customer": "Lindqvist, Erik",
-  "source_invoice": "2390",
-  "lines": [
-   {
-    "item": "EV Charger 48A",
-    "quantity": "1",
-    "rate": "899.00",
-    "amount": "899.00",
-    "desc": "Returned unopened",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "576.50"
-   }
-  ],
-  "note": "Erik Lindqvist's HOA said no to the charger. He brought it back unopened; it's back on the shelf.",
-  "taxable": "899.00",
-  "tax": "78.66",
-  "total": "977.66"
- },
- {
   "id": "J61",
   "kind": "customer_refund",
   "date": "2026-07-20",
@@ -1800,33 +1827,6 @@
   "cleared": "2026-07-24",
   "note": "Refund check to Erik for the charger.",
   "amount": "977.66"
- },
- {
-  "id": "J62",
-  "kind": "bill",
-  "date": "2026-07-20",
-  "vendor": "Illinois Valley Gas & Electric",
-  "number": "6619-0442 JUL",
-  "terms": "Net 21",
-  "expenses": [
-   [
-    "Utilities:Gas and Electric",
-    "412.67",
-    "Shop, July",
-    null
-   ]
-  ],
-  "note": "Gas & electric bill for July (autopay on the due date).",
-  "total": "412.67",
-  "due": "2026-08-10",
-  "lines": [
-   {
-    "account": "Utilities:Gas and Electric",
-    "amount": "412.67",
-    "memo": "Shop, July",
-    "job": null
-   }
-  ]
  },
  {
   "id": "J63",
@@ -1935,23 +1935,6 @@
   "total": "38.97"
  },
  {
-  "id": "J68",
-  "kind": "deposit",
-  "date": "2026-07-23",
-  "cleared": "2026-07-23",
-  "payments": [
-   "J66"
-  ],
-  "note": "Deposited St. Casimir.",
-  "total": "1962.50",
-  "items": [
-   {
-    "source": "J66",
-    "amount": "1962.50"
-   }
-  ]
- },
- {
   "id": "J69",
   "kind": "bill",
   "date": "2026-07-23",
@@ -1975,6 +1958,23 @@
     "amount": "2207.40",
     "memo": "Devices, plates, fixtures for trim",
     "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
+   }
+  ]
+ },
+ {
+  "id": "J68",
+  "kind": "deposit",
+  "date": "2026-07-23",
+  "cleared": "2026-07-23",
+  "payments": [
+   "J66"
+  ],
+  "note": "Deposited St. Casimir.",
+  "total": "1962.50",
+  "items": [
+   {
+    "source": "J66",
+    "amount": "1962.50"
    }
   ]
  },
@@ -2045,6 +2045,118 @@
   "category": "Food & Drink",
   "note": "Crew lunch at Lot 14.",
   "total": "61.25"
+ },
+ {
+  "id": "J78",
+  "kind": "invoice",
+  "date": "2026-07-24",
+  "number": "2400",
+  "customer": "Abernathy, Ruth",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Hall and bedroom alarms",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Labor",
+    "quantity": "1.5",
+    "rate": "105.00",
+    "amount": "157.50",
+    "desc": "Electrician labor, per hour",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "Senior Discount",
+    "quantity": null,
+    "rate": "-10%",
+    "amount": "-15.75",
+    "desc": "Senior discount 10% on labor",
+    "taxable": false,
+    "account": "Sales Discounts"
+   },
+   {
+    "item": "Smoke/CO Detector",
+    "quantity": "3",
+    "rate": "69.00",
+    "amount": "207.00",
+    "desc": "Hardwired smoke/CO combination alarm",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "116.88"
+   }
+  ],
+  "note": "Ruth Abernathy: replaced three alarms. Gave her the senior discount on the labor.",
+  "taxable": "207.00",
+  "tax": "18.11",
+  "total": "511.86",
+  "issued": {
+   "Smoke/CO Detector": [
+    "3",
+    "116.88"
+   ]
+  },
+  "terms": "Due on receipt",
+  "due": "2026-07-24"
+ },
+ {
+  "id": "J76",
+  "kind": "bill",
+  "date": "2026-07-24",
+  "vendor": "Delgado, Ray",
+  "number": "0724",
+  "expenses": [
+   [
+    "Subcontractors",
+    "1150.00",
+    "Trenching and conduit, Lot 14",
+    "Van Dyke Construction:Lot 14 Prairie Crossing"
+   ]
+  ],
+  "note": "Ray's invoice 0724 for trenching at Lot 14.",
+  "total": "1150.00",
+  "terms": "Net 15",
+  "due": "2026-08-08",
+  "lines": [
+   {
+    "account": "Subcontractors",
+    "amount": "1150.00",
+    "memo": "Trenching and conduit, Lot 14",
+    "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
+   }
+  ]
+ },
+ {
+  "id": "J77",
+  "kind": "bill",
+  "date": "2026-07-24",
+  "vendor": "Prairie Uniform Service",
+  "number": "U-89107",
+  "expenses": [
+   [
+    "Uniforms",
+    "112.36",
+    "July service",
+    null
+   ]
+  ],
+  "note": "Uniform bill (haven't paid June's yet).",
+  "total": "112.36",
+  "terms": "Net 30",
+  "due": "2026-08-23",
+  "lines": [
+   {
+    "account": "Uniforms",
+    "amount": "112.36",
+    "memo": "July service",
+    "job": null
+   }
+  ]
  },
  {
   "id": "J72",
@@ -2139,116 +2251,39 @@
   ]
  },
  {
-  "id": "J76",
-  "kind": "bill",
-  "date": "2026-07-24",
-  "vendor": "Delgado, Ray",
-  "number": "0724",
-  "expenses": [
-   [
-    "Subcontractors",
-    "1150.00",
-    "Trenching and conduit, Lot 14",
-    "Van Dyke Construction:Lot 14 Prairie Crossing"
-   ]
-  ],
-  "note": "Ray's invoice 0724 for trenching at Lot 14.",
-  "total": "1150.00",
-  "terms": "Net 15",
-  "due": "2026-08-08",
-  "lines": [
-   {
-    "account": "Subcontractors",
-    "amount": "1150.00",
-    "memo": "Trenching and conduit, Lot 14",
-    "job": "Van Dyke Construction:Lot 14 Prairie Crossing"
-   }
-  ]
- },
- {
-  "id": "J77",
-  "kind": "bill",
-  "date": "2026-07-24",
-  "vendor": "Prairie Uniform Service",
-  "number": "U-89107",
-  "expenses": [
-   [
-    "Uniforms",
-    "112.36",
-    "July service",
-    null
-   ]
-  ],
-  "note": "Uniform bill (haven't paid June's yet).",
-  "total": "112.36",
-  "terms": "Net 30",
-  "due": "2026-08-23",
-  "lines": [
-   {
-    "account": "Uniforms",
-    "amount": "112.36",
-    "memo": "July service",
-    "job": null
-   }
-  ]
- },
- {
-  "id": "J78",
+  "id": "J82",
   "kind": "invoice",
-  "date": "2026-07-24",
-  "number": "2400",
-  "customer": "Abernathy, Ruth",
+  "date": "2026-07-27",
+  "number": "2401",
+  "customer": "Fitzgerald, Sean",
+  "new_customer": true,
   "lines": [
-   {
-    "item": "Service Call",
-    "quantity": "1",
-    "rate": "145.00",
-    "amount": "145.00",
-    "desc": "Hall and bedroom alarms",
-    "taxable": false,
-    "account": "Service Income"
-   },
    {
     "item": "Labor",
-    "quantity": "1.5",
+    "quantity": "2",
     "rate": "105.00",
-    "amount": "157.50",
-    "desc": "Electrician labor, per hour",
+    "amount": "210.00",
+    "desc": "Ceiling fan, family room",
     "taxable": false,
     "account": "Installation Income"
    },
    {
-    "item": "Senior Discount",
-    "quantity": null,
-    "rate": "-10%",
-    "amount": "-15.75",
-    "desc": "Senior discount 10% on labor",
-    "taxable": false,
-    "account": "Sales Discounts"
-   },
-   {
-    "item": "Smoke/CO Detector",
-    "quantity": "3",
-    "rate": "69.00",
-    "amount": "207.00",
-    "desc": "Hardwired smoke/CO combination alarm",
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "46.12",
+    "amount": "46.12",
+    "desc": "Fan brace box, wire",
     "taxable": true,
-    "account": "Materials Income",
-    "cost": "116.88"
+    "account": "Materials Income"
    }
   ],
-  "note": "Ruth Abernathy: replaced three alarms. Gave her the senior discount on the labor.",
-  "taxable": "207.00",
-  "tax": "18.11",
-  "total": "511.86",
-  "issued": {
-   "Smoke/CO Detector": [
-    "3",
-    "116.88"
-   ]
-  },
+  "note": "New customer: Sean Fitzgerald, 10 Ashley Ct, Mokena. Ceiling fan install.",
+  "taxable": "46.12",
+  "tax": "4.04",
+  "total": "260.16",
+  "issued": {},
   "terms": "Due on receipt",
-  "due": "2026-07-24"
+  "due": "2026-07-27"
  },
  {
   "id": "J79",
@@ -2312,39 +2347,30 @@
   "note": "Moved $3,000 to savings."
  },
  {
-  "id": "J82",
-  "kind": "invoice",
-  "date": "2026-07-27",
-  "number": "2401",
-  "customer": "Fitzgerald, Sean",
-  "new_customer": true,
+  "id": "J85",
+  "kind": "vendor_credit",
+  "date": "2026-07-28",
+  "vendor": "Midland Electric Supply",
+  "number": "CM S1191012",
+  "items": [
+   [
+    "Breaker 20A AFCI",
+    "4",
+    "42.10",
+    null
+   ]
+  ],
+  "note": "Took 4 AFCI breakers back to Midland (wrong style). Credit memo CM S1191012.",
+  "total": "168.40",
   "lines": [
    {
-    "item": "Labor",
-    "quantity": "2",
-    "rate": "105.00",
-    "amount": "210.00",
-    "desc": "Ceiling fan, family room",
-    "taxable": false,
-    "account": "Installation Income"
-   },
-   {
-    "item": "Materials",
-    "quantity": "1",
-    "rate": "46.12",
-    "amount": "46.12",
-    "desc": "Fan brace box, wire",
-    "taxable": true,
-    "account": "Materials Income"
+    "item": "Breaker 20A AFCI",
+    "quantity": "4",
+    "cost": "42.10",
+    "amount": "168.40",
+    "job": null
    }
-  ],
-  "note": "New customer: Sean Fitzgerald, 10 Ashley Ct, Mokena. Ceiling fan install.",
-  "taxable": "46.12",
-  "tax": "4.04",
-  "total": "260.16",
-  "issued": {},
-  "terms": "Due on receipt",
-  "due": "2026-07-27"
+  ]
  },
  {
   "id": "J83",
@@ -2398,32 +2424,6 @@
   ]
  },
  {
-  "id": "J85",
-  "kind": "vendor_credit",
-  "date": "2026-07-28",
-  "vendor": "Midland Electric Supply",
-  "number": "CM S1191012",
-  "items": [
-   [
-    "Breaker 20A AFCI",
-    "4",
-    "42.10",
-    null
-   ]
-  ],
-  "note": "Took 4 AFCI breakers back to Midland (wrong style). Credit memo CM S1191012.",
-  "total": "168.40",
-  "lines": [
-   {
-    "item": "Breaker 20A AFCI",
-    "quantity": "4",
-    "cost": "42.10",
-    "amount": "168.40",
-    "job": null
-   }
-  ]
- },
- {
   "id": "J86",
   "kind": "invoice",
   "date": "2026-07-29",
@@ -2456,7 +2456,7 @@
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "107.90"
+    "cost": "107.93"
    }
   ],
   "note": "Lakeview, Hickory Creek pole lights.",
@@ -2466,7 +2466,7 @@
   "issued": {
    "GFCI Receptacle 20A": [
     "6",
-    "107.90"
+    "107.93"
    ]
   },
   "terms": "1% 10 Net 30",
@@ -2532,16 +2532,6 @@
   "due": "2026-08-13"
  },
  {
-  "id": "J88",
-  "kind": "inventory_adjust",
-  "date": "2026-07-30",
-  "item": "LED Wafer Light 6in",
-  "quantity": "-2",
-  "account": "Inventory Adjustments",
-  "note": "Two wafer lights damaged in the van - toss them.",
-  "value": "-23.60"
- },
- {
   "id": "J89",
   "kind": "invoice",
   "date": "2026-07-30",
@@ -2591,6 +2581,16 @@
   "due": "2026-08-29"
  },
  {
+  "id": "J88",
+  "kind": "inventory_adjust",
+  "date": "2026-07-30",
+  "item": "LED Wafer Light 6in",
+  "quantity": "-2",
+  "account": "Inventory Adjustments",
+  "note": "Two wafer lights damaged in the van - toss them.",
+  "value": "-23.60"
+ },
+ {
   "id": "J90",
   "kind": "card_charge",
   "date": "2026-07-30",
@@ -2607,6 +2607,33 @@
   "category": "Home",
   "note": "Plainfield Hardware, anchors and straps.",
   "total": "29.84"
+ },
+ {
+  "id": "J96",
+  "kind": "bill",
+  "date": "2026-07-31",
+  "vendor": "Prairie Fleet Card",
+  "number": "0731-7741",
+  "expenses": [
+   [
+    "Vehicle Expense:Fuel",
+    "1236.84",
+    "July fuel",
+    null
+   ]
+  ],
+  "note": "Fleet card statement for July fuel.",
+  "total": "1236.84",
+  "terms": "Net 15",
+  "due": "2026-08-15",
+  "lines": [
+   {
+    "account": "Vehicle Expense:Fuel",
+    "amount": "1236.84",
+    "memo": "July fuel",
+    "job": null
+   }
+  ]
  },
  {
   "id": "J91",
@@ -2705,33 +2732,6 @@
   "cleared": "2026-08-05",
   "note": "Permit for Heritage Medical Suite C at the counter, check 4482.",
   "total": "150.00"
- },
- {
-  "id": "J96",
-  "kind": "bill",
-  "date": "2026-07-31",
-  "vendor": "Prairie Fleet Card",
-  "number": "0731-7741",
-  "expenses": [
-   [
-    "Vehicle Expense:Fuel",
-    "1236.84",
-    "July fuel",
-    null
-   ]
-  ],
-  "note": "Fleet card statement for July fuel.",
-  "total": "1236.84",
-  "terms": "Net 15",
-  "due": "2026-08-15",
-  "lines": [
-   {
-    "account": "Vehicle Expense:Fuel",
-    "amount": "1236.84",
-    "memo": "July fuel",
-    "job": null
-   }
-  ]
  },
  {
   "id": "J97",
@@ -2871,6 +2871,40 @@
   "total": "89.00"
  },
  {
+  "kind": "invoice",
+  "date": "2026-08-04",
+  "number": "2405",
+  "customer": "O'Brien, Kathleen",
+  "lines": [
+   {
+    "item": "Service Call",
+    "quantity": "1",
+    "rate": "145.00",
+    "amount": "145.00",
+    "desc": "Outlet repair",
+    "taxable": false,
+    "account": "Service Income"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "48.33",
+    "amount": "48.33",
+    "desc": "Fixtures and trim",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Kathleen O'Brien.",
+  "id": "A06",
+  "taxable": "48.33",
+  "tax": "4.23",
+  "total": "197.56",
+  "issued": {},
+  "terms": "Due on receipt",
+  "due": "2026-08-04"
+ },
+ {
   "kind": "bill",
   "date": "2026-08-04",
   "vendor": "Midland Electric Supply",
@@ -2892,7 +2926,7 @@
    ]
   ],
   "note": "Midland bill (stock order and job materials).",
-  "id": "A06",
+  "id": "A07",
   "total": "1834.92",
   "terms": "2% 10 Net 30",
   "due": "2026-09-03",
@@ -2920,41 +2954,7 @@
   "bill": "S1190012.001",
   "amount": "168.40",
   "note": "Used Midland credit CM S1191012 on S1190012.001.",
-  "id": "A07"
- },
- {
-  "kind": "invoice",
-  "date": "2026-08-04",
-  "number": "2405",
-  "customer": "O'Brien, Kathleen",
-  "lines": [
-   {
-    "item": "Service Call",
-    "quantity": "1",
-    "rate": "145.00",
-    "amount": "145.00",
-    "desc": "Outlet repair",
-    "taxable": false,
-    "account": "Service Income"
-   },
-   {
-    "item": "Materials",
-    "quantity": "1",
-    "rate": "48.33",
-    "amount": "48.33",
-    "desc": "Fixtures and trim",
-    "taxable": true,
-    "account": "Materials Income"
-   }
-  ],
-  "note": "Invoiced Kathleen O'Brien.",
-  "id": "A08",
-  "taxable": "48.33",
-  "tax": "4.23",
-  "total": "197.56",
-  "issued": {},
-  "terms": "Due on receipt",
-  "due": "2026-08-04"
+  "id": "A08"
  },
  {
   "kind": "write_off",
@@ -3560,33 +3560,6 @@
   ]
  },
  {
-  "kind": "bill",
-  "date": "2026-08-12",
-  "vendor": "Delgado, Ray",
-  "number": "0812",
-  "expenses": [
-   [
-    "Subcontractors",
-    "1325.00",
-    "Pulling feeders, 205 N Chicago",
-    "Ridgeline Realty Management:205 N Chicago St"
-   ]
-  ],
-  "note": "Ray's invoice 0812.",
-  "id": "A33",
-  "total": "1325.00",
-  "terms": "Net 15",
-  "due": "2026-08-27",
-  "lines": [
-   {
-    "account": "Subcontractors",
-    "amount": "1325.00",
-    "memo": "Pulling feeders, 205 N Chicago",
-    "job": "Ridgeline Realty Management:205 N Chicago St"
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-08-12",
   "number": "2409",
@@ -3612,13 +3585,40 @@
    }
   ],
   "note": "Invoiced Chidi Okafor.",
-  "id": "A34",
+  "id": "A33",
   "taxable": "403.53",
   "tax": "35.31",
   "total": "648.84",
   "issued": {},
   "terms": "Due on receipt",
   "due": "2026-08-12"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-12",
+  "vendor": "Delgado, Ray",
+  "number": "0812",
+  "expenses": [
+   [
+    "Subcontractors",
+    "1325.00",
+    "Pulling feeders, 205 N Chicago",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Ray's invoice 0812.",
+  "id": "A34",
+  "total": "1325.00",
+  "terms": "Net 15",
+  "due": "2026-08-27",
+  "lines": [
+   {
+    "account": "Subcontractors",
+    "amount": "1325.00",
+    "memo": "Pulling feeders, 205 N Chicago",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
  },
  {
   "kind": "payment",
@@ -3802,7 +3802,7 @@
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "71.93"
+    "cost": "71.96"
    },
    {
     "item": "Materials",
@@ -3822,7 +3822,7 @@
   "issued": {
    "GFCI Receptacle 20A": [
     "4",
-    "71.93"
+    "71.96"
    ]
   },
   "terms": "Net 30",
@@ -3922,34 +3922,6 @@
   "total": "119.24"
  },
  {
-  "kind": "bill",
-  "date": "2026-08-18",
-  "vendor": "Midland Electric Supply",
-  "number": "S1200126.001",
-  "items": [],
-  "expenses": [
-   [
-    "Job Materials",
-    "162.39",
-    "Job materials",
-    "Ridgeline Realty Management:Unit Turnovers"
-   ]
-  ],
-  "note": "Midland bill.",
-  "id": "A47",
-  "total": "162.39",
-  "terms": "2% 10 Net 30",
-  "due": "2026-09-17",
-  "lines": [
-   {
-    "account": "Job Materials",
-    "amount": "162.39",
-    "memo": "Job materials",
-    "job": "Ridgeline Realty Management:Unit Turnovers"
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-08-18",
   "number": "2412",
@@ -3995,7 +3967,7 @@
    }
   ],
   "note": "Invoiced Route 59 Auto Care.",
-  "id": "A48",
+  "id": "A47",
   "taxable": "745.36",
   "tax": "65.22",
   "total": "1125.58",
@@ -4011,6 +3983,34 @@
   },
   "terms": "Net 30",
   "due": "2026-09-17"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-18",
+  "vendor": "Midland Electric Supply",
+  "number": "S1200126.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "162.39",
+    "Job materials",
+    "Ridgeline Realty Management:Unit Turnovers"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "A48",
+  "total": "162.39",
+  "terms": "2% 10 Net 30",
+  "due": "2026-09-17",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "162.39",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:Unit Turnovers"
+   }
+  ]
  },
  {
   "kind": "bill_payment",
@@ -4259,7 +4259,7 @@
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "35.96"
+    "cost": "35.98"
    },
    {
     "item": "Breaker 20A AFCI",
@@ -4280,7 +4280,7 @@
   "issued": {
    "GFCI Receptacle 20A": [
     "2",
-    "35.96"
+    "35.98"
    ],
    "Breaker 20A AFCI": [
     "3",
@@ -4376,34 +4376,6 @@
   "id": "A61"
  },
  {
-  "kind": "bill",
-  "date": "2026-08-25",
-  "vendor": "Midland Electric Supply",
-  "number": "S1200175.001",
-  "items": [],
-  "expenses": [
-   [
-    "Job Materials",
-    "743.19",
-    "Job materials",
-    "Ridgeline Realty Management:Unit Turnovers"
-   ]
-  ],
-  "note": "Midland bill.",
-  "id": "A62",
-  "total": "743.19",
-  "terms": "2% 10 Net 30",
-  "due": "2026-09-24",
-  "lines": [
-   {
-    "account": "Job Materials",
-    "amount": "743.19",
-    "memo": "Job materials",
-    "job": "Ridgeline Realty Management:Unit Turnovers"
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-08-25",
   "number": "2415",
@@ -4430,7 +4402,7 @@
    }
   ],
   "note": "Invoiced Chidi Okafor.",
-  "id": "A63",
+  "id": "A62",
   "taxable": "56.00",
   "tax": "4.90",
   "total": "205.90",
@@ -4442,6 +4414,34 @@
   },
   "terms": "Due on receipt",
   "due": "2026-08-25"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-25",
+  "vendor": "Midland Electric Supply",
+  "number": "S1200175.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "743.19",
+    "Job materials",
+    "Ridgeline Realty Management:Unit Turnovers"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "A63",
+  "total": "743.19",
+  "terms": "2% 10 Net 30",
+  "due": "2026-09-24",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "743.19",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:Unit Turnovers"
+   }
+  ]
  },
  {
   "kind": "card_charge",
@@ -4511,7 +4511,7 @@
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "17.98"
+    "cost": "17.99"
    },
    {
     "item": "Materials",
@@ -4535,7 +4535,7 @@
    ],
    "GFCI Receptacle 20A": [
     "1",
-    "17.98"
+    "17.99"
    ]
   },
   "terms": "Net 30",
@@ -4674,7 +4674,7 @@
     "desc": "20 amp single-pole breaker",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "16.98"
+    "cost": "16.99"
    }
   ],
   "note": "Invoiced Ruth Abernathy.",
@@ -4685,7 +4685,7 @@
   "issued": {
    "Breaker 20A 1P": [
     "2",
-    "16.98"
+    "16.99"
    ]
   },
   "terms": "Due on receipt",
@@ -4737,33 +4737,6 @@
   ]
  },
  {
-  "kind": "bill",
-  "date": "2026-08-31",
-  "vendor": "Prairie Fleet Card",
-  "number": "0831-7741",
-  "expenses": [
-   [
-    "Vehicle Expense:Fuel",
-    "1148.95",
-    "August fuel",
-    null
-   ]
-  ],
-  "note": "Fleet card statement for August fuel.",
-  "id": "A74",
-  "total": "1148.95",
-  "terms": "Net 15",
-  "due": "2026-09-15",
-  "lines": [
-   {
-    "account": "Vehicle Expense:Fuel",
-    "amount": "1148.95",
-    "memo": "August fuel",
-    "job": null
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-08-31",
   "number": "2419",
@@ -4796,7 +4769,7 @@
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "17.98"
+    "cost": "17.99"
    },
    {
     "item": "Materials",
@@ -4809,7 +4782,7 @@
    }
   ],
   "note": "Invoiced Erik Lindqvist.",
-  "id": "A75",
+  "id": "A74",
   "taxable": "493.37",
   "tax": "43.17",
   "total": "681.54",
@@ -4820,11 +4793,38 @@
    ],
    "GFCI Receptacle 20A": [
     "1",
-    "17.98"
+    "17.99"
    ]
   },
   "terms": "Due on receipt",
   "due": "2026-08-31"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-08-31",
+  "vendor": "Prairie Fleet Card",
+  "number": "0831-7741",
+  "expenses": [
+   [
+    "Vehicle Expense:Fuel",
+    "1148.95",
+    "August fuel",
+    null
+   ]
+  ],
+  "note": "Fleet card statement for August fuel.",
+  "id": "A75",
+  "total": "1148.95",
+  "terms": "Net 15",
+  "due": "2026-09-15",
+  "lines": [
+   {
+    "account": "Vehicle Expense:Fuel",
+    "amount": "1148.95",
+    "memo": "August fuel",
+    "job": null
+   }
+  ]
  },
  {
   "kind": "payment",
@@ -5573,33 +5573,6 @@
   "due": "2026-09-10"
  },
  {
-  "kind": "bill",
-  "date": "2026-09-11",
-  "vendor": "Delgado, Ray",
-  "number": "0911",
-  "expenses": [
-   [
-    "Subcontractors",
-    "980.00",
-    "Trenching, Hickory Creek pole lights",
-    "Lakeview Property Management:Hickory Creek Townhomes"
-   ]
-  ],
-  "note": "Ray's invoice 0911.",
-  "id": "S21",
-  "total": "980.00",
-  "terms": "Net 15",
-  "due": "2026-09-26",
-  "lines": [
-   {
-    "account": "Subcontractors",
-    "amount": "980.00",
-    "memo": "Trenching, Hickory Creek pole lights",
-    "job": "Lakeview Property Management:Hickory Creek Townhomes"
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-09-11",
   "number": "2425",
@@ -5622,7 +5595,7 @@
     "desc": "20 amp single-pole breaker",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "16.98"
+    "cost": "16.99"
    },
    {
     "item": "Breaker 20A AFCI",
@@ -5645,14 +5618,14 @@
    }
   ],
   "note": "Invoiced Rosa Mendoza.",
-  "id": "S22",
+  "id": "S21",
   "taxable": "837.10",
   "tax": "73.25",
   "total": "1055.35",
   "issued": {
    "Breaker 20A 1P": [
     "2",
-    "16.98"
+    "16.99"
    ],
    "Breaker 20A AFCI": [
     "4",
@@ -5661,6 +5634,33 @@
   },
   "terms": "Due on receipt",
   "due": "2026-09-11"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-11",
+  "vendor": "Delgado, Ray",
+  "number": "0911",
+  "expenses": [
+   [
+    "Subcontractors",
+    "980.00",
+    "Trenching, Hickory Creek pole lights",
+    "Lakeview Property Management:Hickory Creek Townhomes"
+   ]
+  ],
+  "note": "Ray's invoice 0911.",
+  "id": "S22",
+  "total": "980.00",
+  "terms": "Net 15",
+  "due": "2026-09-26",
+  "lines": [
+   {
+    "account": "Subcontractors",
+    "amount": "980.00",
+    "memo": "Trenching, Hickory Creek pole lights",
+    "job": "Lakeview Property Management:Hickory Creek Townhomes"
+   }
+  ]
  },
  {
   "kind": "bill_payment",
@@ -5884,6 +5884,69 @@
   "total": "2000.00"
  },
  {
+  "kind": "invoice",
+  "date": "2026-09-15",
+  "number": "2426",
+  "customer": "Lakeview Property Management:Cass Street Apartments",
+  "lines": [
+   {
+    "item": "Labor",
+    "quantity": "3",
+    "rate": "105.00",
+    "amount": "315.00",
+    "desc": "Fixture swap",
+    "taxable": false,
+    "account": "Installation Income"
+   },
+   {
+    "item": "GFCI Receptacle 20A",
+    "quantity": "4",
+    "rate": "32.50",
+    "amount": "130.00",
+    "desc": "20A tamper-resistant GFCI receptacle",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "71.95"
+   },
+   {
+    "item": "LED Wafer Light 6in",
+    "quantity": "3",
+    "rate": "28.00",
+    "amount": "84.00",
+    "desc": "6 in LED wafer downlight, selectable color",
+    "taxable": true,
+    "account": "Materials Income",
+    "cost": "35.52"
+   },
+   {
+    "item": "Materials",
+    "quantity": "1",
+    "rate": "213.69",
+    "amount": "213.69",
+    "desc": "Devices and plates",
+    "taxable": true,
+    "account": "Materials Income"
+   }
+  ],
+  "note": "Invoiced Lakeview Property Management (Cass Street Apartments).",
+  "id": "S33",
+  "taxable": "427.69",
+  "tax": "37.42",
+  "total": "780.11",
+  "issued": {
+   "GFCI Receptacle 20A": [
+    "4",
+    "71.95"
+   ],
+   "LED Wafer Light 6in": [
+    "3",
+    "35.52"
+   ]
+  },
+  "terms": "1% 10 Net 30",
+  "due": "2026-10-15"
+ },
+ {
   "kind": "bill",
   "date": "2026-09-15",
   "vendor": "Lund & Ostrowski CPAs",
@@ -5897,7 +5960,7 @@
    ]
   ],
   "note": "Lund & Ostrowski bill.",
-  "id": "S33",
+  "id": "S34",
   "total": "425.00",
   "terms": "Net 30",
   "due": "2026-10-15",
@@ -5925,7 +5988,7 @@
    ]
   ],
   "note": "Midland bill.",
-  "id": "S34",
+  "id": "S35",
   "total": "782.51",
   "terms": "2% 10 Net 30",
   "due": "2026-10-15",
@@ -5937,69 +6000,6 @@
     "job": "Ridgeline Realty Management:205 N Chicago St"
    }
   ]
- },
- {
-  "kind": "invoice",
-  "date": "2026-09-15",
-  "number": "2426",
-  "customer": "Lakeview Property Management:Cass Street Apartments",
-  "lines": [
-   {
-    "item": "Labor",
-    "quantity": "3",
-    "rate": "105.00",
-    "amount": "315.00",
-    "desc": "Fixture swap",
-    "taxable": false,
-    "account": "Installation Income"
-   },
-   {
-    "item": "GFCI Receptacle 20A",
-    "quantity": "4",
-    "rate": "32.50",
-    "amount": "130.00",
-    "desc": "20A tamper-resistant GFCI receptacle",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "71.93"
-   },
-   {
-    "item": "LED Wafer Light 6in",
-    "quantity": "3",
-    "rate": "28.00",
-    "amount": "84.00",
-    "desc": "6 in LED wafer downlight, selectable color",
-    "taxable": true,
-    "account": "Materials Income",
-    "cost": "35.52"
-   },
-   {
-    "item": "Materials",
-    "quantity": "1",
-    "rate": "213.69",
-    "amount": "213.69",
-    "desc": "Devices and plates",
-    "taxable": true,
-    "account": "Materials Income"
-   }
-  ],
-  "note": "Invoiced Lakeview Property Management (Cass Street Apartments).",
-  "id": "S35",
-  "taxable": "427.69",
-  "tax": "37.42",
-  "total": "780.11",
-  "issued": {
-   "GFCI Receptacle 20A": [
-    "4",
-    "71.93"
-   ],
-   "LED Wafer Light 6in": [
-    "3",
-    "35.52"
-   ]
-  },
-  "terms": "1% 10 Net 30",
-  "due": "2026-10-15"
  },
  {
   "kind": "payment",
@@ -6208,7 +6208,7 @@
     "desc": "20 amp single-pole breaker",
     "taxable": false,
     "account": "Materials Income",
-    "cost": "50.94"
+    "cost": "50.96"
    },
    {
     "item": "Materials",
@@ -6228,7 +6228,7 @@
   "issued": {
    "Breaker 20A 1P": [
     "6",
-    "50.94"
+    "50.96"
    ]
   },
   "terms": "Net 30",
@@ -6530,34 +6530,6 @@
   "total": "41.71"
  },
  {
-  "kind": "bill",
-  "date": "2026-09-22",
-  "vendor": "Midland Electric Supply",
-  "number": "S1201154.001",
-  "items": [],
-  "expenses": [
-   [
-    "Job Materials",
-    "245.18",
-    "Job materials",
-    "Ridgeline Realty Management:205 N Chicago St"
-   ]
-  ],
-  "note": "Midland bill.",
-  "id": "S55",
-  "total": "245.18",
-  "terms": "2% 10 Net 30",
-  "due": "2026-10-22",
-  "lines": [
-   {
-    "account": "Job Materials",
-    "amount": "245.18",
-    "memo": "Job materials",
-    "job": "Ridgeline Realty Management:205 N Chicago St"
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-09-22",
   "number": "2430",
@@ -6580,7 +6552,7 @@
     "desc": "20A tamper-resistant GFCI receptacle",
     "taxable": true,
     "account": "Materials Income",
-    "cost": "53.95"
+    "cost": "53.97"
    },
    {
     "item": "LED Wafer Light 6in",
@@ -6603,14 +6575,14 @@
    }
   ],
   "note": "Invoiced Chidi Okafor.",
-  "id": "S56",
+  "id": "S55",
   "taxable": "265.67",
   "tax": "23.25",
   "total": "433.92",
   "issued": {
    "GFCI Receptacle 20A": [
     "3",
-    "53.95"
+    "53.97"
    ],
    "LED Wafer Light 6in": [
     "2",
@@ -6619,6 +6591,34 @@
   },
   "terms": "Due on receipt",
   "due": "2026-09-22"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-22",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201154.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "245.18",
+    "Job materials",
+    "Ridgeline Realty Management:205 N Chicago St"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "S56",
+  "total": "245.18",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-22",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "245.18",
+    "memo": "Job materials",
+    "job": "Ridgeline Realty Management:205 N Chicago St"
+   }
+  ]
  },
  {
   "kind": "payment",
@@ -6741,33 +6741,6 @@
   "discount": "0.00"
  },
  {
-  "kind": "bill",
-  "date": "2026-09-24",
-  "vendor": "Prairie Uniform Service",
-  "number": "U-90529",
-  "expenses": [
-   [
-    "Uniforms",
-    "112.36",
-    "September service",
-    null
-   ]
-  ],
-  "note": "Uniform bill.",
-  "id": "S61",
-  "total": "112.36",
-  "terms": "Net 30",
-  "due": "2026-10-24",
-  "lines": [
-   {
-    "account": "Uniforms",
-    "amount": "112.36",
-    "memo": "September service",
-    "job": null
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-09-24",
   "number": "2432",
@@ -6803,7 +6776,7 @@
    }
   ],
   "note": "Invoiced Lakeview Property Management (Cass Street Apartments).",
-  "id": "S62",
+  "id": "S61",
   "taxable": "696.42",
   "tax": "60.94",
   "total": "1177.36",
@@ -6815,6 +6788,33 @@
   },
   "terms": "1% 10 Net 30",
   "due": "2026-10-24"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-24",
+  "vendor": "Prairie Uniform Service",
+  "number": "U-90529",
+  "expenses": [
+   [
+    "Uniforms",
+    "112.36",
+    "September service",
+    null
+   ]
+  ],
+  "note": "Uniform bill.",
+  "id": "S62",
+  "total": "112.36",
+  "terms": "Net 30",
+  "due": "2026-10-24",
+  "lines": [
+   {
+    "account": "Uniforms",
+    "amount": "112.36",
+    "memo": "September service",
+    "job": null
+   }
+  ]
  },
  {
   "kind": "transfer",
@@ -6949,34 +6949,6 @@
   "discount": "0.00"
  },
  {
-  "kind": "bill",
-  "date": "2026-09-29",
-  "vendor": "Midland Electric Supply",
-  "number": "S1201203.001",
-  "items": [],
-  "expenses": [
-   [
-    "Job Materials",
-    "1080.51",
-    "Job materials",
-    "Lakeview Property Management:Cass Street Apartments"
-   ]
-  ],
-  "note": "Midland bill.",
-  "id": "S69",
-  "total": "1080.51",
-  "terms": "2% 10 Net 30",
-  "due": "2026-10-29",
-  "lines": [
-   {
-    "account": "Job Materials",
-    "amount": "1080.51",
-    "memo": "Job materials",
-    "job": "Lakeview Property Management:Cass Street Apartments"
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-09-29",
   "number": "2434",
@@ -7002,13 +6974,41 @@
    }
   ],
   "note": "Invoiced Bella Notte Trattoria.",
-  "id": "S70",
+  "id": "S69",
   "taxable": "0.00",
   "tax": "0.00",
   "total": "2720.00",
   "issued": {},
   "terms": "Net 30",
   "due": "2026-10-29"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-29",
+  "vendor": "Midland Electric Supply",
+  "number": "S1201203.001",
+  "items": [],
+  "expenses": [
+   [
+    "Job Materials",
+    "1080.51",
+    "Job materials",
+    "Lakeview Property Management:Cass Street Apartments"
+   ]
+  ],
+  "note": "Midland bill.",
+  "id": "S70",
+  "total": "1080.51",
+  "terms": "2% 10 Net 30",
+  "due": "2026-10-29",
+  "lines": [
+   {
+    "account": "Job Materials",
+    "amount": "1080.51",
+    "memo": "Job materials",
+    "job": "Lakeview Property Management:Cass Street Apartments"
+   }
+  ]
  },
  {
   "kind": "card_charge",
@@ -7051,33 +7051,6 @@
   ]
  },
  {
-  "kind": "bill",
-  "date": "2026-09-30",
-  "vendor": "Prairie Fleet Card",
-  "number": "0930-7741",
-  "expenses": [
-   [
-    "Vehicle Expense:Fuel",
-    "1294.84",
-    "September fuel",
-    null
-   ]
-  ],
-  "note": "Fleet card statement for September fuel.",
-  "id": "S73",
-  "total": "1294.84",
-  "terms": "Net 15",
-  "due": "2026-10-15",
-  "lines": [
-   {
-    "account": "Vehicle Expense:Fuel",
-    "amount": "1294.84",
-    "memo": "September fuel",
-    "job": null
-   }
-  ]
- },
- {
   "kind": "invoice",
   "date": "2026-09-30",
   "number": "2435",
@@ -7113,7 +7086,7 @@
    }
   ],
   "note": "Invoiced Bella Notte Trattoria.",
-  "id": "S74",
+  "id": "S73",
   "taxable": "586.62",
   "tax": "51.33",
   "total": "847.95",
@@ -7125,6 +7098,33 @@
   },
   "terms": "Net 30",
   "due": "2026-10-30"
+ },
+ {
+  "kind": "bill",
+  "date": "2026-09-30",
+  "vendor": "Prairie Fleet Card",
+  "number": "0930-7741",
+  "expenses": [
+   [
+    "Vehicle Expense:Fuel",
+    "1294.84",
+    "September fuel",
+    null
+   ]
+  ],
+  "note": "Fleet card statement for September fuel.",
+  "id": "S74",
+  "total": "1294.84",
+  "terms": "Net 15",
+  "due": "2026-10-15",
+  "lines": [
+   {
+    "account": "Vehicle Expense:Fuel",
+    "amount": "1294.84",
+    "memo": "September fuel",
+    "job": null
+   }
+  ]
  },
  {
   "kind": "check",

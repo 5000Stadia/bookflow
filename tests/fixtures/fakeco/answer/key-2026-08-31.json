@@ -38,7 +38,7 @@
    {
     "number": "1300",
     "account": "Inventory Asset",
-    "balance": "7629.57"
+    "balance": "7629.92"
    },
    {
     "number": "1510",
@@ -133,7 +133,7 @@
    {
     "number": "5000",
     "account": "Cost of Goods Sold",
-    "balance": "24000.48"
+    "balance": "24000.13"
    },
    {
     "number": "5050",
@@ -542,7 +542,7 @@
    {
     "item": "Breaker 20A 1P",
     "on_hand": "52",
-    "value": "441.49"
+    "value": "441.61"
    },
    {
     "item": "Breaker 20A AFCI",
@@ -557,7 +557,7 @@
    {
     "item": "GFCI Receptacle 20A",
     "on_hand": "38",
-    "value": "683.34"
+    "value": "683.57"
    },
    {
     "item": "LED Wafer Light 6in",
@@ -580,7 +580,7 @@
     "value": "1197.94"
    }
   ],
-  "value": "7629.57"
+  "value": "7629.92"
  },
  "reconciliations": {
   "Checking": {

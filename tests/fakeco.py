@@ -877,7 +877,7 @@ def later_months(books: Books, month: int, rng: random.Random) -> list[dict]:
         note="Uniform bill.")
 
     # in date order; deposits on Tuesdays and Fridays of what has come in; numbers in the order written
-    events.sort(key=lambda ev: (ev["date"], _order(ev["kind"])))
+    events.sort(key=lambda ev: (ev["date"], _paper_class(ev["kind"]), _order(ev["kind"])))
     final, waiting = [], []
     for when in days:
         todays = [ev for ev in events if ev["date"] == when.isoformat()]
@@ -938,6 +938,19 @@ def _spoken(name: str) -> str:
     return f"{top} ({job})" if job else top
 
 
+def _paper_class(kind: str) -> int:
+    """Where a kind of event falls within one day so that stock moves in the order the paperwork lists it.
+
+    The paperwork lists a week or a month section by section: invoices, sales and credit memos first (they take stock
+    out and put returns back), then bills and vendor credits (stock in and back out), then the rest, inventory
+    adjustments last (render.SECTIONS). Bookflow costs same-date stock movements in entry order, so a person entering
+    the paperwork as written gets the answer key's figures only if the key takes the day in that order. Everything
+    else moves no stock and keeps its own order, which keeps each payment after its invoice and each credit
+    application before the payment it reduces.
+    """
+    return 0 if kind in ("invoice", "sales_receipt", "credit_memo") else 1 if kind in ("bill", "vendor_credit") else 2
+
+
 def _order(kind: str) -> int:
     return ["bill", "vendor_credit", "vendor_credit_apply", "invoice", "sales_receipt", "credit_memo", "credit_apply",
             "payment", "write_off", "bill_payment"].index(kind) if kind in (
@@ -962,7 +975,7 @@ def build() -> tuple[Books, list[Snapshot]]:
     books.open_cutover()
     snapshots = [Snapshot(CUTOVER, dict(books.gl), copy.deepcopy(books.ar), copy.deepcopy(books.ap),
                           copy.deepcopy(books.stock), books.tax_owed())]
-    july = sorted(D.JULY, key=lambda ev: ev["date"])  # stable: the list's own order within a day
+    july = sorted(D.JULY, key=lambda ev: (ev["date"], _paper_class(ev["kind"])))  # stable: the list's own order within a class
     for ev in july:
         books.apply(ev)
     rng = random.Random(170)
