@@ -56,6 +56,7 @@ ACCEPTED = {
     'party-merge-v1': (525, 'f42ffc267bd8651808375d39dfbfb7c2fa2613e5889151cd68dc6609b2174398'),
     'bounced-check-v1': (526, '0b6616e4040e1986f3b010f4f2d8c92276ba12d741c28b474539755fa65ed68e'),
     'cutover-rest-v1': (527, 'eec55b86544f824349e62bbdeb9c20a63c6873c4e6073f97ade1a3b0ebe9d084'),
+    'attachment-text-v1': (528, 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -105,6 +106,7 @@ CHAIN_ADDITIONS = {
     'party-merge-v1': {'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge'},
     'bounced-check-v1': {'payment bounce'},
     'cutover-rest-v1': {'vendor 1099-opening'},
+    'attachment-text-v1': {'attachment text'},
 }
 
 _ANCESTOR_EDIT = """

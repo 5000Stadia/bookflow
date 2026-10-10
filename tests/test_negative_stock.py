@@ -392,3 +392,19 @@ def test_a_preview_warns_before_anything_is_saved(books):
     assert preview['dry_run'] is True
     assert [line.split(';')[0] for line in _stock_warnings(preview)] == ['Takes Previewed to -1 on 2017-07-01']
     assert _movements(books, item) == before
+
+
+def test_a_sale_dated_before_stock_already_received_warns_for_its_own_date(books):
+    """R170 blind July asked whether a dip on one date, recovered by a later receipt, is ever said: it is.
+    5 received on 2017-08-10; a sale of 2 dated 2017-08-05 finds nothing on hand that day, so it takes the
+    item to -2 on 2017-08-05 although the stock today is 3. The preview and the saved result both warn
+    (the anchor product's "you don't have sufficient quantity"), and the sale is saved, not refused."""
+    item = _item(books, 'Dated', '4.00')
+    _bill(books, item, '2017-08-10', '5', '4')
+    assert _stock(books, item)[0] == '5'
+    preview = _invoice(books, item, '2017-08-05', '2', dry_run=True)
+    saved = _invoice(books, item, '2017-08-05', '2')
+    for result in (preview, saved):
+        assert [line.split(';')[0] for line in _stock_warnings(result)] == ['Takes Dated to -2 on 2017-08-05']
+    assert _stock(books, item, '2017-08-05')[0] == '-2' and _stock(books, item)[0] == '3'
+    _ties(books)
