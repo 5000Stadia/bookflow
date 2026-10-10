@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_party_merge_catalog as tip_layer
+from bookflow.hub import permission_cutover_rest_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -20,9 +20,9 @@ REASON = {"X-Bookflow-Reason": "people-only witness"}
 def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_changes_who_can_do_what():
     registry.load_all()
     tip = runtime.current_catalog()
-    # The tip has since moved on (sales-tax-adjustment-v1, restore-v1, then party-merge-v1), which carry these admin actions
-    # and add their own people-only acts: restoring a deleted journal entry or invoice, merging and unmerging
-    # customers and vendors.
+    # The tip has since moved on (sales-tax-adjustment-v1, restore-v1, party-merge-v1, then cutover-rest-v1), which carry
+    # these admin actions and add their own people-only acts: restoring a deleted journal entry or invoice, merging and
+    # unmerging customers and vendors. cutover-rest-v1's `vendor 1099-opening` is not one: an agent may set it.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge'}

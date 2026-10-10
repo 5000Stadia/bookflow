@@ -88,6 +88,7 @@ class Books:
         self.employees = rows(c.employees)
         self.other_names = rows(c.other_names)
         self.payment_methods = rows(c.payment_methods)
+        self.openings_1099 = {(row["vendor_id"], row["year"]): row for row in rows(c.vendor_1099_openings)}
         # Each account's reconciliation as it stands: the opening it adopted, and its open opening drafts.
         self.reconciliation: dict[str, dict[str, Any]] = defaultdict(lambda: {"opening": None, "drafts": []})
         for row in conn.execute(sa.select(c.reconciliation_accounts.c.account_id, c.reconciliation_accounts.c.opening_id)):
@@ -2025,12 +2026,111 @@ def _reconciliation_openings(built: Built, inp) -> None:
 
 
 def _vendor_1099(built: Built, inp) -> None:
-    """Placeholder until the 1099 openings land."""
+    """What each 1099 vendor was paid so far this year, from the old books' 1099 Summary.
+
+    It comes in as the vendor's opening 1099 amount for the year (`vendor 1099-opening`), through
+    the cutover date, less what the move-in itself brings in as paid to the vendor that year -- its
+    uncleared checks, which the 1099 summary counts on their own dates -- so the year's summary here
+    shows exactly the old books' figure as of the cutover, and the year whole from then on.
+    """
+    reports = built.sources.vendor_1099
+    if not reports:
+        return
+    if len(reports) > 1:
+        _problem(built, "blocking", "several_1099_summaries", "more than one 1099 Summary was given", "Give one, for January 1 to the cutover date.",
+                 file=reports[1].file)
+        return
+    report, year = reports[0], int(inp.as_of[:4])
+    if (report.date_from, report.date_to) != (f"{year}-01-01", inp.as_of):
+        covers = f"{report.date_from} to {report.date_to}" if report.date_from else "dates its heading does not say"
+        _problem(built, "blocking", "vendor_1099_dates", f"the 1099 Summary covers {covers}, not {year}-01-01 to {inp.as_of}, the year so far",
+                 src._1099_FIX, file=report.file)
+        return
+    rows = {src.key(row.path): row for row in built.sources.lists["vendor"]}
+    for row in report.rows:
+        if not row.total:
+            continue
+        target = built.targets.get("vendor:" + src.key(row.vendor))
+        if target is None:
+            continue
+        if row.total < 0:
+            _problem(built, "blocking", "vendor_1099_negative", f"{row.vendor} was paid {_show(built, row.total)} this year in the old books",
+                     "Correct the vendor's payments in the old books and export the 1099 Summary again.", file=row.file, line=row.line,
+                     subject=row.vendor)
+            continue
+        listed = rows.get(src.key(row.vendor))
+        record = next((v for v in built.books.vendors if v["id"] == target["id"]), None) if target["id"] else None
+        eligible = (bool(record["eligible_1099"]) if record is not None and not target.get("made")
+                    else listed is None or listed.get("1099").upper() == "Y")
+        if not eligible:
+            _problem(built, "warning", "not_1099_vendor",
+                     f"{row.vendor} is on the old books' 1099 Summary ({_show(built, row.total)}) but is not marked eligible for a 1099, so "
+                     "its payments so far do not come in",
+                     "Mark the vendor eligible for a 1099 (`vendor update` eligible_1099), then set them with `vendor 1099-opening`.",
+                     file=row.file, line=row.line, subject=row.vendor)
+            continue
+        vendor = target["id"] or Ref(target["ref"])
+        own = sum(step.clearing for step in built.steps if step.kind == "uncleared_item" and step.extra.get("bank")
+                  and step.extra.get("payee") == ("vendor", vendor) and f"{year}-01-01" <= (step.date or "") <= inp.as_of)
+        opening = row.total - own
+        if opening < 0:
+            _problem(built, "blocking", "vendor_1099_below_payments",
+                     f"{row.vendor}'s 1099 total this year is {_show(built, row.total)}, less than the {_show(built, own)} of uncleared "
+                     "checks to it the move-in brings in", "Export the 1099 Summary and the uncleared items from the same books.",
+                     file=row.file, line=row.line, subject=row.vendor)
+            continue
+        outside_id = f"1099:{src.key(row.vendor)}:{year}"
+        linked = built.books.link(outside_id, "vendor_1099_opening")
+        held = built.books.openings_1099.get((target["id"], year)) if target["id"] else None
+        if held is not None and held["id"] != linked:
+            _problem(built, "warning", "vendor_1099_opening_exists",
+                     f"{row.vendor} already has {_show(built, held['amount_minor_units'])} set as paid in {year} before the books began "
+                     f"here; the move-in leaves it, and the old books' figure less the uncleared checks is {_show(built, opening)}",
+                     "Set it with `vendor 1099-opening` if the old books' figure is right.", file=row.file, line=row.line, subject=row.vendor)
+            continue
+        if held is not None and held["amount_minor_units"] != opening:
+            _problem(built, "warning", "vendor_1099_changed",
+                     f"{row.vendor}'s payments before the move-in came in as {_show(built, held['amount_minor_units'])} and the old books "
+                     f"now say {_show(built, opening)}", "Set it again with `vendor 1099-opening` if the old books' figure is right.",
+                     file=row.file, line=row.line, subject=row.vendor)
+        if not opening:
+            continue
+        less = f", less {_show(built, own)} of uncleared checks that count on their own dates" if own else ""
+        built.steps.append(Step("vendor_1099_opening", outside_id, f"{year} 1099 payments so far · {row.vendor}",
+                                None if linked else "vendor 1099-opening",
+                                {"vendor": vendor, "year": year, "as_of": inp.as_of, "amount": _amount_text(built, opening)},
+                                "already_in" if linked else "create", linked, "vendor_1099_opening", amount=opening, date=inp.as_of,
+                                detail=f"{_show(built, row.total)} in the old books' 1099 Summary{less}"))
 
 
 def _vendor_1099_section(s, ctx, built: Built, inp) -> CutoverTieSection:
+    """Each vendor on the old books' 1099 Summary against this company's 1099 summary for the same dates."""
     currency = built.books.currency
-    return CutoverTieSection(source="none", source_total=money(0, currency), books_total=money(0, currency), differences=0, rows=[])
+    reports = built.sources.vendor_1099
+    if not reports:
+        return CutoverTieSection(source="none", source_total=money(0, currency), books_total=money(0, currency), differences=0, rows=[])
+    year = inp.as_of[:4]
+    books = {row["vendor_id"]: row for row in _whole(s, ctx, "report vendor-1099-summary", {
+        "date_from": f"{year}-01-01", "date_to": inp.as_of, "above_threshold_only": False})}
+    rows, differences, seen = [], 0, set()
+    for row in sorted(reports[0].rows, key=lambda r: r.vendor.lower()):
+        target = built.targets.get("vendor:" + src.key(row.vendor))
+        record_id = target["id"] if target else None
+        seen.add(record_id)
+        books_value = books[record_id]["payments"]["minor_units"] if record_id in books else 0
+        difference = row.total - books_value
+        differences += bool(difference)
+        rows.append(CutoverTieRow(name=row.vendor, record_id=record_id, column="payments", source=money(row.total, currency),
+                                  books=money(books_value, currency), difference=money(difference, currency)))
+    for vendor_id, mine in books.items():
+        value = mine["payments"]["minor_units"]
+        if vendor_id not in seen and value:
+            differences += 1
+            rows.append(CutoverTieRow(name=mine["current_vendor_name"], record_id=vendor_id, column="payments",
+                                      source=money(0, currency), books=money(value, currency), difference=money(-value, currency)))
+    return CutoverTieSection(source="1099 Summary", source_total=money(sum(r.total for r in reports[0].rows), currency),
+                             books_total=money(sum(mine["payments"]["minor_units"] for mine in books.values()), currency),
+                             differences=differences, rows=rows)
 
 
 def _account_name(built: Built, account_id: str | None) -> str:

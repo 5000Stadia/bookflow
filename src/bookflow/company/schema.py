@@ -1172,3 +1172,6 @@ from bookflow.company.sales_tax_adjustment_schema import define_tables as _defin
 globals().update(_define_sales_tax_adjustment_tables(metadata, _column, _table))
 from bookflow.company.party_merge_schema import define_tables as _define_party_merge_tables
 globals().update(_define_party_merge_tables(metadata, _column, _table))
+
+from bookflow.company.vendor_1099_opening_schema import define_tables as _define_vendor_1099_opening_tables
+globals().update(_define_vendor_1099_opening_tables(metadata, _column, _table))

@@ -20,6 +20,12 @@ accounts are all mapped to that one box.
 **The threshold is the year's filing threshold for the 1099-NEC**: 600.00 for payments
 made before 2026 and 2,000.00 for payments made in 2026 or later, read for the year of
 ``date_to``. The inflation adjustment the law applies after 2026 is not applied.
+
+**Payments before the books began here count too.** A company that moved in mid-year keeps
+what each 1099 vendor was paid so far in the old books as an opening amount (`vendor
+1099-opening`, set by the move-in from the old books' 1099 Summary): paid from January 1
+through its ``as_of`` day, it is counted when the report's dates include that day, as an
+opening balance dated the cutover is, and shown on its own as ``opening_payments``.
 """
 from __future__ import annotations
 
@@ -61,6 +67,7 @@ class Vendor1099Totals(StrictModel):
     reportable: MoneyOutput
     vendors_meeting_threshold: int = Field(ge=0)
     payments: MoneyOutput
+    opening_payments: MoneyOutput = Field(description="Of the payments, what the vendors listed were paid before the books began here")
     card_payments_excluded: MoneyOutput
 
 
@@ -71,6 +78,9 @@ class Vendor1099Row(StrictModel):
     active: bool
     box: Literal["nonemployee_compensation"]
     payments: MoneyOutput
+    opening_payments: MoneyOutput = Field(description=(
+        "Of the payments, what the vendor was paid before the books began here (`vendor 1099-opening`), counted when the "
+        "report's dates include its as_of day"))
     card_payments_excluded: MoneyOutput
     meets_threshold: bool
 
@@ -89,13 +99,18 @@ WITH paid AS (
  JOIN accounts a ON a.id=l.account_id
  WHERE l.name_type='vendor' AND a.type IN ('bank', 'credit_card')
    AND b.effective_date>=:date_from AND b.effective_date<=:date_to
+ UNION ALL
+ SELECT """ + survivor_sql("vendor", "o.vendor_id") + """ AS vendor, 'opening' AS account_type, o.amount_minor_units AS amount
+ FROM vendor_1099_openings o
+ WHERE o.amount_minor_units<>0 AND o.as_of>=:date_from AND o.as_of<=:date_to
 ), by_vendor AS (
  SELECT vendor,
-   coalesce(bookflow_sum_int(CASE WHEN account_type='bank' THEN amount END),'0') AS payments,
-   coalesce(bookflow_sum_int(CASE WHEN account_type='credit_card' THEN amount END),'0') AS card
+   coalesce(bookflow_sum_int(CASE WHEN account_type IN ('bank', 'opening') THEN amount END),'0') AS payments,
+   coalesce(bookflow_sum_int(CASE WHEN account_type='credit_card' THEN amount END),'0') AS card,
+   coalesce(bookflow_sum_int(CASE WHEN account_type='opening' THEN amount END),'0') AS opening
  FROM paid GROUP BY vendor
 )
-SELECT v.id, v.name, v.name_key, v.active, p.payments, p.card
+SELECT v.id, v.name, v.name_key, v.active, p.payments, p.card, p.opening
 FROM by_vendor p JOIN vendors v ON v.id=p.vendor
 WHERE v.eligible_1099=1 AND (p.payments!='0' OR p.card!='0')
 ORDER BY v.name_key, v.id
@@ -112,12 +127,12 @@ def vendor_1099_summary(inp: Vendor1099SummaryInput, s, *, principal_id=None) ->
         raw, currency = s.company.raw, state.metadata.currency
         threshold = threshold_for(int(inp.date_to[:4]))
         vendors = []
-        for vendor_id, name, _key, active, payments, card in raw.execute(
+        for vendor_id, name, _key, active, payments, card, opening in raw.execute(
                 _PAID, {"date_from": inp.date_from, "date_to": inp.date_to}):
             payments = money(int(payments), currency).minor_units
             card = money(int(card), currency).minor_units
             vendors.append(dict(vendor_id=vendor_id, name=name, active=bool(active), payments=payments,
-                                card=card, meets=payments >= threshold))
+                                card=card, opening=money(int(opening), currency).minor_units, meets=payments >= threshold))
         reportable = sum(vendor["payments"] for vendor in vendors if vendor["meets"])
         meeting = sum(1 for vendor in vendors if vendor["meets"])
         listed = [vendor for vendor in vendors if vendor["meets"] or not inp.above_threshold_only]
@@ -125,11 +140,13 @@ def vendor_1099_summary(inp: Vendor1099SummaryInput, s, *, principal_id=None) ->
         rows = [Vendor1099Row(vendor_id=vendor["vendor_id"], current_vendor_name=vendor["name"],
             display_vendor_label=str(vendor["name"]) if vendor["name"] is not None else NO_VENDOR,
             active=vendor["active"], box="nonemployee_compensation",
-            payments=money(vendor["payments"], currency), card_payments_excluded=money(vendor["card"], currency),
+            payments=money(vendor["payments"], currency), opening_payments=money(vendor["opening"], currency),
+            card_payments_excluded=money(vendor["card"], currency),
             meets_threshold=vendor["meets"]) for vendor in page[:inp.limit]]
         return Vendor1099SummaryOutput(metadata=state.metadata, rows=rows, count=len(rows),
             totals=Vendor1099Totals(threshold=money(threshold, currency), reportable=money(reportable, currency),
                 vendors_meeting_threshold=meeting,
                 payments=money(sum(vendor["payments"] for vendor in listed), currency),
+                opening_payments=money(sum(vendor["opening"] for vendor in listed), currency),
                 card_payments_excluded=money(sum(vendor["card"] for vendor in listed), currency)),
             next_cursor=ledger._continuation(state, offset, len(rows), len(page) > inp.limit, s.company))

@@ -346,7 +346,7 @@ def test_1099_summary_counts_bank_payments_to_eligible_vendors(client):
     assert {key: (_minor(value) if isinstance(value, dict) else value)
             for key, value in result["totals"].items()} == {
         "threshold": 200000, "reportable": 240000, "vendors_meeting_threshold": 1,
-        "payments": 240000, "card_payments_excluded": 15000}
+        "payments": 240000, "opening_payments": 0, "card_payments_excluded": 15000}
     # Before the check was written nothing was paid, so nobody meets the threshold, and with
     # the filter off the card payment is still not counted.
     early = _run(client, "report vendor-1099-summary", {"date_from": "2026-01-01", "date_to": "2026-12-08",
