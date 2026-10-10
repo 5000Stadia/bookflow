@@ -349,3 +349,59 @@ def plan_list(inp: AttachmentListInput, ctx: Context, s) -> Plan:
     cursor = base64.urlsafe_b64encode(_Cursor(**scope, before=rows[-1]["id"]).model_dump_json().encode()).decode().rstrip("=") if more else None
     names = _link_names(s, rows)
     return Plan(AttachmentPage(items=[_link_out(s, r, attachments[r["attachment_id"]], names) for r in rows], count=len(rows), has_more=more, next_cursor=cursor))
+
+
+# What `attachment text` reads whole: a statement's summary box, a letter, an export. Anything larger
+# is downloaded with `attachment get`; nothing is cut short.
+TEXT_LIMIT = 65536
+TEXT_EXTENSIONS = frozenset(('.txt', '.text', '.csv', '.tsv', '.ofx', '.qfx', '.qbo', '.iif', '.json', '.xml', '.md', '.htm', '.html'))
+TEXT_MEDIA = frozenset(('application/json', 'application/xml', 'application/csv', 'application/x-ofx', 'application/vnd.intu.qfx',
+                        'application/x-qfx', 'application/x-iif'))
+
+
+class AttachmentTextOut(AttachmentOut):
+    text: str = Field(description='The whole file as text.')
+    encoding: str = Field(description='utf-8 (a byte order mark dropped), else windows-1252, as the desktop product writes.')
+    line_count: int
+
+
+def _textual(row):
+    import os
+    media = row["media_type"].lower()
+    return (media.startswith("text/") or media in TEXT_MEDIA
+            or os.path.splitext(row["original_filename"].lower())[1] in TEXT_EXTENSIONS)
+
+
+attachment_text = command("attachment text", scope="company",
+    description=("Read a small text attachment (a statement's summary box, a letter, a CSV or OFX file; at most 64 KiB) "
+                 "as text in the result, with its original metadata. Over MCP this is how a text file already "
+                 "attached is read; `attachment get` downloads any file's bytes."),
+    input_model=AttachmentSelector, output_model=AttachmentTextOut, required_role="member", positional=["attachment"],
+    error_codes=["E_RECORD_NOT_FOUND", "E_IO", "E_DB_BUSY", "E_VALUE_RANGE", "E_VALIDATION"])
+
+
+@attachment_text
+def plan_text(inp: AttachmentSelector, ctx: Context, s) -> Plan:
+    from bookflow.core.errors import BookflowError
+    _pending(s)
+    row = _get(s, "attachment", inp.attachment)
+    _available(s, row)
+    if not _textual(row):
+        raise BookflowError("E_VALIDATION", f"{row['original_filename']} ({row['media_type']}) is not a text file; download it with `attachment get`.",
+                            {"fields": [{"field": "attachment", "problem": "not a text file"}]})
+    if row["size_bytes"] > TEXT_LIMIT:
+        raise BookflowError("E_VALUE_RANGE", f"{row['original_filename']} is {row['size_bytes']} bytes, more than the {TEXT_LIMIT} `attachment text` reads; download it with `attachment get`.",
+                            {"field": "attachment", "size_bytes": row["size_bytes"], "limit": TEXT_LIMIT})
+    with store_api.open_verified(_store_limit(s)[0], store_api.BodyInfo(row["sha256"], row["size_bytes"])) as body:
+        raw = body.read(TEXT_LIMIT + 1)
+    if b"\x00" in raw:
+        raise BookflowError("E_VALIDATION", f"{row['original_filename']} holds binary data, not text; download it with `attachment get`.",
+                            {"fields": [{"field": "attachment", "problem": "not a text file"}]})
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    try:
+        text, encoding = raw.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        text, encoding = raw.decode("cp1252", errors="replace"), "windows-1252"
+    out = _out(s, row, AttachmentOut)
+    return Plan(AttachmentTextOut(**out.model_dump(), text=text, encoding=encoding, line_count=len(text.splitlines())))

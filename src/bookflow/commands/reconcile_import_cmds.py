@@ -78,6 +78,11 @@ class ImportInput(m.Dated):
         "Use the CSV mapping saved under this name for the account; columns given in csv_mapping override it."))
     save_mapping: str = Field('', max_length=80, description=(
         'Save the CSV mapping used for this import under this name for the account (a newer save of a name replaces it for later use).'))
+    limit: int | None = Field(None, strict=True, ge=1, le=1000, description=(
+        'Statement lines to return in this result, from the cursor on; omitted, every line comes back. '
+        'The counts, the ticking and cleared_without_line always cover the whole file.'))
+    cursor: str | None = Field(None, max_length=512, description=(
+        'next_cursor from an earlier import of the same file on the same account: the lines after those it returned.'))
 
     @model_validator(mode='after')
     def target(self):
@@ -145,7 +150,38 @@ class ImportOutput(m.Model):
     cleared_without_line: tuple[Suggestion, ...] = Field(description=(
         'Movements ticked on the draft that no line of this statement accounts for: cleared '
         'without a statement line. Flagged, never refused; check each before finishing.'))
+    has_more: bool = Field(False, description='More lines follow this page: pass next_cursor as cursor, with the same file, for them.')
+    next_cursor: str | None = Field(None, description='The cursor for the lines after this page; null on the last page.')
     next_step: str
+
+
+def _page_key(text, account_id):
+    import hashlib
+    return hashlib.sha256(f'{account_id}\n{text}'.encode('utf-8')).hexdigest()[:32]
+
+
+def _page(lines, inp, text, account_id):
+    """The lines this result returns, and the cursor for the rest: a page that says there is more."""
+    import base64
+    import json
+    key = _page_key(text, account_id)
+    start = 0
+    if inp.cursor is not None:
+        try:
+            raw = inp.cursor.encode('ascii')
+            value = json.loads(base64.urlsafe_b64decode(raw + b'=' * (-len(raw) % 4)))
+            start, given = value['o'], value['f']
+            valid = type(start) is int and 0 < start <= len(lines) and given == key
+        except (ValueError, UnicodeError, KeyError, TypeError):
+            valid = False
+        if not valid:
+            raise files.invalid('cursor', 'not a cursor from an import of this same file on this account; '
+                                          'start again without a cursor')
+    end = len(lines) if inp.limit is None else min(len(lines), start + inp.limit)
+    more = end < len(lines)
+    cursor = (base64.urlsafe_b64encode(json.dumps({'o': end, 'f': key}).encode()).decode().rstrip('=')
+              if more else None)
+    return lines[start:end], start, more, cursor
 
 
 def _places(currency):
@@ -253,7 +289,17 @@ def _prepare(inp, ctx, s, ids):
         text = attachment_text(s, inp.attachment, 'attachment')[1]
     else:
         text = inp.content
-    parsed = files.parse(text, inp.format, places, mapping)
+    try:
+        parsed = files.parse(text, inp.format, places, mapping)
+    except BookflowError as error:
+        if inp.attachment is None or error.code != 'E_VALIDATION':
+            raise
+        # A text file that is not a statement's transactions -- the summary box with the closing date
+        # and the new balance, a letter from the bank -- is read with `attachment text`, not imported.
+        hint = (f' If this attachment is not a list of statement transactions (a statement summary with the '
+                f'closing date and balance, say), read it with `attachment text {inp.attachment}`.')
+        raise BookflowError('E_VALIDATION', message=(error.message or 'Invalid statement file.') + hint,
+                            details={**(error.details or {}), 'read_with': f'attachment text {inp.attachment}'}) from None
     if inp.save_mapping and parsed.format != 'csv':
         raise files.invalid('save_mapping', 'only a CSV file has a column mapping to save')
     if parsed.currency and parsed.currency.upper() != currency:
@@ -277,7 +323,8 @@ def _prepare(inp, ctx, s, ids):
     elif inp.start:
         if statement_date is None or ending is None:
             raise files.invalid('ending_balance' if statement_date else 'statement_date',
-                                'the file gives no statement date and ending balance; pass statement_date and ending_balance')
+                                'the file gives no statement date and ending balance; pass statement_date and ending_balance'
+                                ' (a statement summary attached as a text file reads with `attachment text`)')
         draft = _statement_draft(snapshot, account_id, statement_date)
         if draft is None:
             opening_draft = _opening_draft(snapshot, account_id)
@@ -359,9 +406,14 @@ def _prepare(inp, ctx, s, ids):
             step = (f'{len(unsupported)} ticked movement(s) match no line of this statement (cleared without '
                     'a statement line): untick each one the bank did not show, with `reconcile mark` '
                     'action unmark, unless you know why it is missing. ' + step)
+    page, first, more, next_cursor = _page(out_lines, inp, text, account_id)
+    if more or first:
+        step = (f'This result holds lines {first + 1} to {first + len(page)} of {len(out_lines)}'
+                + (': pass next_cursor as cursor, with the same file, for the rest. ' if more else '. ') + step)
     output = ImportOutput(account_id=account_id, currency=currency, format=parsed.format,
                           statement_date=statement_date, ending_balance=ending, counts=counts,
-                          draft=value, draft_started=started is not None, lines=tuple(out_lines),
+                          draft=value, draft_started=started is not None, lines=tuple(page),
+                          has_more=more, next_cursor=next_cursor,
                           cleared_without_line=tuple(
                               Suggestion(movement=c.ref[0], group_fingerprint=c.ref[1], date=c.date,
                                          amount=c.amount, number=c.number, payees=c.payees,

@@ -2438,14 +2438,21 @@ def _stopped(step: Step, error: BookflowError, created: int) -> BookflowError:
                  "cause": error.code, "cause_details": error.details})
 
 
+def _read_ctx(ctx):
+    return ctx.model_copy(update={"idempotency_key": None}) if ctx.idempotency_key else ctx
+
+
 def _read(s, ctx, name: str, raw: dict) -> dict:
-    """A read command inside the move-in, the session left as it was."""
+    """A read command inside the move-in, the session left as it was.
+
+    It runs without the move-in's idempotency key: that key is `cutover apply`'s own, and a read
+    takes none (a key passed on would refuse the read part-way through the apply)."""
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session, validate_input
     command = registry.get(name)
     saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run)
     try:
-        return run_in_session(command, validate_input(command, raw), ctx, s)
+        return run_in_session(command, validate_input(command, raw), _read_ctx(ctx), s)
     finally:
         s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved
 
@@ -2462,7 +2469,10 @@ def _place_opening(s, ctx, built: Built, step: Step, draft_id: str, made: dict[s
     outstanding = {made[o] for o in step.extra.get("outstanding", ()) if made.get(o)}
     entries, cursor, version = [], None, row.version
     while True:
-        page = _read(s, ctx, "reconcile candidates", {"draft": draft_id, "limit": 200, **({"cursor": cursor} if cursor else {})})
+        try:
+            page = _read(s, ctx, "reconcile candidates", {"draft": draft_id, "limit": 200, **({"cursor": cursor} if cursor else {})})
+        except BookflowError as error:
+            raise _stopped(step, error, created) from None
         version = page["draft_version"]
         for candidate in page["items"]:
             moved = candidate["movement"]["transaction_id"]
@@ -2516,6 +2526,49 @@ def _set_default_tax_item(s, ctx) -> str | None:
         s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved
         if s.company is not None and s.company.write_transaction:
             s.company.raw.rollback()
+
+
+# The document series the move-in brings numbered documents into: the series row and the document
+# types that draw from it (a credit memo takes the next invoice number, as in the anchor product).
+CARRIED_SERIES = {"invoice": ("invoice", "credit_memo")}
+
+
+def _carry_number_series(s, made: dict[str, str]) -> dict[str, str]:
+    """Move each series past the highest number the move-in brought, as the anchor product's next
+    number follows the last one used: after open invoices 2380 to 2386 come in, the next new invoice
+    is 2387, not 1. Only a number that is all digits after the series' prefix counts; a series already
+    further on stays where it is, so a rerun changes nothing. Checks need nothing here: `check post`
+    moves its bank account's next check number past every number it is given. Returns, per series it
+    moved, the next number it will hand out."""
+    ids = list(set(made.values()))
+    moved: dict[str, str] = {}
+    if not ids:
+        return moved
+    for series, types in CARRIED_SERIES.items():
+        row = s.company.conn.execute(sa.select(c.sequences).where(c.sequences.c.name == series)).mappings().first()
+        prefix, current = (row["prefix"], row["next_number"]) if row else ("", 1)
+        top = None
+        for start in range(0, len(ids), 500):
+            for (number,) in s.company.conn.execute(sa.select(c.transactions.c.number).where(
+                    c.transactions.c.id.in_(ids[start:start + 500]), c.transactions.c.type.in_(types))):
+                digits = (number or "")[len(prefix):] if (number or "").startswith(prefix) else ""
+                if digits.isascii() and digits.isdigit() and len(digits) <= 18:
+                    top = max(top or 0, int(digits))
+        if top is None or top + 1 <= current:
+            continue
+        from sqlalchemy.dialects.sqlite import insert
+        values = dict(name=series, next_number=top + 1, prefix=prefix)
+        s.company.raw.execute("BEGIN IMMEDIATE")
+        try:
+            s.company.conn.execute(insert(c.sequences).values(**values).on_conflict_do_update(
+                index_elements=["name"], set_=dict(next_number=top + 1)))
+            s.commits.commit(s.company, "cutover.apply")
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+        moved[series] = f"{prefix}{top + 1}"
+    return moved
 
 
 def apply(plan_: Plan, ctx, s) -> Applied:
@@ -2572,9 +2625,12 @@ def apply(plan_: Plan, ctx, s) -> Applied:
                 _place_opening(s, ctx, built, step, record_id, made, created)  # part of making the opening
         already = sum(1 for step in built.steps if step.action == "already_in")
         default_tax = _set_default_tax_item(s, ctx)
+        series = _carry_number_series(s, made)
         summary = _summary(built, applied=True)
         if default_tax:
             summary += f"; {default_tax}, the only sales tax item, is now the company's default"
+        if series.get("invoice"):
+            summary += f"; the next invoice number is {series['invoice']}, after the last one the old books used"
         out = plan_output(built, inp, CutoverApplyOutput, created=created, already_in=already,
                           clearing_account_id=built.clearing_id, default_sales_tax_item=default_tax,
                           summary=summary)
@@ -2600,7 +2656,7 @@ def _whole(s, ctx, name: str, raw: dict) -> list[dict]:
     command = registry.get(name)
     rows, cursor = [], None
     while True:
-        page = run_in_session(command, validate_input(command, {**raw, "limit": 200, **({"cursor": cursor} if cursor else {})}), ctx, s)
+        page = run_in_session(command, validate_input(command, {**raw, "limit": 200, **({"cursor": cursor} if cursor else {})}), _read_ctx(ctx), s)
         rows.extend(page["rows"])
         cursor = page.get("next_cursor")
         if not cursor:

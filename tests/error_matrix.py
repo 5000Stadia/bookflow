@@ -1811,3 +1811,12 @@ MATRIX['vendor 1099-opening'] = {
     'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
     'E_DIRECTIVE_INACTIVE': 'context directive inactive',
 }
+
+# A small text attachment read as text (R170 blind July): the summary box of a statement, kept as an attachment.
+MATRIX['attachment text'] = {
+    'E_RECORD_NOT_FOUND': 'attachment absent',
+    'E_VALIDATION': 'not a text file by its media type or name, or a body holding binary data',
+    'E_VALUE_RANGE': 'larger than the 64 KiB attachment text reads, or an invalid company byte limit',
+    'E_IO': 'missing, collected, corrupt or unsafe body',
+    'E_DB_BUSY': 'collection pending',
+}
