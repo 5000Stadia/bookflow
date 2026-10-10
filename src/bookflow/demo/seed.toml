@@ -2472,7 +2472,7 @@ input = { customer = "${bounce_customer.id}", date = "2026-12-06", amount = "200
 command = "payment bounce"
 capture = "bounce_record"
 reason = "Bank returned check 5001 unpaid"
-input = { payment = "${bounce_payment.id}", expected_version = "${bounce_payment.version}", date = "2026-12-08", operation_key = "DEMO-BOUNCE-1", bank_fee = { amount = "15.00", account = "Bank Fees" }, customer_fee = { amount = "25.00", item = "${pay_item.id}", number = "DEMO-BOUNCE-FEE-1" } }
+input = { payment = "${bounce_payment.id}", expected_version = "${bounce_payment.version}", date = "2026-12-08", operation_key = "DEMO-BOUNCE-1", bank_fee_amount = "15.00", bank_fee_account = "Bank Fees", customer_fee_amount = "25.00", customer_fee_item = "${pay_item.id}", customer_fee_number = "DEMO-BOUNCE-FEE-1" }
 
 # A bad debt written off with no cash (R177): the anchor's Receive Payments for 0.00 with the
 # balance taken as a discount to a Bad Debt expense account. The customer is inactive afterwards,
