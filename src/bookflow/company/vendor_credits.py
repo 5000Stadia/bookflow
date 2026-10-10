@@ -6,6 +6,17 @@ falls by exactly what was credited and the expense that was recognised comes bac
 one reverses that at its own date and keeps every revision readable. That is the bill's
 lifecycle with the signs swapped, deliberately.
 
+**Two tabs, like the bill.** A credit has an Expenses grid and an Items grid, and it may be
+entered on either or on both; they are two profile tables over one ``purchase`` envelope
+family (``vendor_credit_expense_lines`` and ``vendor_credit_item_lines``), resolved by the
+bill's own resolvers, so an item row is written by the code that writes a bill's. Both credit
+the account they captured and debit Accounts Payable once for the sum. An item that holds stock
+credits Inventory Asset and sends the quantity back at the *credited* amount -- one
+``vendor_return`` movement through ``company/inventory_effects.py`` -- so the average cost of
+what stays moves, which is the anchor's rule for stock returned to a vendor. A correction
+reverses the movement it wrote and takes the new grid's; a void reverses it and stops; a return
+dated before later sales recosts those sales exactly as a backdated bill does.
+
 **It is a source, not a payable.** A bill creates an ``ap_obligation_keys`` row because
 somebody owes it; a credit creates none, because nobody owes a credit -- what it has is
 capacity to settle something else. ``report unpaid-bills`` lists documents of type ``bill``,

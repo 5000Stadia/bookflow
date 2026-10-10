@@ -5,6 +5,10 @@ A vendor credit is the bill read backwards, and its verbs say so: ``post``, ``sh
 payment's. That is deliberate -- whichever of the three payables documents a person learned
 first, the next one is already familiar.
 
+**Two tabs, one envelope.** ``expenses`` and ``items`` are the bill's two grids. An item row is
+the bill's ``BillItemInput`` unchanged, because a credit returns what a bill bought; for stock it
+takes the quantity off the shelf at the credited cost.
+
 **Two settlements, one shape.** ``VendorCreditSettlementOutput`` is
 ``BillPaymentSettlementOutput`` field for field, because what a credit has free and what a
 check has free is the same question about the same ``ap_applications`` edge. A reader that can

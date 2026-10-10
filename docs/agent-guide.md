@@ -562,6 +562,29 @@ agent with `E_PERMISSION`. When the difference will not reach zero, leave the dr
 and tell the owner the account, the statement date and the remaining difference from
 `reconcile preview`.
 
+## Stock sent back to a vendor
+
+Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with
+`item`, `quantity` and either `unit_cost` (what the vendor credits for one) or `amount` (the whole
+line), plus the bill's optional `customer`, `billable` and class. Do not take the stock out with
+`inventory adjust` into a clearing account and then credit the clearing account: that costs the
+units at the average, not at what the vendor credited, and leaves two documents where one credit
+note arrived. `expenses` rows (an account and an amount) stay for things that are not items,
+freight or a restocking fee, and the two tabs can be used together.
+
+A stocked item credits Inventory Asset the credited amount and takes the quantity off the shelf
+on the credit's date. The credit decides what the units were worth, so the average cost of what
+stays moves; a credit of 4 at 42.10 against an average of 41.55 leaves the rest costing a little
+less. Any other item credits the expense account its purchase side names. Applying the credit
+to bills and paying are unchanged (`vendor-credit apply`).
+
+Only stock on hand on the credit's date can go back. A refusal names the item, the date and
+`items`: send back no more than is there, or, when you are returning all of it, credit exactly
+what it is worth (the refusal prints that figure). `vendor-credit update` with `items` replaces
+that grid, and one left out keeps its captured rows and the stock they moved; `vendor-credit
+void` puts the stock back at the value it left at. A return dated before later sales recosts
+those sales with their own dated entries, as a backdated bill does.
+
 ## Deleting duplicate documents
 
 Use `invoice delete`, `sales-receipt delete`, `check delete`, `card-charge delete`,

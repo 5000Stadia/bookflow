@@ -19,4 +19,5 @@ Database: `company`.
 | `supplier_reference` | VARCHAR(128) | yes | — | — | — | — | The supplier's own credit-note number, as entered; null when blank. |
 | `supplier_reference_key` | VARCHAR(256) | yes | — | — | ix_vendor_credit_profiles_reference | — | NFC-normalized, trimmed and case-folded reference used to detect a repeat; null when blank. |
 | `expense_total_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of the credited expense lines. |
+| `item_total_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of the credited item lines. |
 | `profile_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of resolved header facts and input origins. |

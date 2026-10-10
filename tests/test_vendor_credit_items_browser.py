@@ -98,8 +98,11 @@ def test_correcting_a_credit_with_items_opens_both_grids_on_what_was_captured(re
 
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/vendor-credit/{credit["id"]}/update')
     b.wait_for('!!document.querySelector("[data-generated-form]")')
-    b.wait_for('!!document.querySelector("[data-line-tab]")')
-    _open_tab(b, 'items')
+    # The correction is the generated form, not the document window: both collections are on
+    # it, each baselined on what the revision captured.
+    b.wait_for('!!document.querySelector("[data-collection-path=items]")')
+    assert b.evaluate('document.querySelectorAll("[data-collection-path=expenses] > '
+                      '[data-collection-items] > [data-collection-item]").length') == 0
     assert _value(b, _item(b, 0, 'item')) == books['item']
     assert _value(b, _item(b, 0, 'quantity')) == '4'
     assert _value(b, _item(b, 0, 'unit_cost')) == '42.10'
