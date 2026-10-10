@@ -18,13 +18,17 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.commands.common import CommonOut
-from bookflow.company.bill_models import MoneyOutput, SupplierReference, Text, reference_key
+from bookflow.company.bill_models import (
+    BillItemInput, MoneyOutput, SupplierReference, Text, reference_key,
+)
 from bookflow.company.bill_payment_models import BillApplicationOutput
 from bookflow.company.journal_models import (
     MoneyInput, _Date, _Input, _Number, _Selector, _Version,
 )
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput
-from bookflow.company.vendor_credit_facts import BillExpenseProfile, VendorCreditProfile
+from bookflow.company.vendor_credit_facts import (
+    BillExpenseProfile, BillItemProfile, VendorCreditProfile,
+)
 from bookflow.core.models import WriteOutput
 
 __all__ = ['reference_key']
@@ -60,13 +64,26 @@ class VendorCreditExpenseInput(_Input):
         return self
 
 
-Expenses = Annotated[list[VendorCreditExpenseInput], Field(min_length=1, max_length=200)]
+Expenses = Annotated[list[VendorCreditExpenseInput], Field(min_length=0, max_length=200)]
+# The Items tab is the bill's, row for row: the same input, the same validation. A row names an
+# item, a quantity and a cost; the item decides which account is credited, and for stock that
+# account is Inventory Asset and the quantity leaves the shelf at the credited amount.
+Items = Annotated[list[BillItemInput], Field(min_length=0, max_length=200)]
 
 
 class VendorCreditPostInput(_Input):
+    """A new vendor credit: money a vendor owes back, on the Expenses tab, the Items tab or both.
+
+    ``expenses`` names the accounts a cost went to; ``items`` names things sent back. An item row
+    for stock takes the quantity off the shelf at the credited cost -- its ``unit_cost`` times its
+    ``quantity``, or an ``amount`` typed outright -- and the average cost of what remains moves
+    with it. Write at least one row on one of the tabs.
+    """
+
     date: _Date
     vendor: _Selector
-    expenses: Expenses
+    expenses: Expenses | None = None
+    items: Items | None = None
     number: _Number | None = None
     ap_account: _Selector | None = None
     supplier_reference: SupplierReference | None = None
@@ -75,7 +92,9 @@ class VendorCreditPostInput(_Input):
 
     @model_validator(mode='after')
     def new_lines(self) -> Self:
-        if any(line.line_id is not None for line in self.expenses):
+        if not (self.expenses or self.items):
+            raise ValueError('a vendor credit needs at least one expense row or item row')
+        if any(line.line_id is not None for line in (self.expenses or []) + (self.items or [])):
             raise ValueError('new credited lines cannot supply an existing line identity')
         return self
 
@@ -83,9 +102,9 @@ class VendorCreditPostInput(_Input):
 class VendorCreditUpdateInput(_Input):
     """A correction of a saved vendor credit: what changes is what is supplied.
 
-    ``expenses`` replaces the whole credited grid, each row keeping its ``line_id`` so the row
-    a reader follows through the history is the same row; leave it out and the captured lines
-    stand exactly as they were, which is how a wrong date, memo, reference or class alone is
+    ``expenses`` and ``items`` each replace their whole grid, each row keeping its ``line_id`` so
+    the row a reader follows through the history is the same row; leave one out and its captured
+    lines stand exactly as they were, which is how a wrong date, memo, reference or class alone is
     corrected. ``vendor`` and ``ap_account`` stay what they always were -- optional guards,
     never choices -- because a credit's settlement source is minted once and permanently
     carries the vendor, the payable account and the currency an application has to match. A
@@ -97,6 +116,7 @@ class VendorCreditUpdateInput(_Input):
     expected_version: _Version | None = None
     date: _Date | None = None
     expenses: Expenses | None = None
+    items: Items | None = None
     number: _Number | None = None
     supplier_reference: SupplierReference | None = None
     memo: Text | None = None
@@ -112,7 +132,7 @@ class VendorCreditUpdateInput(_Input):
 
     @model_validator(mode='after')
     def required_values(self) -> Self:
-        for field in ('date', 'expenses', 'number', 'vendor', 'ap_account'):
+        for field in ('date', 'expenses', 'items', 'number', 'vendor', 'ap_account'):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f'{field} cannot be null')
         return self
@@ -240,6 +260,39 @@ class VendorCreditExpenseOutput(CreatedOutput):
     line_snapshot: BillExpenseProfile
 
 
+class VendorCreditItemOutput(CreatedOutput):
+    """One stored item row: the envelope's identity and the item profile's own figures.
+
+    ``account_id`` is the account this row credited, captured from the item rather than typed
+    -- Inventory Asset for stock -- and ``unit_cost`` is null exactly when the amount was
+    entered outright.
+    """
+
+    transaction_id: str
+    revision_id: str
+    line_id: str
+    position: int
+    kind: Literal['purchase']
+    item_id: str
+    account_id: str
+    quantity: str
+    quantity_microunits: int
+    unit_cost: MoneyOutput | None
+    unit_cost_minor_units: int | None
+    amount: MoneyOutput
+    amount_minor_units: int
+    currency: str
+    description: str | None
+    customer_id: str | None
+    billable: bool
+    class_id: str | None
+    class_name: str | None
+    name_type: str | None
+    name_id: str | None
+    party_name: str | None
+    line_snapshot: BillItemProfile
+
+
 class VendorCreditSourceOutput(CreatedOutput):
     """The settlement source a vendor credit carries, and the capacity it breaks into."""
 
@@ -301,8 +354,10 @@ class VendorCreditRevisionSummaryOutput(CreatedOutput):
     name_id: str
     memo: str | None
     expense_total: MoneyOutput
+    item_total: MoneyOutput
     total: MoneyOutput
     expense_total_minor_units: int
+    item_total_minor_units: int
     total_minor_units: int
     currency: str
     audit_event_id: str
@@ -315,6 +370,7 @@ class VendorCreditRevisionOutput(VendorCreditRevisionSummaryOutput):
     issuer_snapshot: dict[str, str | None]
     profile: VendorCreditProfile
     expenses: list[VendorCreditExpenseOutput]
+    items: list[VendorCreditItemOutput] = Field(default_factory=list)
     source: VendorCreditSourceOutput | None = None
 
 
@@ -334,8 +390,10 @@ class VendorCreditSummaryOutput(CommonOut):
     supplier_reference: str | None
     memo: str | None
     expense_total: MoneyOutput
+    item_total: MoneyOutput
     total: MoneyOutput
     expense_total_minor_units: int
+    item_total_minor_units: int
     total_minor_units: int
     currency: str
     settlement_current: VendorCreditSettlementOutput

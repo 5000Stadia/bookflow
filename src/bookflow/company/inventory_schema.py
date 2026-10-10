@@ -11,7 +11,7 @@ reports are the same figure read two ways. That is the whole point of the ``post
 uniqueness: an asset posting nobody attributed to an item would break the tie silently, and
 a second movement on one line would double-count it.
 
-**The five kinds, and why replay needs to tell them apart.**
+**The six kinds, and why replay needs to tell them apart.**
 
 - ``receipt`` -- quantity in. An input to costing. Its value is stated -- what a bill paid,
   or what a person entering an adjustment said it was worth -- **except** when it names an
@@ -21,6 +21,12 @@ a second movement on one line would double-count it.
 - ``issue`` -- quantity out; its value is what the weighted average consumed. An input to
   costing in quantity, an *output* of costing in value.
 - ``value`` -- a value-only write-up or write-down; quantity does not move. An input.
+- ``vendor_return`` -- quantity out, sent back to the supplier for a credit. Unlike an issue, its
+  value is *stated*: the amount the vendor credited, which is what the vendor-credit line posts
+  to Inventory Asset. It takes that amount out of the stock's value whatever the running
+  average was, so the average cost of what stays moves -- the anchor's rule for a return to a
+  vendor. It is an input to costing in quantity and in value, never an output, so nothing ever
+  recosts it.
 - ``recost`` -- a zero-quantity value delta produced by the recalculation path, linked by
   ``corrects_movement_id`` to an issue or an owned receipt, at that movement's own
   effective date. Issue corrections are replay outputs; receipt corrections amend the
@@ -65,7 +71,7 @@ DOCUMENT_KINDS = ('adjustment', 'recost')
 # The movement kinds. ``INPUT_KINDS`` is what a replay walks; the other two are produced by
 # replay or by a void and are never re-read as new stock activity. Anything that needs "every
 # movement kind" derives it from here rather than writing the words again.
-INPUT_KINDS = ('receipt', 'issue', 'value')
+INPUT_KINDS = ('receipt', 'issue', 'value', 'vendor_return')
 DERIVED_KINDS = ('recost', 'reversal')
 MOVEMENT_KINDS = INPUT_KINDS + DERIVED_KINDS
 
@@ -92,7 +98,7 @@ def define_tables(metadata, column, table):
         C('document_line_id', sa.String(26), 'Entered line this movement is attributed to.', nullable=False),
         C('effective_date', sa.String(10), 'Accounting date reports value this movement on.', nullable=False),
         C('sequence', sa.BigInteger, 'Company-wide recorded order; decides same-day replay order.', nullable=False),
-        C('kind', sa.String(16), 'Movement kind: receipt, issue, value, recost or reversal.', nullable=False),
+        C('kind', sa.String(16), 'Movement kind: receipt, issue, value, vendor_return, recost or reversal.', nullable=False),
         C('quantity_microunits', sa.BigInteger, 'Signed quantity change in micro-units.', nullable=False),
         C('value_minor_units', sa.BigInteger, 'Signed inventory asset value change in minor units.', nullable=False),
         C('currency', sa.String(3), 'Home currency of this movement value.', nullable=False),
@@ -145,6 +151,8 @@ def define_tables(metadata, column, table):
             "(kind = 'issue' AND quantity_microunits < 0 AND value_minor_units <= 0 "
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
             "(kind = 'value' AND quantity_microunits = 0 AND value_minor_units != 0 "
+            "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
+            "(kind = 'vendor_return' AND quantity_microunits < 0 AND value_minor_units <= 0 "
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
             "(kind = 'recost' AND quantity_microunits = 0 AND value_minor_units != 0 "
             "AND corrects_movement_id IS NOT NULL AND reverses_movement_id IS NULL) OR "

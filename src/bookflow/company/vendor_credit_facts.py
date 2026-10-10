@@ -6,17 +6,23 @@ vendor's own credit-note number and the class. ``Vendor``, ``Account``, ``Refere
 ``Origin`` are imported from the bill's own facts rather than redefined, so a vendor captured
 on a credit and a vendor captured on the bill it answers are the same fact in the same shape.
 
-The line is the bill's line exactly: ``BillExpenseProfile``. A credited line names the account
-the original cost went to, because that is the account the credit gives back, and it names the
-job the cost was attributed to so job costing nets. It carries no ``billable`` flag of its own
--- passing a credit on to a customer is a rebilling decision this document does not make.
+The Expenses line is the bill's line exactly: ``BillExpenseProfile``. An expense line names the
+account the original cost went to, because that is the account the credit gives back, and the job
+the cost was attributed to so job costing nets; it carries no ``billable`` flag -- passing a
+credit on to a customer is a rebilling decision this document does not make there.
+
+The Items line is the bill's ``BillItemProfile`` unchanged: the same captured item, account
+basis, quantity and cost, because a credit returns what a bill bought, so the bill's own item
+resolver writes both. An item row keeps the bill's ``customer`` and ``billable`` columns, as the
+anchor's Items tab does.
 """
 from __future__ import annotations
 
-from bookflow.company.bill_facts import Account, BillExpenseProfile, Origin, Reference, Vendor
+from bookflow.company.bill_facts import Account, BillExpenseProfile, BillItemProfile, Origin, Reference, Vendor
 from bookflow.company.sales_models import StrictModel
 
-__all__ = ['Account', 'Origin', 'Reference', 'Vendor', 'BillExpenseProfile', 'VendorCreditProfile']
+__all__ = ['Account', 'Origin', 'Reference', 'Vendor', 'BillExpenseProfile', 'BillItemProfile',
+           'VendorCreditProfile']
 
 
 class VendorCreditProfile(StrictModel):
@@ -28,6 +34,7 @@ class VendorCreditProfile(StrictModel):
     supplier_reference_key: str | None = None
     class_id: Reference | None = None
     expense_total_minor_units: int
+    item_total_minor_units: int = 0
     currency: str
     # Where each resolved value came from, so a later reader can tell a company default from a
     # value the person typed.
