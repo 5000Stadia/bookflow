@@ -329,6 +329,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/vendor_contact_points`](schema/company/vendor_contact_points.md)
 - [`company/vendor_contacts`](schema/company/vendor_contacts.md)
 - [`company/vendor_credit_expense_lines`](schema/company/vendor_credit_expense_lines.md)
+- [`company/vendor_credit_item_lines`](schema/company/vendor_credit_item_lines.md)
 - [`company/vendor_credit_profiles`](schema/company/vendor_credit_profiles.md)
 - [`company/vendor_expense_accounts`](schema/company/vendor_expense_accounts.md)
 - [`company/vendor_types`](schema/company/vendor_types.md)

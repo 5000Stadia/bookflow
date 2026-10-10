@@ -21,7 +21,7 @@ Database: `company`.
 | `document_line_id` | VARCHAR(26) | no | — | — | — | document_lines.id | Entered line this movement is attributed to. |
 | `effective_date` | VARCHAR(10) | no | — | — | ix_inventory_movements_item | — | Accounting date reports value this movement on. |
 | `sequence` | BIGINT | no | — | unique | ix_inventory_movements_document, ix_inventory_movements_item | — | Company-wide recorded order; decides same-day replay order. |
-| `kind` | VARCHAR(16) | no | — | — | — | — | Movement kind: receipt, issue, value, recost or reversal. |
+| `kind` | VARCHAR(16) | no | — | — | — | — | Movement kind: receipt, issue, value, vendor_return, recost or reversal. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Signed quantity change in micro-units. |
 | `value_minor_units` | BIGINT | no | — | — | — | — | Signed inventory asset value change in minor units. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of this movement value. |

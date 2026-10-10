@@ -60,13 +60,29 @@ def _at(path, revision):
             db.raw.execute('PRAGMA foreign_keys=ON')
 
 
+def _later_modules():
+    """The migration modules after this one, in the chain's own words."""
+    import pkgutil
+    from bookflow.storage.company_migrations import versions
+    from tests.test_bill_payment_migration import _revisions_after
+    after = set(_revisions_after(M.revision))
+    for info in pkgutil.iter_modules(versions.__path__):
+        name = versions.__name__ + '.' + info.name
+        if getattr(importlib.import_module(name), 'revision', '') in after:
+            yield type('Found', (), {'name': name})
+
+
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_modules():
     indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes],
                      key=lambda index: index.name)
+    # A table a later revision rebuilt (co0070 widened vendor_credit_profiles) can only equal today's
+    # metadata in its own revision's file; which those are is derived, never listed here.
+    rebuilt = _rebuilt_since(M.revision)
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())).strip()
-                     for name in M.NEW_TABLES)
+                     for name in M.NEW_TABLES if name not in rebuilt)
     compiled += tuple(str(CreateIndex(index).compile(dialect=dialect())).strip() for index in indexes)
-    assert M.DDL == compiled
+    assert tuple(statement for statement in M.DDL
+                 if not any(statement.startswith(f'CREATE TABLE {name} (') for name in rebuilt)) == compiled
     # Frozen text can only equal today's metadata for the objects no later revision has
     # rewritten. Which those are is derived from the later migrations themselves, never
     # listed here: a literal list is what makes the next migration falsify this test.
@@ -75,7 +91,12 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
                  if statement.split()[2] in M.REPLACED]
     rewritten += [statement for statement in settlement_guard_statements()
                   if statement.split()[2] == 'document_lines_type_insert']
-    current = tuple(guard_statements()) + tuple(rewritten)
+    # Triggers on a table a later revision created are that revision's own (co0070's item lines).
+    later = set()
+    for module in (importlib.import_module(info.name) for info in _later_modules()):
+        later.update(getattr(module, 'NEW_TABLES', ()))
+    current = tuple(statement for statement in tuple(guard_statements()) + tuple(rewritten)
+                    if not any(f' ON {table}' in statement for table in later - set(M.NEW_TABLES)))
     assert tuple(s for s in M.GUARDS if s.split()[2] not in superseded) == tuple(
         s for s in current if s.split()[2] not in superseded)
     assert {statement.split()[2] for statement in M.GUARDS} >= set(M.REPLACED)

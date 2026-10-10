@@ -105,11 +105,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expense_total.amount` | string | yes | no | — | — |
 | `expense_total.currency` | string | yes | no | — | — |
 | `expense_total.minor_units` | integer | yes | no | — | — |
+| `item_total` | object | yes | no | — | — |
+| `item_total.amount` | string | yes | no | — | — |
+| `item_total.currency` | string | yes | no | — | — |
+| `item_total.minor_units` | integer | yes | no | — | — |
 | `total` | object | yes | no | — | — |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expense_total_minor_units` | integer | yes | no | — | — |
+| `item_total_minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `settlement_current` | object | yes | no | — | — |
@@ -151,11 +156,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expense_total.amount` | string | yes | no | — | — |
 | `revision.expense_total.currency` | string | yes | no | — | — |
 | `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.item_total` | object | yes | no | — | — |
+| `revision.item_total.amount` | string | yes | no | — | — |
+| `revision.item_total.currency` | string | yes | no | — | — |
+| `revision.item_total.minor_units` | integer | yes | no | — | — |
 | `revision.total` | object | yes | no | — | — |
 | `revision.total.amount` | string | yes | no | — | — |
 | `revision.total.currency` | string | yes | no | — | — |
 | `revision.total.minor_units` | integer | yes | no | — | — |
 | `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.item_total_minor_units` | integer | yes | no | — | — |
 | `revision.total_minor_units` | integer | yes | no | — | — |
 | `revision.currency` | string | yes | no | — | — |
 | `revision.audit_event_id` | string | yes | no | — | — |
@@ -239,6 +249,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.class_id.label` | string | yes | no | — | — |
 | `revision.profile.class_id.version` | integer | yes | no | — | — |
 | `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.item_total_minor_units` | integer | no | no | 0 | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.expenses` | array[object] | yes | no | — | — |
@@ -283,6 +294,70 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
 | `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
 | `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.items` | array[object] | no | no | [] | — |
+| `revision.items[].id` | string | yes | no | — | — |
+| `revision.items[].created_at` | string | yes | no | — | — |
+| `revision.items[].created_by` | string | yes | no | — | — |
+| `revision.items[].created_via` | string | yes | no | — | — |
+| `revision.items[].transaction_id` | string | yes | no | — | — |
+| `revision.items[].revision_id` | string | yes | no | — | — |
+| `revision.items[].line_id` | string | yes | no | — | — |
+| `revision.items[].position` | integer | yes | no | — | — |
+| `revision.items[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.items[].item_id` | string | yes | no | — | — |
+| `revision.items[].account_id` | string | yes | no | — | — |
+| `revision.items[].quantity` | string | yes | no | — | — |
+| `revision.items[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `revision.items[].unit_cost.amount` | string | yes | no | — | — |
+| `revision.items[].unit_cost.currency` | string | yes | no | — | — |
+| `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].amount` | object | yes | no | — | — |
+| `revision.items[].amount.amount` | string | yes | no | — | — |
+| `revision.items[].amount.currency` | string | yes | no | — | — |
+| `revision.items[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.items[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.items[].currency` | string | yes | no | — | — |
+| `revision.items[].description` | string \| null | yes | yes | — | — |
+| `revision.items[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.items[].billable` | boolean | yes | no | — | — |
+| `revision.items[].class_id` | string \| null | yes | yes | — | — |
+| `revision.items[].class_name` | string \| null | yes | yes | — | — |
+| `revision.items[].name_type` | string \| null | yes | yes | — | — |
+| `revision.items[].name_id` | string \| null | yes | yes | — | — |
+| `revision.items[].party_name` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.items[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.source` | object \| null | no | yes | null | — |
 | `revision.source.id` | string | yes | no | — | — |
 | `revision.source.created_at` | string | yes | no | — | — |
@@ -370,6 +445,12 @@ Example JSON output:
   },
   "expense_total_minor_units": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
   "revision": {
@@ -390,6 +471,13 @@ Example JSON output:
     "expenses": [],
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "issuer_snapshot": {},
+    "item_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "item_total_minor_units": 1,
+    "items": [],
     "line_count": 1,
     "memo": null,
     "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -407,6 +495,7 @@ Example JSON output:
       "class_id": null,
       "currency": "USD",
       "expense_total_minor_units": 1,
+      "item_total_minor_units": 0,
       "origins": {},
       "supplier_reference": null,
       "supplier_reference_key": null,
@@ -600,11 +689,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].expense_total.amount` | string | yes | no | — | — |
 | `items[].expense_total.currency` | string | yes | no | — | — |
 | `items[].expense_total.minor_units` | integer | yes | no | — | — |
+| `items[].item_total` | object | yes | no | — | — |
+| `items[].item_total.amount` | string | yes | no | — | — |
+| `items[].item_total.currency` | string | yes | no | — | — |
+| `items[].item_total.minor_units` | integer | yes | no | — | — |
 | `items[].total` | object | yes | no | — | — |
 | `items[].total.amount` | string | yes | no | — | — |
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
 | `items[].expense_total_minor_units` | integer | yes | no | — | — |
+| `items[].item_total_minor_units` | integer | yes | no | — | — |
 | `items[].total_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
 | `items[].audit_event_id` | string | yes | no | — | — |
@@ -717,7 +811,7 @@ Example JSON output:
 
 ## `vendor-credit post`
 
-Enter a vendor credit: money a vendor owes you back for a return, an overcharge or a rebate. Accounts Payable is debited the total and each line credits the account the original cost went to, so what the vendor is owed falls by exactly what was credited. `expenses` is one to 200 rows of account, amount, memo, optional customer or job and optional class, naming the accounts the credit gives back; a row without its own `class_id` takes the credit’s, and `class_mode` set to `none` leaves one row unclassified. `ap_account` is the Accounts Payable account the credit is credited against and defaults to the only active one when the company has exactly one; it must match the bills this credit will settle. `supplier_reference` is the vendor’s own credit-note number, kept as typed. A credit is not a payable: it is never due, never appears on `report unpaid-bills`, and settles nothing until `vendor-credit apply` points it at a bill. Vendor credits take their own number series; they do not share the bill series.
+Enter a vendor credit: money a vendor owes you back for a return, an overcharge or a rebate. Accounts Payable is debited the total and each line credits the account the original cost went to, so what the vendor is owed falls by exactly what was credited. `expenses` is up to 200 rows of account, amount, memo, optional customer or job and optional class, naming the accounts the credit gives back; `items` is up to 200 rows, the bill’s Items tab, of item, quantity and either `unit_cost` (what the vendor credits for one) or `amount`, plus optional description, customer or job, `billable` and class, naming things sent back: write at least one row on one of the two tabs, or both. An item credits the account its purchase side names; a stocked item (inventory part or assembly) credits Inventory Asset the credited amount and takes the quantity off the shelf on the credit’s date, so returning stock to a supplier is this one document and the average cost of what stays moves with the credit. Only stock on hand on that date can go back, and returning all of it must credit exactly what it is worth. A row without its own `class_id` takes the credit’s, and `class_mode` set to `none` leaves one row unclassified. `ap_account` is the Accounts Payable account the credit is credited against and defaults to the only active one when the company has exactly one; it must match the bills this credit will settle. `supplier_reference` is the vendor’s own credit-note number, kept as typed. A credit is not a payable: it is never due, never appears on `report unpaid-bills`, and settles nothing until `vendor-credit apply` points it at a bill. Vendor credits take their own number series; they do not share the bill series.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -756,6 +850,16 @@ The same example as complete `bookflow_run` arguments:
 | `expenses[].customer` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].class_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].quantity` | inside `--items` JSON array | string | no | no | "1" | — |
+| `items[].unit_cost` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].amount` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].customer` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
+| `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
@@ -826,11 +930,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expense_total.amount` | string | yes | no | — | — |
 | `expense_total.currency` | string | yes | no | — | — |
 | `expense_total.minor_units` | integer | yes | no | — | — |
+| `item_total` | object | yes | no | — | — |
+| `item_total.amount` | string | yes | no | — | — |
+| `item_total.currency` | string | yes | no | — | — |
+| `item_total.minor_units` | integer | yes | no | — | — |
 | `total` | object | yes | no | — | — |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expense_total_minor_units` | integer | yes | no | — | — |
+| `item_total_minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `settlement_current` | object | yes | no | — | — |
@@ -872,11 +981,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expense_total.amount` | string | yes | no | — | — |
 | `revision.expense_total.currency` | string | yes | no | — | — |
 | `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.item_total` | object | yes | no | — | — |
+| `revision.item_total.amount` | string | yes | no | — | — |
+| `revision.item_total.currency` | string | yes | no | — | — |
+| `revision.item_total.minor_units` | integer | yes | no | — | — |
 | `revision.total` | object | yes | no | — | — |
 | `revision.total.amount` | string | yes | no | — | — |
 | `revision.total.currency` | string | yes | no | — | — |
 | `revision.total.minor_units` | integer | yes | no | — | — |
 | `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.item_total_minor_units` | integer | yes | no | — | — |
 | `revision.total_minor_units` | integer | yes | no | — | — |
 | `revision.currency` | string | yes | no | — | — |
 | `revision.audit_event_id` | string | yes | no | — | — |
@@ -960,6 +1074,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.class_id.label` | string | yes | no | — | — |
 | `revision.profile.class_id.version` | integer | yes | no | — | — |
 | `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.item_total_minor_units` | integer | no | no | 0 | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.expenses` | array[object] | yes | no | — | — |
@@ -1004,6 +1119,70 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
 | `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
 | `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.items` | array[object] | no | no | [] | — |
+| `revision.items[].id` | string | yes | no | — | — |
+| `revision.items[].created_at` | string | yes | no | — | — |
+| `revision.items[].created_by` | string | yes | no | — | — |
+| `revision.items[].created_via` | string | yes | no | — | — |
+| `revision.items[].transaction_id` | string | yes | no | — | — |
+| `revision.items[].revision_id` | string | yes | no | — | — |
+| `revision.items[].line_id` | string | yes | no | — | — |
+| `revision.items[].position` | integer | yes | no | — | — |
+| `revision.items[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.items[].item_id` | string | yes | no | — | — |
+| `revision.items[].account_id` | string | yes | no | — | — |
+| `revision.items[].quantity` | string | yes | no | — | — |
+| `revision.items[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `revision.items[].unit_cost.amount` | string | yes | no | — | — |
+| `revision.items[].unit_cost.currency` | string | yes | no | — | — |
+| `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].amount` | object | yes | no | — | — |
+| `revision.items[].amount.amount` | string | yes | no | — | — |
+| `revision.items[].amount.currency` | string | yes | no | — | — |
+| `revision.items[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.items[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.items[].currency` | string | yes | no | — | — |
+| `revision.items[].description` | string \| null | yes | yes | — | — |
+| `revision.items[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.items[].billable` | boolean | yes | no | — | — |
+| `revision.items[].class_id` | string \| null | yes | yes | — | — |
+| `revision.items[].class_name` | string \| null | yes | yes | — | — |
+| `revision.items[].name_type` | string \| null | yes | yes | — | — |
+| `revision.items[].name_id` | string \| null | yes | yes | — | — |
+| `revision.items[].party_name` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.items[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.source` | object \| null | no | yes | null | — |
 | `revision.source.id` | string | yes | no | — | — |
 | `revision.source.created_at` | string | yes | no | — | — |
@@ -1091,6 +1270,12 @@ Example JSON output:
   },
   "expense_total_minor_units": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
   "revision": {
@@ -1111,6 +1296,13 @@ Example JSON output:
     "expenses": [],
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "issuer_snapshot": {},
+    "item_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "item_total_minor_units": 1,
+    "items": [],
     "line_count": 1,
     "memo": null,
     "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1128,6 +1320,7 @@ Example JSON output:
       "class_id": null,
       "currency": "USD",
       "expense_total_minor_units": 1,
+      "item_total_minor_units": 0,
       "origins": {},
       "supplier_reference": null,
       "supplier_reference_key": null,
@@ -1331,11 +1524,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].expense_total.amount` | string | yes | no | — | — |
 | `items[].expense_total.currency` | string | yes | no | — | — |
 | `items[].expense_total.minor_units` | integer | yes | no | — | — |
+| `items[].item_total` | object | yes | no | — | — |
+| `items[].item_total.amount` | string | yes | no | — | — |
+| `items[].item_total.currency` | string | yes | no | — | — |
+| `items[].item_total.minor_units` | integer | yes | no | — | — |
 | `items[].total` | object | yes | no | — | — |
 | `items[].total.amount` | string | yes | no | — | — |
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
 | `items[].expense_total_minor_units` | integer | yes | no | — | — |
+| `items[].item_total_minor_units` | integer | yes | no | — | — |
 | `items[].total_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
 | `items[].settlement_current` | object | yes | no | — | — |
@@ -1491,11 +1689,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expense_total.amount` | string | yes | no | — | — |
 | `expense_total.currency` | string | yes | no | — | — |
 | `expense_total.minor_units` | integer | yes | no | — | — |
+| `item_total` | object | yes | no | — | — |
+| `item_total.amount` | string | yes | no | — | — |
+| `item_total.currency` | string | yes | no | — | — |
+| `item_total.minor_units` | integer | yes | no | — | — |
 | `total` | object | yes | no | — | — |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expense_total_minor_units` | integer | yes | no | — | — |
+| `item_total_minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `settlement_current` | object | yes | no | — | — |
@@ -1537,11 +1740,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expense_total.amount` | string | yes | no | — | — |
 | `revision.expense_total.currency` | string | yes | no | — | — |
 | `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.item_total` | object | yes | no | — | — |
+| `revision.item_total.amount` | string | yes | no | — | — |
+| `revision.item_total.currency` | string | yes | no | — | — |
+| `revision.item_total.minor_units` | integer | yes | no | — | — |
 | `revision.total` | object | yes | no | — | — |
 | `revision.total.amount` | string | yes | no | — | — |
 | `revision.total.currency` | string | yes | no | — | — |
 | `revision.total.minor_units` | integer | yes | no | — | — |
 | `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.item_total_minor_units` | integer | yes | no | — | — |
 | `revision.total_minor_units` | integer | yes | no | — | — |
 | `revision.currency` | string | yes | no | — | — |
 | `revision.audit_event_id` | string | yes | no | — | — |
@@ -1625,6 +1833,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.class_id.label` | string | yes | no | — | — |
 | `revision.profile.class_id.version` | integer | yes | no | — | — |
 | `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.item_total_minor_units` | integer | no | no | 0 | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.expenses` | array[object] | yes | no | — | — |
@@ -1669,6 +1878,70 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
 | `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
 | `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.items` | array[object] | no | no | [] | — |
+| `revision.items[].id` | string | yes | no | — | — |
+| `revision.items[].created_at` | string | yes | no | — | — |
+| `revision.items[].created_by` | string | yes | no | — | — |
+| `revision.items[].created_via` | string | yes | no | — | — |
+| `revision.items[].transaction_id` | string | yes | no | — | — |
+| `revision.items[].revision_id` | string | yes | no | — | — |
+| `revision.items[].line_id` | string | yes | no | — | — |
+| `revision.items[].position` | integer | yes | no | — | — |
+| `revision.items[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.items[].item_id` | string | yes | no | — | — |
+| `revision.items[].account_id` | string | yes | no | — | — |
+| `revision.items[].quantity` | string | yes | no | — | — |
+| `revision.items[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `revision.items[].unit_cost.amount` | string | yes | no | — | — |
+| `revision.items[].unit_cost.currency` | string | yes | no | — | — |
+| `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].amount` | object | yes | no | — | — |
+| `revision.items[].amount.amount` | string | yes | no | — | — |
+| `revision.items[].amount.currency` | string | yes | no | — | — |
+| `revision.items[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.items[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.items[].currency` | string | yes | no | — | — |
+| `revision.items[].description` | string \| null | yes | yes | — | — |
+| `revision.items[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.items[].billable` | boolean | yes | no | — | — |
+| `revision.items[].class_id` | string \| null | yes | yes | — | — |
+| `revision.items[].class_name` | string \| null | yes | yes | — | — |
+| `revision.items[].name_type` | string \| null | yes | yes | — | — |
+| `revision.items[].name_id` | string \| null | yes | yes | — | — |
+| `revision.items[].party_name` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.items[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.source` | object \| null | no | yes | null | — |
 | `revision.source.id` | string | yes | no | — | — |
 | `revision.source.created_at` | string | yes | no | — | — |
@@ -1751,6 +2024,12 @@ Example JSON output:
   },
   "expense_total_minor_units": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
   "revision": {
@@ -1771,6 +2050,13 @@ Example JSON output:
     "expenses": [],
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "issuer_snapshot": {},
+    "item_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "item_total_minor_units": 1,
+    "items": [],
     "line_count": 1,
     "memo": null,
     "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1788,6 +2074,7 @@ Example JSON output:
       "class_id": null,
       "currency": "USD",
       "expense_total_minor_units": 1,
+      "item_total_minor_units": 0,
       "origins": {},
       "supplier_reference": null,
       "supplier_reference_key": null,
@@ -1988,11 +2275,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expense_total.amount` | string | yes | no | — | — |
 | `expense_total.currency` | string | yes | no | — | — |
 | `expense_total.minor_units` | integer | yes | no | — | — |
+| `item_total` | object | yes | no | — | — |
+| `item_total.amount` | string | yes | no | — | — |
+| `item_total.currency` | string | yes | no | — | — |
+| `item_total.minor_units` | integer | yes | no | — | — |
 | `total` | object | yes | no | — | — |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expense_total_minor_units` | integer | yes | no | — | — |
+| `item_total_minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `settlement_current` | object | yes | no | — | — |
@@ -2034,11 +2326,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expense_total.amount` | string | yes | no | — | — |
 | `revision.expense_total.currency` | string | yes | no | — | — |
 | `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.item_total` | object | yes | no | — | — |
+| `revision.item_total.amount` | string | yes | no | — | — |
+| `revision.item_total.currency` | string | yes | no | — | — |
+| `revision.item_total.minor_units` | integer | yes | no | — | — |
 | `revision.total` | object | yes | no | — | — |
 | `revision.total.amount` | string | yes | no | — | — |
 | `revision.total.currency` | string | yes | no | — | — |
 | `revision.total.minor_units` | integer | yes | no | — | — |
 | `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.item_total_minor_units` | integer | yes | no | — | — |
 | `revision.total_minor_units` | integer | yes | no | — | — |
 | `revision.currency` | string | yes | no | — | — |
 | `revision.audit_event_id` | string | yes | no | — | — |
@@ -2122,6 +2419,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.class_id.label` | string | yes | no | — | — |
 | `revision.profile.class_id.version` | integer | yes | no | — | — |
 | `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.item_total_minor_units` | integer | no | no | 0 | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.expenses` | array[object] | yes | no | — | — |
@@ -2166,6 +2464,70 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
 | `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
 | `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.items` | array[object] | no | no | [] | — |
+| `revision.items[].id` | string | yes | no | — | — |
+| `revision.items[].created_at` | string | yes | no | — | — |
+| `revision.items[].created_by` | string | yes | no | — | — |
+| `revision.items[].created_via` | string | yes | no | — | — |
+| `revision.items[].transaction_id` | string | yes | no | — | — |
+| `revision.items[].revision_id` | string | yes | no | — | — |
+| `revision.items[].line_id` | string | yes | no | — | — |
+| `revision.items[].position` | integer | yes | no | — | — |
+| `revision.items[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.items[].item_id` | string | yes | no | — | — |
+| `revision.items[].account_id` | string | yes | no | — | — |
+| `revision.items[].quantity` | string | yes | no | — | — |
+| `revision.items[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `revision.items[].unit_cost.amount` | string | yes | no | — | — |
+| `revision.items[].unit_cost.currency` | string | yes | no | — | — |
+| `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].amount` | object | yes | no | — | — |
+| `revision.items[].amount.amount` | string | yes | no | — | — |
+| `revision.items[].amount.currency` | string | yes | no | — | — |
+| `revision.items[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.items[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.items[].currency` | string | yes | no | — | — |
+| `revision.items[].description` | string \| null | yes | yes | — | — |
+| `revision.items[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.items[].billable` | boolean | yes | no | — | — |
+| `revision.items[].class_id` | string \| null | yes | yes | — | — |
+| `revision.items[].class_name` | string \| null | yes | yes | — | — |
+| `revision.items[].name_type` | string \| null | yes | yes | — | — |
+| `revision.items[].name_id` | string \| null | yes | yes | — | — |
+| `revision.items[].party_name` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.items[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.source` | object \| null | no | yes | null | — |
 | `revision.source.id` | string | yes | no | — | — |
 | `revision.source.created_at` | string | yes | no | — | — |
@@ -2253,6 +2615,12 @@ Example JSON output:
   },
   "expense_total_minor_units": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
   "revision": {
@@ -2273,6 +2641,13 @@ Example JSON output:
     "expenses": [],
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "issuer_snapshot": {},
+    "item_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "item_total_minor_units": 1,
+    "items": [],
     "line_count": 1,
     "memo": null,
     "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -2290,6 +2665,7 @@ Example JSON output:
       "class_id": null,
       "currency": "USD",
       "expense_total_minor_units": 1,
+      "item_total_minor_units": 0,
       "origins": {},
       "supplier_reference": null,
       "supplier_reference_key": null,
@@ -2399,7 +2775,7 @@ Example JSON output:
 
 ## `vendor-credit update`
 
-Correct a vendor credit with a required reason and another immutable revision. What you supply replaces what was captured and what you leave out stands, so a wrong date, memo, credit-note reference or class is corrected on its own; supply `expenses` to change the credited rows and the whole grid is replaced, each row keeping its `line_id` so a reader can follow the same row through the history. The superseded revision is reversed at its own date and a replacement is posted at the corrected one, so both periods must be open. Every bill this credit answers is released and settled again for the same amount on the same date out of the corrected credit, so no bill silently changes what it owes and the credit is never spendable twice; a correction worth less than what the credit already answers is refused with `E_APPLICATION_CAPACITY`, and one dated after a settlement it already made is refused by date. The number is kept unless you give a new one. A correction cannot change who gave the credit: `vendor` and `ap_account` stay guards rather than choices, because the settlement source carrying them is minted once. A voided credit cannot be corrected. An empty patch writes nothing and reports `changed` false. Pass `expected_version` to refuse a write over somebody else, and reuse one idempotency key to retry safely.
+Correct a vendor credit with a required reason and another immutable revision. What you supply replaces what was captured and what you leave out stands, so a wrong date, memo, credit-note reference or class is corrected on its own; supply `expenses` or `items` to change the credited rows of that tab and the whole grid is replaced, each row keeping its `line_id` so a reader can follow the same row through the history, while a tab you leave out keeps its rows and the stock they moved. The superseded revision is reversed at its own date, stock it sent back included, and a replacement is posted at the corrected one, so both periods must be open. Every bill this credit answers is released and settled again for the same amount on the same date out of the corrected credit, so no bill silently changes what it owes and the credit is never spendable twice; a correction worth less than what the credit already answers is refused with `E_APPLICATION_CAPACITY`, and one dated after a settlement it already made is refused by date. The number is kept unless you give a new one. A correction cannot change who gave the credit: `vendor` and `ap_account` stay guards rather than choices, because the settlement source carrying them is minted once. A voided credit cannot be corrected. An empty patch writes nothing and reports `changed` false. Pass `expected_version` to refuse a write over somebody else, and reuse one idempotency key to retry safely.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2439,6 +2815,16 @@ The same example as complete `bookflow_run` arguments:
 | `expenses[].customer` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].class_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].quantity` | inside `--items` JSON array | string | no | no | "1" | — |
+| `items[].unit_cost` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].amount` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].customer` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
+| `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -2510,11 +2896,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expense_total.amount` | string | yes | no | — | — |
 | `expense_total.currency` | string | yes | no | — | — |
 | `expense_total.minor_units` | integer | yes | no | — | — |
+| `item_total` | object | yes | no | — | — |
+| `item_total.amount` | string | yes | no | — | — |
+| `item_total.currency` | string | yes | no | — | — |
+| `item_total.minor_units` | integer | yes | no | — | — |
 | `total` | object | yes | no | — | — |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expense_total_minor_units` | integer | yes | no | — | — |
+| `item_total_minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `settlement_current` | object | yes | no | — | — |
@@ -2556,11 +2947,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expense_total.amount` | string | yes | no | — | — |
 | `revision.expense_total.currency` | string | yes | no | — | — |
 | `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.item_total` | object | yes | no | — | — |
+| `revision.item_total.amount` | string | yes | no | — | — |
+| `revision.item_total.currency` | string | yes | no | — | — |
+| `revision.item_total.minor_units` | integer | yes | no | — | — |
 | `revision.total` | object | yes | no | — | — |
 | `revision.total.amount` | string | yes | no | — | — |
 | `revision.total.currency` | string | yes | no | — | — |
 | `revision.total.minor_units` | integer | yes | no | — | — |
 | `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.item_total_minor_units` | integer | yes | no | — | — |
 | `revision.total_minor_units` | integer | yes | no | — | — |
 | `revision.currency` | string | yes | no | — | — |
 | `revision.audit_event_id` | string | yes | no | — | — |
@@ -2644,6 +3040,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.class_id.label` | string | yes | no | — | — |
 | `revision.profile.class_id.version` | integer | yes | no | — | — |
 | `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.item_total_minor_units` | integer | no | no | 0 | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.expenses` | array[object] | yes | no | — | — |
@@ -2688,6 +3085,70 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
 | `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
 | `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.items` | array[object] | no | no | [] | — |
+| `revision.items[].id` | string | yes | no | — | — |
+| `revision.items[].created_at` | string | yes | no | — | — |
+| `revision.items[].created_by` | string | yes | no | — | — |
+| `revision.items[].created_via` | string | yes | no | — | — |
+| `revision.items[].transaction_id` | string | yes | no | — | — |
+| `revision.items[].revision_id` | string | yes | no | — | — |
+| `revision.items[].line_id` | string | yes | no | — | — |
+| `revision.items[].position` | integer | yes | no | — | — |
+| `revision.items[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.items[].item_id` | string | yes | no | — | — |
+| `revision.items[].account_id` | string | yes | no | — | — |
+| `revision.items[].quantity` | string | yes | no | — | — |
+| `revision.items[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `revision.items[].unit_cost.amount` | string | yes | no | — | — |
+| `revision.items[].unit_cost.currency` | string | yes | no | — | — |
+| `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].amount` | object | yes | no | — | — |
+| `revision.items[].amount.amount` | string | yes | no | — | — |
+| `revision.items[].amount.currency` | string | yes | no | — | — |
+| `revision.items[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.items[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.items[].currency` | string | yes | no | — | — |
+| `revision.items[].description` | string \| null | yes | yes | — | — |
+| `revision.items[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.items[].billable` | boolean | yes | no | — | — |
+| `revision.items[].class_id` | string \| null | yes | yes | — | — |
+| `revision.items[].class_name` | string \| null | yes | yes | — | — |
+| `revision.items[].name_type` | string \| null | yes | yes | — | — |
+| `revision.items[].name_id` | string \| null | yes | yes | — | — |
+| `revision.items[].party_name` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.items[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.source` | object \| null | no | yes | null | — |
 | `revision.source.id` | string | yes | no | — | — |
 | `revision.source.created_at` | string | yes | no | — | — |
@@ -2775,6 +3236,12 @@ Example JSON output:
   },
   "expense_total_minor_units": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
   "revision": {
@@ -2795,6 +3262,13 @@ Example JSON output:
     "expenses": [],
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "issuer_snapshot": {},
+    "item_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "item_total_minor_units": 1,
+    "items": [],
     "line_count": 1,
     "memo": null,
     "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -2812,6 +3286,7 @@ Example JSON output:
       "class_id": null,
       "currency": "USD",
       "expense_total_minor_units": 1,
+      "item_total_minor_units": 0,
       "origins": {},
       "supplier_reference": null,
       "supplier_reference_key": null,
@@ -2927,7 +3402,7 @@ Example JSON output:
 
 ## `vendor-credit void`
 
-Void a vendor credit with a required reason. Its accounting is reversed at its own date, its number stays occupied and its history stays readable. Anything it still settles must be unapplied first, so voiding never silently reopens a bill. A credit typed wrong is corrected with `vendor-credit update` rather than voided: that keeps one document where one credit note arrived.
+Void a vendor credit with a required reason. Its accounting is reversed at its own date, any stock it sent back is returned to the shelf at the value it left at, its number stays occupied and its history stays readable. Anything it still settles must be unapplied first, so voiding never silently reopens a bill. A credit typed wrong is corrected with `vendor-credit update` rather than voided: that keeps one document where one credit note arrived.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -3024,11 +3499,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `expense_total.amount` | string | yes | no | — | — |
 | `expense_total.currency` | string | yes | no | — | — |
 | `expense_total.minor_units` | integer | yes | no | — | — |
+| `item_total` | object | yes | no | — | — |
+| `item_total.amount` | string | yes | no | — | — |
+| `item_total.currency` | string | yes | no | — | — |
+| `item_total.minor_units` | integer | yes | no | — | — |
 | `total` | object | yes | no | — | — |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `expense_total_minor_units` | integer | yes | no | — | — |
+| `item_total_minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `settlement_current` | object | yes | no | — | — |
@@ -3070,11 +3550,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expense_total.amount` | string | yes | no | — | — |
 | `revision.expense_total.currency` | string | yes | no | — | — |
 | `revision.expense_total.minor_units` | integer | yes | no | — | — |
+| `revision.item_total` | object | yes | no | — | — |
+| `revision.item_total.amount` | string | yes | no | — | — |
+| `revision.item_total.currency` | string | yes | no | — | — |
+| `revision.item_total.minor_units` | integer | yes | no | — | — |
 | `revision.total` | object | yes | no | — | — |
 | `revision.total.amount` | string | yes | no | — | — |
 | `revision.total.currency` | string | yes | no | — | — |
 | `revision.total.minor_units` | integer | yes | no | — | — |
 | `revision.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.item_total_minor_units` | integer | yes | no | — | — |
 | `revision.total_minor_units` | integer | yes | no | — | — |
 | `revision.currency` | string | yes | no | — | — |
 | `revision.audit_event_id` | string | yes | no | — | — |
@@ -3158,6 +3643,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.class_id.label` | string | yes | no | — | — |
 | `revision.profile.class_id.version` | integer | yes | no | — | — |
 | `revision.profile.expense_total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.item_total_minor_units` | integer | no | no | 0 | — |
 | `revision.profile.currency` | string | yes | no | — | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.expenses` | array[object] | yes | no | — | — |
@@ -3202,6 +3688,70 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.expenses[].line_snapshot.customer.version` | integer | yes | no | — | — |
 | `revision.expenses[].line_snapshot.billable` | boolean | no | no | false | — |
 | `revision.expenses[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.items` | array[object] | no | no | [] | — |
+| `revision.items[].id` | string | yes | no | — | — |
+| `revision.items[].created_at` | string | yes | no | — | — |
+| `revision.items[].created_by` | string | yes | no | — | — |
+| `revision.items[].created_via` | string | yes | no | — | — |
+| `revision.items[].transaction_id` | string | yes | no | — | — |
+| `revision.items[].revision_id` | string | yes | no | — | — |
+| `revision.items[].line_id` | string | yes | no | — | — |
+| `revision.items[].position` | integer | yes | no | — | — |
+| `revision.items[].kind` | literal["purchase"] | yes | no | — | — |
+| `revision.items[].item_id` | string | yes | no | — | — |
+| `revision.items[].account_id` | string | yes | no | — | — |
+| `revision.items[].quantity` | string | yes | no | — | — |
+| `revision.items[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `revision.items[].unit_cost.amount` | string | yes | no | — | — |
+| `revision.items[].unit_cost.currency` | string | yes | no | — | — |
+| `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].amount` | object | yes | no | — | — |
+| `revision.items[].amount.amount` | string | yes | no | — | — |
+| `revision.items[].amount.currency` | string | yes | no | — | — |
+| `revision.items[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.items[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.items[].currency` | string | yes | no | — | — |
+| `revision.items[].description` | string \| null | yes | yes | — | — |
+| `revision.items[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.items[].billable` | boolean | yes | no | — | — |
+| `revision.items[].class_id` | string \| null | yes | yes | — | — |
+| `revision.items[].class_name` | string \| null | yes | yes | — | — |
+| `revision.items[].name_type` | string \| null | yes | yes | — | — |
+| `revision.items[].name_id` | string \| null | yes | yes | — | — |
+| `revision.items[].party_name` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account` | object | yes | no | — | — |
+| `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.items[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.items[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.items[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.source` | object \| null | no | yes | null | — |
 | `revision.source.id` | string | yes | no | — | — |
 | `revision.source.created_at` | string | yes | no | — | — |
@@ -3289,6 +3839,12 @@ Example JSON output:
   },
   "expense_total_minor_units": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
   "revision": {
@@ -3309,6 +3865,13 @@ Example JSON output:
     "expenses": [],
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "issuer_snapshot": {},
+    "item_total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "item_total_minor_units": 1,
+    "items": [],
     "line_count": 1,
     "memo": null,
     "name_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -3326,6 +3889,7 @@ Example JSON output:
       "class_id": null,
       "currency": "USD",
       "expense_total_minor_units": 1,
+      "item_total_minor_units": 0,
       "origins": {},
       "supplier_reference": null,
       "supplier_reference_key": null,

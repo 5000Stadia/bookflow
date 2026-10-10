@@ -4118,6 +4118,25 @@ then says; a void reverses them exactly, one `reversal` movement per receipt bou
 that reverses the one the receipt hung off. Taking a returned quantity back out may leave the
 item below zero; that is the negative-stock rule below, not a refusal.
 
+**Stock sent back to a vendor is a vendor credit with item rows, taken out at the credited cost.**
+The vendor credit gained the bill's Items tab (`vendor_credit_item_lines`, the same row model and
+the same resolver as `purchase_item_lines`, with `vendor_credit_profiles.item_total_minor_units`
+beside the expense total). A non-stocked item credits the account the item names. A stocked item
+credits Inventory Asset the credited amount and writes one `vendor_return` movement against that
+leg: the sixth movement kind, quantity out at a value that is *stated* — what the vendor allowed
+— and not the weighted average. That is the anchor product's rule for an item on a vendor
+credit: the asset account is credited the credited amount, so the average cost of what stays on
+the shelf moves by the difference between the credit and the average, and no clearing account or
+adjustment is needed. In replay a `vendor_return` is an input in both quantity and value
+(`INPUT_KINDS`), never an output, so nothing recosts it; later issues simply take the new
+average, and a return dated before sales recosts them through the ordinary dated `recost`
+entries. It may not take more than is on hand on its date (the refusal names the item, the date
+and `items`), and a return that empties the shelf must credit exactly what the shelf is worth
+(`residual_value`), because stock cannot be left without quantity. A correction reverses the
+movement the previous revision wrote and takes the new grid's; a void reverses it, returning the
+quantity at the value it left at. `purchases-by-item` and `purchases-by-vendor` net the return
+against what was bought; `stock-status` and `inventory-valuation` read it from the movements.
+
 **A credited line that *names* a stock item is still refused.** A standalone line carries an
 item, a quantity and a price, and a price is not a cost. Nothing in Bookflow derives what an
 unlinked quantity coming in is worth: every receipt in the ledger states its value because
@@ -4396,7 +4415,7 @@ record type nothing writes; the row fixes that in the same place.
 the same footer, the same tax rule — with the two columns that make a row a return instead of a
 sale (`source_invoice`, `source_line`) and without the addresses, which belong to the invoice it
 credits, or the price-level machinery, which prices new work rather than taking a sale back. A
-vendor credit is the bill's Expenses grid with `billable` removed. A refund's grid is neither:
+vendor credit is the bill's Expenses grid with `billable` removed, and the bill's Items grid as is. A refund's grid is neither:
 its rows are the credits being spent, one credit memo and how much of it goes out.
 `document_form.refund_totals` and `vendor_credit_totals` copy the server's own figures the way
 `bill_totals` does; nothing on any of the three pages is arithmetic done in the browser.
@@ -4470,8 +4489,8 @@ preview, save, and read the revision it replaced.
 hazards. `detail_context` puts a `Correct this vendor credit` link on a posted credit beside a
 sentence saying a wrong credit is corrected rather than voided, and `pages._editable_values`
 routes `vendor-credit` to `credits.vendor_credit_editable_values` -- the bill's projection with
-the bill's own columns removed, since a credit has no terms, no due date, no Items tab and no
-`billable` column. Without it the generic fallback hands the form the whole `vendor-credit show`
+the bill's own columns removed, since a credit has no terms and no due date, and its Expenses rows
+no `billable` column (the Items grid is baselined as the bill's is). Without it the generic fallback hands the form the whole `vendor-credit show`
 output, whose `vendor_id`, `ap_account_id` and nested expense grid are not the fields the command
 takes, and the vendor, the payable, the class and every credited row render blank on a document
 that has all of them.

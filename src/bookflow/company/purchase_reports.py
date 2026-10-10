@@ -151,13 +151,15 @@ class OpenPurchaseOrdersOutput(ledger.Page):
 #
 # `bought` is the stock purchased from a vendor: a receipt whose other side is a payable,
 # a bank account or a card, the recosts that amend such a receipt, and the reversals of
-# either. `other_items` is every other purchased item's cost posting, attributed to its
+# either. Stock sent back to the vendor on a vendor credit is the same purchase read the other
+# way: its movement carries the quantity and the credited amount with their signs, so the net
+# of what was bought and what went back is one figure per item and vendor. `other_items` is every other purchased item's cost posting, attributed to its
 # entered line; the posting line that carries a stock movement is left to `bought`, so no
 # cent is read twice. `first` keeps a line's quantity on one posting line of one batch.
 _PURCHASES = """
 WITH receipts AS (
  SELECT m.id FROM inventory_movements m JOIN accounts o ON o.id=m.offset_account_id
- WHERE m.kind='receipt' AND m.returns_movement_id IS NULL
+ WHERE ((m.kind='receipt' AND m.returns_movement_id IS NULL) OR m.kind='vendor_return')
    AND o.type IN ('accounts_payable', 'bank', 'credit_card')
 ), amended AS (
  SELECT id FROM receipts
@@ -171,6 +173,8 @@ WITH receipts AS (
  WHERE m.kind='reversal' AND m.reverses_movement_id IN (SELECT id FROM amended)
 ), purchase_lines AS (
  SELECT document_line_id, item_id, quantity_microunits AS quantity FROM purchase_item_lines
+ UNION ALL
+ SELECT document_line_id, item_id, quantity_microunits FROM vendor_credit_item_lines
  UNION ALL
  SELECT document_line_id, item_id,
         CAST(json_extract(line_snapshot, '$.quantity_microunits') AS INTEGER) FROM money_out_item_lines

@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 from bookflow.company import bill_payment_validation as settlement
 from bookflow.company import document_effects as effects, schema as c
-from bookflow.company.vendor_credit_facts import BillExpenseProfile, VendorCreditProfile
+from bookflow.company.vendor_credit_facts import BillExpenseProfile, BillItemProfile, VendorCreditProfile
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX
 
@@ -91,6 +91,103 @@ def _validate(plan, s, ctx):
     require(all(row['source_transaction_id'] == header['id']
                 for row in pending.get('ap_applications', [])), 'cross-document settlement')
     _accounting(s, data, header, pending, indexed, currency, operation)
+
+
+def _item(line, facts):
+    """What an item row stores beyond an expense row, checked against its own captured facts.
+
+    The account is not re-read from the item: what the credit posted is what it captured, and a
+    later repointing of the item must not be able to make a stored revision look wrong.
+    """
+    from bookflow.company import bills
+
+    require(facts.item.id == line['item_id'], 'the captured item disagrees with the column')
+    require(facts.item_type in bills.PURCHASABLE_ITEM_TYPES,
+            'an item row names a family a credit cannot return')
+    require(facts.quantity_microunits == line['quantity_microunits'] > 0,
+            'an item row has no positive quantity')
+    require(facts.unit_cost_minor_units == line['unit_cost_minor_units'],
+            'the captured unit cost disagrees with the column')
+    require(facts.billable == bool(line['billable']), 'the captured billable mark disagrees with the column')
+    allowed, _ = bills.ACCOUNT_BASES[facts.account_basis]
+    require(facts.account.type in allowed, 'an item row names an ineligible account')
+    if facts.amount_basis == 'unit_cost':
+        from bookflow.company.sales_calculations import extension
+        require(line['unit_cost_minor_units'] is not None
+                and line['amount_minor_units'] == extension(line['quantity_microunits'],
+                                                            line['unit_cost_minor_units']),
+                'a derived amount is not quantity times cost')
+    else:
+        require(line['unit_cost_minor_units'] is None,
+                'an entered amount carries a unit cost it was not derived from')
+
+
+def _stock(s, data, indexed, items, credits):
+    """What this credit did to the stock ledger, read back off the rows it is about to write.
+
+    The one invariant worth checking independently is the tie: every posting to an inventory
+    control account is claimed by exactly one movement and carries exactly that movement's
+    value, because that is what makes the inventory asset on the balance sheet and the total on
+    the stock reports the same number. The rest is that statement's parts: a movement belongs to
+    a leg of this credit at that leg's own date, for the quantity the entered row actually sent
+    back, at exactly the amount the row credited.
+    """
+    from bookflow.company import inventory
+
+    header, pending = data['header'], data['pending']
+    stock = data['stock']
+    movements = [movement.values for movement in stock.movements]
+    legs, batches = indexed['posting_lines'], indexed['posting_batches']
+    control = {row['id'] for row in effects.rows(
+        s, c.accounts, c.accounts.c.system_role == inventory.ASSET_ROLE)}
+    claimed = [row['posting_line_id'] for row in movements if row['value_minor_units']]
+    require(len(claimed) == len(set(claimed)), 'two stock movements claim one posting line')
+    require(set(claimed) == {leg['id'] for leg in legs.values() if leg['account_id'] in control},
+            'an inventory-asset posting is not attributed to exactly one item')
+    by_envelope = {line['document_line_id']: line for line in items}
+    prior = {row['id']: row for row in effects.rows(
+        s, c.inventory_movements, c.inventory_movements.c.transaction_id == header['id'])}
+    for row in movements:
+        leg = legs.get(row['posting_line_id'])
+        batch = batches.get(row['posting_batch_id'])
+        require(batch is not None and batch['transaction_id'] == row['transaction_id']
+                and batch['effective_date'] == row['effective_date'], 'stock batch ownership/date')
+        if row['value_minor_units']:
+            require(leg is not None and leg['batch_id'] == row['posting_batch_id']
+                    and leg['account_id'] == row['asset_account_id']
+                    and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units'],
+                    'stock monetary attribution')
+        else:
+            require(row['posting_line_id'] is None and row['quantity_microunits'] != 0,
+                    'zero stock effect must have quantity and no monetary leg')
+        require(row['kind'] in ('vendor_return', 'reversal'),
+                'a vendor credit moves stock only out or back in')
+        if row['kind'] == 'reversal':
+            original = prior.get(row['reverses_movement_id'])
+            require(original is not None and original['kind'] == 'vendor_return'
+                    and (leg['reversed_line_id'] if leg else None) == original['posting_line_id']
+                    and row['quantity_microunits'] == -original['quantity_microunits']
+                    and row['value_minor_units'] == -original['value_minor_units']
+                    and row['item_id'] == original['item_id']
+                    and row['document_line_id'] == original['document_line_id']
+                    and row['revision_id'] == original['revision_id'],
+                    'a stock reversal is not the exact inverse of the movement it retires')
+            continue
+        line = by_envelope.get(row['document_line_id'])
+        require(line is not None and line['item_id'] == row['item_id']
+                and row['quantity_microunits'] == -line['quantity_microunits']
+                and row['value_minor_units'] == -line['amount_minor_units']
+                and row['revision_id'] == line['revision_id'],
+                'a stock return does not match the item row that sent it back')
+        facts = BillItemProfile.model_validate_json(line['line_snapshot'])
+        require(facts.item_type in inventory.TRACKED_TYPES and facts.account_basis == 'asset',
+                'a stock return was written for a row that carries no stock')
+    for envelope_id, line in by_envelope.items():
+        facts = BillItemProfile.model_validate_json(line['line_snapshot'])
+        if facts.item_type in inventory.TRACKED_TYPES:
+            require(any(row['document_line_id'] == envelope_id and row['kind'] == 'vendor_return'
+                        for row in movements),
+                    'an item row returned stock that no movement took out')
 
 
 def _batches(pending, indexed, currency, noun):
@@ -216,6 +313,7 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
         _exact_inverse(s, replaced[0], pending['posting_lines'])
         require(not ap_settlement.active_applications(s, header['id']),
                 'a voided credit still settles a bill')
+        _stock(s, data, indexed, [], {})
         return
 
     from bookflow.company import bills
@@ -272,10 +370,10 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
             'a supplier reference without its comparison key')
 
     envelopes = pending['document_lines']
-    expenses = pending['vendor_credit_expense_lines']
-    require(bool(envelopes) and len(envelopes) == len(expenses),
+    expenses, items = pending['vendor_credit_expense_lines'], pending['vendor_credit_item_lines']
+    require(bool(envelopes) and len(envelopes) == len(expenses) + len(items),
             'every credited line needs exactly one profile')
-    require(all(line['revision_id'] == revision['id'] for line in envelopes + expenses),
+    require(all(line['revision_id'] == revision['id'] for line in envelopes + expenses + items),
             'a line belongs to another revision')
     require(sorted(line['position'] for line in envelopes) == list(range(1, len(envelopes) + 1)),
             'non-contiguous entered lines')
@@ -298,20 +396,33 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
         require(not kept, 'a new credit mints every line identity it uses')
 
     by_envelope = {line['document_line_id']: line for line in expenses}
-    total = 0
+    require(len(by_envelope) == len(expenses), 'an envelope owns two expense profiles')
+    by_item = {line['document_line_id']: line for line in items}
+    require(len(by_item) == len(items) and not set(by_envelope) & set(by_item),
+            'an envelope owns two profiles')
+    by_envelope.update(by_item)
+    totals = {'expense': 0, 'item': 0}
     for envelope in envelopes:
         line = by_envelope.get(envelope['id'])
-        require(line is not None, 'a credited line without its expense profile')
-        facts = BillExpenseProfile.model_validate_json(line['line_snapshot'])
+        require(line is not None, 'a credited line without its expense or item profile')
+        family = 'item' if envelope['id'] in by_item else 'expense'
+        facts = (BillItemProfile if family == 'item' else BillExpenseProfile).model_validate_json(
+            line['line_snapshot'])
         require(facts.account.id == line['account_id'], 'captured line facts disagree with columns')
-        require(facts.account.type in bills.EXPENSE_ACCOUNTS,
-                'a credited line names an ineligible account')
-        require(facts.billable is False, 'a vendor credit line is never billable')
+        if family == 'item':
+            _item(line, facts)
+        else:
+            require(facts.account.type in bills.EXPENSE_ACCOUNTS,
+                    'a credited line names an ineligible account')
+            require(facts.billable is False, 'a vendor credit expense line is never billable')
         require(line['customer_id'] == (facts.customer.id if facts.customer else None),
                 'the captured job disagrees with the column')
-        total += amount(line['amount_minor_units'], positive=True)
-    require(total == profile['expense_total_minor_units'] == revision['total_minor_units'],
+        totals[family] += amount(line['amount_minor_units'], positive=True)
+    require(totals['expense'] == profile['expense_total_minor_units']
+            and totals['item'] == profile['item_total_minor_units']
+            and totals['expense'] + totals['item'] == revision['total_minor_units'],
             'the credited lines do not add up to the credit')
+    total = totals['expense'] + totals['item']
 
     batch = batches[0]
     legs, sources = pending['posting_lines'], pending['posting_line_sources']
@@ -327,6 +438,7 @@ def _accounting(s, data, header, pending, indexed, currency, operation):
                 'a vendor credit posts nothing but expense credits and one payable debit')
         credits[leg['id']] = leg
     require(len(credits) == len(envelopes), 'one credited account per entered line')
+    _stock(s, data, indexed, items, credits)
 
     attributed = {}
     for source in sources:

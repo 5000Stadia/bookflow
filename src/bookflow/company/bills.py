@@ -420,7 +420,7 @@ def _readable(types):
     return ', '.join(spelled[:-1]) + ' or ' + spelled[-1]
 
 
-def _purchasable_item(s, selector, field):
+def _purchasable_item(s, selector, field, noun='bill'):
     """The item a bill line may buy, the account buying it debits, and which account that is.
 
     Three bases, and the item decides which. A **stock-carrying** item debits its own
@@ -439,13 +439,13 @@ def _purchasable_item(s, selector, field):
     if row['type'] not in PURCHASABLE_ITEM_TYPES:
         raise BookflowError('E_VALIDATION', details={
             'fields': [{'field': field, 'problem':
-                        f'"{row["full_name"]}" is a {row["type"].replace("_", " ")} item; a bill '
+                        f'"{row["full_name"]}" is a {row["type"].replace("_", " ")} item; a {noun} '
                         f'line takes a {_readable(PURCHASABLE_ITEM_TYPES)} item'}],
             'record_type': 'item', 'record_id': row['id'], 'item_type': row['type'],
             'reason': 'item_type_not_purchasable',
             'supported_item_types': list(PURCHASABLE_ITEM_TYPES)})
     if row['other_charge_percent_millionths'] is not None:
-        raise _invalid(field, f'"{row["full_name"]}" is a percentage charge; a bill line has no base '
+        raise _invalid(field, f'"{row["full_name"]}" is a percentage charge; a {noun} line has no base '
                               'to take a percentage of')
     if row['type'] in inventory.TRACKED_TYPES:
         basis, account_id = 'asset', row['asset_account_id']
@@ -458,16 +458,17 @@ def _purchasable_item(s, selector, field):
                               'description and an expense account, or enter the cost as an expense line')
     account = _account_row(s, account_id, field)
     if not account_eligible(basis, account):
-        raise _invalid(field, f'"{row["full_name"]}" posts to "{account["full_name"]}", which a bill '
-                              'line may not debit; repoint the item at an eligible account')
+        raise _invalid(field, f'"{row["full_name"]}" posts to "{account["full_name"]}", which a {noun} '
+                              'line may not ' + ('credit' if noun == 'vendor credit' else 'debit')
+                       + '; repoint the item at an eligible account')
     return row, account, basis
 
 
-def _item_line(s, line, header_class, currency, index):
+def _item_line(s, line, header_class, currency, index, noun='bill'):
     """One Items-tab row resolved into the amount it debits and the facts it captures."""
     from bookflow.company.sales_models import money as sales_money
     field = f'items.{index}'
-    row, account, account_basis = _purchasable_item(s, line.item, field + '.item')
+    row, account, account_basis = _purchasable_item(s, line.item, field + '.item', noun)
     if account['currency'] != currency:
         raise _invalid(field + '.item', 'account must use the home currency')
     if row['cost_minor_units'] is not None and row['cost_currency'] != currency:

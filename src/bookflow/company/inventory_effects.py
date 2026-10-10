@@ -29,6 +29,12 @@ as well -- they are recosted with the issue instead of being stranded at what th
 on the day the credit was written. The money side of the credit is untouched by this, for the
 same reason a sale's revenue is.
 
+A **return to a vendor** is a purchase read backwards, and its value is stated rather than
+costed: a vendor-credit item line credits Inventory Asset the amount the vendor credited and
+writes one ``vendor_return`` movement carrying the quantity and that amount, so the average cost
+of what stays on the shelf moves by the difference between the credit and the average. Nothing
+recosts it later, because nobody but the vendor decided what it was worth.
+
 A **correction or a void** reverses those legs exactly, the way it reverses every other leg,
 and writes one ``reversal`` movement against each reversing leg. A replacement revision then
 receives or issues again at whatever the average says *now*. There is no separate rule for a
@@ -109,12 +115,12 @@ class Entry:
     key: str
     item_id: str
     item_name: str
-    kind: str                      # 'receipt' or 'issue'
+    kind: str                      # 'receipt', 'issue' or 'vendor_return'
     quantity_microunits: int       # positive magnitude; the sign comes from the kind
     asset_account_id: str
     offset_account_id: str
     class_id: str | None = None
-    value_minor_units: int | None = None   # a bought receipt states it; the rest ask costing
+    value_minor_units: int | None = None   # a bought receipt and a vendor return state it; the rest ask costing
     returns_movement_id: str | None = None # the issue this receipt gives back, on a return
 
 
@@ -124,6 +130,22 @@ def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
         return None
     return Entry(key=key, item_id=facts.item.id, item_name=facts.item.label,
                  kind='receipt', quantity_microunits=facts.quantity_microunits,
+                 asset_account_id=facts.account.id, offset_account_id=offset_account_id,
+                 class_id=class_id, value_minor_units=amount)
+
+
+def vendor_return_entry(facts, *, key, amount, offset_account_id, class_id):
+    """Declare stock sent back to a supplier, taken out of the asset at the credited amount.
+
+    The inverse of ``purchase_entry``: the same two accounts, used the other way round. What it
+    is worth is *stated* -- the amount the vendor credited, which the credit line posts to
+    Inventory Asset -- so it is not the weighted average's answer and the average of what stays
+    moves with it, exactly as the anchor product does with an item on a vendor credit.
+    """
+    if facts.item_type not in inventory.TRACKED_TYPES:
+        return None
+    return Entry(key=key, item_id=facts.item.id, item_name=facts.item.label,
+                 kind='vendor_return', quantity_microunits=facts.quantity_microunits,
                  asset_account_id=facts.account.id, offset_account_id=offset_account_id,
                  class_id=class_id, value_minor_units=amount)
 
@@ -272,6 +294,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             quantity_microunits=signed,
             value_minor_units=(entry.value_minor_units
                                if entry.kind == 'receipt' and entry.returns_movement_id is None
+                               else -entry.value_minor_units if entry.kind == 'vendor_return'
                                else -1),
             effective_date=date, sequence=sequence, currency=currency,
             asset_account_id=entry.asset_account_id, offset_account_id=entry.offset_account_id,

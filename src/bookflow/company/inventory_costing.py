@@ -16,6 +16,13 @@ quantity out and consumes value at the running weighted average:
     consumed = V                                   when the issue empties the stock
     consumed = round_half_even(V * |q| / Q)        otherwise
 
+A **vendor return** moves quantity out at a *stated* value -- the amount the vendor credited --
+rather than at the average: ``Q`` falls by its quantity, ``V`` by that amount, and the average of
+what stays moves. It is an input in both quantity and value and never has a cost of its own to
+recompute. It may not take more than is on hand, and the stock that is left must still be worth
+what the walk's checks below require, so a return that empties the shelf must credit exactly what
+it was worth.
+
 A **return** -- a receipt naming an issue in ``returns_movement_id`` -- is that issue read
 backwards, so its value is an output of this walk and not a number anybody states. The returns
 of one issue take contiguous spans of its issued quantity in the order they are walked and
@@ -128,7 +135,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from bookflow.company.inventory_schema import INPUT_KINDS
-from bookflow.core.exact import QUANTITY_SCALE, endpoint_share, round_ratio_half_even
+from bookflow.core.exact import (
+    QUANTITY_SCALE, endpoint_share, format_quantity_micro_units, round_ratio_half_even,
+)
 
 MICRO = 10 ** QUANTITY_SCALE
 
@@ -344,6 +353,27 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                                    problem='stock on hand must be worth more than nothing; '
                                            'issue the quantity to write it off in full')
             value = proposed
+        elif row['kind'] == 'vendor_return':
+            # Sent back to the supplier for a credit. The credit is what the vendor allowed,
+            # so that is what leaves the asset -- not the running average -- and what stays
+            # on the shelf is worth the difference: its average moves. Only stock that is on
+            # hand can go back, so a return never reaches below zero or into a shortfall.
+            issue = -change
+            if issue > quantity:
+                raise StockRefusal(
+                    'negative_stock', row, quantity_microunits=quantity,
+                    problem=('only ' + format_quantity_micro_units(max(quantity, 0))
+                             + ' on hand, so no more than that can go back to the vendor'))
+            if issue == quantity and value + int(row['value_minor_units']) != 0:
+                from bookflow.core.money import Money
+                worth = Money(value, row['currency'])
+                raise StockRefusal(
+                    'residual_value', row, value_minor_units=value + int(row['value_minor_units']),
+                    problem=(f'sending back all {format_quantity_micro_units(quantity)} on hand must '
+                             f'credit exactly what that stock is worth, {worth}; credit the rest '
+                             'on an expense line, or leave some quantity behind'))
+            quantity -= issue
+            value += int(row['value_minor_units'])
         else:
             issue = -change
             if issue <= quantity:

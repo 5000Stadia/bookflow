@@ -6,6 +6,17 @@ falls by exactly what was credited and the expense that was recognised comes bac
 one reverses that at its own date and keeps every revision readable. That is the bill's
 lifecycle with the signs swapped, deliberately.
 
+**Two tabs, like the bill.** A credit has an Expenses grid and an Items grid, and it may be
+entered on either or on both; they are two profile tables over one ``purchase`` envelope
+family (``vendor_credit_expense_lines`` and ``vendor_credit_item_lines``), resolved by the
+bill's own resolvers, so an item row is written by the code that writes a bill's. Both credit
+the account they captured and debit Accounts Payable once for the sum. An item that holds stock
+credits Inventory Asset and sends the quantity back at the *credited* amount -- one
+``vendor_return`` movement through ``company/inventory_effects.py`` -- so the average cost of
+what stays moves, which is the anchor's rule for stock returned to a vendor. A correction
+reverses the movement it wrote and takes the new grid's; a void reverses it and stops; a return
+dated before later sales recosts those sales exactly as a backdated bill does.
+
 **It is a source, not a payable.** A bill creates an ``ap_obligation_keys`` row because
 somebody owes it; a credit creates none, because nobody owes a credit -- what it has is
 capacity to settle something else. ``report unpaid-bills`` lists documents of type ``bill``,
@@ -35,17 +46,22 @@ import sqlalchemy as sa
 
 from bookflow.company import ap_settlement, bill_payments, bills, journals, schema as c
 from bookflow.company import document_effects as effects
+from bookflow.company import inventory_effects
 from bookflow.company.journal_models import checked_sum
 from bookflow.company.parties import resolve_party
-from bookflow.company.vendor_credit_facts import BillExpenseProfile, Origin, Vendor, VendorCreditProfile
+from bookflow.company.vendor_credit_facts import (
+    BillExpenseProfile, BillItemProfile, Origin, Vendor, VendorCreditProfile,
+)
 from bookflow.company.vendor_credit_models import (
-    VendorCreditComponentOutput, VendorCreditExpenseOutput, VendorCreditOutput,
+    VendorCreditComponentOutput, VendorCreditExpenseOutput, VendorCreditItemOutput,
+    VendorCreditOutput,
     VendorCreditHistoryOutput, VendorCreditPageOutput, VendorCreditRevisionOutput,
     VendorCreditRevisionSummaryOutput, VendorCreditSettlementOutput,
     VendorCreditSourceOutput, VendorCreditSummaryOutput, VendorCreditWriteOutput, reference_key,
 )
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
+from bookflow.core.exact import format_quantity_micro_units
 from bookflow.core.ids import is_ulid, new_id
 from bookflow.core.money import Money
 from bookflow.core.registry import Applied, Plan, Touched
@@ -61,6 +77,7 @@ TABLE_KINDS = (
     ('document_lines', 'document_line', 'id'),
     ('vendor_credit_profiles', 'vendor_credit_profile', 'revision_id'),
     ('vendor_credit_expense_lines', 'vendor_credit_expense_line', 'document_line_id'),
+    ('vendor_credit_item_lines', 'vendor_credit_item_line', 'document_line_id'),
     ('posting_batches', 'posting_batch', 'id'),
     ('posting_lines', 'posting_line', 'id'),
     ('posting_line_sources', 'posting_line_source', 'id'),
@@ -101,24 +118,49 @@ def profile_row(s, revision):
                         c.vendor_credit_profiles.c.revision_id == revision['id'])[0]
 
 
-def merged_line(envelope, profile):
+LINE_FACTS = {'expense': BillExpenseProfile, 'item': BillItemProfile}
+
+
+def merged_line(envelope, profile, family='expense'):
     """One credited line as a reader sees it: the envelope's identity, the profile's money.
 
     Both rows carry ``account_id`` and ``amount_minor_units``, and on a purchase envelope both
     are null -- the accounting lives in the profile. Spelling the overlap out rather than
-    merging blindly is what keeps a line's account from silently reading as null.
+    merging blindly is what keeps a line's account from silently reading as null. An item row
+    adds what the Items tab has and the Expenses tab does not, the bill's own columns: the
+    item, the quantity and the unit cost the amount came from, and the billable mark.
     """
-    return dict(envelope, memo=envelope['description'], account_id=profile['account_id'],
-                amount_minor_units=profile['amount_minor_units'],
-                customer_id=profile['customer_id'], line_snapshot=profile['line_snapshot'])
+    merged = dict(envelope, family=family, memo=envelope['description'],
+                  account_id=profile['account_id'],
+                  amount_minor_units=profile['amount_minor_units'],
+                  customer_id=profile['customer_id'], line_snapshot=profile['line_snapshot'])
+    if family == 'item':
+        merged.update(item_id=profile['item_id'], billable=bool(profile['billable']),
+                      quantity_microunits=profile['quantity_microunits'],
+                      quantity=format_quantity_micro_units(profile['quantity_microunits']),
+                      unit_cost_minor_units=profile['unit_cost_minor_units'])
+    return merged
+
+
+def line_profiles(s, revision):
+    """Every stored line profile of a revision, by envelope id, with the family that owns it."""
+    found = {}
+    for family, table in (('expense', c.vendor_credit_expense_lines), ('item', c.vendor_credit_item_lines)):
+        for row in effects.rows(s, table, table.c.revision_id == revision['id']):
+            found[row['document_line_id']] = (family, row)
+    return found
 
 
 def saved_lines(s, revision):
     envelopes = effects.rows(s, c.document_lines, c.document_lines.c.revision_id == revision['id'],
                              order=c.document_lines.c.position)
-    profiles = {row['document_line_id']: row for row in effects.rows(
-        s, c.vendor_credit_expense_lines, c.vendor_credit_expense_lines.c.revision_id == revision['id'])}
-    return [merged_line(envelope, profiles[envelope['id']]) for envelope in envelopes]
+    profiles = line_profiles(s, revision)
+    return [merged_line(envelope, profiles[envelope['id']][1], profiles[envelope['id']][0])
+            for envelope in envelopes]
+
+
+def by_family(lines, family):
+    return [line for line in lines if line['family'] == family]
 
 
 # ---------------------------------------------------------------- what a credit captures
@@ -212,37 +254,53 @@ def resolve_header(s, inp, previous=None):
 
 
 def _credited_grid(s, inp, header, previous):
-    """The credited rows this revision carries, and the identity each one keeps.
+    """The credited rows this revision carries, grid by grid, and the identity each one keeps.
 
-    Supplying ``expenses`` replaces the grid outright; leaving it out on a correction keeps
-    every captured row exactly as it was written, down to the account name the credit was
-    entered under, so correcting the date cannot silently re-resolve a renamed account.
+    Supplying ``expenses`` or ``items`` replaces that grid outright; leaving one out on a
+    correction keeps every captured row of it exactly as it was written, down to the account
+    name the credit was entered under, so correcting the date cannot silently re-resolve a
+    renamed account or an item since repointed. The grids are resolved by the bill's own
+    resolvers: an item row is written by the same code that writes a bill's.
     """
     currency = header['currency']
-    if previous is None:
-        return [bills._expense_line(s, line, header['class_id'], currency, index)
-                for index, line in enumerate(inp.expenses)]
-    saved = saved_lines(s, previous['revision'])
-    if inp.expenses is None:
-        return [dict(line_id=line['line_id'], memo=line['memo'],
-                     amount_minor_units=line['amount_minor_units'],
-                     profile=BillExpenseProfile.model_validate_json(line['line_snapshot']))
-                for line in saved]
-    prior, seen, lines = {line['line_id'] for line in saved}, set(), []
-    for index, line in enumerate(inp.expenses):
-        key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
-        # A retired identity cannot return, and no identity may name two rows: the row a
-        # reader follows through the history has to stay one row.
-        if key is not None and (key not in prior or key in seen):
-            raise _invalid('expenses.line_id',
-                           'use a unique current line identity from this credit; retired '
-                           'identities cannot return')
-        if key:
-            seen.add(key)
-        resolved = bills._expense_line(s, line, header['class_id'], currency, index)
-        resolved['line_id'] = key
-        lines.append(resolved)
-    return lines
+    old_lines = saved_lines(s, previous['revision']) if previous else []
+    seen, grids = set(), {}
+    for family, supplied, resolver in (('expense', inp.expenses, bills._expense_line),
+                                       ('item', inp.items, bills._item_line)):
+        kept = by_family(old_lines, family)
+        if previous and supplied is None:
+            grids[family] = [dict(line_id=line['line_id'], family=family, memo=line['memo'],
+                                  amount_minor_units=line['amount_minor_units'],
+                                  profile=LINE_FACTS[family].model_validate_json(line['line_snapshot']))
+                             for line in kept]
+            seen.update(line['line_id'] for line in kept)
+            continue
+        collection = 'items' if family == 'item' else 'expenses'
+        prior, resolved_lines = {line['line_id'] for line in kept}, []
+        for index, line in enumerate(supplied or []):
+            key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
+            # A retired identity cannot return, no identity may name two rows, and an identity
+            # cannot cross tabs: the row a reader follows through the history has to stay one row.
+            if key is not None and (key not in prior or key in seen):
+                raise _invalid(collection + '.line_id',
+                               'use a unique current line identity from this credit; retired '
+                               'identities cannot return and a row cannot change grid')
+            if key:
+                seen.add(key)
+            resolved = (resolver(s, line, header['class_id'], currency, index, noun='vendor credit')
+                        if family == 'item' else
+                        resolver(s, line, header['class_id'], currency, index))
+            resolved['line_id'] = key
+            resolved_lines.append(resolved)
+        grids[family] = resolved_lines
+    return grids
+
+
+def _income_warning(profile):
+    return (f'"{profile.item.label}" has no purchase account, so its income account '
+            f'"{profile.account.full_name}" is being used. Returning something you sell raises '
+            'that income rather than giving back a cost. Give the item a purchase description '
+            'and an expense account to credit a cost account instead.')
 
 
 def commercial(s, inp, previous=None):
@@ -252,10 +310,20 @@ def commercial(s, inp, previous=None):
     old_revision = previous['revision'] if previous else None
     date = (inp.date or old_revision['date']) if old_revision else inp.date
     memo = inp.memo if previous is None or _supplied(inp, 'memo') else old_revision['memo']
-    lines = _credited_grid(s, inp, header, previous)
+    grids = _credited_grid(s, inp, header, previous)
+    # Expenses first, then items: the order of the two tabs on the document itself.
+    lines = grids['expense'] + grids['item']
+    if not lines:
+        raise _invalid('items' if inp.items is not None and inp.expenses is None else 'expenses',
+                       'a vendor credit needs at least one expense row or item row')
     for line in lines:
         line.setdefault('line_id', None)
-    total = checked_sum((line['amount_minor_units'] for line in lines), 'expenses.total')
+        if line['amount_minor_units'] <= 0:
+            raise _invalid('items' if line['family'] == 'item' else 'expenses',
+                           'every credited row must be worth more than nothing')
+    expense_total = checked_sum((line['amount_minor_units'] for line in grids['expense']), 'expenses.total')
+    item_total = checked_sum((line['amount_minor_units'] for line in grids['item']), 'items.total')
+    total = checked_sum((expense_total, item_total), 'total')
     number, sequence = effects.allocate(
         s, DOCUMENT_TYPE,
         inp.number if inp.number is not None else (old_revision['number'] if previous else None),
@@ -264,16 +332,21 @@ def commercial(s, inp, previous=None):
         vendor=header['vendor'], ap_account=header['ap_account'],
         supplier_reference=header['supplier_reference'],
         supplier_reference_key=header['supplier_reference_key'], class_id=header['class_id'],
-        expense_total_minor_units=total, currency=currency, origins=header['origins'])
-    return dict(profile=profile, lines=lines, total=total, currency=currency, number=number,
-                sequence=sequence, issuer=header['issuer'], memo=memo, date=date)
+        expense_total_minor_units=expense_total, item_total_minor_units=item_total,
+        currency=currency, origins=header['origins'])
+    return dict(profile=profile, lines=lines, total=total, expense_total=expense_total,
+                item_total=item_total, currency=currency, number=number,
+                sequence=sequence, issuer=header['issuer'], memo=memo, date=date,
+                warnings=list(dict.fromkeys(
+                    _income_warning(line['profile']) for line in lines
+                    if getattr(line['profile'], 'account_basis', 'purchase') == 'income')))
 
 
 # ---------------------------------------------------------------- what changed, and whether anything did
 
 
 def _line_semantic(line):
-    return {'line_id': line['line_id'], 'memo': line['memo'],
+    return {'line_id': line['line_id'], 'family': line['family'], 'memo': line['memo'],
             'amount_minor_units': line['amount_minor_units'],
             'profile': line['profile'].model_dump(mode='json')}
 
@@ -284,7 +357,7 @@ def saved_semantic(s, revision):
     return dict(
         date=revision['date'], number=revision['number'], memo=revision['memo'],
         profile=VendorCreditProfile.model_validate_json(stored['profile_snapshot']).model_dump(mode='json'),
-        lines=[_line_semantic(dict(line, profile=BillExpenseProfile.model_validate_json(
+        lines=[_line_semantic(dict(line, profile=LINE_FACTS[line['family']].model_validate_json(
             line['line_snapshot']))) for line in saved_lines(s, revision)])
 
 
@@ -326,8 +399,10 @@ def summary(header, revision, profile, settlement):
                 supplier_reference=profile['supplier_reference'], memo=revision['memo'],
                 currency=currency,
                 expense_total_minor_units=profile['expense_total_minor_units'],
+                item_total_minor_units=profile['item_total_minor_units'],
                 total_minor_units=revision['total_minor_units'],
                 expense_total=Money(profile['expense_total_minor_units'], currency).to_dict(),
+                item_total=Money(profile['item_total_minor_units'], currency).to_dict(),
                 total=Money(revision['total_minor_units'], currency).to_dict(),
                 settlement_current=settlement)
 
@@ -385,8 +460,11 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
             sa.select(sa.func.count()).select_from(c.document_lines).where(
                 c.document_lines.c.revision_id == revision['id'])).scalar_one()
     elif envelopes:
-        details = {row['document_line_id']: row for row in pending['vendor_credit_expense_lines']}
-        lines = [merged_line(line, details[line['id']]) for line in envelopes]
+        details = {row['document_line_id']: (family, row) for family, table in
+                   (('expense', 'vendor_credit_expense_lines'), ('item', 'vendor_credit_item_lines'))
+                   for row in pending[table]}
+        lines = [merged_line(line, details[line['id']][1], details[line['id']][0])
+                 for line in envelopes]
     else:
         lines = saved_lines(s, revision)
     profile = next((row for row in pending.get('vendor_credit_profiles', [])
@@ -394,6 +472,8 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
     values = {k: v for k, v in revision.items() if not k.endswith('_snapshot')}
     values.update(expense_total_minor_units=profile['expense_total_minor_units'],
                   expense_total=Money(profile['expense_total_minor_units'], currency).to_dict(),
+                  item_total_minor_units=profile['item_total_minor_units'],
+                  item_total=Money(profile['item_total_minor_units'], currency).to_dict(),
                   total=Money(revision['total_minor_units'], currency).to_dict(),
                   line_count=line_count if summary_only else len(lines), batches=summaries,
                   applications=bill_payments.application_outputs(mine, currency, numbers))
@@ -405,7 +485,14 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
         source=_source_output(s, header, revision, edges, pending),
         expenses=[VendorCreditExpenseOutput(
             **dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
-                   line_snapshot=json.loads(line['line_snapshot']))) for line in lines])
+                   line_snapshot=json.loads(line['line_snapshot'])))
+            for line in by_family(lines, 'expense')],
+        items=[VendorCreditItemOutput(
+            **dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
+                   unit_cost=None if line['unit_cost_minor_units'] is None
+                   else Money(line['unit_cost_minor_units'], currency).to_dict(),
+                   line_snapshot=json.loads(line['line_snapshot'])))
+            for line in by_family(lines, 'item')])
 
 
 def _output(s, header, revision, pending=None, *, model=VendorCreditOutput, **extra):
@@ -550,11 +637,19 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     now owes less, and each entered line's share of it is an attribution row on that debit
     rather than a leg of its own. Those attribution rows are what the source components name,
     which is how an application can later land on particular credited lines.
+
+    Nothing here asks which tab a row came from. An expense row's account was typed and an item
+    row's was read off the item, but by the time both are stored each is one captured account and
+    one positive amount, so both take exactly one credit leg and one component. A stocked item's
+    account is Inventory Asset: that leg is the one its ``vendor_return`` movement is bound to,
+    so it is returned keyed by entered line for the caller to bind.
     """
     profile = resolved['profile']
     currency = revision['currency']
     envelopes = [row for row in pending['document_lines'] if row['revision_id'] == revision['id']]
-    profiles = {row['document_line_id']: row for row in pending['vendor_credit_expense_lines']}
+    profiles = {row['document_line_id']: (family, row) for family, table in
+                (('expense', 'vendor_credit_expense_lines'), ('item', 'vendor_credit_item_lines'))
+                for row in pending[table]}
     line_no = 0
 
     def leg(account, amount, debit, class_id, class_name, description):
@@ -579,11 +674,13 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
         pending['posting_line_sources'].append(source)
         return source
 
+    credits = {}
     for envelope in envelopes:
-        line = profiles[envelope['id']]
-        facts = BillExpenseProfile.model_validate_json(line['line_snapshot'])
+        family, line = profiles[envelope['id']]
+        facts = LINE_FACTS[family].model_validate_json(line['line_snapshot'])
         given_back = leg(facts.account, line['amount_minor_units'], False,
                          envelope['class_id'], envelope['class_name'], envelope['description'])
+        credits[envelope['id']] = given_back
         attribute(given_back, envelope, line['amount_minor_units'])
     payable = leg(profile.ap_account, resolved['total'], True,
                   profile.class_id.id if profile.class_id else None,
@@ -597,13 +694,35 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
                           ap_account_id=profile.ap_account.id, currency=currency, audit_event_id=event)
         pending['ap_source_keys'].append(source_key)
     for envelope in envelopes:
-        line = profiles[envelope['id']]
+        line = profiles[envelope['id']][1]
         attribution = attribute(payable, envelope, line['amount_minor_units'])
         pending['ap_source_components'].append(dict(
             **created(), transaction_id=header['id'], revision_id=revision['id'],
             key_id=source_key['id'], document_line_id=envelope['id'], ordinal=1,
             posting_source_id=attribution['id'], amount_minor_units=line['amount_minor_units'],
             currency=currency, audit_event_id=event))
+    return credits
+
+
+def _stock_entries(pending, profile):
+    """The item rows that send stock back, in the shape the inventory ledger takes them.
+
+    What leaves the shelf is read off the captured facts, not off the item master, so
+    repointing an item afterwards cannot change which rows of a stored revision moved stock.
+    """
+    items = {row['document_line_id']: row for row in pending['vendor_credit_item_lines']}
+    entries = []
+    for envelope in pending['document_lines']:
+        line = items.get(envelope['id'])
+        if line is None:
+            continue
+        entry = inventory_effects.vendor_return_entry(
+            BillItemProfile.model_validate_json(line['line_snapshot']), key=envelope['id'],
+            amount=line['amount_minor_units'], offset_account_id=profile.ap_account.id,
+            class_id=envelope['class_id'])
+        if entry is not None:
+            entries.append(entry)
+    return entries
 
 
 def _has_applications(s, header):
@@ -756,7 +875,8 @@ def _compose(s, ctx, inp, resolved, previous=None):
         type=DOCUMENT_TYPE, vendor_id=profile.vendor.id, ap_account_id=profile.ap_account.id,
         supplier_reference=profile.supplier_reference,
         supplier_reference_key=profile.supplier_reference_key,
-        expense_total_minor_units=resolved['total'],
+        expense_total_minor_units=resolved['expense_total'],
+        item_total_minor_units=resolved['item_total'],
         profile_snapshot=json_text(profile.model_dump())))
     for position, line in enumerate(resolved['lines'], 1):
         # A row carried over from the superseded revision keeps its identity, so the row a
@@ -775,12 +895,28 @@ def _compose(s, ctx, inp, resolved, previous=None):
                         class_name=facts.class_id.label if facts.class_id else None,
                         description=line['memo'], **dict.fromkeys(journals.FACTS))
         pending['document_lines'].append(envelope)
-        pending['vendor_credit_expense_lines'].append(dict(
+        shared = dict(
             document_line_id=envelope['id'], transaction_id=header['id'], revision_id=revision['id'],
             **row_provenance, account_id=facts.account.id,
             amount_minor_units=line['amount_minor_units'],
             customer_id=facts.customer.id if facts.customer else None,
-            line_snapshot=json_text(facts.model_dump())))
+            line_snapshot=json_text(facts.model_dump()))
+        if line['family'] == 'item':
+            pending['vendor_credit_item_lines'].append(dict(
+                shared, item_id=facts.item.id, quantity_microunits=facts.quantity_microunits,
+                unit_cost_minor_units=facts.unit_cost_minor_units, billable=facts.billable))
+        else:
+            pending['vendor_credit_expense_lines'].append(shared)
+    # What this write does to stock, decided in full before any of it is built: the previous
+    # revision's returns are retired, the new revision's are taken, and the corrections every
+    # later issue is owed -- its average moved -- are worked out against the item's whole
+    # history. A refusal here (more sent back than is on hand, a closed period, value left
+    # behind) leaves nothing behind, because nothing has been written.
+    stock = inventory_effects.plan(
+        s, entries=_stock_entries(pending, profile),
+        reversing=inventory_effects.own_movements(s, old_header['id']) if previous else (),
+        date=revision['date'], currency=currency, field='items')
+    inventory_effects.open_dates(s, stock)
     old_batch = source_key = None
     if previous:
         batches = effects.rows(s, c.posting_batches,
@@ -799,18 +935,25 @@ def _compose(s, ctx, inp, resolved, previous=None):
                  reverses_batch_id=None,
                  replaces_batch_id=old_batch['id'] if old_batch else None, audit_event_id=event)
     pending['posting_batches'].append(batch)
-    _business_postings(s, header, revision, batch, resolved, pending, created, event,
-                       source_key=source_key)
+    credits = _business_postings(s, header, revision, batch, resolved, pending, created, event,
+                                 source_key=source_key)
+    for movement in stock.movements:
+        if movement.key is not None:
+            inventory_effects.bind(movement, credits.get(movement.key), transaction_id=header['id'],
+                                   revision_id=revision['id'], document_line_id=movement.key,
+                                   batch=batch)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
+    inventory_effects.check(s, stock, pending['posting_lines'])
     if previous:
         _retake_applications(s, ctx, header, resolved, pending, at, event)
     changed_fields = (bills._changes(saved_semantic(s, old_revision), resolved_semantic(resolved))
                       if previous else [])
     plan = Plan(_output(s, header, revision, pending, model=VendorCreditWriteOutput,
-                        changed_fields=changed_fields),
+                        changed_fields=changed_fields, warnings=resolved['warnings']),
                 dict(input=inp, operation='update' if previous else 'post', changed=True,
                      header=header, before=old_header, old_revision=old_revision, pending=pending,
                      sequence=resolved['sequence'], event=event, resolved=resolved,
-                     previous=previous))
+                     previous=previous, stock=stock))
     from bookflow.company.vendor_credit_validation import validate
     validate(plan, s, ctx)
     return plan
@@ -844,6 +987,14 @@ def prepare_void(s, ctx, inp):
                                  c.posting_batches.c.revision_id == old_revision['id'],
                                  c.posting_batches.c.kind != 'reversal')[0]
     inverse = effects.reverse(s, header, old_revision, current_batch, event, created, pending)
+    # What came off the shelf goes back on it. The stock the credit sent away is returned at
+    # the value it left at, and every later issue is owed the correction its average implies.
+    stock = inventory_effects.plan(
+        s, entries=[], reversing=inventory_effects.own_movements(s, old_header['id']),
+        date=old_revision['date'], currency=old_revision['currency'], field='items')
+    inventory_effects.open_dates(s, stock)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
+    inventory_effects.check(s, stock, pending['posting_lines'])
     header.update(version=old_header['version'] + 1, updated_at=at, updated_by=s.actor.id,
                   updated_via=ctx.interface.value, status='voided', voided_at=at,
                   voided_by=s.actor.id, void_reason=ctx.reason.strip(),
@@ -852,7 +1003,7 @@ def prepare_void(s, ctx, inp):
                         changed_fields=['status']),
                 dict(input=inp, operation='void', changed=True, header=header, before=old_header,
                      old_revision=old_revision, pending=pending, sequence=None, event=event,
-                     resolved=None))
+                     resolved=None, stock=stock))
     from bookflow.company.vendor_credit_validation import validate
     validate(plan, s, ctx)
     return plan
@@ -1051,8 +1202,16 @@ def apply(plan, ctx, s):
     data = fresh.data
     command_name = 'vendor-credit ' + operation
     if operation in ('post', 'void', 'update'):
-        return effects.persist(fresh, ctx, s, command_name=command_name,
-                               table_kinds=table_kinds_for(operation))
+        applied = effects.persist(fresh, ctx, s, command_name=command_name,
+                                  table_kinds=table_kinds_for(operation))
+        # The dated cost corrections this return owes later issues: their own documents, at
+        # their own dates, in this same company transaction.
+        stock = data.get('stock')
+        if stock is None or not stock.moves_stock:
+            return applied
+        return inventory_effects.settle(applied, stock, ctx, s, command_name=command_name,
+                                        summary=f"stock moved by vendor credit {data['header']['number']}",
+                                        created_at=data['header']['updated_at'])
     header, before = data['header'], data['before']
     touched = [Touched('transaction', header['id'], 'update', before['version'], header['version'],
                        header, before, db='company')]
