@@ -7,7 +7,8 @@ two customer checks waiting in Undeposited Funds (1,662.00) and the 1099 Summary
 (Delgado, Ray: 8,450.00, of which check 4472 for 900.00 had not cleared). Figures are the fixture's own,
 added up by hand: checking 21,604.12 on the statement, less 3,915.23 of outstanding checks, plus the
 2,315.60 deposit in transit, is the trial balance's 20,004.49; the card's 2,486.17 owed plus 87.68 of
-charges not yet posted is its 2,573.85.
+charges not yet posted is its 2,573.85. July kept after this move-in, reconciled and closed, is the fit
+check's own replay (tests/fakeco_replay.py, tests/test_fakeco_fit.py).
 """
 from pathlib import Path
 
@@ -23,9 +24,8 @@ OLD = Path(__file__).parent / "fixtures" / "fakeco" / "handed-over" / "old-books
 AS_OF = replay_module.AS_OF
 MAPPINGS = replay_module.MAPPINGS
 CORE = replay_module.CORE_FILES
-SUMMARIES = ("reconciliation_summary_checking_2026-06.csv", "reconciliation_summary_savings_2026-06.csv",
-             "reconciliation_summary_visa_2026-06.csv")
-REST = SUMMARIES + ("uncleared_2026-06-30.csv", "undeposited_funds_2026-06-30.csv", "vendor_1099_summary_2026-06.csv")
+SUMMARIES = replay_module.SUMMARIES
+REST = replay_module.REST
 
 
 def _text(name: str) -> str:
@@ -318,83 +318,3 @@ def test_an_opening_1099_amount_is_set_replaced_and_cleared_and_counts_by_its_da
         assert refused.value.code == "E_VALIDATION" and field in str(refused.value.details), bad
     cleared = run("vendor 1099-opening", dict(vendor=vendor, year=2026, as_of="2026-06-30", amount="0.00"), reason="Not paid after all")
     assert cleared["changed"] and year("2026-01-01", "2026-12-31")[vendor] == (240000, 0)
-
-
-# ---------------------------------------------------------------- July after the move-in
-
-class _RestOfTheBooks(replay_module.Replay):
-    """The fit check's July (tests/fakeco_replay.py), kept after a move-in that brings the rest of the old books:
-    no uncleared item is entered again, no June statement balance is typed, and the July 1 deposit picks the two
-    checks waiting in Undeposited Funds."""
-
-    def move_in(self) -> dict:
-        files = self.attach(CORE + REST)
-        plan = self.run("cutover plan", dict(as_of=AS_OF, files=files, mappings=MAPPINGS))
-        assert plan["ready"], plan["blocking"]
-        applied = self.run("cutover apply", dict(as_of=AS_OF, files=files, mappings=MAPPINGS), reason="Move in from the old books")
-        tie = self.run("cutover tie-out", dict(as_of=AS_OF, files=files + self.attach(replay_module.AGING_FILES), mappings=MAPPINGS))
-        self.cutover = dict(plan=plan, applied=applied, tie=tie)
-        self.journals = {step["record_id"] for step in applied["steps"] if step["kind"] == "journal"}
-        self.openings = {step["name"].split(" · ", 1)[1]: step["record_id"] for step in applied["steps"]
-                         if step["kind"] == "reconciliation_opening"}
-        return self.cutover
-
-    def opening_detail(self):
-        """Nothing to enter again: the move-in brought each uncleared item and the June reconciliation."""
-
-    def _deposit(self, ev: dict):
-        if not all(row["source"].startswith("uf:") for row in ev["items"]):
-            return super()._deposit(ev)
-        names = {row["source"][3:] for row in ev["items"]}
-        picked = [row for row in self.run("deposit sources", dict(date=ev["date"]))["items"] if row["received_from"] in names]
-        assert len(picked) == len(ev["items"]), picked
-        self.made[ev["id"]] = self.run("deposit post", dict(operation_key=new_id(), document=dict(
-            mode="inline", deposit_to="Checking", date=ev["date"],
-            sources=[dict(source_type=row["source_type"], source=row["source"], expected_version=row["expected_version"])
-                     for row in picked])))
-
-    def open_reconciliation(self, account: str, statement: str, ending: str, june: str) -> dict:
-        opening = next(draft for label, draft in self.openings.items() if label.endswith(account))
-        self.covered = {row["group_fingerprint"] for row in self.candidates(opening)
-                        if row["movement"]["transaction_id"] in self.journals}
-        return self.run("reconcile start", dict(operation_key=new_id(), account=account, statement_date=statement,
-                                                ending_balance=ending))["draft"]
-
-
-@pytest.mark.timeout(900)
-def test_july_after_the_move_in_reconciles_to_its_statements_with_nothing_entered_again(tmp_path, monkeypatch):
-    root = tmp_path / "root"
-    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(root))
-    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
-    client = bookflow.connect(data_root=str(root))
-    client.init()
-    harbor = _RestOfTheBooks(root, client)
-    month = harbor.keep_july()
-    assert harbor.cutover["tie"]["tied"], harbor.cutover["tie"]["summary"]
-    assert replay_module.differences(harbor.books("2026-07-31"), replay_module.expected("2026-07-31")) == []
-    key = replay_module.key("2026-07-31")["reconciliations"]
-    for account, done in month["reconciliations"].items():
-        want, totals = key[account], done["finish"]["totals"]
-        assert totals["difference"] == 0, account
-        assert (totals["beginning_balance"], totals["ending_balance"]) == (
-            replay_module.cents(want["beginning_balance"]), replay_module.cents(want["ending_balance"])), account
-        assert sorted(abs(row["amount"]) for row in done["outstanding"]) == sorted(
-            abs(replay_module.cents(row["amount"])) for row in want["outstanding"]), account
-    # June's three checks clear on their own numbers, and nothing is ticked by hand.
-    checking = month["reconciliations"]["Checking"]
-    assert checking["by_hand"] == []
-    assert not [line for line in checking["first"]["lines"] if line["status"] == "unmatched" and line["number"]]
-    # The year's 1099 summary is the whole year's: January to June from the old books, July from Bookflow.
-    year = harbor.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
-    assert [(row["display_vendor_label"], row["payments"]["minor_units"], row["opening_payments"]["minor_units"])
-            for row in year["rows"]] == [("Delgado, Ray", 845000 + 255000, 755000)]
-    # Once July is reconciled and closed, the move-in run again makes nothing, and what it brought still ties as of
-    # the cutover: each opening is now certified, the receipts were deposited, the 1099 figure stands.
-    files = harbor.cutover["plan"]["files"]
-    given = [{"attachment": f["attachment"]} for f in files]
-    again = harbor.run("cutover apply", dict(as_of=AS_OF, files=given, mappings=MAPPINGS), reason="Run the move-in again")
-    assert again["created"] == 0 and "reconciliation_exists" not in {e["code"] for e in again["exceptions"]}
-    tie = harbor.run("cutover tie-out", dict(as_of=AS_OF, files=given, mappings=MAPPINGS))
-    assert [(row["name"], row["opening"], row["tied"]) for row in tie["bank"]["rows"]] == [
-        ("Checking", "certified", True), ("Savings", "certified", True), ("Visa Business Card", "certified", True)]
-    assert (tie["undeposited"]["differences"], tie["vendor_1099"]["differences"], tie["trial_balance"]["differences"]) == (0, 0, 0)
