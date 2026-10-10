@@ -283,6 +283,15 @@ def test_files_that_disagree_with_the_trial_balance_or_the_cutover_block_the_mov
     # A 1099 Summary that stops a month short of the cutover.
     may = _text("vendor_1099_summary_2026-06.csv").replace("January through June 2026", "January through May 2026")
     assert blocking(plan({"content": may, "name": "1099.csv"})) == {"vendor_1099_dates"}
+    # Files checked on their own tie to nothing yet: they plan what they can, block on nothing, and the plan
+    # says once that apply needs the trial balance. A 1099 vendor no list names comes in eligible for a 1099.
+    pieces = run("cutover plan", dict(as_of=AS_OF, files=harbor.attach(("reconciliation_summary_checking_2026-06.csv",
+                                                                        "uncleared_2026-06-30.csv"))))
+    assert (pieces["ready"], pieces["blocking"]) == (False, []) and ("note", "no_trial_balance") in _codes(pieces)
+    assert (_counts(pieces)["uncleared_item"], _counts(pieces)["reconciliation_opening"]) == ((4, 0, 0), (1, 0, 0))
+    alone = run("cutover plan", dict(as_of=AS_OF, files=harbor.attach(("vendor_1099_summary_2026-06.csv",))))
+    assert alone["blocking"] == [] and (_counts(alone)["vendor"], _counts(alone)["vendor_1099_opening"]) == ((1, 0, 0), (1, 0, 0))
+    assert next(step for step in alone["steps"] if step["kind"] == "vendor_1099_opening")["amount"]["minor_units"] == 845000
 
 
 def test_an_opening_1099_amount_is_set_replaced_and_cleared_and_counts_by_its_date(client):
@@ -379,3 +388,13 @@ def test_july_after_the_move_in_reconciles_to_its_statements_with_nothing_entere
     year = harbor.run("report vendor-1099-summary", dict(date_from="2026-01-01", date_to="2026-12-31"))
     assert [(row["display_vendor_label"], row["payments"]["minor_units"], row["opening_payments"]["minor_units"])
             for row in year["rows"]] == [("Delgado, Ray", 845000 + 255000, 755000)]
+    # Once July is reconciled and closed, the move-in run again makes nothing, and what it brought still ties as of
+    # the cutover: each opening is now certified, the receipts were deposited, the 1099 figure stands.
+    files = harbor.cutover["plan"]["files"]
+    given = [{"attachment": f["attachment"]} for f in files]
+    again = harbor.run("cutover apply", dict(as_of=AS_OF, files=given, mappings=MAPPINGS), reason="Run the move-in again")
+    assert again["created"] == 0 and "reconciliation_exists" not in {e["code"] for e in again["exceptions"]}
+    tie = harbor.run("cutover tie-out", dict(as_of=AS_OF, files=given, mappings=MAPPINGS))
+    assert [(row["name"], row["opening"], row["tied"]) for row in tie["bank"]["rows"]] == [
+        ("Checking", "certified", True), ("Savings", "certified", True), ("Visa Business Card", "certified", True)]
+    assert (tie["undeposited"]["differences"], tie["vendor_1099"]["differences"], tie["trial_balance"]["differences"]) == (0, 0, 0)

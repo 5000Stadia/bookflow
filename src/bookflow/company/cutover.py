@@ -190,6 +190,7 @@ class Built:
     tax_item_skips: list[tuple[str, str]] = field(default_factory=list)  # (customer, TAXITEM) the move-in cannot give it
     payee_skips: list[str] = field(default_factory=list)  # uncleared items' payees in no name list
     payer_skips: list[str] = field(default_factory=list)  # undeposited receipts' payers that are no customer
+    unknown_accounts: set[tuple[str, str]] = field(default_factory=set)  # (file, account) said once as unmapped
     undeposited: set[str] = field(default_factory=set)  # Undeposited Funds accounts whose balance comes in as receipts
 
 
@@ -770,6 +771,9 @@ def _parties(built: Built, inp, kind: str) -> None:
             for column in ("TAXVEND", "PREFVEND"):
                 if row.get(column):
                     referenced.setdefault(src.key(row.get(column)), (row.get(column), row.file, row.line))
+        for report in built.sources.vendor_1099:
+            for row in report.rows:
+                referenced.setdefault(src.key(row.vendor), (row.vendor, row.file, row.line))
     paths: dict[str, tuple[str, src.ListRow | None, str | None, int | None]] = {}
     for folded, row in rows.items():
         paths[folded] = (row.path, row, row.file, row.line)
@@ -782,10 +786,6 @@ def _parties(built: Built, inp, kind: str) -> None:
     agencies = {src.key(r.get("TAXVEND")) for r in built.sources.lists["item"] if r.get("TAXVEND")}
     # A vendor on the old books' 1099 Summary that no vendor list describes comes in eligible for a 1099.
     eligible_1099 = {src.key(r.vendor) for report in built.sources.vendor_1099 for r in report.rows} if kind == "vendor" else set()
-    if kind == "vendor":
-        for report in built.sources.vendor_1099:
-            for r in report.rows:
-                referenced.setdefault(src.key(r.vendor), (r.vendor, r.file, r.line))
     name_only = []
     table = books.customers if kind == "customer" else books.vendors
     name_field = "full_name" if kind == "customer" else "name"
@@ -1523,11 +1523,22 @@ def _signed_text(built: Built, minor: int) -> str:
 
 
 def _bank_target(built: Built, path: str, label: str, file: str, line: int | None, what: str):
+    """The account a reconciliation or uncleared row belongs to: one the move-in plans, else one here of that
+    name (a bank account with no balance is on no trial balance). None, said once, when neither."""
     target = _account_for(built, path)
     if target is None:
-        _problem(built, "blocking", "unmapped_account",
-                 f"{label} is in {file} but in no account list given and on no trial balance line, and no account here has that name",
-                 "Give the chart of accounts IIF export, or map it with mappings.accounts.", file=file, line=line, subject=label)
+        record = built.books.by_key(built.books.accounts, "full_name", path)
+        if record is not None:
+            target = {"id": record["id"], "ref": None, "type": record["type"], "name": record["full_name"],
+                      "role": record["system_role"], "label": label, "balance": 0, "made": False, "hidden": False,
+                      "active": record["active"]}
+            built.targets["account:" + src.key(path)] = target
+    if target is None:
+        if (built.sources.trial_balances or built.sources.lists["account"]) and (file, label) not in built.unknown_accounts:
+            built.unknown_accounts.add((file, label))
+            _problem(built, "blocking", "unmapped_account",
+                     f"{label} is in {file} but in no account list given and on no trial balance line, and no account here has that name",
+                     "Give the chart of accounts IIF export, or map it with mappings.accounts.", file=file, line=line, subject=label)
     elif target["type"] not in BANK_TYPES and not (what == "items" and target.get("role") == "undeposited_funds"):
         _problem(built, "blocking", "not_a_bank_account",
                  f"{label} in {file} stands for {target['name']}, a {target['type'].replace('_', ' ')} account: a reconciliation "
@@ -1593,9 +1604,10 @@ def _bank_items(built: Built, inp) -> None:
         trial = target.get("balance", 0)
         uncleared = sum(item.amount for item in rows)
         show = lambda debit: _show(built, _natural(card, debit))
+        whole = bool(sources.trial_balances)  # files checked in pieces tie to nothing yet; the plan says so once
         if summary is not None:
             statement = _natural(card, summary.cleared_balance)  # debit positive
-            if not rows and summary.uncleared_total and not sources.open_item_files:
+            if whole and not rows and summary.uncleared_total and not sources.open_item_files:
                 _problem(built, "blocking", "missing_uncleared_items",
                          f"{label}'s Reconciliation Summary lists {summary.uncleared_count or 'some'} uncleared transactions "
                          f"({_show(built, summary.uncleared_total)}) and no uncleared items were given",
@@ -1603,7 +1615,7 @@ def _bank_items(built: Built, inp) -> None:
                          "as of the cutover date, totalled by account) to CSV, or leave out the Reconciliation Summary to bring the "
                          "account in as one amount.", file=summary.file, subject=label)
                 continue
-            if statement + uncleared != trial:
+            if whole and statement + uncleared != trial:
                 _problem(built, "blocking", "uncleared_do_not_tie",
                          f"{label}: the statement's ending balance ({show(statement)}) and the uncleared items ({show(uncleared)}) come to "
                          f"{show(statement + uncleared)}, but the trial balance carries {show(trial)}; difference {show(trial - statement - uncleared)}",
@@ -1759,7 +1771,7 @@ def _undeposited(built: Built, inp) -> None:
         label = target.get("label") or target["name"]
         if given:
             found = sum(item.amount for item in given)
-            if found != trial:
+            if found != trial and built.sources.trial_balances:
                 _problem(built, "blocking", "undeposited_do_not_tie",
                          f"the receipts waiting in {label} add up to {_show(built, found)}, but the trial balance carries "
                          f"{_show(built, trial)}; difference {_show(built, trial - found)}",
@@ -1934,6 +1946,8 @@ def _journal(built: Built, inp, number: str | None) -> None:
                          "Correct it in the old books before the cutover, or clear it with a journal entry afterwards.",
                          file=row.file, line=row.line, subject=row.label)
     for key_, detail in built.bank.items():
+        if not built.sources.trial_balances:
+            break  # files checked in pieces: no opening journal is planned without the trial balance
         label = detail.target.get("label") or detail.label
         line = _Line(detail.target, label, detail.statement, key_)
         when = detail.statement_date if detail.statement_date and detail.statement_date < inp.as_of else inp.as_of
@@ -2008,13 +2022,13 @@ def _reconciliation_openings(built: Built, inp) -> None:
         account_id = detail.target["id"]
         linked = built.books.link(outside_id, "reconciliation_draft")
         state = built.books.reconciliation.get(account_id) if account_id else None
-        if state is not None and state["opening"]:
+        if state is not None and state["opening"] and not linked:
             _problem(built, "warning", "reconciliation_exists",
                      f"{detail.label} is reconciled here already, so the old books' last reconciliation ({summary.statement_date}) does not "
                      "come in; its uncleared items still do", subject=detail.label)
             continue
         others = [draft for draft in (state["drafts"] if state else []) if draft != linked]
-        if others:
+        if others and not linked:
             _problem(built, "warning", "opening_draft_exists",
                      f"{detail.label} has an opening reconciliation draft here the move-in did not make ({others[0]}), so the old books' "
                      "last reconciliation does not come in as another",
