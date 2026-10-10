@@ -468,7 +468,7 @@ input = { "estimate" = "${work_estimate_a.id}", "expected_version" = "${work_est
 command = "estimate update"
 capture = "work_estimate_accepted"
 reason = "Record the customer's acceptance of alternative B"
-input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "decision_note" = "Accepted by telephone on 2026-09-10; alternative A declined" }
+input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "acknowledge_expired" = true, "decision_note" = "Accepted by telephone on 2026-09-10; alternative A declined" }
 
 [[commands]]
 command = "estimate work-order"
@@ -1573,3 +1573,9 @@ input = { account = "Depreciation Expense", cash_flow_section = "operating" }
 command = "account update"
 reason = "Classify accumulated depreciation as an operating cash-flow item"
 input = { account = "Accumulated Depreciation", cash_flow_section = "operating" }
+
+# The reference year is fixed and never moved. Its story is written as of the year's last day,
+# so a check that asks whether something has passed (an estimate's expiry) is judged on that
+# day, not the real one, and the reference builds the same on any real day.
+[calendar]
+as_of = "2026-12-31"

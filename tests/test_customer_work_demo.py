@@ -140,7 +140,9 @@ def test_seeded_work_chain_lineage_arithmetic_and_history(reference_client, comp
     assert est_b["revision"]["decision_note"].startswith("Accepted by telephone")
     assert run("estimate show", estimate=est_b["id"], revision_number=1)["revision"]["accepted_revision_id"] is None
     with pytest.raises(BookflowError) as caught:
-        run("estimate update", estimate=est_a["id"], expected_version=1, status="accepted", decision_note="Second acceptance")
+        # Acknowledged, so the real day (past EST-1A's expiry or not) cannot answer first.
+        run("estimate update", estimate=est_a["id"], expected_version=1, status="accepted", acknowledge_expired=True,
+            decision_note="Second acceptance")
     assert caught.value.code == "E_WORK_DEPENDENCY"
 
     # Work orders: WO-1 from the accepted alternative, scheduled, started, completed; WO-2 copied; WO-3 direct.

@@ -68,11 +68,25 @@ CUTOVER_SEED_EDITS = (
 )
 
 
-def as_edited_by_r83(old, resource):
-    """Frozen bytes of a demo resource as they read after R83's deliberate in-place edits.
+# The one in-place edit the reference year took when the seeds stopped reading the wall clock: the
+# reference is written as of its year end (its `[calendar] as_of`), when alternative B's estimate has
+# expired, so its acceptance acknowledges that, exactly as the demo seed's has since R83.
+REFERENCE_CLOCK_EDITS = (
+    (b'''input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "decision_note" = "Accepted by telephone on 2026-09-10; alternative A declined" }''',
+     b'''input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "acknowledge_expired" = true, "decision_note" = "Accepted by telephone on 2026-09-10; alternative A declined" }'''),
+)
 
-    Only seed.toml was edited; reference.toml carries parallel text and was not touched.
+
+def as_edited_by_r83(old, resource):
+    """Frozen bytes of a demo resource as they read after the deliberate in-place edits.
+
+    seed.toml took R83's and the move-in's edits; reference.toml took only the one its fixed
+    working day needed (REFERENCE_CLOCK_EDITS).
     """
+    if resource == 'reference.toml':
+        for before, after in REFERENCE_CLOCK_EDITS:
+            old = old.replace(before, after)
+        return old
     if resource != 'seed.toml':
         return old
     for before, after in (*R83_SEED_EDITS, *CUTOVER_SEED_EDITS):
