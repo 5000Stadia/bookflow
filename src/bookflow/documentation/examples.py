@@ -463,7 +463,7 @@ _PAYMENT_EXAMPLES = {
     'payment void': dict(payment=ID, expected_version=3, operation_key='example-void-1'),
     'payment bounce': dict(payment=ID, expected_version=2, date='2026-07-09', operation_key='example-bounce-1',
                            bank_fee_amount='12.00', bank_fee_account='Bank Service Charges',
-                           customer_fee_amount='35.00', customer_fee_account='Returned Check Charges'),
+                           customer_fee_amount='35.00'),
     'payment history': dict(payment=ID, limit=25),
     'payment settlement changes': dict(guard='authenticated-guard-from-payment-show', limit=25),
     'application show': dict(application=ID),

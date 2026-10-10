@@ -37,14 +37,16 @@ class PaymentBounceInput(_Input):
         'Memo on the fee entry; defaults to a line naming the check.'))
     customer_fee_amount: str | None = Field(default=None, description=(
         'A fee billed to the customer for the returned check, as a decimal string more than zero, such as '
-        '"35.00"; it becomes an open invoice. Omit it to bill none. Give `customer_fee_item` or '
-        '`customer_fee_account` with it.'))
+        '"35.00"; it becomes an open invoice. Omit it to bill none. With neither `customer_fee_item` nor '
+        '`customer_fee_account` it is billed, as the anchor bills it, through the Returned Check Charge item '
+        'posting to the Returned Check Charges income account, both set up on first use.'))
     customer_fee_item: _Selector | None = Field(default=None, description=(
         'Item the customer\'s fee is billed through, a service or Other Charge item with a fixed price, such as '
-        'Returned Check Charge. Give this or `customer_fee_account`, not both.'))
+        'Returned Check Charge. Give this or `customer_fee_account`, not both; omit both for the default.'))
     customer_fee_account: _Selector | None = Field(default=None, description=(
         'Income account the customer\'s fee is billed to, such as Returned Check Charges: the fee is billed '
-        'through the active item that already posts to it. Give this or `customer_fee_item`, not both.'))
+        'through the active item that already posts to it. Give this or `customer_fee_item`, not both; omit both '
+        'for the default.'))
     customer_fee_number: _Number | None = Field(default=None, description=(
         'Invoice number for the customer\'s fee; the next invoice number when omitted.'))
     customer_fee_memo: str | None = Field(default=None, max_length=2000, description=(
@@ -65,9 +67,9 @@ class PaymentBounceInput(_Input):
         if self.customer_fee_amount is None and (self.customer_fee_item or self.customer_fee_account
                                                  or self.customer_fee_number or self.customer_fee_memo):
             raise ValueError('customer_fee_amount is required with the other customer_fee fields')
-        if self.customer_fee_amount is not None and (self.customer_fee_item is None) == (self.customer_fee_account is None):
+        if self.customer_fee_item is not None and self.customer_fee_account is not None:
             raise ValueError('name the item the customer fee is billed through (customer_fee_item) or the income account '
-                             'it belongs to (customer_fee_account), one of the two')
+                             'it belongs to (customer_fee_account), not both; omit both for Returned Check Charge')
         return self
 
 

@@ -514,6 +514,20 @@ class PaymentCandidateOutput(StrictModel):
     suggested_discount_minor_units: int = Field(default=0, description='Discount the terms suggest for a receipt on the context date: the terms percentage of the total less any discount already taken, at most what is due; zero after the discount date. Taken only when listed in `payment receive` discounts.')
 
 
+class AvailableCreditOutput(StrictModel):
+    credit_memo_id: str
+    number: str
+    date: str
+    available: JournalMoneyOutput
+    next: str = Field(description='The command that applies this credit to an invoice: `customer-credit apply`.')
+
+
+_AVAILABLE_CREDITS = ("This customer's credit memos with money left, oldest first (the anchor's Discounts & Credits "
+                      'in Receive Payments). A payment does not use them: apply one to an invoice with '
+                      '`customer-credit apply` (credit_memo, its expected_version, and the invoice and amount). '
+                      'Omitted when there are none.')
+
+
 class PaymentCandidatesOutput(StrictModel):
     items: list[PaymentCandidateOutput]
     total_count: int
@@ -522,6 +536,8 @@ class PaymentCandidatesOutput(StrictModel):
     customer_id: str
     payer_balance: JournalMoneyOutput
     family_balance: JournalMoneyOutput
+    available_credits: list[AvailableCreditOutput] = Field(
+        default_factory=list, exclude_if=lambda v: not v, description=_AVAILABLE_CREDITS)
 
 
 class PaymentCalculationOutput(SelectionItemsOutput):
@@ -529,6 +545,8 @@ class PaymentCalculationOutput(SelectionItemsOutput):
     amount_origin: Literal['entered', 'selection_total', 'unresolved']
     unapplied_minor_units: int | None
     problems: list[str]
+    available_credits: list[AvailableCreditOutput] = Field(
+        default_factory=list, exclude_if=lambda v: not v, description=_AVAILABLE_CREDITS)
 
 
 class PaymentSummaryOutput(StrictModel):

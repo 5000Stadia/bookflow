@@ -42,6 +42,10 @@ def books(tmp_path, monkeypatch):
     bank = next(row['id'] for row in accounts if row['type'] == 'bank')
     income = next(row['id'] for row in accounts if row['type'] == 'income')
     parts = run('account create', dict(name='Parts Bought', type='expense'))['id']
+    # The anchor never invents the discount account; a company names its own. These two carry the
+    # default names a payment falls back to when no account or preference is given.
+    run('account create', dict(name='Discounts Given', type='income'))
+    run('account create', dict(name='Discounts Taken', type='income'))
     terms = {row['name']: row['id'] for row in run('term query', dict(limit=50))['items']}
     methods = {row['name']: row['id'] for row in run('payment-method query', dict(limit=50))['items']}
     exempt = next(row['id'] for row in run('sales-tax-code list')['items'] if not row['taxable'])
@@ -434,10 +438,39 @@ def test_the_discount_account_preferences(books):
     sale = bill(books, '100.00')
     pay(books, [dict(bill=sale['id'], amount='98.00', discount='2.00')])
     assert balances(books)[mine] == -200
-    assert not [row for row in run('account query', dict(limit=200))['items'] if row['full_name'] == 'Discounts Taken']
+    assert account(books, 'Discounts Taken') not in balances(books)
     with pytest.raises(BookflowError):
         run('company update', dict(expected_version=run('company show')['info_version'],
                                    customer_discount_account_id=books['bank']))
+
+
+def test_no_discount_account_is_refused_not_created(books):
+    """Pay Bills / Receive Payments ask which discount account: with no account named, no
+    preference and no default-named account, the write is refused on discount_account and lists
+    the discount accounts the chart already has (the fake company's Purchase Discounts)."""
+    run = books['run']
+    for old, new in (('Discounts Taken', 'Purchase Discounts'), ('Discounts Given', 'Sales Discounts')):
+        run('account update', dict(account=account(books, old), name=new))
+    before = len(run('account query', dict(limit=200))['items'])
+    sale = bill(books, '100.00')
+    with pytest.raises(BookflowError) as refused:
+        pay(books, [dict(bill=sale['id'], amount='98.00', discount='2.00')])
+    assert refused.value.code == 'E_VALIDATION'
+    [field] = refused.value.details['fields']
+    assert field['field'] == 'discount_account'
+    assert 'vendor_discount_account_id' in field['problem'] and '"Purchase Discounts"' in field['problem']
+    sold = invoice(books, '100.00')
+    with pytest.raises(BookflowError) as refused:
+        receive(books, '98.00', [(sold, version(books, sold), '98.00')], discounts=[dict(invoice=sold['id'], amount='2.00')])
+    assert refused.value.code == 'E_VALIDATION'
+    [field] = refused.value.details['fields']
+    assert field['field'] == 'discount_account'
+    assert 'customer_discount_account_id' in field['problem'] and '"Sales Discounts"' in field['problem']
+    assert len(run('account query', dict(limit=200))['items']) == before
+    # Naming the account is all it takes.
+    pay(books, [dict(bill=sale['id'], amount='98.00', discount='2.00')],
+        discount_account=account(books, 'Purchase Discounts'))
+    assert balances(books)[account(books, 'Purchase Discounts')] == -200
 
 
 def test_deleting_a_discounted_receipt_cancels_the_discount(books):

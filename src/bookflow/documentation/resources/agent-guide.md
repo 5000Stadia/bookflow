@@ -409,14 +409,15 @@ re-enter anything by hand: `payment bounce` records the return in one step. Prev
  "input": {"payment": "<receipt id from payment query>", "expected_version": 2, "date": "2026-07-09",
            "operation_key": "bounce-1182",
            "bank_fee_amount": "12.00", "bank_fee_account": "Bank Service Charges",
-           "customer_fee_amount": "35.00", "customer_fee_account": "Returned Check Charges"}}
+           "customer_fee_amount": "35.00"}}
 ```
 
 The invoices the receipt paid reopen; the returned amount and the bank's fee leave the bank as two
-lines on that date; the customer fee becomes an open invoice. The customer fee names an Other Charge
-or service item (`customer_fee_item`) or the income account an item posts to (`customer_fee_account`;
-create the item first if none does); leave out the `bank_fee_*` or `customer_fee_*` fields when there
-is none. To undo it, void the returned-check refund
+lines on that date; the customer fee becomes an open invoice. With only `customer_fee_amount`, as
+the anchor does, the fee is billed through the Returned Check Charge item to the Returned Check
+Charges income account, both set up on first use; name an Other Charge or service item
+(`customer_fee_item`) or the income account an item posts to (`customer_fee_account`) to bill it
+elsewhere. Leave out the `bank_fee_*` or `customer_fee_*` fields when there is none. To undo it, void the returned-check refund
 (`customer-refund void`); there is no un-bounce command. A receipt that was never deposited did not
 bounce: unapply and void it.
 

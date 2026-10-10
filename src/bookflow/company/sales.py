@@ -74,7 +74,18 @@ def resolve(s, selector, document_type):
                 kind.replace('_', ' ') + ' ' + selector for kind in kinds) +
                 '; name the one you mean by its id')
     if not found:
-        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': types[0], 'selector': selector})
+        details = {'record_type': types[0], 'selector': selector}
+        if 'payment' in types and 'credit_memo' not in types:
+            credit = effects.rows(s, t, t.c.type == 'credit_memo', t.c.id == key) or effects.rows(
+                s, t, t.c.type == 'credit_memo', t.c.number == selector)
+            if credit:
+                # The blind July trial: a credit memo handed to `payment apply` / `payment suggest`
+                # came back "no such payment", and the credit was never applied.
+                raise BookflowError('E_RECORD_NOT_FOUND', message=(
+                    f'{selector} is credit memo {credit[0]["number"]}, not a payment; apply a credit memo to an '
+                    'invoice with `customer-credit apply`.'), details=dict(
+                    details, credit_memo_id=credit[0]['id'], next='customer-credit apply'))
+        raise BookflowError('E_RECORD_NOT_FOUND', details=details)
     return found[0]
 
 
