@@ -66,6 +66,7 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "bash"),
             ("executable", "python"),
             ("illustrative", "bash"),
+            ("illustrative", "json"),  # a statement kept as an attachment, read by `reconcile import` (311b8f2)
         ],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,
