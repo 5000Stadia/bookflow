@@ -331,8 +331,8 @@ def reconciliation_summary_csv(account: str, register: int) -> bytes:
     in_count, in_total = june["in"]
     cleared = F.cents(out_total) + F.cents(in_total)
     rows += [["", "Cleared Transactions", "", ""],
-             ["", "", f"{out_label} - {out_count} items", F.qb_money(F.cents(out_total))],
-             ["", "", f"{in_label} - {in_count} items", F.qb_money(F.cents(in_total))],
+             ["", "", f"{out_label} - {out_count} item{'' if out_count == 1 else 's'}", F.qb_money(F.cents(out_total))],
+             ["", "", f"{in_label} - {in_count} item{'' if in_count == 1 else 's'}", F.qb_money(F.cents(in_total))],
              ["", "Total Cleared Transactions", "", F.qb_money(cleared)],
              ["Cleared Balance", "", "", F.qb_money(F.cents(june["beginning"]) + cleared)]]
     assert F.cents(june["beginning"]) + cleared == F.cents(D.JUNE_STATEMENTS[account])
@@ -366,6 +366,38 @@ def uncleared_csv() -> bytes:
         rows.append([f"Total {F.qb_account(account)}", *[""] * 7, F.qb_money(running), F.qb_money(running)])
         total += running
     rows.append(["TOTAL", *[""] * 7, F.qb_money(total), F.qb_money(total)])
+    return _csv(rows).encode("cp1252")
+
+
+def undeposited_csv() -> bytes:
+    """The receipts still waiting in Undeposited Funds, as the desktop product's help has a person list them: the
+    account's QuickReport, Dates All, filtered to Cleared No (a receipt is cleared there once it is deposited)."""
+    account = F.qb_account("Undeposited Funds")
+    rows = [[COMPANY], ["Account QuickReport"], ["All Transactions"],
+            ["", "", "Type", "Date", "Num", "Name", "Memo", "Split", "Amount", "Balance"], [account, *[""] * 9]]
+    running = 0
+    for when, name, number, amount, _ in D.UNDEPOSITED:
+        running += F.cents(amount)
+        rows.append(["", "", "Payment", F.us(F.day(when)), number, name, "", F.qb_account("Accounts Receivable"),
+                     F.qb_money(F.cents(amount)), F.qb_money(running)])
+    rows.append([f"Total {account}", *[""] * 7, F.qb_money(running), F.qb_money(running)])
+    rows.append(["TOTAL", *[""] * 7, F.qb_money(running), F.qb_money(running)])
+    return _csv(rows).encode("cp1252")
+
+
+def vendor_1099_csv() -> bytes:
+    """The old books' 1099 Summary for the year so far (Vendors & Payables > 1099 Summary, January 1 to the cutover,
+    thresholds ignored): one row per 1099 vendor, one column per 1099 box, and the total."""
+    paid_bills = F.cents(D.CUTOVER_BALANCES["Subcontractors"]) - sum(
+        F.cents(amount) for vendor, *_, amount in D.UNPAID_BILLS if vendor == "Delgado, Ray")
+    assert F.cents(D.VENDOR_1099_PAID["Delgado, Ray"]) == paid_bills
+    rows = [[COMPANY], ["1099 Summary"], [f"January through {F.CUTOVER:%B %Y}"],
+            ["", "", "Box 1 Nonemployee Compensation", "TOTAL"]]
+    total = 0
+    for name, amount in sorted(D.VENDOR_1099_PAID.items()):
+        rows.append([name, "", F.qb_money(F.cents(amount)), F.qb_money(F.cents(amount))])
+        total += F.cents(amount)
+    rows.append(["TOTAL", "", F.qb_money(total), F.qb_money(total)])
     return _csv(rows).encode("cp1252")
 
 
@@ -705,9 +737,12 @@ def render() -> dict[str, bytes]:
     files[old + "ap_aging.csv"] = ap_aging_csv(cut.ap, F.CUTOVER)
     files[old + "inventory_valuation.csv"] = inventory_valuation_csv(cut.stock, F.CUTOVER)
     files[old + "reconciliation_summary_checking_2026-06.csv"] = reconciliation_summary_csv("Checking", cut.gl["Checking"])
+    files[old + "reconciliation_summary_savings_2026-06.csv"] = reconciliation_summary_csv("Savings", cut.gl["Savings"])
     files[old + "reconciliation_summary_visa_2026-06.csv"] = reconciliation_summary_csv(
         "Visa Business Card", -cut.gl["Visa Business Card"])
     files[old + "uncleared_2026-06-30.csv"] = uncleared_csv()
+    files[old + "undeposited_funds_2026-06-30.csv"] = undeposited_csv()
+    files[old + "vendor_1099_summary_2026-06.csv"] = vendor_1099_csv()
 
     beginning = {k: F.cents(v) for k, v in D.JUNE_STATEMENTS.items()}
     for month_end in F.MONTH_ENDS:

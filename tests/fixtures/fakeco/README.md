@@ -24,8 +24,10 @@ PYTHONPATH=src:. python -m tests.fakeco
 | `unpaid_bills.csv` | Unpaid Bills Detail: 8 bills and a vendor credit, 7,868.81 |
 | `ar_aging.csv`, `ap_aging.csv` | A/R and A/P Aging Summary |
 | `inventory_valuation.csv` | Inventory Valuation Summary: 8 stocked items, 5,340.25 |
-| `reconciliation_summary_checking_2026-06.csv`, `reconciliation_summary_visa_2026-06.csv` | The June reconciliations: statement balances and what was still uncleared |
+| `reconciliation_summary_checking_2026-06.csv`, `reconciliation_summary_savings_2026-06.csv`, `reconciliation_summary_visa_2026-06.csv` | The June reconciliations: statement balances and what was still uncleared |
 | `uncleared_2026-06-30.csv` | The uncleared checks, deposit and card charges, one by one |
+| `undeposited_funds_2026-06-30.csv` | Undeposited Funds' QuickReport filtered to Cleared No: the two customer checks waiting for deposit |
+| `vendor_1099_summary_2026-06.csv` | 1099 Summary, January through June 2026: what the 1099 subcontractor was paid so far this year |
 
 The exports carry what a real file carries: an inactive customer still owing, a tax-exempt customer and a
 contractor customer without sales tax, jobs under two property managers and a builder, terms the new books

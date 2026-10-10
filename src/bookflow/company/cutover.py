@@ -35,9 +35,10 @@ import sqlalchemy as sa
 from bookflow.company import cutover_sources as src
 from bookflow.company import schema as c
 from bookflow.company.cutover_models import (
-    CutoverApplyOutput, CutoverCheck, CutoverClearing, CutoverClearingPart, CutoverCount, CutoverException, CutoverFileOutput, CutoverJournal,
-    CutoverJournalLine, CutoverListRow, CutoverListSection, CutoverMappingsOutput, CutoverPlanOutput, CutoverStep,
-    CutoverStockRow, CutoverStockSection, CutoverTieOutOutput, CutoverTieRow, CutoverTieSection,
+    CutoverApplyOutput, CutoverBankRow, CutoverBankSection, CutoverCheck, CutoverClearing, CutoverClearingPart, CutoverCount,
+    CutoverException, CutoverFileOutput, CutoverJournal, CutoverJournalLine, CutoverListRow, CutoverListSection,
+    CutoverMappingsOutput, CutoverPlanOutput, CutoverStep, CutoverStockRow, CutoverStockSection, CutoverTieOutOutput,
+    CutoverTieRow, CutoverTieSection,
 )
 from bookflow.company.ledger_reports import money
 from bookflow.core.errors import BookflowError
@@ -84,6 +85,16 @@ class Books:
         self.terms = rows(c.terms)
         self.classes = rows(c.classes)
         self.codes = rows(c.sales_tax_codes)
+        self.employees = rows(c.employees)
+        self.other_names = rows(c.other_names)
+        self.payment_methods = rows(c.payment_methods)
+        # Each account's reconciliation as it stands: the opening it adopted, and its open opening drafts.
+        self.reconciliation: dict[str, dict[str, Any]] = defaultdict(lambda: {"opening": None, "drafts": []})
+        for row in conn.execute(sa.select(c.reconciliation_accounts.c.account_id, c.reconciliation_accounts.c.opening_id)):
+            self.reconciliation[row.account_id]["opening"] = row.opening_id
+        for row in conn.execute(sa.select(c.reconciliation_drafts.c.id, c.reconciliation_drafts.c.account_id).where(
+                c.reconciliation_drafts.c.kind == "opening", c.reconciliation_drafts.c.state == "open")):
+            self.reconciliation[row.account_id]["drafts"].append(row.id)
         self.info = dict(conn.execute(sa.select(c.company_info)).mappings().one())
         self.currency = self.info["home_currency"]
         from bookflow.core.money import minor_units_of
@@ -138,6 +149,26 @@ class Step:
     date: str | None = None
     detail: str | None = None
     ref: str | None = None
+    clearing: int | None = None  # what the record posts to the clearing account, debit positive, when its kind has no fixed sign
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class BankDetail:
+    """A bank or card account brought in from its last reconciliation: the statement's ending balance,
+    and each check, deposit and charge no statement had shown yet, one document each."""
+    target: dict[str, Any]
+    label: str
+    card: bool
+    summary: src.ReconciliationSummary | None
+    items: list[src.OpenItem]
+    statement: int  # the statement's ending balance, debit positive, as the opening journal carries it
+    journal: str | None = None  # the outside id of the journal that carries it
+    item_steps: list[Step] = field(default_factory=list)
+
+    @property
+    def statement_date(self) -> str | None:
+        return self.summary.statement_date if self.summary else None
 
 
 @dataclass
@@ -152,9 +183,13 @@ class Built:
     targets: dict[str, dict[str, Any]] = field(default_factory=dict)  # outside id -> {"id", "ref", "type", "name"}
     clearing_ref: str | None = None
     clearing_id: str | None = None
-    tb_by_target: dict[str, int] = field(default_factory=dict)
     piece: bool = False  # `cutover plan`: the files may be checked in pieces, without the trial balance
     no_account_list: list[tuple[str, str]] = field(default_factory=list)  # (item, account) skipped for want of the account list
+    bank: dict[str, BankDetail] = field(default_factory=dict)  # account outside id -> its last reconciliation and uncleared items
+    tax_item_skips: list[tuple[str, str]] = field(default_factory=list)  # (customer, TAXITEM) the move-in cannot give it
+    payee_skips: list[str] = field(default_factory=list)  # uncleared items' payees in no name list
+    payer_skips: list[str] = field(default_factory=list)  # undeposited receipts' payers that are no customer
+    undeposited: set[str] = field(default_factory=set)  # Undeposited Funds accounts whose balance comes in as receipts
 
 
 def _problem(built: Built, severity: str, code: str, problem: str, fix: str | None = None, *, file=None, line=None, subject=None):
@@ -205,14 +240,18 @@ def build(s, inp, *, journal_number: str | None = None, piece: bool = False) -> 
     _sales_tax(built)
     _accounts(built, inp)
     _terms(built, inp)
-    _parties(built, inp, "customer")
     _parties(built, inp, "vendor")
     _items(built, inp)
+    _parties(built, inp, "customer")  # after the items: a customer's sales tax item is one of them
     _no_account_list(built)
     _clearing(built, inp)
     _documents(built, inp)
     _stock(built, inp)
+    _bank_items(built, inp)
+    _undeposited(built, inp)
     _journal(built, inp, journal_number)
+    _reconciliation_openings(built, inp)
+    _vendor_1099(built, inp)
     _deactivations(built)
     _closing(built, inp)
     _default_tax_note(built)
@@ -740,6 +779,12 @@ def _parties(built: Built, inp, kind: str) -> None:
                 partial = ":".join(parts[:depth])
                 paths.setdefault(src.key(partial), (partial, rows.get(src.key(partial)), file, line))
     agencies = {src.key(r.get("TAXVEND")) for r in built.sources.lists["item"] if r.get("TAXVEND")}
+    # A vendor on the old books' 1099 Summary that no vendor list describes comes in eligible for a 1099.
+    eligible_1099 = {src.key(r.vendor) for report in built.sources.vendor_1099 for r in report.rows} if kind == "vendor" else set()
+    if kind == "vendor":
+        for report in built.sources.vendor_1099:
+            for r in report.rows:
+                referenced.setdefault(src.key(r.vendor), (r.vendor, r.file, r.line))
     name_only = []
     table = books.customers if kind == "customer" else books.vendors
     name_field = "full_name" if kind == "customer" else "name"
@@ -773,7 +818,11 @@ def _parties(built: Built, inp, kind: str) -> None:
             continue
         if row is None:
             name_only.append(path)
-        payload = _customer_payload(built, path, row) if kind == "customer" else _vendor_payload(built, path, row, folded in agencies)
+        if kind == "customer":
+            parent_row = rows.get(src.key(path.rsplit(":", 1)[0])) if ":" in path else None
+            payload = _customer_payload(built, path, row, parent_row)
+        else:
+            payload = _vendor_payload(built, path, row, folded in agencies, on_1099=folded in eligible_1099)
         if payload is None:
             continue
         built.steps.append(Step(kind, outside_id, path, f"{kind} create", payload, "create", record_type=kind, ref=outside_id,
@@ -782,6 +831,8 @@ def _parties(built: Built, inp, kind: str) -> None:
                 extra={"hidden": bool(row and row.get("HIDDEN").upper() == "Y"), "active": True, "made": True})
         built.mappings[plural][path] = "create"
     _look_alikes(built, kind, [path for path, *_ in paths.values()], table, name_field, built.mappings[plural])
+    if kind == "customer":
+        _tax_item_skips(built)
     if name_only:
         _problem(built, "warning", f"{kind}s_by_name_only",
                  f"{len(name_only)} {plural} come in with their names only, because no {kind} list IIF was given: " + ", ".join(name_only[:8]) + ("…" if len(name_only) > 8 else ""),
@@ -870,7 +921,55 @@ def _code_id(built: Built, taxable: bool) -> str | None:
     return next((code["id"] for code in built.books.codes if bool(code["taxable"]) is taxable and code["active"]), None)
 
 
-def _customer_payload(built: Built, path: str, row: src.ListRow | None) -> dict | None:
+def _customer_code(built: Built, row: src.ListRow) -> str | None:
+    """The sales tax code a customer's list row names (SALESTAXCODE), else the one its TAXABLE flag means."""
+    taxable = row.get("TAXABLE").upper()
+    code_name = row.get("SALESTAXCODE")
+    code = next((x["id"] for x in built.books.codes if code_name and x["code_key"] == src.key(code_name)), None)
+    return code or (_code_id(built, taxable == "Y") if taxable in ("Y", "N") else None)
+
+
+def _customer_tax_item(built: Built, row: src.ListRow):
+    """The sales tax item a customer's list row names (TAXITEM), as it comes in; None when it names none or
+    names one that does not come in (a sales tax group, or an item in no list)."""
+    name = row.get("TAXITEM")
+    if not name:
+        return None
+    target = built.targets.get("item:" + src.key(name))
+    if target is not None:
+        return (target["id"] or Ref(target["ref"])) if target.get("item_type") in TAX_TYPES else None
+    record = built.books.by_key(built.books.items, "full_name", name)
+    return record["id"] if record is not None and record["type"] in TAX_TYPES and record["active"] else None
+
+
+def _customer_tax(built: Built, row: src.ListRow, parent: src.ListRow | None = None) -> dict[str, Any]:
+    """The sales tax code and item the move-in gives a customer, from its list row. A job takes only
+    what differs from its customer's, and inherits the rest, as the anchor's jobs do."""
+    if not built.books.info.get("sales_tax_enabled"):
+        return {}
+    found = {"sales_tax_code_id": _customer_code(built, row), "sales_tax_item_id": _customer_tax_item(built, row)}
+    if row.get("TAXITEM") and found["sales_tax_item_id"] is None and (parent is None or row.get("TAXITEM") != parent.get("TAXITEM")):
+        built.tax_item_skips.append((row.path, row.get("TAXITEM")))
+    if parent is not None:
+        inherited = {"sales_tax_code_id": _customer_code(built, parent), "sales_tax_item_id": _customer_tax_item(built, parent)}
+        found = {k: v for k, v in found.items() if v != inherited[k]}
+    return {k: v for k, v in found.items() if v is not None}
+
+
+def _tax_item_skips(built: Built) -> None:
+    if not built.tax_item_skips:
+        return
+    items = sorted({item for _, item in built.tax_item_skips})
+    names = [path for path, _ in built.tax_item_skips]
+    _problem(built, "warning", "customer_tax_item_skipped",
+             f"{len(names)} customer{'s come' if len(names) != 1 else ' comes'} in without the sales tax item the old books give "
+             f"{'them' if len(names) != 1 else 'it'} ({', '.join(items)}), because that item does not come in: "
+             + ", ".join(names[:8]) + (f" and {len(names) - 8} more" if len(names) > 8 else "")
+             + "; their invoices take the company's default sales tax item",
+             "Add the sales tax item, then set it on each customer with `customer update` sales_tax_item_id.")
+
+
+def _customer_payload(built: Built, path: str, row: src.ListRow | None, parent_row: src.ListRow | None = None) -> dict | None:
     leaf = path.rsplit(":", 1)[-1]
     payload: dict[str, Any] = {"name": leaf}
     if ":" in path:
@@ -881,7 +980,10 @@ def _customer_payload(built: Built, path: str, row: src.ListRow | None) -> dict 
     if row is None:
         return payload
     if ":" in path:
-        # A job inherits its customer's address, contacts and tax settings; it brings its own job facts.
+        # A job inherits its customer's address and contacts, and its tax settings unless its own differ;
+        # it brings its own job facts.
+        if parent_row is not None:
+            payload.update(_customer_tax(built, row, parent_row))
         status = JOB_STATUS.get(row.get("JOBSTATUS").lower())
         if status:
             payload["job_status"] = status
@@ -911,23 +1013,22 @@ def _customer_payload(built: Built, path: str, row: src.ListRow | None) -> dict 
     terms = _term_for(built, row.get("TERMS"))
     if terms:
         payload["terms_id"] = terms
-    taxable = row.get("TAXABLE").upper()
-    code_name = row.get("SALESTAXCODE")
-    code = next((x["id"] for x in built.books.codes if code_name and x["code_key"] == src.key(code_name)), None)
-    code = code or (_code_id(built, taxable == "Y") if taxable in ("Y", "N") else None)
-    if code and built.books.info.get("sales_tax_enabled"):
-        payload["sales_tax_code_id"] = code
+    payload.update(_customer_tax(built, row))
     limit = _money_text(built, row, "LIMIT")
     if limit:
         payload["credit_limit"] = limit
     return payload
 
 
-def _vendor_payload(built: Built, path: str, row: src.ListRow | None, agency: bool) -> dict:
+def _vendor_payload(built: Built, path: str, row: src.ListRow | None, agency: bool, *, on_1099: bool = False) -> dict:
+    """A vendor as its list row gives it. `on_1099`: on the old books' 1099 Summary, so a vendor that no
+    list row describes comes in eligible for a 1099."""
     payload: dict[str, Any] = {"name": path}
     if agency:
         payload["is_tax_agency"] = True
     if row is None:
+        if on_1099:
+            payload["eligible_1099"] = True
         return payload
     company = row.get("COMPANYNAME")
     simple = {"company_name": company, "salutation": row.get("SALUTATION"), "first_name": row.get("FIRSTNAME"),
@@ -1175,7 +1276,10 @@ def _clearing(built: Built, inp) -> None:
     books = built.books
     owned = sum(t.get("balance", 0) for key_, t in built.targets.items() if key_.startswith("account:")
                 and (t["type"] in DOCUMENT_ACCOUNT_TYPES or t.get("role") == "inventory_asset"))
-    needed = bool(built.sources.documents or built.sources.stock or owned)
+    undeposited = any(t.get("balance") for key_, t in built.targets.items() if key_.startswith("account:")
+                      and t.get("role") == "undeposited_funds")
+    needed = bool(built.sources.documents or built.sources.stock or owned or undeposited
+                  or built.sources.open_items or built.sources.reconciliations)
     if inp.clearing_account:
         record = books.account(inp.clearing_account)
         if record is None or record["type"] not in CLEARING_TYPES or record["system_role"]:
@@ -1403,6 +1507,329 @@ def _stock(built: Built, inp) -> None:
                                 detail=f"{row.quantity} on hand"))
 
 
+# ---------------------------------------------------------------- bank and card accounts: the last reconciliation
+
+BANK_TYPES = frozenset({"bank", "credit_card"})
+
+
+def _natural(detail_card: bool, debit: int) -> int:
+    """An amount in the account's own sign: money in the bank, or what is owed on the card."""
+    return -debit if detail_card else debit
+
+
+def _signed_text(built: Built, minor: int) -> str:
+    return ("-" if minor < 0 else "") + _amount_text(built, abs(minor))
+
+
+def _bank_target(built: Built, path: str, label: str, file: str, line: int | None, what: str):
+    target = _account_for(built, path)
+    if target is None:
+        _problem(built, "blocking", "unmapped_account",
+                 f"{label} is in {file} but in no account list given and on no trial balance line, and no account here has that name",
+                 "Give the chart of accounts IIF export, or map it with mappings.accounts.", file=file, line=line, subject=label)
+    elif target["type"] not in BANK_TYPES and not (what == "items" and target.get("role") == "undeposited_funds"):
+        _problem(built, "blocking", "not_a_bank_account",
+                 f"{label} in {file} stands for {target['name']}, a {target['type'].replace('_', ' ')} account: a reconciliation "
+                 "and its uncleared items belong to a bank or credit card account" + (", or receipts to Undeposited Funds" if what == "items" else ""),
+                 "Leave the file out, or map the account to the bank or card account it is with mappings.accounts.",
+                 file=file, line=line, subject=label)
+        return None
+    return target
+
+
+def _bank_items(built: Built, inp) -> None:
+    """Each bank and card account given its Reconciliation Summary or its uncleared items.
+
+    The opening journal carries the statement's ending balance rather than the trial balance's
+    figure, and each check, deposit and charge the statement had not shown comes in as its own
+    document against the clearing account, dated and numbered as in the old books, with its payee.
+    So the account still ties to the trial balance, and the first reconciliation clears the items
+    one by one. Without either file an account comes in as one amount, as before, and a note says so.
+    """
+    sources = built.sources
+    summaries: dict[str, src.ReconciliationSummary] = {}
+    for summary in sources.reconciliations:
+        target = _bank_target(built, summary.path, summary.label, summary.file, summary.line, "summary")
+        if target is None:
+            continue
+        key_ = "account:" + src.key(summary.path)
+        if key_ in summaries:
+            _problem(built, "blocking", "several_reconciliation_summaries",
+                     f"{summary.label} has more than one Reconciliation Summary ({summaries[key_].file} and {summary.file})",
+                     "Give only the summary of the last statement the old books reconciled.", file=summary.file,
+                     subject=summary.label)
+            continue
+        if summary.statement_date and summary.statement_date > inp.as_of:
+            _problem(built, "blocking", "statement_after_cutover",
+                     f"{summary.label}'s reconciled statement is dated {summary.statement_date}, after the cutover date",
+                     "Give the summary of the last statement dated on or before the cutover date.", file=summary.file,
+                     subject=summary.label)
+            continue
+        summaries[key_] = summary
+    items: dict[str, list[src.OpenItem]] = defaultdict(list)
+    late: dict[str, int] = defaultdict(int)
+    for item in sources.open_items:
+        target = _bank_target(built, item.path, item.label, item.file, item.line, "items")
+        if target is None or target["type"] not in BANK_TYPES:
+            continue
+        if item.date is None:
+            _problem(built, "blocking", "item_without_date", f"{item.type} {item.num or ''} under {item.label} has no date",
+                     file=item.file, line=item.line, subject=item.label)
+            continue
+        if item.date > inp.as_of:
+            late[item.file] += 1
+            continue
+        items["account:" + src.key(item.path)].append(item)
+    for file, count in late.items():
+        _problem(built, "warning", "items_after_cutover",
+                 f"{count} row{'s' if count != 1 else ''} of {file} {'are' if count != 1 else 'is'} dated after the cutover date "
+                 "and stay out: they belong to the new books", file=file)
+    for key_ in sorted(set(summaries) | set(items), key=lambda k: built.targets[k]["name"].lower()):
+        target, summary, rows = built.targets[key_], summaries.get(key_), items.get(key_, [])
+        card = target["type"] == "credit_card"
+        label = summary.label if summary else rows[0].label
+        trial = target.get("balance", 0)
+        uncleared = sum(item.amount for item in rows)
+        show = lambda debit: _show(built, _natural(card, debit))
+        if summary is not None:
+            statement = _natural(card, summary.cleared_balance)  # debit positive
+            if not rows and summary.uncleared_total and not sources.open_item_files:
+                _problem(built, "blocking", "missing_uncleared_items",
+                         f"{label}'s Reconciliation Summary lists {summary.uncleared_count or 'some'} uncleared transactions "
+                         f"({_show(built, summary.uncleared_total)}) and no uncleared items were given",
+                         "Export the transactions that had not cleared (Reports > Custom Reports > Transaction Detail, Cleared: No, "
+                         "as of the cutover date, totalled by account) to CSV, or leave out the Reconciliation Summary to bring the "
+                         "account in as one amount.", file=summary.file, subject=label)
+                continue
+            if statement + uncleared != trial:
+                _problem(built, "blocking", "uncleared_do_not_tie",
+                         f"{label}: the statement's ending balance ({show(statement)}) and the uncleared items ({show(uncleared)}) come to "
+                         f"{show(statement + uncleared)}, but the trial balance carries {show(trial)}; difference {show(trial - statement - uncleared)}",
+                         "Export the Reconciliation Summary of the last statement the old books reconciled and the uncleared "
+                         "items as of the cutover date, both from the same books.", file=summary.file, subject=label)
+                continue
+            before = sum(_natural(card, item.amount) for item in rows if item.date <= summary.statement_date)
+            if before != summary.uncleared_total:
+                _problem(built, "blocking", "uncleared_do_not_tie",
+                         f"{label}'s Reconciliation Summary has {_show(built, summary.uncleared_total)} uncleared on "
+                         f"{summary.statement_date}, but the uncleared items dated by then come to {_show(built, before)}",
+                         "Export the Reconciliation Summary of the last statement the old books reconciled; an older one "
+                         "lists items a later reconciliation cleared.", file=summary.file, subject=label)
+                continue
+        else:
+            statement = trial - uncleared
+        detail = BankDetail(target, label, card, summary, rows, statement)
+        built.bank[key_] = detail
+        occurrences: dict[str, int] = defaultdict(int)
+        for item in sorted(rows, key=lambda i: (i.date, i.num or "", i.line)):
+            base = f"uncleared:{src.key(item.path)}:{src.key(item.type)}:{item.num or ''}:{item.date}:{item.amount}"
+            occurrences[base] += 1
+            step = _uncleared_step(built, detail, item, f"{base}:{occurrences[base]}")
+            if step is not None:
+                built.steps.append(step)
+                detail.item_steps.append(step)
+        if summary is None:
+            _problem(built, "note", "no_reconciliation_summary",
+                     f"{label}'s uncleared items come in one by one, but without its Reconciliation Summary the move-in does not "
+                     "know the last statement, so the first reconciliation starts with `reconcile opening start`",
+                     "Give the account's Reconciliation Summary to bring the last reconciliation too.", subject=label)
+    lumps = [t["name"] for key_, t in built.targets.items() if key_.startswith("account:") and t["type"] in BANK_TYPES
+             and t.get("balance") and key_ not in built.bank]
+    if lumps and sources.trial_balances:
+        _problem(built, "note", "no_reconciliation",
+                 f"{', '.join(sorted(lumps))} come{'s in as one opening amount' if len(lumps) == 1 else ' in as one opening amount each'}, "
+                 "with no uncleared items and no last reconciliation, so a first reconciliation starts with `reconcile opening start`",
+                 "Give each account's Reconciliation Summary and the uncleared items (Transaction Detail, Cleared: No) to bring "
+                 "the last reconciliation and each uncleared check, deposit and charge.")
+    if built.payee_skips:
+        names = sorted(set(built.payee_skips))
+        _problem(built, "warning", "payee_not_found",
+                 f"{len(names)} payee{'s' if len(names) != 1 else ''} of uncleared items {'are' if len(names) != 1 else 'is'} in "
+                 f"no name list that comes in, so {'they come' if len(names) != 1 else 'it comes'} in the item's memo: "
+                 + ", ".join(names[:8]) + (f" and {len(names) - 8} more" if len(names) > 8 else ""),
+                 "Give the customer and vendor list IIF exports to bring the payees.")
+
+
+def _payee(built: Built, name: str | None, money_in: bool):
+    """(name_type, id or Ref) of the party an item names: a vendor for money out, a customer for money
+    in, either one otherwise, then an employee or other name here; None when no list has it."""
+    if not name:
+        return None
+    order = ("customer", "vendor") if money_in else ("vendor", "customer")
+    for kind in order:
+        value = _party_for(built, kind, name)
+        if value is not None:
+            return kind, value
+    for kind, rows in (("employee", built.books.employees), ("other_name", built.books.other_names)):
+        record = built.books.by_key(rows, "name", name)
+        if record is not None and record["active"]:
+            return kind, record["id"]
+    built.payee_skips.append(name)
+    return None
+
+
+def _uncleared_step(built: Built, detail: BankDetail, item: src.OpenItem, outside_id: str) -> Step | None:
+    """One uncleared check, deposit or charge as its own document against the clearing account."""
+    clearing = _clearing_value(built)
+    if clearing is None:
+        return None
+    account = detail.target["id"] or Ref(detail.target["ref"])
+    amount = _amount_text(built, abs(item.amount))
+    out = item.amount < 0  # money out of the bank, or a charge on the card
+    party = _payee(built, item.name, money_in=not out)
+    named = f"{item.type} {item.num}" if item.num else item.type
+    memo = item.memo or f"{named} from the old books"
+    if party is None and item.name:
+        memo = f"{item.name}: {memo}"
+    line_memo = f"Not yet on a statement at the move-in: {named} dated {item.date}"[:2000]
+    expenses = [{"account": clearing, "amount": amount, "memo": line_memo}]
+    payee = {"name_type": party[0], "name_id": party[1]} if party else None
+    if not detail.card and out and item.num and item.num.isdigit():
+        command, what = "check post", f"check {item.num}"
+        payload = {"account": account, "date": item.date, "number": item.num, "amount": amount, "memo": memo[:2000],
+                   "expenses": expenses, **({"pay_to": payee} if payee else {})}
+    elif detail.card and out:
+        command, what = "card-charge post", "card charge"
+        payload = {"account": account, "date": item.date, "amount": amount, "expenses": expenses, **({"pay_to": payee} if payee else {}),
+                   "memo": (f"{memo} (ref {item.num})" if item.num else memo)[:2000]}
+    elif detail.card and re.search(r"credit|refund", item.type, re.IGNORECASE):
+        command, what = "card-credit post", "card credit"
+        payload = {"account": account, "date": item.date, "amount": amount, "expenses": expenses, **({"pay_to": payee} if payee else {}),
+                   "memo": (f"{memo} (ref {item.num})" if item.num else memo)[:2000]}
+    else:
+        # A deposit, a transfer, a payment without a check number or to the card: a register entry.
+        command = "register post"
+        what = ("deposit" if not out else "payment") if not detail.card else ("charge" if out else "payment or credit")
+        payload = {"account": account, "date": item.date, "amount": amount, "memo": memo[:2000], "category": clearing,
+                   "direction": ("increase" if out else "decrease") if detail.card else ("decrease" if out else "increase")}
+        if item.num:
+            payload["number"] = item.num[:64]
+        if payee:
+            payload["payee"] = payee
+    linked = built.books.link(outside_id, "transaction")
+    return Step("uncleared_item", outside_id, f"{named} · {item.name or detail.label}", None if linked else command, payload,
+                "already_in" if linked else "create", linked, amount=abs(item.amount), date=item.date,
+                detail=f"{what} on {detail.target['name']}, not yet on a statement", clearing=-item.amount,
+                extra={"account": "account:" + src.key(item.path), "payee": party, "bank": not detail.card})
+
+
+# ---------------------------------------------------------------- Undeposited Funds: receipts waiting to be deposited
+
+OPENING_CUSTOMER = "Opening balance"
+
+
+def _opening_customer(built: Built):
+    """The customer a receipt is from when the old books do not say: made on first use."""
+    outside_id = "opening-balance-customer"
+    if outside_id not in built.targets:
+        books = built.books
+        linked = books.link(outside_id, "customer")
+        record = (next((r for r in books.customers if r["id"] == linked), None) if linked
+                  else books.by_key(books.customers, "full_name", OPENING_CUSTOMER))
+        if record is not None:
+            _target(built, outside_id, record_id=record["id"], ref=None, record_type="customer", name=record["full_name"])
+            if linked == record["id"]:
+                _already(built, "customer", outside_id, OPENING_CUSTOMER, record["id"], "customer")
+        else:
+            built.steps.append(Step("customer", outside_id, OPENING_CUSTOMER, "customer create",
+                                    {"name": OPENING_CUSTOMER, "notes": "Receipts brought in from the old books' Undeposited Funds"},
+                                    "create", record_type="customer", ref=outside_id, detail="receipts waiting for deposit"))
+            _target(built, outside_id, record_id=None, ref=outside_id, record_type="customer", name=OPENING_CUSTOMER)
+    return _id_or_ref(built, outside_id)
+
+
+def _undeposited(built: Built, inp) -> None:
+    """Undeposited Funds as the receipts waiting in it, so Make Deposits picks them.
+
+    With the account's QuickReport (Cleared: No) each receipt comes in as a sales receipt into
+    Undeposited Funds from its customer, dated and referenced as in the old books, of one `Opening
+    balance` line on the clearing account. Without it the balance comes in as one such receipt.
+    Either way the opening journal leaves the account out.
+    """
+    funds = {key_: t for key_, t in built.targets.items() if key_.startswith("account:") and t.get("role") == "undeposited_funds"}
+    rows: dict[str, list[src.OpenItem]] = defaultdict(list)
+    for item in built.sources.open_items:
+        key_ = "account:" + src.key(item.path)
+        if key_ in funds and item.date is not None and item.date <= inp.as_of:
+            rows[key_].append(item)
+    for key_, target in sorted(funds.items(), key=lambda pair: pair[1]["name"].lower()):
+        trial, given = target.get("balance", 0), rows.get(key_, [])
+        label = target.get("label") or target["name"]
+        if given:
+            found = sum(item.amount for item in given)
+            if found != trial:
+                _problem(built, "blocking", "undeposited_do_not_tie",
+                         f"the receipts waiting in {label} add up to {_show(built, found)}, but the trial balance carries "
+                         f"{_show(built, trial)}; difference {_show(built, trial - found)}",
+                         "Export Undeposited Funds' QuickReport (Dates: All, Cleared: No) and the trial balance from the same books.",
+                         file=given[0].file, subject=label)
+                continue
+            if any(item.amount <= 0 for item in given):
+                bad = next(item for item in given if item.amount <= 0)
+                _problem(built, "blocking", "undeposited_not_a_receipt",
+                         f"{bad.type} {bad.num or ''} in {label} takes money out of Undeposited Funds; only receipts come in as receipts",
+                         "Deposit or clear it in the old books before the cutover, and export the report again.",
+                         file=bad.file, line=bad.line, subject=label)
+                continue
+        elif trial <= 0:
+            continue  # nothing waiting, or a credit balance the opening journal carries as before
+        if _opening_item(built) is None or _clearing_value(built) is None:
+            continue
+        built.undeposited.add(key_)
+        occurrences: dict[str, int] = defaultdict(int)
+        if not given:
+            _problem(built, "warning", "undeposited_funds",
+                     f"Undeposited Funds holds {_show(built, trial)} in the old books and the receipts in it were not given: it "
+                     f"comes in as one receipt from {OPENING_CUSTOMER!r} that Make Deposits picks whole",
+                     "Give Undeposited Funds' QuickReport (Dates: All, Cleared: No; kind `uncleared`) to bring each receipt "
+                     "on its own, so each deposit picks the checks it holds.", subject=label)
+            built.steps.append(_receipt_step(built, target, None, trial, inp.as_of, f"undeposited:{inp.as_of}:1"))
+            continue
+        for item in sorted(given, key=lambda i: (i.date, i.num or "", i.line)):
+            base = f"undeposited:{src.key(item.type)}:{src.key(item.name or '')}:{item.num or ''}:{item.date}:{item.amount}"
+            occurrences[base] += 1
+            built.steps.append(_receipt_step(built, target, item, item.amount, item.date, f"{base}:{occurrences[base]}"))
+    if built.payer_skips:
+        names = sorted(set(built.payer_skips))
+        _problem(built, "warning", "receipt_payer_unknown",
+                 f"{len(names)} receipt{'s' if len(names) != 1 else ''} waiting in Undeposited Funds {'name' if len(names) != 1 else 'names'} "
+                 f"a payer that is no customer, so {'they come' if len(names) != 1 else 'it comes'} in from {OPENING_CUSTOMER!r} with "
+                 "the payer in the memo: " + ", ".join(names[:8]) + (f" and {len(names) - 8} more" if len(names) > 8 else ""),
+                 "Give the customer list IIF export, or change the receipt's customer with `sales-receipt update` before depositing it.")
+
+
+def _receipt_step(built: Built, target: dict, item: src.OpenItem | None, amount: int, date: str, outside_id: str) -> Step:
+    """A receipt waiting in Undeposited Funds: a sales receipt of one `Opening balance` line."""
+    customer = _party_for(built, "customer", item.name) if item is not None and item.name else None
+    payer = item.name if item is not None and item.name else None
+    memo = (item.memo if item is not None and item.memo else
+            f"{item.type}{' ' + item.num if item.num else ''} received before the move-in" if item is not None else
+            f"Undeposited Funds from the old books as of {date}")
+    if customer is None:
+        customer = _opening_customer(built)
+        if payer:
+            memo = f"{payer}: {memo}"
+            built.payer_skips.append(payer)
+    text = _amount_text(built, amount)
+    line = {"item": _opening_item(built), "quantity": "1", "unit_price": text,
+            "description": "Waiting for deposit at the move-in" + (f": {item.type} {item.num or ''}".rstrip() if item is not None else "")}
+    code = _code_id(built, False)
+    if code and built.books.info.get("sales_tax_enabled"):
+        line["tax_code"] = code
+    payload: dict[str, Any] = {"customer": customer, "date": date, "deposit_to": target["id"] or Ref(target["ref"]),
+                               "memo": memo[:2000], "lines": [line]}
+    if item is not None and item.num:
+        payload["payment_reference"] = item.num[:128]
+        method = built.books.by_key(built.books.payment_methods, "name", "Check")
+        if item.num.isdigit() and method is not None and method["active"]:
+            payload["payment_method"] = method["id"]
+    linked = built.books.link(outside_id, "transaction")
+    name = f"{item.type} {item.num or ''}".rstrip() + f" · {payer or OPENING_CUSTOMER}" if item is not None else f"Undeposited Funds · {OPENING_CUSTOMER}"
+    return Step("undeposited_receipt", outside_id, name, None if linked else "sales-receipt post", payload,
+                "already_in" if linked else "create", linked, amount=amount, date=date,
+                detail="waiting in Undeposited Funds for a deposit", clearing=-amount)
+
+
 # ---------------------------------------------------------------- the opening sales tax
 
 def _tax_agencies(built: Built) -> list[str]:
@@ -1453,38 +1880,64 @@ def _opening_sales_tax(built: Built, inp, target: dict[str, Any], row: src.Trial
 
 # ---------------------------------------------------------------- the opening journal
 
+@dataclass
+class _Line:
+    target: dict[str, Any]
+    label: str  # the old-books account the line carries
+    net: int  # debit positive
+    key: str  # the account's outside id
+
+
 def _journal(built: Built, inp, number: str | None) -> None:
-    lines = []
+    """The opening journal: every trial balance account the documents, stock and receipts do not carry.
+
+    A bank or card account brought in from its last reconciliation carries the statement's ending
+    balance, not the trial balance's figure: its uncleared items carry the rest. When that statement
+    is dated before the cutover, its balance goes in a journal of its own dated the statement date,
+    so the first reconciliation in Bookflow starts from it, as the anchor's opening balance does.
+    """
+    lines: list[_Line] = []
+    dated: dict[str, list[_Line]] = defaultdict(list)
     for tb in built.sources.trial_balances[:1]:
         for row in tb.rows:
-            target = built.targets.get("account:" + src.key(row.path))
-            if target is None or not row.net:
+            key_ = "account:" + src.key(row.path)
+            target = built.targets.get(key_)
+            if target is None or not row.net or key_ in built.bank:
                 continue
             if target["type"] in DOCUMENT_ACCOUNT_TYPES or target.get("role") == "inventory_asset":
                 continue
             if target["type"] == "non_posting":
                 continue
+            if key_ in built.undeposited:
+                continue  # its receipts carry it
             if target.get("role") == "sales_tax_payable" and not _opening_sales_tax(built, inp, target, row):
-                built.tb_by_target[target["id"] or target["ref"]] = built.tb_by_target.get(target["id"] or target["ref"], 0) + row.net
                 continue
-            lines.append((target, row))
-            built.tb_by_target[target["id"] or target["ref"]] = built.tb_by_target.get(target["id"] or target["ref"], 0) + row.net
+            lines.append(_Line(target, row.label, row.net, key_))
             if target.get("role") == "undeposited_funds":
                 _problem(built, "warning", "undeposited_funds",
-                         f"Undeposited Funds holds {_show(built, row.net)} in the old books; it comes in as one opening amount that Make Deposits cannot pick",
-                         "Deposit those receipts in the old books before the cutover, or move the amount to the bank with a journal entry when it is deposited.",
+                         f"Undeposited Funds holds {_show(built, row.net)} in the old books, a credit balance no receipt can carry; "
+                         "it comes in as one opening amount that Make Deposits cannot pick",
+                         "Correct it in the old books before the cutover, or clear it with a journal entry afterwards.",
                          file=row.file, line=row.line, subject=row.label)
-    if not lines:
+    for key_, detail in built.bank.items():
+        label = detail.target.get("label") or detail.label
+        line = _Line(detail.target, label, detail.statement, key_)
+        when = detail.statement_date if detail.statement_date and detail.statement_date < inp.as_of else inp.as_of
+        if detail.statement:
+            (lines if when == inp.as_of else dated[when]).append(line)
+    if not lines and not dated:
         return
     clearing = _clearing_value(built)
-    parts = [lines[i:i + JOURNAL_LINES] for i in range(0, len(lines), JOURNAL_LINES)]
+    batches = [(inp.as_of, f"journal:{inp.as_of}:{index}", part, index, -(-len(lines) // JOURNAL_LINES))
+               for index, part in enumerate((lines[i:i + JOURNAL_LINES] for i in range(0, len(lines), JOURNAL_LINES)), start=1)]
+    for when in sorted(dated):
+        batches.append((when, f"journal:statement:{when}", dated[when], 0, 0))
     shown = []
     total_clearing = 0
-    for index, part in enumerate(parts, start=1):
-        net = sum(row.net for _, row in part)
-        outside_id = f"journal:{inp.as_of}:{index}"
-        payload_lines = [{"account": target["id"] or Ref(target["ref"]), "side": "debit" if row.net > 0 else "credit",
-                          "amount": _amount_text(built, abs(row.net)), "description": row.label[:200]} for target, row in part]
+    for when, outside_id, part, index, count in batches:
+        net = sum(line.net for line in part)
+        payload_lines = [{"account": line.target["id"] or Ref(line.target["ref"]), "side": "debit" if line.net > 0 else "credit",
+                          "amount": _amount_text(built, abs(line.net)), "description": line.label[:200]} for line in part]
         if net:
             if clearing is None:
                 _problem(built, "blocking", "no_clearing_account", "the opening journal needs a clearing account",
@@ -1493,22 +1946,91 @@ def _journal(built: Built, inp, number: str | None) -> None:
             payload_lines.append({"account": clearing, "side": "credit" if net > 0 else "debit",
                                   "amount": _amount_text(built, abs(net)), "description": "Balanced by the open documents and opening stock"})
         total_clearing -= net
-        payload = {"date": inp.as_of, "memo": f"Opening balances from the old books as of {inp.as_of}", "lines": payload_lines}
+        if index:
+            name = f"Opening journal{'' if count == 1 else f' part {index}'}"
+            memo = f"Opening balances from the old books as of {inp.as_of}"
+        else:
+            name, memo = f"Statement balances of {when}", f"Bank and card balances of the statements the old books last reconciled, dated {when}"
+        payload = {"date": when, "memo": memo, "lines": payload_lines}
         if number:
-            payload["number"] = number if len(parts) == 1 else f"{number}-{index}"
+            payload["number"] = (number if count == 1 else f"{number}-{index}") if index else f"{number}-S{when.replace('-', '')}"
         linked = built.books.link(outside_id, "transaction")
-        built.steps.append(Step("journal", outside_id, f"Opening journal{'' if len(parts) == 1 else f' part {index}'}", "journal post",
-                                payload, "already_in" if linked else "create", linked,
-                                amount=(sum(abs(r.net) for _, r in part) + abs(net)) // 2,
-                                date=inp.as_of, detail=f"{len(payload_lines)} lines"))
-        for target, row in part:
-            shown.append(CutoverJournalLine(account=target["name"], account_id=target["id"], side="debit" if row.net > 0 else "credit",
-                                            amount=money(abs(row.net), built.books.currency), description=row.label))
+        built.steps.append(Step("journal", outside_id, name, "journal post", payload, "already_in" if linked else "create", linked,
+                                amount=(sum(abs(line.net) for line in part) + abs(net)) // 2,
+                                date=when, detail=f"{len(payload_lines)} lines"))
+        for line in part:
+            if line.key in built.bank:
+                built.bank[line.key].journal = outside_id
+            shown.append(CutoverJournalLine(account=line.target["name"], account_id=line.target["id"],
+                                            side="debit" if line.net > 0 else "credit", amount=money(abs(line.net), built.books.currency),
+                                            description=line.label if index else f"{line.label} (statement of {when})"))
         if net:
             shown.append(CutoverJournalLine(account=CLEARING_NAME if built.clearing_ref else _account_name(built, built.clearing_id),
                                             account_id=built.clearing_id, side="credit" if net > 0 else "debit",
                                             amount=money(abs(net), built.books.currency), description="Balanced by the open documents and opening stock"))
-    built.journal = {"date": inp.as_of, "number": number, "parts": len(parts), "lines": shown, "clearing": total_clearing}
+    built.journal = {"date": inp.as_of, "number": number, "parts": len(batches), "lines": shown, "clearing": total_clearing}
+
+
+def _operation_key(outside_id: str, *salt: Any) -> str:
+    """A stable reconciliation operation key for one move-in write, as its pattern allows."""
+    import hashlib
+    return "cutover-" + hashlib.sha256(":".join([outside_id, *map(str, salt)]).encode("utf-8")).hexdigest()[:40]
+
+
+def _reconciliation_openings(built: Built, inp) -> None:
+    """The last reconciliation of each account given its Reconciliation Summary, as an opening draft.
+
+    It opens at the statement's date and ending balance; the journal line carrying that balance is
+    marked `covered` and each uncleared item dated by then `outstanding`, so it proves, and the next
+    `reconcile start` on the account follows it. The opening is certified with that first statement,
+    never alone. An account that already has an opening here, or an opening draft the move-in did
+    not make, keeps it and is named.
+    """
+    for key_, detail in built.bank.items():
+        summary = detail.summary
+        if summary is None or summary.statement_date is None:
+            continue
+        outside_id = "reconciliation:" + key_.split(":", 1)[1]
+        account_id = detail.target["id"]
+        linked = built.books.link(outside_id, "reconciliation_draft")
+        state = built.books.reconciliation.get(account_id) if account_id else None
+        if state is not None and state["opening"]:
+            _problem(built, "warning", "reconciliation_exists",
+                     f"{detail.label} is reconciled here already, so the old books' last reconciliation ({summary.statement_date}) does not "
+                     "come in; its uncleared items still do", subject=detail.label)
+            continue
+        others = [draft for draft in (state["drafts"] if state else []) if draft != linked]
+        if others:
+            _problem(built, "warning", "opening_draft_exists",
+                     f"{detail.label} has an opening reconciliation draft here the move-in did not make ({others[0]}), so the old books' "
+                     "last reconciliation does not come in as another",
+                     "Finish that opening through its first statement, or make the opening from the move-in's figures: "
+                     f"`reconcile opening start` at {summary.statement_date} with {_show(built, summary.cleared_balance)}.",
+                     subject=detail.label)
+            continue
+        balance = summary.cleared_balance
+        covered = [detail.journal] if detail.journal and detail.statement else []
+        outstanding = [step.outside_id for step in detail.item_steps if step.date and step.date <= summary.statement_date]
+        payload = {"operation_key": _operation_key(outside_id), "account": account_id or Ref(detail.target["ref"]),
+                   "opening_date": summary.statement_date, "entered_balance": _signed_text(built, balance),
+                   "evidence": {"format": 1, "statement_reference": f"{detail.label} statement ending {summary.statement_date}"[:200],
+                                "entered_text": f"Cleared Balance of the old books' Reconciliation Summary ({summary.file})"[:500]},
+                   "references": []}
+        built.steps.append(Step("reconciliation_opening", outside_id, f"Last reconciliation · {detail.label}",
+                                None if linked else "reconcile opening start", payload, "already_in" if linked else "create",
+                                linked, "reconciliation_draft", date=summary.statement_date,
+                                detail=(f"statement of {summary.statement_date} ending at {_show(built, balance)}; "
+                                        f"{len(outstanding)} uncleared item{'s' if len(outstanding) != 1 else ''} outstanding"),
+                                extra={"covered": covered, "outstanding": outstanding}))
+
+
+def _vendor_1099(built: Built, inp) -> None:
+    """Placeholder until the 1099 openings land."""
+
+
+def _vendor_1099_section(s, ctx, built: Built, inp) -> CutoverTieSection:
+    currency = built.books.currency
+    return CutoverTieSection(source="none", source_total=money(0, currency), books_total=money(0, currency), differences=0, rows=[])
 
 
 def _account_name(built: Built, account_id: str | None) -> str:
@@ -1551,7 +2073,8 @@ def _closing(built: Built, inp) -> None:
 
 def _counts(built: Built) -> list[CutoverCount]:
     order = ("account", "term", "customer", "vendor", "item", "invoice", "credit_memo", "bill", "vendor_credit",
-             "inventory_adjustment", "sales_tax_adjustment", "journal", "deactivation")
+             "inventory_adjustment", "uncleared_item", "undeposited_receipt", "sales_tax_adjustment", "journal",
+             "reconciliation_opening", "vendor_1099_opening", "deactivation")
     tally = {kind: [0, 0, 0] for kind in order}
     totals: dict[str, int] = {}
     for step in built.steps:
@@ -1624,6 +2147,8 @@ def _summary(built: Built, *, applied: bool = False) -> str:
 CLEARING_PARTS = {"invoice": ("invoices_and_credit_memos", -1), "credit_memo": ("invoices_and_credit_memos", 1),
                   "bill": ("bills_and_vendor_credits", 1), "vendor_credit": ("bills_and_vendor_credits", -1),
                   "inventory_adjustment": ("opening_stock", -1)}
+# Kinds whose records post either way to the clearing account; each step carries its own signed amount.
+SIGNED_PARTS = {"uncleared_item": "uncleared_items", "undeposited_receipt": "undeposited_receipts"}
 
 
 def _clearing_out(built: Built) -> CutoverClearing | None:
@@ -1638,6 +2163,11 @@ def _clearing_out(built: Built) -> CutoverClearing | None:
     for step in built.steps:
         if step.action not in ("create", "already_in") or step.amount is None:
             continue
+        if step.clearing is not None and step.kind in SIGNED_PARTS:
+            entry = parts.setdefault(SIGNED_PARTS[step.kind], [0, 0])
+            entry[0] += step.clearing
+            entry[1] += 1
+            continue
         if step.kind == "sales_tax_adjustment":
             name, sign = "opening_sales_tax", 1 if step.payload.get("direction", "increase") == "increase" else -1
         elif step.kind in CLEARING_PARTS:
@@ -1649,7 +2179,8 @@ def _clearing_out(built: Built) -> CutoverClearing | None:
         entry[1] += 1
     if not parts:
         return None
-    order = ("opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax")
+    order = ("opening_journal", "invoices_and_credit_memos", "bills_and_vendor_credits", "opening_stock", "opening_sales_tax",
+             "uncleared_items", "undeposited_receipts")
     currency = built.books.currency
     return CutoverClearing(
         account=CLEARING_NAME if built.clearing_ref or not built.clearing_id else _account_name(built, built.clearing_id),
@@ -1715,7 +2246,8 @@ def _record_id(output: dict, record_type: str) -> str | None:
     for name in ("id", "transaction_id"):
         if isinstance(output.get(name), str):
             return output[name]
-    for name in ("record", "account", "customer", "vendor", "item", "term", "transaction", "journal", "adjustment"):
+    for name in ("record", "account", "customer", "vendor", "item", "term", "transaction", "journal", "adjustment", "draft",
+                 "opening"):
         nested = output.get(name)
         if isinstance(nested, dict) and isinstance(nested.get("id"), str):
             return nested["id"]
@@ -1768,6 +2300,63 @@ def _run_step(s, ctx, step: Step, payload: dict) -> dict:
         s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved
         if s.company is not None and s.company.write_transaction:
             s.company.raw.rollback()
+
+
+def _stopped(step: Step, error: BookflowError, created: int) -> BookflowError:
+    return BookflowError("E_CUTOVER_INCOMPLETE",
+        message=(f"The move-in stopped at {step.kind.replace('_', ' ')} {step.name}: {error.message} "
+                 f"The {created} record{'s' if created != 1 else ''} made before it stay in; fix this and run cutover apply again to continue."),
+        details={"created": created, "step": {"kind": step.kind, "outside_id": step.outside_id, "name": step.name,
+                                             "command": step.command},
+                 "cause": error.code, "cause_details": error.details})
+
+
+def _read(s, ctx, name: str, raw: dict) -> dict:
+    """A read command inside the move-in, the session left as it was."""
+    from bookflow.core import registry
+    from bookflow.core.dispatch import run_in_session, validate_input
+    command = registry.get(name)
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run)
+    try:
+        return run_in_session(command, validate_input(command, raw), ctx, s)
+    finally:
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved
+
+
+def _place_opening(s, ctx, built: Built, step: Step, draft_id: str, made: dict[str, str], created: int) -> int:
+    """Mark the opening draft: the statement balance's journal line `covered`, each uncleared item dated
+    by the statement `outstanding`. Only the move-in's own records, only what is not placed yet, and only
+    while the draft is open; so a rerun writes nothing. Returns the writes made (0 or 1)."""
+    row = s.company.conn.execute(sa.select(c.reconciliation_drafts.c.state, c.reconciliation_drafts.c.version).where(
+        c.reconciliation_drafts.c.id == draft_id)).first()
+    if row is None or row.state != "open":
+        return 0
+    covered = {made[o] for o in step.extra.get("covered", ()) if made.get(o)}
+    outstanding = {made[o] for o in step.extra.get("outstanding", ()) if made.get(o)}
+    entries, cursor, version = [], None, row.version
+    while True:
+        page = _read(s, ctx, "reconcile candidates", {"draft": draft_id, "limit": 200, **({"cursor": cursor} if cursor else {})})
+        version = page["draft_version"]
+        for candidate in page["items"]:
+            moved = candidate["movement"]["transaction_id"]
+            if candidate["eligible"] and not candidate["selected"] and moved in covered | outstanding:
+                entries.append({"movement": candidate["movement"], "group_fingerprint": candidate["group_fingerprint"],
+                                "action": "covered" if moved in covered else "outstanding"})
+        cursor = page.get("next_cursor")
+        if not cursor:
+            break
+    if not entries:
+        return 0
+    marks = Step("reconciliation_opening", step.outside_id + ":marks", step.name, "reconcile mark", {}, "create",
+                 record_type="reconciliation_draft")
+    for start in range(0, len(entries), 200):
+        payload = {"draft": draft_id, "operation_key": _operation_key(marks.outside_id, version),
+                   "expected_version": version, "entries": entries[start:start + 200]}
+        try:
+            version = _run_step(s, ctx, marks, payload)["draft"]["version"]
+        except BookflowError as error:
+            raise _stopped(marks, error, created) from None
+    return 1
 
 
 def _set_default_tax_item(s, ctx) -> str | None:
@@ -1829,27 +2418,31 @@ def apply(plan_: Plan, ctx, s) -> Applied:
                         message=f"The move-in could not keep {file.name} as an attachment: {error.message} Nothing was moved in yet.",
                         details={"created": 0, "file": file.name, "cause": error.code, "cause_details": error.details}) from None
         created = 0
+        made: dict[str, str] = {}  # outside id -> the record made for it, by this run or an earlier one
         for step in built.steps:
             if step.action in ("already_in", "matched"):
                 if step.ref and step.record_id:
                     ids[step.ref] = step.record_id
+                if step.record_id:
+                    made[step.outside_id] = step.record_id
+                if step.kind == "reconciliation_opening" and step.record_id:
+                    created += _place_opening(s, ctx, built, step, step.record_id, made, created)
                 continue
             try:
                 output = _run_step(s, ctx, step, _resolve(step.payload, ids))
             except BookflowError as error:
-                raise BookflowError("E_CUTOVER_INCOMPLETE",
-                    message=(f"The move-in stopped at {step.kind.replace('_', ' ')} {step.name}: {error.message} "
-                             f"The {created} record{'s' if created != 1 else ''} made before it stay in; fix this and run cutover apply again to continue."),
-                    details={"created": created, "step": {"kind": step.kind, "outside_id": step.outside_id, "name": step.name,
-                                                         "command": step.command},
-                             "cause": error.code, "cause_details": error.details}) from None
+                raise _stopped(step, error, created) from None
             record_id = _record_id(output, step.record_type)
             step.record_id = record_id
             if step.ref and record_id:
                 ids[step.ref] = record_id
             if step.ref == built.clearing_ref and record_id:
                 built.clearing_id = record_id
+            if record_id:
+                made[step.outside_id] = record_id
             created += 1
+            if step.kind == "reconciliation_opening" and record_id:
+                _place_opening(s, ctx, built, step, record_id, made, created)  # part of making the opening
         already = sum(1 for step in built.steps if step.action == "already_in")
         default_tax = _set_default_tax_item(s, ctx)
         summary = _summary(built, applied=True)
@@ -1975,6 +2568,96 @@ def _stock_section(s, ctx, built: Built, inp) -> CutoverStockSection:
                                differences=differences, rows=rows)
 
 
+def _opening_proves(s, account_id: str, draft_id: str) -> bool:
+    """Whether an opening draft proves as it stands: what `reconcile preview` checks on it."""
+    from bookflow.company import reconciliation_drafts as drafts
+    from bookflow.company import reconciliation_loading as loading
+    from bookflow.company import reconciliation_preparation as preparation
+    try:
+        snapshot = loading.load(s, account_id)
+        preparation.opening(snapshot, drafts.load(snapshot, draft_id, authority_transactions=snapshot.authority_transactions))
+        return True
+    except BookflowError:
+        return False
+
+
+def _bank_section(s, built: Built, books_tb: dict[str, dict]) -> CutoverBankSection:
+    """Each account brought in from its last reconciliation or its uncleared items: the balance here
+    against the statement's plus what was in transit, the items, and the opening that follows."""
+    currency = built.books.currency
+    rows, differences = [], 0
+    for key_, detail in sorted(built.bank.items(), key=lambda pair: pair[1].target["name"].lower()):
+        account_id, card = detail.target["id"], detail.card
+        natural = [_natural(card, item.amount) for item in detail.items]
+        statement = _natural(card, detail.statement)
+        increase = sum(value for value in natural if value > 0)
+        decrease = -sum(value for value in natural if value < 0)
+        expected = statement + increase - decrease
+        books_value = _natural(card, books_tb[account_id]["signed_net"]["minor_units"]) if account_id in books_tb else 0
+        found = sum(1 for step in detail.item_steps if step.action == "already_in" and step.record_id)
+        opening, proven = "none", None
+        if detail.summary is not None and account_id:
+            state = built.books.reconciliation.get(account_id)
+            linked = built.books.link("reconciliation:" + key_.split(":", 1)[1], "reconciliation_draft")
+            if state is not None and state["opening"]:
+                opening = "certified"
+            elif linked and state is not None and linked in state["drafts"]:
+                opening, proven = "draft", _opening_proves(s, account_id, linked)
+        tied = (expected == books_value and found == len(detail.items)
+                and (detail.summary is None or opening == "certified" or bool(proven)))
+        differences += not tied
+        rows.append(CutoverBankRow(
+            name=detail.target["name"], record_id=account_id, statement_date=detail.statement_date,
+            statement_balance=money(statement, currency), uncleared_increase=money(increase, currency),
+            uncleared_decrease=money(decrease, currency), expected_balance=money(expected, currency),
+            books_balance=money(books_value, currency), difference=money(expected - books_value, currency),
+            items_source=len(detail.items), items_books=found, opening=opening, opening_proven=proven, tied=tied))
+    source = ("Reconciliation Summary and uncleared items" if built.sources.reconciliations else "uncleared items") if rows else "none"
+    return CutoverBankSection(source=source, differences=differences, rows=rows)
+
+
+def _undeposited_section(s, ctx, built: Built, inp) -> CutoverTieSection:
+    """What the old books held in Undeposited Funds against the receipts here that Make Deposits can pick."""
+    currency = built.books.currency
+    funds = {key_: t for key_, t in built.targets.items() if key_.startswith("account:") and t.get("role") == "undeposited_funds"
+             and (t.get("balance") or key_ in built.undeposited)}
+    if not funds:
+        return CutoverTieSection(source="none", source_total=money(0, currency), books_total=money(0, currency), differences=0, rows=[])
+    waiting: dict[str, int] = defaultdict(int)
+    for row in _whole_items(s, ctx, "deposit sources", {"date": inp.as_of}):
+        if row.get("eligible") and not row.get("deposited") and row["date"] <= inp.as_of:
+            waiting[row["undeposited_funds_account"]] += row["amount"]["minor_units"]
+    rows, differences, source_total, books_total = [], 0, 0, 0
+    given = {"account:" + src.key(item.path) for item in built.sources.open_items}
+    for key_, target in sorted(funds.items(), key=lambda pair: pair[1]["name"].lower()):
+        source_value = target.get("balance", 0)
+        books_value = waiting.get(target["id"], 0) if target["id"] else 0
+        if key_ not in built.undeposited:
+            books_value = source_value if source_value <= 0 else books_value
+        difference = source_value - books_value
+        differences += bool(difference)
+        source_total, books_total = source_total + source_value, books_total + books_value
+        rows.append(CutoverTieRow(name=target["name"], record_id=target["id"], column="receipts", source=money(source_value, currency),
+                                  books=money(books_value, currency), difference=money(difference, currency)))
+    label = "Undeposited Funds QuickReport" if given & set(funds) else "Trial Balance"
+    return CutoverTieSection(source=label, source_total=money(source_total, currency), books_total=money(books_total, currency),
+                             differences=differences, rows=rows)
+
+
+def _whole_items(s, ctx, name: str, raw: dict) -> list[dict]:
+    """Every page of a read whose rows are `items`."""
+    from bookflow.core import registry
+    from bookflow.core.dispatch import run_in_session, validate_input
+    command = registry.get(name)
+    rows, cursor = [], None
+    while True:
+        page = run_in_session(command, validate_input(command, {**raw, "limit": 200, **({"cursor": cursor} if cursor else {})}), ctx, s)
+        rows.extend(page["items"])
+        cursor = page.get("next_cursor")
+        if not cursor:
+            return rows
+
+
 def _lists_section(built: Built) -> CutoverListSection:
     """The list fields that matter, as the old books' lists give them, against the records here."""
     books = built.books
@@ -2019,6 +2702,18 @@ def _lists_section(built: Built) -> CutoverListSection:
             add("account", row.path, record, "number", number, record["number"], note=True)
         target = built.targets.get("account:" + src.key(row.path)) or {}
         active("account", row, record, note=bool(target.get("balance")))
+    customer_rows = {src.key(row.path): row for row in built.sources.lists["customer"]}
+    code_name = lambda code_id: next((x["code"] for x in books.codes if x["id"] == code_id), None)
+    item_name = lambda item_id: by_id["item"][item_id]["full_name"] if item_id in by_id["item"] else None
+
+    def tax(row, record, parent):
+        # The tax code and item the move-in gives the customer; a job is compared on what it takes as its own.
+        for field_, wanted in _customer_tax(built, row, parent).items():
+            if isinstance(wanted, Ref) or wanted == record.get(field_):
+                continue
+            name = code_name if field_ == "sales_tax_code_id" else item_name
+            add("customer", row.path, record, field_.removesuffix("_id"), name(wanted), name(record.get(field_)))
+
     for row in built.sources.lists["customer"]:
         record = record_for("customer", row.path)
         compared += 1
@@ -2032,7 +2727,11 @@ def _lists_section(built: Built) -> CutoverListSection:
                 add("customer", row.path, record, "job_status", status, record.get("job_status") or "none")
             if (row.get("JOBDESC") or None) != (record.get("job_description") or None):
                 add("customer", row.path, record, "job_description", row.get("JOBDESC") or None, record.get("job_description"))
+            parent = customer_rows.get(src.key(row.path.rsplit(":", 1)[0]))
+            if parent is not None:
+                tax(row, record, parent)
             continue
+        tax(row, record, None)
         wanted = _term_for(built, row.get("TERMS")) if row.get("TERMS") else None
         if row.get("TERMS") and (wanted if isinstance(wanted, str) and not isinstance(wanted, Ref) else None) != record.get("terms_id"):
             add("customer", row.path, record, "terms", row.get("TERMS"), term_name(record.get("terms_id")))
@@ -2132,17 +2831,25 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
                             "vendor_id", "current_vendor_name", "vendor", inp.detail)
     inventory = _stock_section(s, ctx, built, inp)
     lists = _lists_section(built)
+    bank = _bank_section(s, built, books_tb)
+    undeposited = _undeposited_section(s, ctx, built, inp)
+    vendor_1099 = _vendor_1099_section(s, ctx, built, inp)
     clearing = books_tb[clearing_id]["signed_net"]["minor_units"] if clearing_id in books_tb else 0
     tied = not problems and not (tb_differences or receivables.differences or payables.differences or inventory.differences
-                                 or lists.differences or clearing)
+                                 or lists.differences or clearing or bank.differences or undeposited.differences
+                                 or vendor_1099.differences)
     if tied:
-        summary = (f"tied: the trial balance, receivables, payables and stock match the old books to the cent as of {inp.as_of}, "
-                   f"and the {lists.compared} list records compared match")
+        extra = [what for what, rows in (("the bank and card accounts with their uncleared items and last reconciliations", bank.rows),
+                                         ("the receipts waiting for deposit", undeposited.rows),
+                                         ("the 1099 payments so far this year", vendor_1099.rows)) if rows]
+        summary = (f"tied: the trial balance, receivables, payables and stock{''.join(', ' + e for e in extra)} match the old "
+                   f"books to the cent as of {inp.as_of}, and the {lists.compared} list records compared match")
     else:
         parts = [f"{n} {what}{'s' if n != 1 else ''}" for n, what in (
             (tb_differences, "trial balance difference"), (receivables.differences, "receivables difference"),
             (payables.differences, "payables difference"), (inventory.differences, "stock difference"),
-            (lists.differences, "list difference")) if n]
+            (lists.differences, "list difference"), (bank.differences, "bank or card account not tied"),
+            (undeposited.differences, "undeposited funds difference"), (vendor_1099.differences, "1099 difference")) if n]
         if clearing:
             parts.append(f"clearing account at {_show(built, clearing)}")
         if problems:
@@ -2150,6 +2857,7 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
         summary = "not tied: " + ", ".join(parts)
     return CutoverTieOutOutput(as_of=inp.as_of, tied=tied, summary=summary, trial_balance=trial_section,
                                receivables=receivables, payables=payables, inventory=inventory, lists=lists,
+                               bank=bank, undeposited=undeposited, vendor_1099=vendor_1099,
                                clearing=money(clearing, currency),
                                exceptions=[CutoverException(severity=p.severity, code=p.code, problem=p.problem, fix=p.fix,
                                                             file=p.file, line=p.line, subject=p.subject) for p in problems])

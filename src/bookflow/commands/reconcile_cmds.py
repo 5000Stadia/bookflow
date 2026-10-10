@@ -129,6 +129,22 @@ def _targets(account_id, **kinds):
     return found
 
 
+def _follow_opening_draft(s, inp):
+    """A statement naming neither opening, on an account with no adopted opening, follows the account's
+    one open opening draft -- the one its first `reconcile finish` adopts anyway, such as the last
+    reconciliation `cutover apply` brings in from the old books. The recorded request names it."""
+    if inp.opening_id or inp.opening_draft_id:
+        return inp
+    state = s.company.conn.execute(c.reconciliation_accounts.select().where(
+        c.reconciliation_accounts.c.account_id == inp.account)).mappings().first()
+    if state is not None and state['opening_id']:
+        return inp
+    drafts = s.company.conn.execute(c.reconciliation_drafts.select().where(
+        c.reconciliation_drafts.c.account_id == inp.account, c.reconciliation_drafts.c.kind == 'opening',
+        c.reconciliation_drafts.c.state == 'open')).mappings().all()
+    return inp.model_copy(update={'opening_draft_id': drafts[0]['id']}) if len(drafts) == 1 else inp
+
+
 def _start_family(verb, model, description):
     """`reconcile opening start` and `reconcile start`: both open a draft and differ only in kind."""
 
@@ -148,6 +164,8 @@ def _start_family(verb, model, description):
         # later step carry the ID whichever way the caller named the account.
         from bookflow.company.accounts import resolve_account
         inp = inp.model_copy(update={'account': resolve_account(s.company, inp.account)['id']})
+        if isinstance(inp, m.Start):
+            inp = _follow_opening_draft(s, inp)
         value = prepare(inp, ctx, s, ids)
         return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp))
 
@@ -192,9 +210,11 @@ reconcile_opening_start = _start_family(
 reconcile_start = _start_family(
     'start', m.Start,
     'Open a draft for one bank or credit card statement. It follows the account\'s adopted opening '
-    'unless you name opening_id, or opening_draft_id for an opening not finished yet; an account '
-    'with no opening needs `reconcile opening start` first. Then `reconcile candidates`, '
-    '`reconcile mark`, `reconcile preview` and `reconcile finish`. ' + preparation.STOP_RULE)
+    'unless you name opening_id, or opening_draft_id for an opening not finished yet; naming neither, '
+    'an account with no adopted opening follows its one open opening draft, such as the last '
+    'reconciliation `cutover apply` brings in from the old books. An account with no opening at all '
+    'needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, '
+    '`reconcile preview` and `reconcile finish`. ' + preparation.STOP_RULE)
 
 
 def _marked(inp, value):

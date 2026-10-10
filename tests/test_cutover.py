@@ -82,7 +82,11 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     # as that agency's balance (R175) and the plan has nothing to warn about it.
     assert {(e["severity"], e["code"]) for e in plan["exceptions"]} == {
         ("warning", "non_posting_accounts"), ("warning", "item_skipped"), ("note", "account_number_differs"),
-        ("note", "sales_tax_default")}
+        ("note", "sales_tax_default"), ("note", "no_reconciliation")}
+    # R179: no Reconciliation Summary or uncleared items were given, so the bank and card accounts come in as one
+    # amount each, as before, and the plan says so once.
+    lumps = next(e for e in plan["exceptions"] if e["code"] == "no_reconciliation")["problem"]
+    assert all(name in lumps for name in ("Checking", "Savings", "Visa")) and "reconcile opening start" in lumps
     assert "IL Sales Tax" in next(e for e in plan["exceptions"] if e["code"] == "sales_tax_default")["problem"]
     tax_step = next(step for step in plan["steps"] if step["kind"] == "sales_tax_adjustment")
     assert (tax_step["outside_id"], tax_step["name"]) == (f"sales-tax:{AS_OF}", "Opening sales tax · Illinois Department of Revenue")

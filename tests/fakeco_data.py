@@ -764,5 +764,11 @@ JULY = [
 # statement's ending balance and June's cleared totals. A card's charges are positive, its payments negative.
 JUNE_RECONCILIATION = {
     "Checking": {"beginning": "18402.77", "out": (38, "-41522.14"), "in": (14, "44723.49")},
+    "Savings": {"beginning": "18507.98", "out": (0, "0.00"), "in": (1, "4.65")},
     "Visa Business Card": {"beginning": "2113.40", "out": (31, "2528.27"), "in": (2, "-2155.50")},
 }
+
+# What the old books' 1099 Summary shows for January 1 to June 30, 2026 (thresholds ignored): every 2026 bill of
+# the one 1099 subcontractor went to Subcontractors, and all of them but 0627 (1,400.00, unpaid at the cutover)
+# were paid by June 30, check 4472 among them (900.00 on June 29, not yet cleared).
+VENDOR_1099_PAID = {"Delgado, Ray": "8450.00"}
