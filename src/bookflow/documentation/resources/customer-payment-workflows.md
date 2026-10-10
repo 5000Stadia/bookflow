@@ -221,8 +221,10 @@ that is waived a discount account such as Sales Discounts; it is never defaulted
 `payment bounce` is the anchor's Record Bounced Check. Name the deposited receipt, the date
 the bank returned it, the bank's fee (`bank_fee_amount` and `bank_fee_account`, an expense account such as Bank
 Service Charges) and, if the business charges for it, a fee for the customer
-(`customer_fee_amount` and an Other Charge or service `customer_fee_item`, or the income
-`customer_fee_account` that an item posts to, such as Returned Check Charges). A reason is required.
+(`customer_fee_amount`; billed, as the anchor bills it, through the Returned Check Charge item to
+the Returned Check Charges income account, both set up on first use, unless an Other Charge or
+service `customer_fee_item` or an income `customer_fee_account` that an item posts to is named).
+A reason is required.
 
 - The invoices the receipt paid are owed again, with their balances.
 - The bank account the deposit went into shows two lines on the return date: the returned

@@ -143,27 +143,118 @@ def _fee_amount(value, currency, field):
     return units
 
 
-def _fee_item(s, inp):
-    """The item the customer's fee is billed through: the one named, or the one on the income account named."""
+#: The anchor's Record Bounced Check bills the customer's fee through its own item, posting to an
+#: income account of its own, and sets both up the first time a fee is charged.
+FEE_ITEM_NAME = 'Returned Check Charge'
+FEE_ACCOUNT_NAME = 'Returned Check Charges'
+
+
+def _fixed_fee_item(row, field):
+    if row['type'] not in FEE_ITEM_TYPES or row.get('charge_percent') is not None or not row.get('sales_enabled', True):
+        raise _invalid(field, f'"{row["full_name"]}" cannot bill a fixed fee (it is a {row["type"].replace("_", " ")} item'
+                       + (' charged as a percentage' if row.get('charge_percent') is not None else '')
+                       + '); name an Other Charge or service item with a fixed price')
+    return row['id']
+
+
+def _item_on(s, account):
     items = c.items
+    return s.company.conn.execute(sa.select(items.c.id).where(
+        items.c.income_account_id == account['id'], items.c.type.in_(FEE_ITEM_TYPES),
+        items.c.active.is_(True), items.c.sales_enabled.is_(True)).order_by(items.c.full_name)).scalars().first()
+
+
+def _named(s, table, name):
+    from bookflow.company.lists import normalize_display_name
+    _, key = normalize_display_name(name)
+    row = s.company.conn.execute(sa.select(table).where(table.c.full_name_key == key)).mappings().first()
+    return dict(row) if row else None
+
+
+def _default_fee(s):
+    """With neither item nor account named: the Returned Check Charge item, as the anchor uses.
+
+    Returns ``(item_id, None)`` when it can be billed through as it stands, else ``(None, create)``
+    where ``create`` says what the write sets up first: the Returned Check Charges income account
+    when there is none, and the item posting to it.
+    """
+    item = _named(s, c.items, FEE_ITEM_NAME)
+    if item is not None:
+        if not item['active']:
+            raise _invalid('customer_fee_item', f'the "{FEE_ITEM_NAME}" item is inactive; make it active (`item activate`) '
+                           'or name the item or income account the fee is billed through')
+        return _fixed_fee_item(item, 'customer_fee_item'), None
+    account = _named(s, c.accounts, FEE_ACCOUNT_NAME)
+    if account is not None:
+        if not account['active'] or account['type'] not in ('income', 'other_income'):
+            raise _invalid('customer_fee_account', f'the "{FEE_ACCOUNT_NAME}" account is '
+                           + ('inactive' if not account['active'] else f'a {account["type"].replace("_", " ")} account')
+                           + '; name the item (customer_fee_item) or income account (customer_fee_account) the fee is billed through')
+        found = _item_on(s, account)
+        if found is not None:
+            return found, None
+    return None, dict(account=account)
+
+
+def _create_default_fee(s, ctx, create, units, currency):
+    """Set up what ``_default_fee`` found missing; returns the item id and the records it touched."""
+    from bookflow.company import items as item_service
+    at = clock.now_iso()
+    touched = []
+    account = create['account']
+    if account is None:
+        mutation = account_service.plan_account_create(
+            s.company, {'name': FEE_ACCOUNT_NAME, 'type': 'income'},
+            actor_id=s.actor.id, via=ctx.interface.value, at=at)
+        account_service.persist_account_mutation(s.company, mutation)
+        account = mutation.after
+        touched.append(Touched('account', account['id'], 'create', None, account['version'], dict(account), None, db='company'))
+    code = s.company.conn.execute(sa.select(c.sales_tax_codes.c.id).where(
+        c.sales_tax_codes.c.taxable.is_(False), c.sales_tax_codes.c.active.is_(True)).order_by(c.sales_tax_codes.c.code)).scalar()
+    payload = {'name': FEE_ITEM_NAME, 'type': 'other_charge', 'sales_enabled': True,
+               'description': 'Returned check charge', 'income_account_id': account['id'],
+               'price': _plain(units, currency)}
+    if code is not None:
+        payload['sales_tax_code_id'] = code
+    mutation = item_service.plan_item_create(s.company, payload, actor_id=s.actor.id, via=ctx.interface.value, at=at)
+    item_service.persist_item_mutation(s.company, mutation)
+    touched.append(Touched(item_service.ITEM_RECORD_TYPE, str(mutation.after['id']), mutation.action, None,
+                           int(mutation.after['version']), mutation.after_snapshot, mutation.before_snapshot, db='company'))
+    return mutation.after['id'], touched
+
+
+def _fee_item(s, inp):
+    """The item the customer's fee is billed through, and what to set up first when it is the default.
+
+    The one named; else the active item on the income account named; else, with neither named, the
+    anchor's own Returned Check Charge item (``_default_fee``).
+    """
     if inp.customer_fee_item is not None:
-        row = defaults._row(s.company, 'item', inp.customer_fee_item)
-        if row['type'] not in FEE_ITEM_TYPES or row.get('charge_percent') is not None or not row.get('sales_enabled', True):
-            raise _invalid('customer_fee_item', f'"{row["full_name"]}" cannot bill a fixed fee (it is a {row["type"].replace("_", " ")} item'
-                           + (' charged as a percentage' if row.get('charge_percent') is not None else '')
-                           + '); name an Other Charge or service item with a fixed price')
-        return row['id']
+        return _fixed_fee_item(defaults._row(s.company, 'item', inp.customer_fee_item), 'customer_fee_item'), None
+    if inp.customer_fee_account is None:
+        return _default_fee(s)
     account = account_service.resolve_account(s.company, inp.customer_fee_account)
     if account['type'] not in ('income', 'other_income'):
         raise _invalid('customer_fee_account', f'"{account["full_name"]}" is a {account["type"].replace("_", " ")} account; '
                        'a customer fee is billed to an income account such as Returned Check Charges')
-    found = s.company.conn.execute(sa.select(items.c.id, items.c.full_name).where(
-        items.c.income_account_id == account['id'], items.c.type.in_(FEE_ITEM_TYPES),
-        items.c.active.is_(True), items.c.sales_enabled.is_(True)).order_by(items.c.full_name)).all()
-    if not found:
-        raise _invalid('customer_fee_account', f'no active item bills to "{account["full_name"]}"; create an Other Charge item '
-                       'that posts to it with `item create` (type other_charge, income_account_id), then name that item')
-    return found[0].id
+    found = _item_on(s, account)
+    if found is None:
+        raise _invalid('customer_fee_account', f'no active item bills to "{account["full_name"]}"; name the item with '
+                       'customer_fee_item, create an Other Charge item that posts to it with `item create` (type '
+                       f'other_charge, income_account_id), or leave out customer_fee_account to bill through the '
+                       f'{FEE_ITEM_NAME} item, set up on first use')
+    return found, None
+
+
+def _fee_invoice(inp, key, profile, units, item_id, currency, check_words):
+    from bookflow.company.sales_models import InvoicePostInput, SalesLineInput
+    description = f'Returned {check_words} fee'
+    extra = {'number': inp.customer_fee_number} if inp.customer_fee_number is not None else {}
+    return InvoicePostInput(
+        customer=key['party_id'], date=inp.date, ar_account=profile['ar_account_id'],
+        memo=(inp.customer_fee_memo or f'{description}; the check was returned by the bank on {inp.date}')[:2000],
+        lines=[SalesLineInput(item=item_id, quantity='1', description=description,
+                              unit_price=_plain(units, currency))], **extra)
 
 
 def _intent(s, ctx, inp):
@@ -254,16 +345,10 @@ def _intent(s, ctx, inp):
     customer_fee = invoice = None
     if inp.customer_fee_amount is not None:
         units = _fee_amount(inp.customer_fee_amount, currency, 'customer_fee_amount')
-        item_id = _fee_item(s, inp)
-        from bookflow.company.sales_models import InvoicePostInput, SalesLineInput
-        description = f'Returned {check_words} fee'
-        extra = {'number': inp.customer_fee_number} if inp.customer_fee_number is not None else {}
-        invoice = InvoicePostInput(
-            customer=key['party_id'], date=inp.date, ar_account=profile['ar_account_id'],
-            memo=(inp.customer_fee_memo or f'{description}; the check was returned by the bank on {inp.date}')[:2000],
-            lines=[SalesLineInput(item=item_id, quantity='1', description=description,
-                                  unit_price=_plain(units, currency))], **extra)
-        customer_fee = dict(units=units, item=item_id)
+        item_id, create = _fee_item(s, inp)
+        if item_id is not None:
+            invoice = _fee_invoice(inp, key, profile, units, item_id, currency, check_words)
+        customer_fee = dict(units=units, item=item_id, create=create)
     return dict(facts=facts, header=header, revision=revision, profile=profile, key=key, cash=cash, discount=discount,
                 bank=bank, deposit_id=deposit_id, payer=payer, applied=applied, unapply=unapply, refund=refund,
                 register=register, invoice=invoice, bank_fee=bank_fee, customer_fee=customer_fee, currency=currency,
@@ -391,10 +476,17 @@ def prepare(s, ctx, inp, operation='bounce'):
     reopened = _reopened(s, unapply, currency)
     fee_bank = _document(register.preview, 'journal_entry', intent['bank_fee']['account']['full_name']) if register else None
     fee_customer = _document(invoice.preview, 'invoice') if invoice else None
+    if intent['customer_fee'] and invoice is None:
+        # The Returned Check Charge item is set up by the write itself; the preview names what the
+        # fee invoice will be without pricing it through an item that does not exist yet.
+        number, _ = effects.allocate(s, 'invoice', inp.customer_fee_number)
+        fee_customer = BounceDocument(id=new_id(), number=number, type='invoice',
+                                      amount=_money(intent['customer_fee']['units'], currency),
+                                      account=f'{FEE_ITEM_NAME} (set up with this write)')
     fingerprint = query.digest([intent['header']['id'], intent['header']['version'], inp.date, intent['cash'],
         intent['bank']['id'], [(row.invoice_id, row.reopened.minor_units) for row in reopened],
         intent['bank_fee'] and [intent['bank_fee']['units'], intent['bank_fee']['account']['id']],
-        intent['customer_fee'] and [intent['customer_fee']['units'], intent['customer_fee']['item']],
+        intent['customer_fee'] and [intent['customer_fee']['units'], intent['customer_fee']['item'] or 'new:' + FEE_ITEM_NAME],
         defaults._info(s.company)['closing_date']])
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'bounce_facts', 'current_facts_fingerprint': fingerprint})
@@ -432,6 +524,12 @@ def apply(plan, ctx, s):
     if intent['register']:
         step = registers.prepare(s, ctx, intent['register'], 'post')
         register_out = registers.apply(step, ctx, s).output
+    created = []
+    if intent['customer_fee'] and intent['customer_fee']['create'] is not None:
+        item_id, created = _create_default_fee(s, ctx, intent['customer_fee']['create'],
+                                               intent['customer_fee']['units'], intent['currency'])
+        intent['invoice'] = _fee_invoice(inp, intent['key'], intent['profile'], intent['customer_fee']['units'],
+                                         item_id, intent['currency'], intent['check_words'])
     if intent['invoice']:
         step = sales.prepare(s, ctx, intent['invoice'], 'invoice', 'post')
         invoice_out = sales.apply(step, ctx, s).output
@@ -446,7 +544,7 @@ def apply(plan, ctx, s):
         customer_fee_minor_units=intent['customer_fee']['units'] if invoice_out else None,
         reason=ctx.reason.strip()[:500], created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
         audit_event_id=event)
-    touched = [Touched('payment_bounce', record['id'], 'create', None, 1, effects.decoded(record), db='company')]
+    touched = created + [Touched('payment_bounce', record['id'], 'create', None, 1, effects.decoded(record), db='company')]
     summary_text = f"bounce payment {intent['header']['number']}"
     audit.write_event_to(s.company, ctx, 'payment bounce', summary_text, touched, actor_id=s.actor.id,
                          actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=event)

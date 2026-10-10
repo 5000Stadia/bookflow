@@ -190,6 +190,52 @@ def test_the_normal_correction_path_reverses_it(july):
     assert by_id(july, fees=july['service_charges'])['fees'] == 1200
 
 
+def test_with_no_fee_item_or_account_the_anchors_returned_check_charge_is_set_up_once(july):
+    """Record Bounced Check bills the customer's fee through its own Returned Check Charge item, to a
+    Returned Check Charges income account, setting them up when absent. The fixture's own item and
+    account are renamed out of the way, so the company starts with neither."""
+    run = july['run']
+    run('item update', dict(item=july['fee_item'], name='Old Fee'))
+    run('account update', dict(account=july['charges'], name='Old Charges'))
+
+    def named(command, name):
+        return [row for row in run(command, dict(limit=200))['items'] if row['full_name'] == name]
+
+    shown = run('payment show', dict(payment=july['check']['id']))
+    raw = dict(payment=july['check']['id'], expected_version=shown['version'], date='2026-07-09',
+               operation_key='default-fee', customer_fee_amount='35.00', customer_fee_number='2393')
+    preview = run('payment bounce', raw, reason='NSF', dry_run=True)
+    assert preview['customer_fee']['number'] == '2393' and preview['customer_fee']['amount']['minor_units'] == 3500
+    assert 'Returned Check Charge' in preview['customer_fee']['account']
+    assert not named('account query', 'Returned Check Charges') and not named('item query', 'Returned Check Charge')
+    done = run('payment bounce', dict(raw, expected_facts_fingerprint=preview['facts_fingerprint']), reason='NSF')
+    [account] = named('account query', 'Returned Check Charges')
+    [listed] = named('item query', 'Returned Check Charge')
+    item = run('item show', dict(item=listed['id']))
+    assert account['type'] == 'income' and item['type'] == 'other_charge' and item['income_account_id'] == account['id']
+    fee = run('invoice show', dict(invoice=done['customer_fee']['id']))
+    assert fee['number'] == '2393' and fee['total']['minor_units'] == 3500
+    assert by_id(july, charges=account['id'])['charges'] == -3500
+    # Kowalski's check comes back too: the same item, nothing set up twice.
+    shown = run('payment show', dict(payment=july['second']['id']))
+    run('payment bounce', dict(payment=july['second']['id'], expected_version=shown['version'], date='2026-07-10',
+                               operation_key='default-fee-2', customer_fee_amount='25.00'), reason='NSF')
+    assert len(named('account query', 'Returned Check Charges')) == 1 and len(named('item query', 'Returned Check Charge')) == 1
+    assert by_id(july, charges=account['id'])['charges'] == -6000
+
+
+def test_with_the_account_but_no_item_on_it_only_the_item_is_set_up(july):
+    run = july['run']
+    run('item update', dict(item=july['fee_item'], name='Old Fee', income_account_id=july['income']))
+    shown = run('payment show', dict(payment=july['check']['id']))
+    done = run('payment bounce', dict(payment=july['check']['id'], expected_version=shown['version'], date='2026-07-09',
+                                      operation_key='default-item', customer_fee_amount='35.00'), reason='NSF')
+    [item] = [row for row in run('item query', dict(limit=200))['items'] if row['full_name'] == 'Returned Check Charge']
+    assert run('item show', dict(item=item['id']))['income_account_id'] == july['charges']
+    assert by_id(july, charges=july['charges'])['charges'] == -3500
+    assert done['customer_fee']['amount']['minor_units'] == 3500
+
+
 def test_refusals_say_what_to_do(july):
     run = july['run']
     shown = run('payment show', dict(payment=july['check']['id']))
@@ -206,10 +252,10 @@ def test_refusals_say_what_to_do(july):
     assert 'expense account' in refused(dict(base, bank_fee_amount='12.00', bank_fee_account=july['bank']))
     assert 'expense account' in refused(dict(base, bank_fee_amount='12.00', bank_fee_account=july['income']))
     assert 'greater than zero' in refused(dict(base, bank_fee_amount='0.00', bank_fee_account=july['service_charges']), code='E_VALUE_RANGE')
-    # The customer's fee names an item or an income account, one of the two, and one an item posts to.
-    assert 'one of the two' in refused(dict(base, customer_fee_amount='35.00'), code='E_VALIDATION')
-    assert 'one of the two' in refused(dict(base, customer_fee_amount='35.00', customer_fee_item=july['fee_item'],
-                                            customer_fee_account=july['charges']), code='E_VALIDATION')
+    # The customer's fee names an item or an income account, not both (neither is the anchor's default), and an
+    # account named must be one an item posts to.
+    assert 'not both' in refused(dict(base, customer_fee_amount='35.00', customer_fee_item=july['fee_item'],
+                                      customer_fee_account=july['charges']), code='E_VALIDATION')
     # A bank fee needs its account and an account its amount.
     assert 'together' in refused(dict(base, bank_fee_amount='12.00'), code='E_VALIDATION')
     lonely = run('account create', dict(name='Other Fees', type='income'))['id']
@@ -240,7 +286,8 @@ def test_a_receipt_with_an_early_payment_discount_returns_only_its_cash(books):
         customer=customer, date='2026-03-08', amount='980.00', payment_method=books['methods']['Check'], reference='900',
         deposit_to=books['bank'], operation_key='disc', applications=dict(mode='inline', items=[
             dict(invoice=sale['id'], expected_version=1, amount='980.00')]),
-        discounts=[dict(invoice=sale['id'], amount='20.00')]), reason='Paid early')
+        discounts=[dict(invoice=sale['id'], amount='20.00')],
+        discount_account=books['run']('account create', dict(name='Discounts Given', type='income'))['id']), reason='Paid early')
     assert by_id(books, checking=books['bank'])['checking'] == 98000
     done = bounce(books, paid, date='2026-03-12', bank_fee=None, customer_fee=None)
     assert done['returned']['minor_units'] == 98000
