@@ -60,6 +60,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import bookflow
@@ -130,6 +131,13 @@ PASSTHROUGH = (
     # a child that waited the production lock timeout would hang the suite.
     "BOOKFLOW_LOCK_TIMEOUT",
 )
+
+
+#: Put on the import path of a child that runs a past release, never of one running today's product.
+OLD_CLOCK = (Path(__file__).resolve().parent / "old_clock").resolve()
+#: The real instant every past-release child of this session maps onto the pinned start, so
+#: their clocks share one offset and stay in order across children (see old_clock/sitecustomize.py).
+OLD_CLOCK_ANCHOR = repr(time.time())
 
 
 def parent_source_root() -> Path:
@@ -246,7 +254,13 @@ def _environment(source) -> dict[str, str]:
         raise ValueError(
             f"No bookflow package under any of {[str(entry) for entry in entries]}; "
             f"a child pinned there could not import the product.")
+    if parent_source_root().resolve() not in entries:
+        # A copy other than the product under test is a past release: its clock starts inside
+        # the world its seeds were written for (see tests/old_clock/sitecustomize.py).
+        entries.append(OLD_CLOCK)
     environment = {name: os.environ[name] for name in PASSTHROUGH if name in os.environ}
+    if OLD_CLOCK in entries:
+        environment["BOOKFLOW_TEST_OLD_CLOCK_ANCHOR"] = OLD_CLOCK_ANCHOR
     # The pinned source leads, so the child imports the artifact the test named
     # even where the interpreter also has an installation of its own.
     environment["PYTHONPATH"] = os.pathsep.join(str(entry) for entry in entries)
