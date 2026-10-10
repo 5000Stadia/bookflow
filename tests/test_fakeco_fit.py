@@ -80,6 +80,14 @@ def test_july_kept_in_bookflow_matches_the_answer_key(tmp_path, monkeypatch):
     # No workaround is left in July that a v1.6 command now covers (R176-R179).
     workarounds = {row.kind for row in replay.fit.values() if row.status == "workaround"}
     assert workarounds == {"Other names list (owner)", "Group item (Smoke Alarm Package)"}, workarounds
+    missing = {row.kind for row in replay.fit.values() if row.status == "missing"}
+    assert missing == {"Customer types, employees, payment methods in the Lists IIF"}, missing
+    # The duplicate vendor is merged into the vendor it repeats (the replay checks its July card receipt then reads
+    # under the survivor on expenses-by-vendor). The merge's own document count reads 0: it counts documents whose
+    # revision names the vendor, and a card charge keeps its payee elsewhere.
+    merged = replay.merged
+    assert (merged["merged_name"], merged["survivor_name"], merged["changed"]) == (
+        "Midland Elec. Supply", "Midland Electric Supply", True), merged
 
     # The person closed July: nothing more can be posted into it.
     assert replay.run("company show")["info"]["closing_date"] == "2026-07-31"

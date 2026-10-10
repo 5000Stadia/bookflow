@@ -45,6 +45,7 @@ REST = SUMMARIES + ("uncleared_2026-06-30.csv", "undeposited_funds_2026-06-30.cs
 MAPPINGS = {"accounts": {"Bank Service Charges": "Bank Fees", "Interest Expense": "create"}}
 NAMES = {"Bank Service Charges": "Bank Fees"}  # old-books account name -> the Bookflow account it became
 STATEMENT_ONLY = ("bank_charge", "bank_interest")
+DUPLICATE, SURVIVOR = "Midland Elec. Supply", "Midland Electric Supply"  # the old books carry both names
 
 
 @dataclass
@@ -433,14 +434,6 @@ class Replay:
         payee = ev.get("payee")
         data = dict(account="Visa Business Card", date=ev["date"], amount=ev["total"],
                     expenses=[dict(account=account, amount=amount, memo=memo) for account, amount, memo in ev["lines"]])
-        if payee == "Midland Elec. Supply":
-            payee = "Midland Electric Supply"
-            self.note("Duplicate vendor name (Midland Elec. Supply)", "missing", ["vendor deactivate"],
-                      "there is no merge: the receipt is entered under Midland Electric Supply and the duplicate "
-                      "deactivated, its history left under its own name (R117 Merge duplicates is in Later)",
-                      "Merge: rename the duplicate to the right name and the anchor folds its history in",
-                      event=ev["id"])
-            self.run("vendor deactivate", dict(vendor="Midland Elec. Supply"))
         if payee and payee in D.NEW_VENDORS:
             info = D.NEW_VENDORS[payee]
             city, rest = info["city"].split(", ")
@@ -454,12 +447,33 @@ class Replay:
             data["pay_to"] = self.party(payee)
         made = self.run(f"{noun} post", data)
         self.made[ev["id"]] = made
+        if payee == DUPLICATE:
+            self.merge_duplicate(ev)
         if noun == "card-credit":
             self.note("Card refund (returned purchase)", "does", ["card-credit post"],
                       "a card credit against the expense it came from", event=ev["id"])
         else:
             self.note("Credit card purchase", "does", ["card-charge post"],
                       "payee optional, expense lines", event=ev["id"])
+
+    def merge_duplicate(self, ev: dict):
+        """The receipt names the duplicate the old books carry; once it is entered as written, the person merges the
+        duplicate into the vendor it repeats, and every read shows its history under that vendor, as the anchor's
+        merge does."""
+        def month() -> dict:
+            report = self.run("report expenses-by-vendor", dict(date_from="2026-07-01", date_to="2026-07-31", limit=200))
+            return {row["display_vendor_label"]: row["expense"]["minor_units"] for row in report["rows"]}
+        before = month()
+        assert before.get(DUPLICATE) == cents(ev["total"]), before
+        merged = self.run("vendor merge", dict(merged=DUPLICATE, into=SURVIVOR),
+                          reason="Midland Elec. Supply is Midland Electric Supply")
+        after = month()
+        assert DUPLICATE not in after and after[SURVIVOR] == before.get(SURVIVOR, 0) + cents(ev["total"]), after
+        self.merged = merged
+        self.note("Duplicate vendor name (Midland Elec. Supply)", "does", ["card-charge post", "vendor merge"],
+                  "the receipt is entered under the duplicate as the paperwork names it, then the person merges the "
+                  "duplicate into Midland Electric Supply; reports, balances and 1099 reads show its history under "
+                  "the survivor", event=ev["id"])
 
     def _card_credit(self, ev: dict):
         self._card_charge(ev, "card-credit")
