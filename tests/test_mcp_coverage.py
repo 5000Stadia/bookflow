@@ -194,7 +194,12 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # all required or context, so no optional branch is new. Re-measured on the merged tree: still 2931.
     # 2931 -> 2933: reconcile import 3 -> 5. It reads a statement kept as an attachment, so `content` is now
     # optional (+1, its null branch) and `attachment` is a new optional string (+1, its null branch).
-    assert sum(len(group["paths"]) for group in mapped)==2933
+    # 2933 -> 2943 (R176), measured per command: payment bounce, a new command, 10 nodes -- the null branches of
+    # its optional bank_fee_amount, bank_fee_account, bank_fee_memo, customer_fee_amount, customer_fee_item,
+    # customer_fee_account, customer_fee_number, customer_fee_memo, bank_account and expected_facts_fingerprint.
+    # The fees are flat optional fields, not nested objects, so no new variant kind arises; the groups stay 26.
+    # R177 adds none: payment receive's input is unchanged (a receipt of 0.00 is a value, and only descriptions moved).
+    assert sum(len(group["paths"]) for group in mapped)==2943
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

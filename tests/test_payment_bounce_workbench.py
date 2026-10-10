@@ -42,15 +42,15 @@ def test_the_bounced_check_form_records_the_return_and_the_receipt_says_so(hoste
                                         {"invoice": sale["id"], "expected_version": 1, "amount": "75.00"}]}})
     form = browser.get(f"/c/{hosted.company_id}/payment/bounce", headers=HEADERS)
     assert form.status_code == 200
-    for name in ("payment", "expected_version", "date", "operation_key", "bank_fee.amount", "bank_fee.account",
-                 "customer_fee.amount", "customer_fee.item", "customer_fee.account"):
+    for name in ("payment", "expected_version", "date", "operation_key", "bank_fee_amount", "bank_fee_account",
+                 "customer_fee_amount", "customer_fee_item", "customer_fee_account"):
         assert re.search(rf'name="f:{re.escape(name)}"', form.text), (name, form.text[:1500])
     # The Customers page offers it as a task.
     assert f"/c/{hosted.company_id}/payment/bounce" in browser.get(f"/c/{hosted.company_id}/_group/customers", headers=HEADERS).text
 
     submitted = browser.post(f"/c/{hosted.company_id}/payment/bounce", headers=HEADERS, follow_redirects=False, data={
         "f:payment": check["id"], "f:expected_version": str(check["version"]), "f:date": "2026-07-08",
-        "f:operation_key": "bounce-wb", "f:bank_fee.amount": "10.00", "f:bank_fee.account": "Bounce Bank Fees",
+        "f:operation_key": "bounce-wb", "f:bank_fee_amount": "10.00", "f:bank_fee_account": "Bounce Bank Fees",
         "ctx:reason": "Bank returned check 311"})
     assert submitted.status_code in (200, 303), submitted.text[:800]
     shown = browser.post(f"{base}/payment.show", json={"payment": check["id"]}, headers=HEADERS).json()
@@ -78,7 +78,7 @@ def test_an_agent_records_the_return_over_http_under_the_existing_role_rules(hos
         operation_key='agent-bounce-receive', applications=dict(mode='inline', items=[
             dict(invoice=sale['id'], expected_version=1, amount='60.00')])))
     raw = dict(payment=check['id'], expected_version=check['version'], date='2026-07-08', operation_key='agent-bounce',
-               bank_fee=dict(amount='5.00', account=fees))
+               bank_fee_amount='5.00', bank_fee_account=fees)
     done = bot.ok('payment bounce', raw)
     assert done['returned']['minor_units'] == 6000 and [row['number'] for row in done['reopened_invoices']]
     assert person.ok('payment show', {'payment': check['id']})['bounce']['note'] == 'bounced on 2026-07-08'

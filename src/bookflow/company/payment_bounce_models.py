@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from bookflow.company.journal_models import _Date, _Input, _Number, _Selector, _Version
 from bookflow.company.journal_outputs import JournalMoneyOutput
@@ -20,30 +20,6 @@ BounceKey = Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$')]
 Fingerprint = Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')]
 
 
-class BankFeeInput(_Input):
-    """The fee the bank charged for returning the check, taken out of the same bank account."""
-
-    amount: str = Field(description='The bank\'s fee as a decimal string, more than zero, such as "12.00".')
-    account: _Selector = Field(description=(
-        'Expense account the fee is charged to, such as Bank Service Charges. Not a bank, card, '
-        'receivable or income account.'))
-    memo: str | None = Field(default=None, max_length=2000, description='Memo on the fee entry; defaults to a line naming the check.')
-
-
-class CustomerFeeInput(_Input):
-    """A fee billed back to the customer for the returned check, as an open invoice."""
-
-    amount: str = Field(description='The fee charged to the customer as a decimal string, more than zero, such as "35.00".')
-    item: _Selector | None = Field(default=None, description=(
-        'Item the fee is billed through, such as an Other Charge item named Returned Check Charge. '
-        'Give this or `account`, not both.'))
-    account: _Selector | None = Field(default=None, description=(
-        'Income account the fee is billed to, such as Returned Check Charges: the fee is billed through '
-        'the active item that already posts to it. Give this or `item`, not both.'))
-    number: _Number | None = Field(default=None, description='Invoice number for the fee; the next invoice number when omitted.')
-    memo: str | None = Field(default=None, max_length=2000, description='Memo on the fee invoice; defaults to a line naming the check.')
-
-
 class PaymentBounceInput(_Input):
     payment: _Selector = Field(description='The customer receipt whose check the bank returned.')
     expected_version: _Version = Field(description='Receipt version from `payment show`.')
@@ -51,14 +27,48 @@ class PaymentBounceInput(_Input):
     operation_key: BounceKey = Field(description=(
         'A unique key for this bounce; asking again with it returns the first result instead of bouncing the '
         'check twice. The steps of the bounce derive their own keys from it, so it is at most 100 characters.'))
-    bank_fee: BankFeeInput | None = Field(default=None, description='The bank\'s fee for returning the check; omit when it charged none.')
-    customer_fee: CustomerFeeInput | None = Field(default=None, description='A fee to bill the customer; omit to bill none.')
+    bank_fee_amount: str | None = Field(default=None, description=(
+        'The bank\'s fee for returning the check, as a decimal string more than zero, such as "12.00". Omit it '
+        'when the bank charged none. Give `bank_fee_account` with it.'))
+    bank_fee_account: _Selector | None = Field(default=None, description=(
+        'Expense account the bank\'s fee is charged to, such as Bank Service Charges. Not a bank, card, '
+        'receivable or income account.'))
+    bank_fee_memo: str | None = Field(default=None, max_length=2000, description=(
+        'Memo on the fee entry; defaults to a line naming the check.'))
+    customer_fee_amount: str | None = Field(default=None, description=(
+        'A fee billed to the customer for the returned check, as a decimal string more than zero, such as '
+        '"35.00"; it becomes an open invoice. Omit it to bill none. Give `customer_fee_item` or '
+        '`customer_fee_account` with it.'))
+    customer_fee_item: _Selector | None = Field(default=None, description=(
+        'Item the customer\'s fee is billed through, a service or Other Charge item with a fixed price, such as '
+        'Returned Check Charge. Give this or `customer_fee_account`, not both.'))
+    customer_fee_account: _Selector | None = Field(default=None, description=(
+        'Income account the customer\'s fee is billed to, such as Returned Check Charges: the fee is billed '
+        'through the active item that already posts to it. Give this or `customer_fee_item`, not both.'))
+    customer_fee_number: _Number | None = Field(default=None, description=(
+        'Invoice number for the customer\'s fee; the next invoice number when omitted.'))
+    customer_fee_memo: str | None = Field(default=None, max_length=2000, description=(
+        'Memo on the fee invoice; defaults to a line naming the check.'))
     bank_account: _Selector | None = Field(default=None, description=(
         'Bank account the returned amount and the bank fee leave. Defaults to the account the receipt was '
         'deposited to; give it only to correct that.'))
     expected_facts_fingerprint: Fingerprint | None = Field(default=None, description=(
         '`facts_fingerprint` from a dry run; the write is refused with E_PREVIEW_STALE if anything it depends '
         'on changed since.'))
+
+    @model_validator(mode='after')
+    def fees_are_whole(self):
+        if (self.bank_fee_amount is None) != (self.bank_fee_account is None):
+            raise ValueError('give bank_fee_amount and bank_fee_account together, or neither')
+        if self.bank_fee_amount is None and self.bank_fee_memo is not None:
+            raise ValueError('bank_fee_memo needs a bank fee')
+        if self.customer_fee_amount is None and (self.customer_fee_item or self.customer_fee_account
+                                                 or self.customer_fee_number or self.customer_fee_memo):
+            raise ValueError('customer_fee_amount is required with the other customer_fee fields')
+        if self.customer_fee_amount is not None and (self.customer_fee_item is None) == (self.customer_fee_account is None):
+            raise ValueError('name the item the customer fee is billed through (customer_fee_item) or the income account '
+                             'it belongs to (customer_fee_account), one of the two')
+        return self
 
 
 class ReopenedInvoice(_Input):

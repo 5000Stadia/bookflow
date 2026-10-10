@@ -95,23 +95,22 @@ def _bounce():
 
     cmd = command('payment bounce', scope='company',
         description=('Record a customer check the bank returned, as the anchor\'s Record Bounced Check, in one step. Name the '
-                     'deposited receipt, the date the bank returned it, the bank\'s fee as `bank_fee` {amount, account} (an '
-                     'expense account such as Bank Service Charges) and, if you charge for returned checks, `customer_fee` '
-                     '{amount, item or account} (an Other Charge item, or the income account such as Returned Check '
-                     'Charges that an item posts to). A reason is required. The invoices the receipt paid reopen with their '
-                     'balances; the returned amount and the bank\'s fee leave the bank account the deposit went into as two '
-                     'lines on the return date, so a statement import matches them; the customer\'s fee becomes an open '
-                     'invoice. The receipt and the deposit are not changed: the bank really did deposit the check. The '
-                     'receipt shows "bounced on ..." in `payment show`, and the returned cash is a customer refund '
-                     '(Returned check ...) in the customer\'s history. Everything is written together or nothing is. There '
-                     'is no un-bounce: reverse it with the normal corrections, `customer-refund void` (the receipt is then '
-                     'an ordinary unapplied receipt again) and voiding the fee entry and the fee invoice. A receipt still in '
-                     'Undeposited Funds never reached the bank: unapply and void it instead. Refused when the receipt was '
-                     'applied inside a closed period, when part of it was already refunded, or when it paid more than one '
-                     'customer or job. Dry run previews every document and gives `facts_fingerprint`. Example: {"payment": '
-                     '"3", "expected_version": 2, "date": "2026-07-09", "operation_key": "bounce-1182", "bank_fee": '
-                     '{"amount": "12.00", "account": "Bank Service Charges"}, "customer_fee": {"amount": "35.00", '
-                     '"account": "Returned Check Charges"}}.'),
+                     'deposited receipt, the date the bank returned it, the bank\'s fee (`bank_fee_amount` and `bank_fee_account`, an '
+                     'expense account such as Bank Service Charges) and, if you charge for returned checks, a fee for the customer '
+                     '(`customer_fee_amount` and either `customer_fee_item`, an Other Charge or service item with a fixed price, or '
+                     '`customer_fee_account`, the income account such as Returned Check Charges that an item posts to). A reason is '
+                     'required. The invoices the receipt paid reopen with their balances; the returned amount and the bank\'s fee '
+                     'leave the bank account the deposit went into as two lines on the return date, so a statement import matches '
+                     'them; the customer\'s fee becomes an open invoice. The receipt and the deposit are not changed: the bank '
+                     'really did deposit the check. The receipt shows "bounced on ..." in `payment show`, and the returned cash is a '
+                     'customer refund (Returned check ...) in the customer\'s history. Everything is written together or nothing is. '
+                     'There is no un-bounce: reverse it with the normal corrections, `customer-refund void` (the receipt is then an '
+                     'ordinary unapplied receipt again) and voiding the fee entry and the fee invoice. A receipt still in Undeposited '
+                     'Funds never reached the bank: unapply and void it instead. Refused when the receipt was applied inside a closed '
+                     'period, when part of it was already refunded, or when it paid more than one customer or job. Dry run previews '
+                     'every document and gives `facts_fingerprint`. Example: {"payment": "3", "expected_version": 2, "date": '
+                     '"2026-07-09", "operation_key": "bounce-1182", "bank_fee_amount": "12.00", "bank_fee_account": "Bank Service '
+                     'Charges", "customer_fee_amount": "35.00", "customer_fee_account": "Returned Check Charges"}.'),
         input_model=PaymentBounceInput, output_model=PaymentBounceOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True, positional=['payment'],
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED', 'E_PERIOD_CLOSED',

@@ -25,8 +25,8 @@ def test_the_same_bounce_through_python_cli_http_and_mcp(root, tmp_path):
             for surface in SURFACES:
                 receipt = await matrix.call(surface, 'payment show', {'payment': 'DEMO-PAY-P2'})
                 raw = {'payment': 'DEMO-PAY-P2', 'expected_version': receipt['version'], 'date': '2026-10-20',
-                       'operation_key': 'bounce-p2', 'bank_fee': {'amount': '15.00', 'account': 'Bank Fees'},
-                       'customer_fee': {'amount': '25.00', 'item': 'Payment Example Labor'}}
+                       'operation_key': 'bounce-p2', 'bank_fee_amount': '15.00', 'bank_fee_account': 'Bank Fees',
+                       'customer_fee_amount': '25.00', 'customer_fee_item': 'Payment Example Labor'}
                 before = await matrix.call(surface, 'report ar-aging', {'as_of': DEMO_AS_OF, 'limit': 200})
                 preview = await matrix.call(surface, 'payment bounce', raw, dry_run=True)
                 done = await matrix.call(surface, 'payment bounce', raw)

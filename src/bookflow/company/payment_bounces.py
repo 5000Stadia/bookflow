@@ -143,28 +143,25 @@ def _fee_amount(value, currency, field):
     return units
 
 
-def _fee_item(s, fee, field):
+def _fee_item(s, inp):
     """The item the customer's fee is billed through: the one named, or the one on the income account named."""
-    if (fee.item is None) == (fee.account is None):
-        raise _invalid(field, 'name the item the fee is billed through (`item`) or the income account it belongs to '
-                       '(`account`), one of the two')
     items = c.items
-    if fee.item is not None:
-        row = defaults._row(s.company, 'item', fee.item)
+    if inp.customer_fee_item is not None:
+        row = defaults._row(s.company, 'item', inp.customer_fee_item)
         if row['type'] not in FEE_ITEM_TYPES or row.get('charge_percent') is not None or not row.get('sales_enabled', True):
-            raise _invalid(field + '.item', f'"{row["full_name"]}" cannot bill a fixed fee (it is a {row["type"].replace("_", " ")} item'
+            raise _invalid('customer_fee_item', f'"{row["full_name"]}" cannot bill a fixed fee (it is a {row["type"].replace("_", " ")} item'
                            + (' charged as a percentage' if row.get('charge_percent') is not None else '')
                            + '); name an Other Charge or service item with a fixed price')
         return row['id']
-    account = account_service.resolve_account(s.company, fee.account)
+    account = account_service.resolve_account(s.company, inp.customer_fee_account)
     if account['type'] not in ('income', 'other_income'):
-        raise _invalid(field + '.account', f'"{account["full_name"]}" is a {account["type"].replace("_", " ")} account; '
+        raise _invalid('customer_fee_account', f'"{account["full_name"]}" is a {account["type"].replace("_", " ")} account; '
                        'a customer fee is billed to an income account such as Returned Check Charges')
     found = s.company.conn.execute(sa.select(items.c.id, items.c.full_name).where(
         items.c.income_account_id == account['id'], items.c.type.in_(FEE_ITEM_TYPES),
         items.c.active.is_(True), items.c.sales_enabled.is_(True)).order_by(items.c.full_name)).all()
     if not found:
-        raise _invalid(field + '.account', f'no active item bills to "{account["full_name"]}"; create an Other Charge item '
+        raise _invalid('customer_fee_account', f'no active item bills to "{account["full_name"]}"; create an Other Charge item '
                        'that posts to it with `item create` (type other_charge, income_account_id), then name that item')
     return found[0].id
 
@@ -243,27 +240,27 @@ def _intent(s, ctx, inp):
         funding_account=bank['id'], method=method['id'], reference=f'Returned {check_words}'[:128],
         memo=memo, customer=key['party_id'])
     bank_fee = register = None
-    if inp.bank_fee is not None:
-        units = _fee_amount(inp.bank_fee.amount, currency, 'bank_fee.amount')
-        expense = account_service.resolve_account(s.company, inp.bank_fee.account)
+    if inp.bank_fee_amount is not None:
+        units = _fee_amount(inp.bank_fee_amount, currency, 'bank_fee_amount')
+        expense = account_service.resolve_account(s.company, inp.bank_fee_account)
         if expense['type'] not in EXPENSE_TYPES:
-            raise _invalid('bank_fee.account', f'"{expense["full_name"]}" is a {expense["type"].replace("_", " ")} account; '
+            raise _invalid('bank_fee_account', f'"{expense["full_name"]}" is a {expense["type"].replace("_", " ")} account; '
                            'the bank\'s fee is charged to an expense account such as Bank Service Charges')
         from bookflow.company.register_models import RegisterPostInput
         bank_fee = dict(units=units, account=expense)
         register = RegisterPostInput(
             account=bank['id'], date=inp.date, direction='decrease', amount=_plain(units, currency),
-            category=expense['id'], memo=(inp.bank_fee.memo or f'Returned item fee, {check_words} from {payer["full_name"]}')[:2000])
+            category=expense['id'], memo=(inp.bank_fee_memo or f'Returned item fee, {check_words} from {payer["full_name"]}')[:2000])
     customer_fee = invoice = None
-    if inp.customer_fee is not None:
-        units = _fee_amount(inp.customer_fee.amount, currency, 'customer_fee.amount')
-        item_id = _fee_item(s, inp.customer_fee, 'customer_fee')
+    if inp.customer_fee_amount is not None:
+        units = _fee_amount(inp.customer_fee_amount, currency, 'customer_fee_amount')
+        item_id = _fee_item(s, inp)
         from bookflow.company.sales_models import InvoicePostInput, SalesLineInput
         description = f'Returned {check_words} fee'
-        extra = {'number': inp.customer_fee.number} if inp.customer_fee.number is not None else {}
+        extra = {'number': inp.customer_fee_number} if inp.customer_fee_number is not None else {}
         invoice = InvoicePostInput(
             customer=key['party_id'], date=inp.date, ar_account=profile['ar_account_id'],
-            memo=(inp.customer_fee.memo or f'{description}; the check was returned by the bank on {inp.date}')[:2000],
+            memo=(inp.customer_fee_memo or f'{description}; the check was returned by the bank on {inp.date}')[:2000],
             lines=[SalesLineInput(item=item_id, quantity='1', description=description,
                                   unit_price=_plain(units, currency))], **extra)
         customer_fee = dict(units=units, item=item_id)

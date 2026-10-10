@@ -99,9 +99,9 @@ def bounce(books, payment, *, key='bounce-1182', date='2026-07-09', reason='Bank
     shown = books['run']('payment show', dict(payment=payment['id']))
     raw = dict(payment=payment['id'], expected_version=shown['version'], date=date, operation_key=key, **extra)
     if bank_fee:
-        raw['bank_fee'] = dict(amount=bank_fee, account=books['service_charges'])
+        raw.update(bank_fee_amount=bank_fee, bank_fee_account=books['service_charges'])
     if customer_fee:
-        raw['customer_fee'] = dict(amount=customer_fee, account=books['charges'], number='2393')
+        raw.update(customer_fee_amount=customer_fee, customer_fee_account=books['charges'], customer_fee_number='2393')
     return books['run']('payment bounce', raw, reason=reason)
 
 
@@ -155,7 +155,7 @@ def test_a_dry_run_writes_nothing_and_the_same_key_never_bounces_twice(july):
     before = balances(july)
     shown = run('payment show', dict(payment=july['check']['id']))
     raw = dict(payment=july['check']['id'], expected_version=shown['version'], date='2026-07-09', operation_key='bounce-dry',
-               bank_fee=dict(amount='12.00', account=july['service_charges']))
+               bank_fee_amount='12.00', bank_fee_account=july['service_charges'])
     preview = run('payment bounce', raw, reason='NSF', dry_run=True)
     assert preview['dry_run'] and preview['bounce_id'] is None and preview['returned']['minor_units'] == 48693
     assert balances(july) == before and due(july, july['sale']) == 0
@@ -203,15 +203,18 @@ def test_refusals_say_what_to_do(july):
 
     refused(base, reason=None, code='E_REASON_REQUIRED')
     # The bank's fee is an expense, not the bank or income.
-    assert 'expense account' in refused(dict(base, bank_fee=dict(amount='12.00', account=july['bank'])))
-    assert 'expense account' in refused(dict(base, bank_fee=dict(amount='12.00', account=july['income'])))
-    assert 'greater than zero' in refused(dict(base, bank_fee=dict(amount='0.00', account=july['service_charges'])), code='E_VALUE_RANGE')
+    assert 'expense account' in refused(dict(base, bank_fee_amount='12.00', bank_fee_account=july['bank']))
+    assert 'expense account' in refused(dict(base, bank_fee_amount='12.00', bank_fee_account=july['income']))
+    assert 'greater than zero' in refused(dict(base, bank_fee_amount='0.00', bank_fee_account=july['service_charges']), code='E_VALUE_RANGE')
     # The customer's fee names an item or an income account, one of the two, and one an item posts to.
-    assert 'one of the two' in refused(dict(base, customer_fee=dict(amount='35.00')))
-    assert 'one of the two' in refused(dict(base, customer_fee=dict(amount='35.00', item=july['fee_item'], account=july['charges'])))
+    assert 'one of the two' in refused(dict(base, customer_fee_amount='35.00'), code='E_VALIDATION')
+    assert 'one of the two' in refused(dict(base, customer_fee_amount='35.00', customer_fee_item=july['fee_item'],
+                                            customer_fee_account=july['charges']), code='E_VALIDATION')
+    # A bank fee needs its account and an account its amount.
+    assert 'together' in refused(dict(base, bank_fee_amount='12.00'), code='E_VALIDATION')
     lonely = run('account create', dict(name='Other Fees', type='income'))['id']
-    assert 'item create' in refused(dict(base, customer_fee=dict(amount='35.00', account=lonely)))
-    assert 'income account' in refused(dict(base, customer_fee=dict(amount='35.00', account=july['service_charges'])))
+    assert 'item create' in refused(dict(base, customer_fee_amount='35.00', customer_fee_account=lonely))
+    assert 'income account' in refused(dict(base, customer_fee_amount='35.00', customer_fee_account=july['service_charges']))
     # Nothing was written by any refusal.
     assert due(july, july['sale']) == 0
     assert by_id(july, checking=july['bank'])['checking'] == 80520

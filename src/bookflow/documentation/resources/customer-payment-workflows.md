@@ -218,17 +218,17 @@ that is waived a discount account such as Sales Discounts; it is never defaulted
 ## A customer's check comes back
 
 `payment bounce` is the anchor's Record Bounced Check. Name the deposited receipt, the date
-the bank returned it, the bank's fee (`bank_fee`: amount and an expense account such as Bank
-Service Charges) and, if the business charges for it, a fee for the customer (`customer_fee`:
-amount and an Other Charge `item`, or the income `account` that an item posts to, such as
-Returned Check Charges). A reason is required.
+the bank returned it, the bank's fee (`bank_fee_amount` and `bank_fee_account`, an expense account such as Bank
+Service Charges) and, if the business charges for it, a fee for the customer
+(`customer_fee_amount` and an Other Charge or service `customer_fee_item`, or the income
+`customer_fee_account` that an item posts to, such as Returned Check Charges). A reason is required.
 
 - The invoices the receipt paid are owed again, with their balances.
 - The bank account the deposit went into shows two lines on the return date: the returned
   amount (a customer refund, "Returned check ...") and the bank's fee (a register entry), so a
   statement import finds both. The original deposit and the receipt are not touched.
-- The customer fee is a new open invoice for the customer. Its number is `customer_fee.number`
-  or the next one.
+- The customer fee is a new open invoice for the customer (the job whose invoice the check paid).
+  Its number is `customer_fee_number` or the next one.
 - `payment show` carries `bounce` ("bounced on ...") and `payment query` rows carry
   `bounced_on` while the return stands.
 - A receipt that took an early-payment discount returns only its cash; the discount stays as

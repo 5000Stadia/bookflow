@@ -462,8 +462,8 @@ _PAYMENT_EXAMPLES = {
     'payment unapply': dict(payment=ID, expected_version=2, operation_key='example-unapply-1', applications=[dict(application_id=ID, invoice_expected_version=2)]),
     'payment void': dict(payment=ID, expected_version=3, operation_key='example-void-1'),
     'payment bounce': dict(payment=ID, expected_version=2, date='2026-07-09', operation_key='example-bounce-1',
-                           bank_fee=dict(amount='12.00', account='Bank Service Charges'),
-                           customer_fee=dict(amount='35.00', account='Returned Check Charges')),
+                           bank_fee_amount='12.00', bank_fee_account='Bank Service Charges',
+                           customer_fee_amount='35.00', customer_fee_account='Returned Check Charges'),
     'payment history': dict(payment=ID, limit=25),
     'payment settlement changes': dict(guard='authenticated-guard-from-payment-show', limit=25),
     'application show': dict(application=ID),
@@ -503,7 +503,7 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
             continue
         # The CLI flattens the applications object into one flag per member (blueprint 5.1).
         for _flag, _member in ([(_field + '_' + key, member) for key, member in _value.items()]
-                               if _field in ('applications', 'bank_fee', 'customer_fee') and isinstance(_value, dict) else [(_field, _value)]):
+                               if _field == 'applications' and isinstance(_value, dict) else [(_field, _value)]):
             _args.extend(['--' + _flag.replace('_', '-'), _payment_json.dumps(_member, separators=(',', ':')) if isinstance(_member, (dict, list)) else str(_member)])
     _args.extend(['--company', 'Demo Plumbing Co', '--json'])
     if _name in ('payment update', 'payment unapply', 'payment void'):
