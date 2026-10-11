@@ -262,7 +262,7 @@ def test_real_card_transfer_and_tax_payment_report_links_open_their_records(host
         (transfer["id"], "journal_entry", "transfer", "transfer", "241.17", "Report link savings transfer"),
         (tax["id"], "sales_tax_payment", None, "sales-tax-payment", "1.23", "Report link tax remittance"),
     )
-    report = hosted.ok("report.general-ledger", {"date_from": date, "date_to": date, "limit": 50}, company=company)
+    report = hosted.ok("report.general-ledger", {"date_from": date, "date_to": date, "limit": 200}, company=company)
     assert report["next_cursor"] is None, "the witness must include every target on the rendered page"
     watermark = str(report["metadata"]["audit_watermark"])
     with TestClient(hosted.handle.app) as browser:

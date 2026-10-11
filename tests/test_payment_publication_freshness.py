@@ -87,7 +87,8 @@ def test_actual_http_mcp_outputs_three_fences_and_current_denial(root,tmp_path,m
         try:
             await matrix.open(root,tmp_path/'surfaces')
             before={s:raw_snapshot(r,matrix.company) for s,r in matrix.roots.items()}
-            payer=(await matrix.call('python','payment query',{'limit':1}))['items'][0]['customer_id']
+            # The newest demo receipt is the R177 write-off by a deactivated customer; payment invoices takes an active payer.
+            payer=next(r['customer_id'] for r in (await matrix.call('python','payment query',{'limit':10}))['items'] if r['received_minor_units']>0)
             requests=[('payment query',{'limit':1}),('payment invoices',{'mode':'new_receipt','customer':payer,'date':'2026-06-02','q':'Absent search value'})]
             receipts={};fences=[]
             for surface in ('python','http','mcp'):

@@ -612,7 +612,8 @@ def _prepare(s, ctx, inp, operation):
         changed = dict(invoice, version=invoice['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         changed_headers.append((invoice, changed))
         discount_view = {}
-        if target['terms'] is not None and (target['terms'].percent_millionths is not None or target['discount']):
+        # A write-off is not an early-payment discount: no terms suggestion beside it.
+        if not write_off and target['terms'] is not None and (target['terms'].percent_millionths is not None or target['discount']):
             discount_view = dict(suggested_discount=Money(target['suggested'], context_['currency']).to_dict(),
                                  discount_date=target['terms'].discount_date)
         if target['discount']:

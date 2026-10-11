@@ -25,6 +25,7 @@
   const discounts = new Map();
   let methodFromCustomer = false;
   let destinationOverride = !config.preferences.use_undeposited_funds_for_payments, defaultDestination = null;
+  const accountNames = new Map();
   let key = 'WB-' + crypto.randomUUID();
   let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null, reviewEpoch = 0;
   const busyStatus=el('p');busyStatus.id='payment-busy-status';busyStatus.setAttribute('role','status');busyStatus.hidden=true;root.prepend(busyStatus);
@@ -386,7 +387,11 @@
     // The command's own summary line: invoices paid, what each still owes, credit left, discounts.
     if(preview.out.summary) {const p=el('p',preview.out.summary.text);p.setAttribute('data-payment-summary','');area.append(p);}
     area.append(el('p',`Received ${cash(preview.out.current.received_minor_units)}; applied ${cash(preview.out.current.applied_minor_units)}; available ${cash(preview.out.current.available_minor_units)}.`));
-    if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
+    // A 0.00 receipt that takes discounts writes the balance off: nothing is deposited, so say where it went.
+    const writeOff=mode==='receive'&&preview.out.current.received_minor_units===0&&preview.out.current.discount_minor_units>0;
+    if(writeOff) {const typed=$('discount-account').value.trim();const named=accountNames.get(typed)||accountNames.get(typed.toLowerCase())||typed;
+      const p=el('p',`No cash — written off to ${named}.`);p.setAttribute('data-payment-write-off','');area.append(p);}
+    else if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {
       const section=el('details');section.open=rows.length<=10;section.append(el('summary',kind.replaceAll('_',' ')+': '+rows.length+' complete changes'));
       const container=el('div');container.className='payment-effects';
@@ -394,7 +399,7 @@
         const card=el('div');card.className='payment-effect';
         if(row.invoice_id) card.append(link('Invoice',`/c/${config.company}/invoice/${row.invoice_id}`),el('span',' · '));
         card.append(el('span',row.party_name||row.kind||row.status||'Document'),el('span',row.amount?' '+money(row.amount):row.received_minor_units!==undefined?' Received '+units(row.received_minor_units)+'; available '+units(row.available_minor_units):row.due_minor_units!==undefined?' Due '+units(row.due_minor_units):''));
-        if(row.discount) {const part=el('span',' · includes discount '+money(row.discount)+(row.suggested_discount?' (suggested '+money(row.suggested_discount)+')':''));part.className='payment-discount-effect';card.append(part);}
+        if(row.discount) {const part=el('span',' · includes discount '+money(row.discount)+(!writeOff&&row.suggested_discount?.minor_units>0?' (suggested '+money(row.suggested_discount)+')':''));part.className='payment-discount-effect';card.append(part);}
         if(row.logical_kind) card.append(el('span',` · line ${row.target_ordinal}, ${row.logical_kind}`));container.append(card);
       }
       section.append(container);area.append(section);
@@ -820,6 +825,7 @@
     const methods=await command('payment-method list',{}),accounts=await command('account list',{}),defs=await command('custom-field list',{filter:['target_type=payment']});
     for(const row of methods.items) $('method').append(new Option(row.name,row.id));
     for(const row of accounts.items) {
+      for(const k of [row.id,(row.full_name||'').toLowerCase(),(row.name||'').toLowerCase()]) if(k&&!accountNames.has(k)) accountNames.set(k,row.full_name||row.name);
       if(row.type==='bank'||row.system_role==='undeposited_funds') $('destination').append(new Option(row.full_name||row.name,row.id));
       if(row.type==='accounts_receivable') $('ar').append(new Option(row.full_name||row.name,row.id));
     }

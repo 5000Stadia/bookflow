@@ -461,7 +461,9 @@ def test_follow_keeps_high_water(cli, root):
              env={"BOOKFLOW_LOCK_TIMEOUT": "30"})
     time.sleep(3)
     p.send_signal(signal.SIGINT)
-    out, _ = p.communicate(timeout=10)
+    # SIGINT lands mid-poll; a loaded machine finishes that read before exiting (suite20 timed out at 10 s
+    # with the event already printed).
+    out, _ = p.communicate(timeout=60)
     lines = [json.loads(l) for l in out.splitlines() if l.strip()]
     assert len(lines) == 1 and lines[0]["command"] == "company update", out
 

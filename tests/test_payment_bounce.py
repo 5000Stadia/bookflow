@@ -437,3 +437,16 @@ def test_every_document_the_bounce_writes_is_audited_under_the_same_request_and_
         'customer-refund post', 'invoice post', 'payment bounce', 'payment unapply', 'register post']
     assert {row['reason'] for row in mine} == {'Statement 07-09: returned item, check 1182'}
     assert {row['interface'] for row in mine} == {'python'} and done['bounce_id']
+
+
+def test_an_inactive_check_method_gives_way_to_the_lists_own_other(july):
+    """The receipt's Check method has since been made inactive, and a Mobile Wallet of kind "other"
+    sorts before Other: the returned-check refund takes Other, the rule a write-off uses."""
+    import json
+    run = july['run']
+    check = july['methods']['Check']
+    run('payment-method deactivate', dict(payment_method=check, expected_version=1))
+    wallet = run('payment-method create', dict(name='Mobile Wallet', kind='other'))['id']
+    done = bounce(july, july['check'], key='bounce-inactive')
+    refund = json.dumps(run('customer-refund show', dict(refund=done['refund']['id'])))
+    assert july['methods']['Other'] in refund and wallet not in refund and check not in refund
