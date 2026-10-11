@@ -160,7 +160,8 @@ def _schema_outline(schema):
         if value.get("type") == "array" and isinstance(value.get("items"), dict):
             return "array of " + kind(value["items"])
         return str(value.get("type", "any"))
-    return {"required": schema.get("required", []),
+    # The schema's own type stays, so an outlined schema still says it describes an object.
+    return {**({"type": schema["type"]} if "type" in schema else {}), "required": schema.get("required", []),
             "properties": {k: kind(v) for k, v in schema.get("properties", {}).items() if isinstance(v, dict)},
             "sections": sorted(schema.get("$defs", {}))}
 

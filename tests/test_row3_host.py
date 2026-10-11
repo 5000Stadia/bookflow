@@ -672,7 +672,10 @@ def _read_calls(hosted):
         "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "report unpaid-bills": ({"as_of": "2026-12-31"}, cid),
     })
-    paid = hosted.ok("payment.query", {"status": "posted", "limit": 1}, company=cid)["items"][0]
+    # The newest demo receipt is the R177 write-off, whose customer was deactivated before it:
+    # a new receipt needs an active payer, so take the newest receipt that brought in cash.
+    paid = next(row for row in hosted.ok("payment.query", {"status": "posted", "limit": 10}, company=cid)["items"]
+                if row["received_minor_units"] > 0)
     payment = hosted.ok("payment.show", {"payment": paid["id"]}, company=cid)
     with sqlite3.connect(company_db) as conn:
         application = conn.execute("SELECT id FROM applications ORDER BY id LIMIT 1").fetchone()[0]
@@ -789,8 +792,11 @@ def _documented_read_calls(hosted, covered):
                 lister = registry.get(f"{noun} {verb}")
                 if lister is None:
                     continue
-                rows = hosted.ok(f"{noun} {verb}".replace(" ", "."), {},
-                                 company=cid if lister.scope == "company" else None).get("items", [])
+                # A lister that needs input of its own (`attachment list` pages one record's
+                # files; `attachment text` is the read that brings it here) finds nothing.
+                reply = hosted.call(f"{noun} {verb}".replace(" ", "."), {},
+                                    company=cid if lister.scope == "company" else None)
+                rows = reply.json().get("items", []) if reply.status_code == 200 else []
                 if rows:
                     row = rows[0].get("current", rows[0])
                     records[noun] = row.get("id") or row.get("deposit_id") or row.get("agent_id")

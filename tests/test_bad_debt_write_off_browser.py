@@ -21,7 +21,10 @@ def test_receive_payments_writes_a_balance_off_to_bad_debt(register_browser):
     run('account create', dict(name='Browser Bad Debt', type='expense'))
     # The customer usually pays by a method of kind "other": the write-off must not take it.
     wallet = run('payment-method create', dict(name='Browser Wallet', kind='other'))['id']
-    payer = run('customer create', dict(name='Write-off Browser Customer', preferred_payment_method_id=wallet))['id']
+    # ...and is on discount terms, long past the discount date: the preview shows no terms suggestion.
+    terms = next(row['id'] for row in run('term query', dict(limit=50))['items'] if row['name'] == '2% 10 Net 30')
+    payer = run('customer create', dict(name='Write-off Browser Customer', preferred_payment_method_id=wallet,
+                                        terms_id=terms))['id']
     exempt = next(row['id'] for row in run('sales-tax-code list', {})['items'] if not row['taxable'])
     item = run('item create', dict(name='Write-off browser labor', type='service', sales_enabled=True,
                                    income_account_id=income, price='100', description='Work',
@@ -44,6 +47,11 @@ def test_receive_payments_writes_a_balance_off_to_bad_debt(register_browser):
     wait(b)
     click(b, 'preview')
     assert not b.evaluate("document.querySelector('#payment-save').disabled")
+    # Nothing is deposited: the proposed effect says where the balance went, not a deposit line.
+    proposed = b.evaluate("document.querySelector('#payment-preview-result').innerText")
+    assert 'No cash — written off to Browser Bad Debt' in proposed, proposed
+    assert 'Deposit to' not in proposed and 'Undeposited Funds' not in proposed and 'suggested' not in proposed, proposed
+    assert 'includes discount 300.00' in proposed, proposed
     click(b, 'save')
     assert run('invoice settlement', dict(invoice=invoice['id']))['due_minor_units'] == 0
     receipt = run('payment query', dict(customer=payer))['items'][0]

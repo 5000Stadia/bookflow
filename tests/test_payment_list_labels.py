@@ -189,10 +189,20 @@ def test_original_combined_page_fields_and_canonical_cursors(client, labels, mon
                 row['unapplied_minor_units'] += session.company.conn.execute(sa.select(sa.func.coalesce(
                     sa.func.sum(c.payment_discounts.c.amount_minor_units), 0)).where(
                     c.payment_discounts.c.transaction_id == row['id'])).scalar()
+                # ...and predates refunds: cash handed back (the demo's returned check, R176) is spent
+                # as surely as cash applied, so the page subtracts the receipt's live refund consumptions.
+                spend = c.customer_refund_consumptions
+                release = spend.alias('release')
+                row['unapplied_minor_units'] -= session.company.conn.execute(sa.select(sa.func.coalesce(
+                    sa.func.sum(spend.c.amount_minor_units), 0)).select_from(spend.join(
+                    c.payment_component_keys, c.payment_component_keys.c.id == spend.c.payment_source_key_id)).where(
+                    c.payment_component_keys.c.transaction_id == row['id'], spend.c.kind == 'consume',
+                    ~sa.exists(sa.select(sa.literal_column('1')).where(release.c.reverses_consumption_id == spend.c.id)))).scalar()
         plan = registered(inp, ctx, session)
         calls['new'] += 1
         actual = plan.preview.model_dump(mode='json')
-        stripped = {**actual, 'items': [{k: v for k, v in row.items() if k not in ('payer_label', 'method_label')} for row in actual['items']]}
+        # bounced_on (R176) is newer than the reference too: a returned check says when it came back.
+        stripped = {**actual, 'items': [{k: v for k, v in row.items() if k not in ('payer_label', 'method_label', 'bounced_on')} for row in actual['items']]}
         assert stripped == expected
         assert canonical(stripped) == canonical(expected)
         receipts.append({'input': inp.model_dump(mode='json'), 'old': expected, 'new': actual,

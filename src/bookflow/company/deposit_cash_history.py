@@ -92,7 +92,9 @@ def load_cash_history(s, source_ids, *, binding, uf_account):
                 cash_account=profile['deposit_account_id' if header['type']=='payment' else 'control_account_id']
                 endpoint_graph=dict(graph,header=saved,posting_batches=[batch])
                 endpoint_graph['payment_component_keys']=[k for k in graph['payment_component_keys'] if event_rows[k['audit_event_id']]['seq']<=endpoint['seq']]
-                if header['type']=='sales_receipt' and rev['total_minor_units']==0:
+                # A zero sales receipt, or a payment that only writes invoices off (R177),
+                # put no cash anywhere: its endpoint has no cash leg to project.
+                if rev['total_minor_units']==0:
                     validation.require(not any(l['batch_id']==batch['id'] and l['account_id']==cash_account for l in graph['posting_lines']))
                     accounts.append(cash_account)
                     continue

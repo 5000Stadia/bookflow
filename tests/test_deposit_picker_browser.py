@@ -65,7 +65,9 @@ def test_bank_payment_and_receipt_without_entering_identifiers(register_browser,
     saved_link = b.evaluate('document.querySelector(`[aria-label="Saved deposit"] a`).href')
     assert '/deposit/' in saved_link and b.evaluate('location.href').split('?')[0] == saved_link
     b.evaluate('document.querySelector(`[aria-label="Saved deposit"] a`).click()')
-    b.wait_for('!!document.querySelector(".deposit-heading")')
+    # Wait for the figure itself: under load the heading is parsed while the page is still loading.
+    b.wait_for('!!document.querySelector(".deposit-lede") || !!document.querySelector(".deposit-unavailable")')
+    assert not b.evaluate('!!document.querySelector(".deposit-unavailable")'), b.evaluate('document.body.innerText')
     assert '$35.00' in b.evaluate('document.querySelector(".deposit-lede").innerText')
     for width in (1280,390):
         b.viewport(width,900)

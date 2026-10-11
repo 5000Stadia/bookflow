@@ -319,8 +319,11 @@ def _intent(s, ctx, inp):
                                       applications=refs, operation_key=inp.operation_key + '.unapply')
     method = defaults._row(s.company, 'payment_method', profile['payment_method_id'], active=False)
     if not method['active']:
-        method = s.company.conn.execute(sa.select(c.payment_methods).where(
-            c.payment_methods.c.kind == 'other', c.payment_methods.c.active.is_(True)).order_by(c.payment_methods.c.name)).mappings().first()
+        # Several methods may be of kind "other" (a Mobile Wallet is one): the one named Other first,
+        # the rule a write-off uses (payments._profile).
+        m = c.payment_methods
+        method = s.company.conn.execute(sa.select(m).where(m.c.kind == 'other', m.c.active.is_(True)).order_by(
+            sa.case((sa.func.lower(m.c.name) == 'other', 0), else_=1), m.c.name)).mappings().first()
         if method is None:
             raise _invalid('payment', 'the receipt\'s payment method is inactive and the list has no active "other" method '
                            'to stand in for it; make one active first')

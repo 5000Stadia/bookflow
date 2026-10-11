@@ -41,10 +41,11 @@ def test_seeded_register_demo_balances_and_layout(register_browser, width, heigh
     url = f'{env.site.base_url}/c/{env.site.company_id}/account/{bank["id"]}/register?date_from=2026-01-01&date_to=2026-12-31'
     browser.navigate(url)
     # Every seeded Checking entry falls in 2026: the register's current and period balances are the
-    # account's own balance (6,534.45 in the demo seed, after the Ask My Accountant entry DEMO-ASK-1).
+    # account's own balance (6,519.45 in the demo seed: 6,534.45 after the Ask My Accountant entry
+    # DEMO-ASK-1, less the returned check's 15.00 bank fee, DEMO-BOUNCE-1; its 200.00 came in and went back).
     units = bank['balance']['minor_units']
     shown = f'{units // 100:,}.{units % 100:02d}'
-    assert units > 0 and shown == '6,534.45'
+    assert units > 0 and shown == '6,519.45'
     browser.wait_for(f"document.querySelector('#register-current').textContent.includes('{shown}')")
     assert shown in browser.evaluate("document.querySelector('#register-period-totals').textContent")
     assert 'DEMO-JPY' in browser.evaluate("document.querySelector('#register-history').textContent")

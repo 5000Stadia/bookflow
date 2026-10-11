@@ -262,3 +262,22 @@ def test_a_write_off_takes_other_says_no_cash_and_does_not_warn_about_terms(book
     # ...and a discount on an invoice without discount terms still warns there.
     assert any('has no early-payment discount in its terms' in w for w in cash['warnings']), cash['warnings']
     assert 'write_off' not in run('payment show', dict(payment=cash['id']))
+
+
+def test_a_write_off_on_discount_terms_carries_no_suggested_discount(books):
+    """An invoice on "2% 10 Net 30" terms written off past its discount date: the preview says no
+    cash and where the balance went, and shows no terms suggestion (0.00) beside the amount
+    written off -- a write-off is not an early-payment discount, and nothing is deposited."""
+    run = books['run']
+    terms = {row['name']: row['id'] for row in run('term query', dict(limit=50))['items']}
+    customer = run('customer create', dict(name='Termed Payer', terms_id=terms['2% 10 Net 30']))['id']
+    sale = run('invoice post', dict(customer=customer, date='2026-03-01', lines=[dict(
+        item=books['item'], quantity='1', unit_price='200.00', tax_code=books['exempt'])]), reason='Bill')
+    raw = dict(customer=customer, date='2026-09-30', amount='0.00', operation_key='wo-terms',
+               discount_account=books['bad_debt'],
+               discounts=[dict(invoice=sale['id'], amount='200.00', expected_version=sale['version'])])
+    preview = run('payment receive', raw, reason='Customer closed', dry_run=True)
+    [application] = preview['effect']['applications']
+    assert application['discount']['minor_units'] == 20000 and 'suggested_discount' not in application
+    assert preview['summary']['text'].startswith('No cash received from Termed Payer; the balance is written off to Bad Debt.')
+    assert 'Undeposited' not in preview['summary']['text']
