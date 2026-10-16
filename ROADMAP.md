@@ -149,7 +149,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R177 write off a bad debt without cash, as the anchor does: receive payment for 0.00 with the open balance taken as a discount or credit to a Bad Debt account, by a person or an agent with a reason (gate g55f9e5)
 - [x] R178 vendor credits with item lines: returning stock to the supplier is one document that takes the items out at the credited cost (gate g55f9e5)
 - [x] R179 the move-in brings the rest of the old books: uncleared bank and card items and the last reconciliation (so the first one certifies), customers' sales tax items, the 1099 totals paid so far this year, and undeposited checks as receipts waiting to be deposited (gate g55f9e5)
-- [?] R165 fixes from Kabe's live use of v1.5 and v1.6, as they arrive
+- [ ] R165 fixes from Kabe's live use of v1.5 and v1.6, as they arrive. Parked 2026-10-16: Kabe has no plan to use it for real now ("indefinitely parked unless there is some beneficial internal testing")
 
 ## M4 — After V1.5: concepts to develop
 
