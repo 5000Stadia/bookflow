@@ -1289,6 +1289,49 @@ EXAMPLES['estimate sales-order'] = Example(
     f'bookflow estimate sales-order {ID} --expected-version 2 --conversion-key "riverside-order-2026-10" --date 2026-10-22'
     ' --ship-date 2026-10-29 --company "Demo Plumbing Co" --reason "Make the order from the accepted estimate" --json',
     {'estimate': ID, 'expected_version': 2, 'conversion_key': 'riverside-order-2026-10', 'date': '2026-10-22', 'ship_date': '2026-10-29'})
+# R119: fixed-asset depreciation and loans.
+EXAMPLES.update({
+    "fixed-asset setup": Example(
+        'bookflow fixed-asset setup "Service truck" --method declining_balance --declining-percent 200 --salvage 2000.00 --life-months 60 --period year --reason "Book depreciation"' + _C,
+        {"item": "Service truck", "method": "declining_balance", "declining_percent": 200, "salvage": "2000.00", "life_months": 60, "period": "year"}),
+    "fixed-asset schedule": Example('bookflow fixed-asset schedule "Service truck"' + _C, {"item": "Service truck"}),
+    "fixed-asset list": Example('bookflow fixed-asset list' + _C, {}),
+    "fixed-asset depreciate": Example(
+        'bookflow fixed-asset depreciate --through 2026-11-30 --reason "Month-end depreciation"' + _C, {"through": "2026-11-30"}),
+    "fixed-asset dispose": Example(
+        'bookflow fixed-asset dispose "Service truck" --date 2026-12-01 --proceeds 30000.00 --deposit-to Checking --reason "Sold the truck"' + _C,
+        {"item": "Service truck", "date": "2026-12-01", "proceeds": "30000.00", "deposit_to": "Checking"}),
+    "loan create": Example(
+        'bookflow loan create --name "Truck loan" --liability-account "Truck Loan" --interest-account "Interest Expense" --principal 25000.00 --annual-rate 6.5 --term-payments 60 --first-payment-date 2026-02-01 --payment-account Checking --reason "New truck loan"' + _C,
+        {"name": "Truck loan", "liability_account": "Truck Loan", "interest_account": "Interest Expense", "principal": "25000.00",
+         "annual_rate": "6.5", "term_payments": 60, "first_payment_date": "2026-02-01", "payment_account": "Checking"}),
+    "loan update": Example('bookflow loan update "Truck loan" --annual-rate 5.9 --reason "Rate adjusted"' + _C,
+                           {"loan": "Truck loan", "annual_rate": "5.9"}),
+    "loan show": Example('bookflow loan show "Truck loan"' + _C, {"loan": "Truck loan"}),
+    "loan list": Example('bookflow loan list' + _C, {}),
+    "loan pay": Example('bookflow loan pay "Truck loan" --reason "December payment"' + _C, {"loan": "Truck loan"}),
+})
+# R103: build finished assemblies from their components; run with --dry-run first to see max_buildable.
+EXAMPLES["assembly build"] = Example(
+    'bookflow assembly build --item "Two-Valve Kit" --quantity 2 --date 2026-07-31 --reason "Built two kits today"'
+    ' --company "Demo Plumbing Co" --json', {"item": "Two-Valve Kit", "quantity": "2", "date": "2026-07-31"})
+EXAMPLES["assembly update"] = Example(
+    'bookflow assembly update 01JASSEMBLYBUILD0000000001 --quantity 3 --reason "Three, not two"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001", "quantity": "3"})
+EXAMPLES["assembly finalize"] = Example(
+    'bookflow assembly finalize 01JASSEMBLYBUILD0000000001 --reason "Valves arrived"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly void"] = Example(
+    'bookflow assembly void 01JASSEMBLYBUILD0000000001 --reason "Entered twice"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly delete"] = Example(
+    'bookflow assembly delete 01JASSEMBLYBUILD0000000001 --reason "Not building these after all"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly show"] = Example(
+    'bookflow assembly show 01JASSEMBLYBUILD0000000001 --company "Demo Plumbing Co" --json',
+    {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly list"] = Example(
+    'bookflow assembly list --status pending --company "Demo Plumbing Co" --json', {"status": "pending"})
 # R102: what customers have ordered and not yet received, by item, with on hand, available and on order.
 EXAMPLES['report open-sales-orders'] = Example(
     'bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json', {'by': 'item', 'date_to': '2026-10-31'})

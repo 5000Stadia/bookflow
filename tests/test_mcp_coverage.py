@@ -51,9 +51,11 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
     # +8 the sales order (R101): sales-order create, update, copy, show, query, history, void; estimate sales-order.
+    # +10 the five fixed-asset and five loan commands (R119).
+    # +7 assembly build, update, finalize, void, delete, show and list (R103).
     # +1 report open-sales-orders (R102).
     # +2 sales-order invoice and sales-order billing (R101 increment 4).
-    assert len(rows) == 575
+    assert len(rows) == 592
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -251,13 +253,20 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
     # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
     # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
-    # 3221 -> 3225 (R102), measured: report open-sales-orders is new with 4, the null branches of its optional
+    # 3221 -> 3254 (R119), measured: the ten fixed-asset and loan commands, 33 nodes -- the null branches of their
+    # optional fields (setup's terms and accounts, depreciate's assets and memo, dispose's deposit_to and memo, the
+    # loan's optional accounts, lender, origination, payment and update fields, pay's date, account, number, extra
+    # principal and memo). No new variant kind.
+    # 3254 -> 3265 (R103 assembly builds), measured: 11 null branches -- build's memo; update's expected_version,
+    # quantity, date and memo; finalize's expected_version and date; void's and delete's expected_version; list's
+    # status and item. No new variant kind.
+    # 3265 -> 3269 (R102), measured: report open-sales-orders is new with 4, the null branches of its optional
     # customer, item, date_from and cursor (date_to is required). No existing command moved. No new variant kind.
-    # 3225 -> 3237 (R101 increment 4), measured per command: sales-order invoice 11 (the null branches of its
+    # 3269 -> 3281 (R101 increment 4), measured per command: sales-order invoice 11 (the null branches of its
     # optional number, line_ids, selections, memo, ar_account, terms, due_date and fingerprint, and an order
     # selection's line_id and item), sales-order billing 1 (cursor). release_to_order on invoice update, void and
     # delete is a defaulted choice and adds none. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3237
+    assert sum(len(group["paths"]) for group in mapped)==3281
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

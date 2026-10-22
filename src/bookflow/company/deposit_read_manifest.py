@@ -299,6 +299,7 @@ FIELDS = {
         'close_estimates_after_billing': ('bool', False, False, 'dependency_field'),
         'sales_orders_enabled': ('bool', False, False, 'dependency_field'),
         'available_deducts_sales_orders': ('bool', False, False, 'dependency_field'),
+        'available_deducts_pending_builds': ('bool', False, False, 'dependency_field'),
         'automatically_apply_payments': ('bool', False, False, 'dependency_field'),
         'automatically_calculate_payments': ('bool', False, False, 'dependency_field'),
         'use_undeposited_funds_for_payments': ('bool', False, False, 'dependency_field'),

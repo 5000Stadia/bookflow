@@ -6627,7 +6627,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].asset_value.currency` | string | yes | no | — | — |
 | `rows[].asset_value.minor_units` | integer | yes | no | — | — |
 | `rows[].quantity_committed` | string | yes | no | — | Open quantity of this item on open sales orders and work orders dated by as_of, in its base unit. |
-| `rows[].quantity_for_assemblies` | string | yes | no | — | Reserved for pending assembly builds; 0 until assembly builds exist. |
+| `rows[].quantity_for_assemblies` | string | yes | no | — | Reserved for pending assembly builds dated by as_of; available deducts it while available_deducts_pending_builds is on. |
 | `rows[].quantity_available` | string | yes | no | — | On hand less committed (and less reserved for builds under its own preference); on hand while the company's available_deducts_sales_orders preference is off. |
 | `rows[].quantity_on_order` | string | yes | no | — | — |
 | `rows[].next_delivery_date` | string \| null | yes | yes | — | Earliest expected date of a live purchase order with this item still to arrive. |

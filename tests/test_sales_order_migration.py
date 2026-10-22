@@ -32,7 +32,8 @@ def _constraint(table_, name):
 
 
 def test_the_frozen_replacements_are_what_the_metadata_declares():
-    assert M.revision == 'co0077' and M.revision in _chain() and HEADS['company'] == 'co0077'
+    # Its own place in the chain, not that it is the head (co0080 came after).
+    assert M.revision == 'co0077' and M.revision in _chain()
     assert M.CHANGED == ('work_documents', 'work_links', 'work_billing_conversions')
     assert KIND in _constraint(c.work_documents, 'ck_work_kind')
     assert ORDER_STATES in _constraint(c.work_documents, 'ck_work_status')
@@ -138,7 +139,8 @@ def test_going_down_refuses_rather_than_half_undoing(tmp_path):
         with pytest.raises(Exception) as refused:
             command.downgrade(_config('company', db.conn), 'co0072')
         assert 'forward-only' in str(refused.value) or 'forward-only' in str(refused.value.__cause__)
-        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0077',)
+        # Nothing is undone: the database stays at the head (co0077 then, co0080 since).
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == (HEADS['company'],)
     assert list((tmp_path / 'backups').glob('*-from-co0072.db')), 'the runner kept the way back'
 
 

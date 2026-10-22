@@ -10,8 +10,8 @@ measures what remains open now. A line for an assembly commits the assembly item
 
 **Available** is on hand less committed while `available_deducts_sales_orders` is on, on hand while
 it is off. **Available to a document** leaves out that document's own commitment. Pending assembly
-builds are a second source, returned separately (`for_assemblies`): it reads nothing until
-assembly builds exist, and deducts only under its own preference.
+builds are a second source, returned separately (`for_assemblies`), dated like orders and deducted
+under its own preference, `available_deducts_pending_builds`.
 """
 from __future__ import annotations
 
@@ -146,14 +146,11 @@ def committed_by(s, item_id, *, excluding=None):
 def for_assemblies(s, as_of=None):
     """Quantity reserved for pending assembly builds, per item: the second source of commitment.
 
-    R103 (assembly builds) provides `assembly_builds.reserved(s)`; until it lands this reads
-    nothing, so the stock-status column is 0 and available is unchanged.
+    Read from `assembly_builds.reserved`, counting pending builds dated on or before `as_of`, as
+    open orders are counted.
     """
-    try:
-        from bookflow.company import assembly_builds
-    except ImportError:
-        return {}
-    return dict(assembly_builds.reserved(s))
+    from bookflow.company import assembly_builds
+    return dict(assembly_builds.reserved(s, as_of=as_of))
 
 
 def _preference(s, name, default):
@@ -168,7 +165,7 @@ def deducts_documents(s):
 
 
 def deducts_builds(s):
-    return _preference(s, "available_deducts_pending_builds", False)
+    return _preference(s, "available_deducts_pending_builds", True)
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}{{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}{% endblock %}{% block body %}<section id="assembly-builds">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / {{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}</nav>
+<h1>{{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}</h1>
+<p><a href="/c/{{ company_id }}/assembly/build">Build assemblies</a> · {% if status == 'pending' %}<a href="/c/{{ company_id }}/assembly/builds">All builds</a>{% else %}<a href="/c/{{ company_id }}/assembly/builds?status=pending">Pending builds</a>{% endif %}</p>
+{% if result %}<div role="status" class="notice" data-assembly-result><p><strong>{{ result.item_name }}: {{ result.status }}</strong></p></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
+{% if listing.rows %}<div class="table-wrap"><table class="list-table assembly-builds"><thead><tr><th>Date</th><th>Num</th><th>Assembly</th><th>Quantity</th><th>Status</th><th>Cost</th><th>Memo</th>{% if can_write %}<th>Actions</th>{% endif %}</tr></thead><tbody>
+{% for row in listing.rows %}<tr data-assembly-build="{{ row.build_id }}">
+<td data-label="Date">{{ row.date }}</td><td data-label="Num">{{ row.number or '' }}</td>
+<td data-label="Assembly">{{ row.item_name }}</td><td data-label="Quantity">{{ row.quantity }}</td>
+<td data-label="Status">{{ row.status }}</td><td data-label="Cost">{{ display_money(row.assembly_cost) if row.assembly_cost else '' }}</td>
+<td data-label="Memo">{{ row.memo or '' }}</td>
+{% if can_write %}<td data-label="Actions"><form method="post" action="/c/{{ company_id }}/assembly/builds" class="inline-actions">
+<input type="hidden" name="build" value="{{ row.build_id }}"><input type="hidden" name="status" value="{{ status }}">
+<input name="ctx:reason" placeholder="Reason" aria-label="Reason for {{ row.item_name }}" size="12">
+{% if row.status == 'pending' %}<button type="submit" name="action" value="finalize">Finalize</button>{% endif %}
+{% if row.status == 'built' %}<button type="submit" name="action" value="void">Void</button>{% endif %}
+{% if row.status != 'deleted' %}<button type="submit" name="action" value="delete">Delete</button>{% endif %}
+</form></td>{% endif %}
+</tr>{% endfor %}</tbody></table></div>
+{% else %}<p data-assembly-none>{{ 'No builds are pending.' if status == 'pending' else 'No assembly builds yet.' }}</p>{% endif %}
+</section>{% endblock %}

@@ -540,6 +540,37 @@ months by hand, `budget clear` empties a row or the whole budget. To keep a repo
 often, `memorized-report create` with a `date_range` such as `this_fiscal_quarter`, and
 `memorized-report run` it: the range is worked out again on every run.
 
+## Depreciation and loan payments
+
+A fixed asset is a `fixed_asset` item; its book depreciation terms come from `fixed-asset setup`
+(straight line, or declining balance at 200 or 150 percent switching to straight line, salvage, life
+in months, month or year periods). For "post this month's depreciation", preview with a dry run, then
+post through the month end:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "fixed-asset depreciate", "input": {"through": "2026-11-30"}}
+```
+
+It posts only periods not yet posted (debit depreciation expense, credit accumulated depreciation),
+so running it twice is harmless; `fixed-asset schedule` shows each period posted or pending. A month
+already closed is refused: post it with `entry: combined`, dated in an open period, if the person
+agrees. Selling or scrapping an asset is `fixed-asset dispose` after depreciation through that date.
+
+For "record the truck loan payment", `loan show` names the next payment and its split, and
+`loan pay` writes the check:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "loan pay", "input": {"loan": "Truck loan"}}
+```
+
+Principal goes to the loan's liability account, interest to its interest account and escrow to its
+escrow account, from the schedule. Extra principal (`extra_principal`) keeps the payment and shortens
+the loan. `loan show` reports whether the liability account ties to the schedule's balance; if it does
+not, the money borrowed or a payment was recorded outside `loan pay`: say so rather than adjusting.
+Tax depreciation (MACRS) is not computed here.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:
@@ -782,6 +813,27 @@ part. It is one-way and a person's act: an agent is refused with `E_PERMISSION`,
 owner which item and why, and suggest `--dry-run` to see the accounts it will carry. Nothing
 posted changes; stock starts at 0 on the conversion date and is counted with `inventory adjust`.
 After a conversion, no stock line for that item may be dated before the conversion date.
+
+## We built 5 water heater kits today
+
+A finished item made from parts is an inventory assembly; record the work with `assembly build`.
+Preview it first: the dry run lists each component with what one kit needs, what is on hand that
+day and what pending builds hold, and `max_buildable`, the most the parts allow.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "assembly build", "reason": "Owner: we built 5 water heater kits today",
+ "input": {"item": "Water Heater Kit", "quantity": "5", "date": "2026-07-14"}}
+```
+
+The parts leave stock at their average cost and the kits arrive at the sum; a service or other
+non-stock part on the bill of materials adds its purchase cost. A component that is itself an
+assembly is taken from stock, never built for you: build it first. More than the parts allow is
+refused with the shortages and `max_buildable`; if the owner wants the build held until parts
+arrive, send `"pending": true` (nothing posts, the parts are reserved) and later `assembly finalize
+BUILD`. `assembly list --status pending` is the pending builds report. Correct a build with
+`assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
+use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
 
 ## Stock sent back to a vendor
 

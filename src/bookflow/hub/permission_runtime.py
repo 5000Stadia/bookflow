@@ -139,8 +139,10 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.CUSTOMER_PREPAYMENT_POLICY_VERSION: 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49',
     c.LIST_MERGE_POLICY_VERSION: 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0',
     c.SALES_ORDER_POLICY_VERSION: '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89',
-    c.COMMITTED_STOCK_POLICY_VERSION: '0f683459df22be2d4341e219ce5196f387177a11c8697d1203bb28109827b33c',
-    c.ORDER_INVOICING_POLICY_VERSION: '6eea6c564280f8c78e8e2da2e680066a03b25639c435eb0e61540ac0855dc2e4',
+    c.FIXED_ASSET_POLICY_VERSION: '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc',
+    c.ASSEMBLY_BUILD_POLICY_VERSION: 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2',
+    c.COMMITTED_STOCK_POLICY_VERSION: 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5',
+    c.ORDER_INVOICING_POLICY_VERSION: '549926f27b35d9566aba7627cd3af873c04b1cb19bf794fb0293f44009a22d85',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -255,6 +257,8 @@ def known_catalog(version):
     from . import permission_customer_prepayment_catalog
     from . import permission_list_merge_catalog
     from . import permission_sales_order_catalog
+    from . import permission_fixed_asset_catalog
+    from . import permission_assembly_build_catalog
     from . import permission_committed_stock_catalog
     from . import permission_order_invoicing_catalog
     known = {
@@ -297,6 +301,8 @@ def known_catalog(version):
         c.CUSTOMER_PREPAYMENT_POLICY_VERSION: permission_customer_prepayment_catalog,
         c.LIST_MERGE_POLICY_VERSION: permission_list_merge_catalog,
         c.SALES_ORDER_POLICY_VERSION: permission_sales_order_catalog,
+        c.FIXED_ASSET_POLICY_VERSION: permission_fixed_asset_catalog,
+        c.ASSEMBLY_BUILD_POLICY_VERSION: permission_assembly_build_catalog,
         c.COMMITTED_STOCK_POLICY_VERSION: permission_committed_stock_catalog,
         c.ORDER_INVOICING_POLICY_VERSION: permission_order_invoicing_catalog,
     }

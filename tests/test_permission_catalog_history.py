@@ -65,8 +65,10 @@ ACCEPTED = {
     'customer-prepayment-v1': (558, 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49'),
     'list-merge-v1': (562, 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0'),
     'sales-order-v1': (570, '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89'),
-    'committed-stock-v1': (571, '0f683459df22be2d4341e219ce5196f387177a11c8697d1203bb28109827b33c'),
-    'order-invoicing-v1': (573, '6eea6c564280f8c78e8e2da2e680066a03b25639c435eb0e61540ac0855dc2e4'),
+    'fixed-asset-v1': (580, '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc'),
+    'assembly-build-v1': (587, 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2'),
+    'committed-stock-v1': (588, 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5'),
+    'order-invoicing-v1': (590, '549926f27b35d9566aba7627cd3af873c04b1cb19bf794fb0293f44009a22d85'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -131,6 +133,9 @@ CHAIN_ADDITIONS = {
     'list-merge-v1': {'account merge', 'account unmerge', 'item merge', 'item unmerge'},
     'sales-order-v1': {'estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
                        'sales-order query', 'sales-order show', 'sales-order update', 'sales-order void'},
+    'fixed-asset-v1': {'fixed-asset depreciate', 'fixed-asset dispose', 'fixed-asset list', 'fixed-asset schedule',
+                       'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'},
+    'assembly-build-v1': {'assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete', 'assembly show', 'assembly list'},
     'committed-stock-v1': {'report open-sales-orders'},
     'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
 }
