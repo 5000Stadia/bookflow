@@ -111,3 +111,58 @@ transaction lists and QuickReports filtered by name, the customer and vendor reg
 profitability, time and billable-cost reports, and the workbench customer and vendor centres'
 own lists of merges. Unposted documents still naming the merged entry (estimates, sales and
 purchase orders, memorized transactions) are refused on their next save until re-pointed.
+
+## Accounts and items (R117, second part)
+
+Measured facts: where an account or item id is held, which triggers bind it, and which reads
+group by it (73 account-id columns in 57 tables, 58 of them immutable; 19 item-id columns, 13
+immutable; one shared ledger CTE plus about 14 independent report queries). Two independent
+reviews (2026-10-22) agreed on the alias as the base and on the limits below.
+
+### The rule
+
+The same alias as customers and vendors: a merge records "M is merged into S", changes nothing
+posted, and every read that groups or filters by account or item resolves M to S. Unlike
+customers, accounts and items are also named by editable list rows and defaults, and a save that
+still names an inactive M is refused. So the one audited merge also:
+
+- **re-points every editable reference from M to S**, recording each one so undo can put it back:
+  item account fields, an account's reimbursable-income account, the company's discount accounts,
+  vendor expense accounts; for items, group and assembly members, price-level rows and vendor
+  profiles. Where S already has its own row (a unique index), the preview names the conflict and
+  the merge keeps S's row and ends M's, or is refused where the two differ in a way that matters
+  (a different per-item price, a component quantity);
+- **resolves M to S when a saved document gets a new revision** (an edit, a memorized entry), so
+  correcting last week's invoice whose line named M saves with S instead of failing.
+
+What stays on M: ids an unfinished settlement, reconciliation or inventory cost chain runs
+through. Those decide what is refused.
+
+### Refused (v1)
+
+Accounts:
+- a different type, a different currency, or M with subaccounts of its own (move them first);
+- an account with a system role, on either side;
+- bank and credit card accounts with any postings (a reconciliation names each line's own
+  account, so M's lines could never clear under S), and A/R and A/P accounts with any postings
+  (settlement keys carry the account);
+- an account a sales tax item or component uses as its liability account, and an account
+  inventory movements use as their asset account.
+
+Items:
+- a different type, or M with sub-items;
+- inventory parts and assemblies with any inventory movement: resolving M to S in the average-cost
+  replay would re-average both histories and re-cost issues already posted, closed periods
+  included. A merge of stocked items needs a dated transfer of M's quantity and value into S,
+  which belongs with stock transfers (R104);
+- sales tax items and groups, fixed assets, and groups (tax attribution and member graphs).
+
+### How it is checked
+
+A twin-company test, not a hand-kept list of readers: one script builds a company twice, once
+with the duplicate then merged, once with every use entered on S from the start. Every report
+command, on each basis and filtered by either name, must give the same result, and so must a
+fixed script run afterwards (edit an old document, void, pay, deposit, sell the item, enter a
+memorized transaction). The only allowed differences are listed: the as-posted snapshot of M's
+name on ledger rows. Undoing a merge with nothing saved since reproduces the pre-merge results,
+re-pointed references included.
