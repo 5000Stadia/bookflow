@@ -113,7 +113,7 @@ def _add_event(path):
     # The company head has since moved on to co0075 (statement imports, sales tax adjustments, party
     # merges, then payment bounces, vendor credit items, opening 1099 amounts, item conversions, finance charges, vendor refund deposits, budgets, customer prepayments and account and item merges, no audit change); the upgrade
     # from co0064 still passes through co0065 and gains its triggers.
-    ('company', 'co0064', 'co0075', COMPANY_MIGRATION), ('hub', 'hub0014', 'hub0015', HUB_MIGRATION)))
+    ('company', 'co0064', 'co0081', COMPANY_MIGRATION), ('hub', 'hub0014', 'hub0015', HUB_MIGRATION)))
 def test_existing_files_gain_the_triggers_on_upgrade(tmp_path, monkeypatch, chain, previous, head, migration):
     assert HEADS[chain] == head
     old = tmp_path / 'old.db'
