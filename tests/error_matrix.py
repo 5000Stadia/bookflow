@@ -1820,3 +1820,18 @@ MATRIX['attachment text'] = {
     'E_IO': 'missing, collected, corrupt or unsafe body',
     'E_DB_BUSY': 'collection pending',
 }
+
+# Converting a non-inventory part or other charge to an inventory part (R154): one-way, people only.
+MATRIX['item convert'] = {
+    'E_RECORD_NOT_FOUND': 'no item carries that name or id',
+    'E_TYPE_CHANGE': 'already an inventory part (one-way), a type that cannot convert, a percentage charge, or an item in a branch of the item list',
+    'E_RECORD_IN_USE': 'an open purchase order, estimate, proposal or work order still names the item',
+    'E_VALIDATION': 'a date before the last document using the item, or no cost-of-goods or income account to name',
+    'E_REASON_REQUIRED': 'a conversion is always given a reason',
+    'E_INACTIVE_REFERENCE': 'a named account is inactive',
+    'E_AMOUNT_PRECISION': 'a price or cost with more decimal places than the home currency has',
+    'E_PERMISSION': 'an agent asked; converting an item is a person\'s act',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+    'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+}

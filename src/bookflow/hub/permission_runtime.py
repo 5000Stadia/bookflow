@@ -131,6 +131,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BOUNCED_CHECK_POLICY_VERSION: '0b6616e4040e1986f3b010f4f2d8c92276ba12d741c28b474539755fa65ed68e',
     c.CUTOVER_REST_POLICY_VERSION: 'eec55b86544f824349e62bbdeb9c20a63c6873c4e6073f97ade1a3b0ebe9d084',
     c.ATTACHMENT_TEXT_POLICY_VERSION: 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284',
+    c.ITEM_CONVERT_POLICY_VERSION: 'bfd88ce7651ba24bb7de27b5a221b5574ebc854ae0f7a4adda69275c9637ad6c',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -237,6 +238,7 @@ def known_catalog(version):
     from . import permission_bounced_check_catalog
     from . import permission_cutover_rest_catalog
     from . import permission_attachment_text_catalog
+    from . import permission_item_convert_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -269,6 +271,7 @@ def known_catalog(version):
         c.BOUNCED_CHECK_POLICY_VERSION: permission_bounced_check_catalog,
         c.CUTOVER_REST_POLICY_VERSION: permission_cutover_rest_catalog,
         c.ATTACHMENT_TEXT_POLICY_VERSION: permission_attachment_text_catalog,
+        c.ITEM_CONVERT_POLICY_VERSION: permission_item_convert_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -279,7 +282,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.ATTACHMENT_TEXT_POLICY_VERSION)
+    return known_catalog(c.ITEM_CONVERT_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

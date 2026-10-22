@@ -1176,3 +1176,7 @@ EXAMPLES["vendor 1099-opening"] = Example(
     {"vendor": "Delgado, Ray", "year": 2026, "as_of": "2026-06-30", "amount": "7550.00"})
 # R170 blind July: a small text attachment read as text -- a statement's summary box, kept as an attachment.
 EXAMPLES["attachment text"] = Example(f'bookflow attachment text {ID} --company "Demo Plumbing Co" --json', {"attachment": ID})
+# R154: a non-inventory part converted to an inventory part, one way. `--dry-run` is the preview.
+EXAMPLES["item convert"] = Example(
+    'bookflow item convert "Copper Coupling" --to inventory --reason "We stock couplings now"'
+    ' --company "Demo Plumbing Co" --json', {"item": "Copper Coupling", "to": "inventory"})

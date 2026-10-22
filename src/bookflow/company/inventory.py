@@ -280,6 +280,8 @@ def refuse_stock(refusal, item, *, quantity_field='quantity_change', value_field
 def _adjustment_change(s, ctx, inp, currency, sequence):
     """The adjustment document and its one movement, with the value the average decides."""
     item = _tracked_item(s, inp.item)
+    from bookflow.company import item_conversions
+    item_conversions.require_stock_date(s, item['id'], item['full_name'], inp.date, 'date')
     asset = _asset_account(s, item)
     offset = _offset_account(s, inp.adjustment_account, asset)
     klass = _class_row(s, inp.class_id)

@@ -88,7 +88,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from bookflow.company import inventory, journals, schema as c
+from bookflow.company import inventory, item_conversions, journals, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_schema import INPUT_KINDS
@@ -285,6 +285,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
         sequence += 1
 
     for entry in entries:
+        # An item converted to an inventory part carries no stock before the conversion (R154).
+        item_conversions.require_stock_date(s, entry.item_id, entry.item_name, date, field)
         history = rows(entry.item_id)
         identity = new_id()
         signed = (entry.quantity_microunits if entry.kind == 'receipt'

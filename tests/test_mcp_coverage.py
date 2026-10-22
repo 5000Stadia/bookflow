@@ -43,7 +43,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 payment bounce (R176).
     # +1 vendor 1099-opening (R179).
     # +1 attachment text (R170 blind July: a statement's summary box read over MCP).
-    assert len(rows) == 530
+    # +1 item convert (R154).
+    assert len(rows) == 531
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven

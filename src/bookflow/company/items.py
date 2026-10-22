@@ -1206,7 +1206,10 @@ def plan_item_update(
     actor_id: str,
     via: str,
     at: str | None = None,
+    converting: bool = False,
 ) -> ItemUpdatePlan:
+    """``converting`` is `item convert`'s one-way change to an inventory part, which the
+    ordinary type change refuses; item_conversions.py checks what it needs first."""
     current = _row(db, record_id)
     existing_members = _members(db, record_id)
     existing_vendors = _vendors(db, record_id)
@@ -1214,7 +1217,8 @@ def plan_item_update(
     target_type = changes.get("type", current["type"])
     if target_type is None:
         raise _validation("type", "cannot be cleared")
-    _validate_type_change(db, current, str(target_type))
+    if not converting:
+        _validate_type_change(db, current, str(target_type))
 
     payload = _payload_from_state(current, existing_members, existing_vendors)
     if target_type != current["type"]:

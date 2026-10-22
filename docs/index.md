@@ -200,6 +200,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/invoice_batch_results`](schema/company/invoice_batch_results.md)
 - [`company/invoice_batches`](schema/company/invoice_batches.md)
 - [`company/item_categories`](schema/company/item_categories.md)
+- [`company/item_conversions`](schema/company/item_conversions.md)
 - [`company/item_members`](schema/company/item_members.md)
 - [`company/item_receipt_lines`](schema/company/item_receipt_lines.md)
 - [`company/item_receipt_revisions`](schema/company/item_receipt_revisions.md)
