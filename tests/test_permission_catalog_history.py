@@ -71,6 +71,7 @@ ACCEPTED = {
     'mileage-v1': (606, '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24'),
     'collections-v1': (608, '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c'),
     'pricing-rules-v1': (617, 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2'),
+    'accountant-review-v1': (631, '877ceb08e1129d87f3df58ea6b3bd71bb280384118db2585cc0906c46fe4b2f1'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -147,6 +148,11 @@ CHAIN_ADDITIONS = {
     'pricing-rules-v1': {'price-rule activate', 'price-rule create', 'price-rule deactivate', 'price-rule list',
                          'price-rule preferences', 'price-rule preview', 'price-rule set-preferences',
                          'price-rule show', 'price-rule update'},
+    'accountant-review-v1': {'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify',
+                             'accountant remove', 'accountant reviewed-through', 'accountant-copy cancel',
+                             'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',
+                             'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
+                             'report accountant-review'},
 }
 
 _ANCESTOR_EDIT = """

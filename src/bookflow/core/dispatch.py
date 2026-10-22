@@ -639,6 +639,10 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                     company_source=company_source, dry_run=dry_run)
     if cmd.authorize_input is not None:
         cmd.authorize_input(inp, ctx, s)
+    if cmd.scope == "company" and cmd.is_write and s.company is not None:
+        # An external accountant, an accountant's copy, or books with a copy out (R121).
+        from bookflow.company.accountant_review import admit
+        admit(s, cmd, inp)
     if cmd.transfer is not None:
         from bookflow.core.transfers import validate_resource
         validate_resource(cmd, inp, ctx, s)
