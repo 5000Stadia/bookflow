@@ -71,7 +71,7 @@ def _validate(plan, s, ctx):
         f = read_facts(rev['facts_snapshot'])
         require(rev['customer_id'] == f.profile.customer.id and rev['currency'] == s.company_info_row['home_currency'], 'wrong customer/currency')
         own_lines = [row for row in pending['work_lines'] if row['revision_id'] == rev['id']]
-        require(len(own_lines) <= 200 and (bool(own_lines) or header['kind'] != 'estimate'), 'invalid line count')
+        require(len(own_lines) <= 200 and (bool(own_lines) or header['kind'] not in ('estimate', 'sales_order')), 'invalid line count')
         require(sorted(row['position'] for row in own_lines) == list(range(1, len(own_lines) + 1)), 'line order is not contiguous')
         require(len({row['line_id'] for row in own_lines}) == len(own_lines), 'repeated stable line')
         expected_cells=work_tax.validate(s,rev,own_lines,pending,require)
@@ -91,6 +91,7 @@ def _validate(plan, s, ctx):
                 amount(getattr(lf, field), nullable=True)
             require(lf.completed_quantity_microunits <= lf.quantity_microunits, 'overcompleted quantity')
             require(header['kind'] == 'work_order' or lf.completed_quantity_microunits == 0, 'completion on quote')
+            require(header['kind'] in ('work_order', 'sales_order') or lf.cancelled_quantity_microunits == 0, 'cancellation on quote')
             require(lf.base_quantity_microunits == calc.base_quantity(lf.quantity_microunits, lf.unit_factor_nanounits), 'wrong base quantity')
             if lf.pricing_basis == 'amount':
                 require(lf.unit_price_minor_units is None and lf.markup_percent_millionths is None, 'amount mode has a competing rate')
@@ -151,7 +152,7 @@ def _validate(plan, s, ctx):
             require(len(source) == 1, 'missing source line')
             linked = [link for link in pending['work_links'] if link['destination_document_id'] == identity['document_id']]
             require(len(linked) == 1 and source[0]['revision_id'] == linked[0]['source_revision_id'], 'line source differs from selected source revision')
-            if linked[0]['relation'] == 'estimate_work_order':
+            if linked[0]['relation'] in ('estimate_work_order', 'estimate_sales_order'):
                 parent = work.rows(s, c.work_line_identities, c.work_line_identities.c.id == source[0]['line_id'])[0]
                 require((identity['root_document_id'], identity['root_line_id']) == (parent['root_document_id'], parent['root_line_id']), 'conversion lost its billing root')
             else:

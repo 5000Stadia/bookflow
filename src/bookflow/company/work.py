@@ -39,15 +39,20 @@ WORK_STATES = ('draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'canc
 # Recorded time is not a decision anyone is still making and not work anyone is scheduling: it
 # either happened, or it was withdrawn. One live state, and the terminal one every kind shares.
 TIME_STATES = ('recorded', 'voided')
+# A sales order holds only what a person decided: open, closed, or withdrawn by `sales-order void`.
+# How much of it is invoiced is read from the billing ledger, never stored.
+ORDER_STATES = ('open', 'closed', 'voided')
 # The states each kind can hold, in one place, so a reader that needs them for a kind asks
 # rather than re-deciding which enumeration applies.
 STATES = dict(proposal=QUOTE_STATES, estimate=QUOTE_STATES, work_order=WORK_STATES,
-              time_activity=TIME_STATES)
+              time_activity=TIME_STATES, sales_order=ORDER_STATES)
+# An estimate's operational destination: at most one of these, ever.
+DESTINATION_RELATIONS = ('estimate_work_order', 'estimate_sales_order')
 TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'work_line'),
                ('work_lines', 'work_revision_line'), ('work_links', 'work_link'),
                ('work_tax_line_keys','work_tax_line_key'), ('work_tax_attributions','work_tax_attribution'),
                ('work_tax_attribution_lines','work_tax_attribution_line'))
-LINE_COLUMNS = ('item_id', 'unit_id', 'quantity_microunits', 'completed_quantity_microunits',
+LINE_COLUMNS = ('item_id', 'unit_id', 'quantity_microunits', 'completed_quantity_microunits', 'cancelled_quantity_microunits',
     'unit_factor_nanounits', 'base_quantity_microunits', 'unit_price_minor_units',
     'net_minor_units', 'tax_minor_units', 'gross_minor_units', 'estimated_unit_cost_minor_units',
     'estimated_cost_minor_units', 'pricing_basis', 'markup_percent_millionths', 'billable')
@@ -102,7 +107,24 @@ def summary(header, rev, s=None, pending=None):
         'currency', 'net_minor_units', 'tax_minor_units', 'gross_minor_units')},
         customer_name=f.profile.customer.label, **_amounts(rev),
         expired=bool(f.expires_on and f.expires_on < clock.today_iso()),
-        time=_time_summary(s, f, rev, pending) if s is not None and header.get('kind') == 'time_activity' else None)
+        time=_time_summary(s, f, rev, pending) if s is not None and header.get('kind') == 'time_activity' else None,
+        order=_order_progress(s, header, rev, pending) if s is not None and header.get('kind') == 'sales_order' else None)
+
+
+def _current_lines(s, rev, pending=None):
+    supplied = (pending or {}).get('work_lines')
+    lines = saved_lines(s, rev) if supplied is None else sorted(
+        (row for row in supplied if row['revision_id'] == rev['id']), key=lambda row: row['position'])
+    identities = {row['id']: row for row in (pending or {}).get('work_line_identities', [])}
+    return lines, identities
+
+
+def _order_progress(s, header, rev, pending=None):
+    from bookflow.company import sales_orders
+    lines, identities = _current_lines(s, rev, pending)
+    sources = [row['source_document_id'] for row in (pending or {}).get('work_links', [])
+               if row['destination_document_id'] == header['id'] and row['relation'] == 'estimate_sales_order']
+    return sales_orders.progress(s, header, rev, lines, identities, sources)
 
 
 def _time_summary(s, f, rev, pending=None):
@@ -119,7 +141,7 @@ def _time_summary(s, f, rev, pending=None):
         item_name=line.profile.item.label, billable=line.billable, note=line.description)
 
 
-def revision_output(s, rev, pending=None, *, summary_only=False):
+def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
     pending = pending or {}
     supplied = pending.get('work_lines')
     if supplied is None:
@@ -150,6 +172,10 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
     if not mapping:mapping=rows(s,c.work_tax_attribution_lines,c.work_tax_attribution_lines.c.revision_id==rev['id'])
     tax_ordinals={row['work_line_id']:row['tax_ordinal'] for row in mapping}
     output, known, complete = [], 0, True
+    from bookflow.company import sales_orders
+    ordering = header is not None and header['kind'] in sales_orders.ORDER_KINDS
+    figures = (sales_orders.line_quantities(s, header, rev, lines, identities, rev['currency'])
+               if ordering and header['current_revision_id'] == rev['id'] else {})
     for line in lines:
         f, ident = line_facts(line), identities[line['line_id']]
         currency = rev['currency']
@@ -160,6 +186,8 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
             **{key: ident[key] for key in ('root_document_id', 'root_line_id', 'source_line_id')},
             facts=f, quantity=format_quantity_micro_units(f.quantity_microunits),
             completed_quantity=format_quantity_micro_units(f.completed_quantity_microunits),
+            cancelled_quantity=format_quantity_micro_units(f.cancelled_quantity_microunits) if ordering else None,
+            order=figures.get(line['line_id']),
             unit_price=amount(f.unit_price_minor_units), net=amount(f.net_minor_units),
             tax=amount(f.tax_minor_units), total=amount(f.gross_minor_units),
             estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units),
@@ -207,7 +235,7 @@ def links(s, document_id, pending=None, headers=None, *, cursor=None, ctx=None):
 
 def output(s, header, rev, pending=None, headers=None, *, cursor=None, ctx=None):
     linked, more, following, watermark = links(s, header['id'], pending, headers, cursor=cursor, ctx=ctx)
-    return WorkOutput(**summary(header, rev, s, pending).model_dump(), revision=revision_output(s, rev, pending),
+    return WorkOutput(**summary(header, rev, s, pending).model_dump(), revision=revision_output(s, rev, pending, header=header),
                       links=linked, links_has_more=more, next_links_cursor=following, links_audit_watermark=watermark)
 
 
@@ -349,6 +377,11 @@ def _lifecycle(kind, old, value, inp, ctx):
         if status != 'recorded':
             raise _invalid('status', 'recorded time is withdrawn by voiding it, not by changing its status')
         return
+    if kind == 'sales_order':
+        from bookflow.company import sales_orders
+        sales_orders.lifecycle(old, value, ctx)
+        _state_invariants(kind, value)
+        return
     if old is None:
         if status != 'draft':
             raise _invalid('status', 'new work documents begin as draft')
@@ -416,11 +449,22 @@ def _state_invariants(kind, value):
     if status == 'scheduled' and not f['scheduled_start']:
         raise _invalid('scheduled_start', 'scheduled work needs a scheduled start')
     if status == 'complete' and (not f['actual_end'] or any(
-            line['facts']['completed_quantity_microunits'] != line['facts']['quantity_microunits'] for line in value['lines'])):
-        raise _invalid('status', 'complete work needs an actual end and all ordered quantities completed')
+            line['facts']['completed_quantity_microunits'] != _uncancelled(line['facts']) for line in value['lines'])):
+        raise _invalid('status', 'complete work needs an actual end and each line completed to its ordered less cancelled quantity')
+
+
+def _uncancelled(line_facts):
+    """Ordered less cancelled: what a work order line has to complete."""
+    return line_facts['quantity_microunits'] - line_facts.get('cancelled_quantity_microunits', 0)
 
 
 def _dependencies(s, header, before, after):
+    if header is not None and header['kind'] == 'sales_order':
+        # An order's header stays editable while invoices consume it; only consumed lines and
+        # the customer are fixed, so it does not share the frozen agreement of billed work.
+        from bookflow.company import sales_orders
+        sales_orders.protect(s, header, before, after)
+        return
     from bookflow.company.billing_edits import protect_work
     protect_work(s, header, before, after)
     if header is None:
@@ -429,10 +473,10 @@ def _dependencies(s, header, before, after):
     for value in (before,after):value['facts']['profile']=work_tax.normalized(value)['facts']['profile']
     t = c.work_links
     if header['kind'] == 'estimate':
-        linked = rows(s, t, t.c.source_document_id == header['id'], t.c.relation == 'estimate_work_order')
+        linked = rows(s, t, t.c.source_document_id == header['id'], t.c.relation.in_(DESTINATION_RELATIONS))
         if linked and (_agreed(before) != _agreed(after) or after['status'] != 'accepted'):
             raise BookflowError('E_WORK_DEPENDENCY', details={'destination_id': linked[0]['destination_document_id'],
-                'problem': 'agreed estimate already has a work order'})
+                'problem': 'agreed estimate already has a ' + linked[0]['relation'].removeprefix('estimate_').replace('_', ' ')})
     elif header['kind'] == 'work_order':
         linked = rows(s, t, t.c.destination_document_id == header['id'], t.c.relation == 'estimate_work_order')
         if not linked:
@@ -504,11 +548,11 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
     before = saved_lines(s, old_rev) if old_rev else []
     prior = {row['line_id']: row for row in before}
     entered = inp.lines if inp.lines is not None else [WorkLineInput(item=row['item_id'], line_id=row['line_id']) for row in before]
-    if len(entered) > 200 or (kind == 'estimate' and not entered):
-        raise _invalid('lines', 'estimates need 1–200 lines; proposals/work orders allow 0–200')
+    if len(entered) > 200 or (kind in ('estimate', 'sales_order') and not entered):
+        raise _invalid('lines', 'estimates and sales orders need 1–200 lines; proposals/work orders allow 0–200')
     seen, out, warnings = set(), [], []
     from bookflow.company.sales import expand_groups
-    resolved_lines = []
+    resolved_lines, inputs = [], []
     for line, group in expand_groups(s, entered):
         if group is not None:
             line = WorkLineInput(**line.model_dump(exclude_unset=True))
@@ -523,6 +567,7 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
         if group is not None:
             resolved.profile.group = group
         resolved_lines.append((key, resolved))
+        inputs.append(line)
         warnings.extend(w for w in line_warnings if w not in warnings)
     if len(resolved_lines) > 200:
         raise _invalid('lines', 'a quote holds at most 200 lines once its groups are expanded')
@@ -535,6 +580,8 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
             for component in payload['taxes']:component['tax_minor_units']=calc.tax(base,component['rule']['rate_percent_millionths'])
             payload['tax_minor_units']=sum(t['tax_minor_units'] for t in payload['taxes']);payload['gross_minor_units']=payload['net_minor_units']+payload['tax_minor_units']
         out.append({'line_id': key, 'facts': payload})
+    from bookflow.company import sales_orders, tax_policy
+    sales_orders.apply_cancellations(s, kind, inputs, out, old_rev, tax_policy.effective(profile))
     return out, warnings
 
 
@@ -725,11 +772,14 @@ def _fingerprint(s, inp, kind, operation, value, source, warnings, document_id):
 
 
 def prepare(s, ctx, inp, kind, operation):
-    if operation in ('copy', 'estimate', 'work-order'):
+    if operation in ('copy', 'estimate', 'work-order', 'sales-order'):
         return _prepare_destination(s, ctx, inp, kind, operation)
     if kind == 'estimate' and operation == 'create':
         from bookflow.company.work_preferences import require_estimates
         require_estimates(s)
+    if kind == 'sales_order' and operation == 'create':
+        from bookflow.company.sales_orders import require_enabled
+        require_enabled(s)
     old = resolve(s, getattr(inp, kind), kind) if operation != 'create' else None
     old_rev = revision(s, old) if old else None
     if old:
@@ -744,6 +794,9 @@ def prepare(s, ctx, inp, kind, operation):
                 facts_fingerprint=_fingerprint(s, inp, kind, operation, _semantic(old_rev, saved_lines(s, old_rev)),
                                                old_rev, [], old['id']), warnings=[]),
                 dict(input=inp, kind=kind, operation=operation, changed=False))
+        if kind == 'sales_order':
+            from bookflow.company.sales_orders import void_guard
+            void_guard(s, old)
     elif old and old['status'] == 'voided':
         raise _invalid(kind, 'a voided ' + kind.replace('_', ' ') + ' cannot be changed')
     at, event = clock.now_iso(), new_id()
@@ -772,7 +825,7 @@ def prepare(s, ctx, inp, kind, operation):
         if value['facts']['actual_end'] is None:
             value['facts']['actual_end'] = at
         for line in value['lines']:
-            line['facts']['completed_quantity_microunits'] = line['facts']['quantity_microunits']
+            line['facts']['completed_quantity_microunits'] = _uncancelled(line['facts'])
         custom_plan = None
         custom_snapshot = json.loads(old_rev['custom_fields_snapshot'])
     else:
@@ -785,8 +838,12 @@ def prepare(s, ctx, inp, kind, operation):
         number, sequence = _number(s, kind, inp.number if inp.number is not None else old['number'] if old else None, header['id'])
         def picked(key, default=None):
             return getattr(inp, key) if key in inp.model_fields_set else before[key] if before else default
-        value = dict(date=picked('date'), number=number, title=picked('title'),
-            status=picked('status', 'draft'), active=picked('active', True), decision_note=picked('decision_note'),
+        title = picked('title')
+        if title is None and kind == 'sales_order':
+            # An order needs no title of its own: it is the customer's order, so it is named for them.
+            title = resolved.profile.customer.label[:200]
+        value = dict(date=picked('date'), number=number, title=title,
+            status=picked('status', 'open' if kind == 'sales_order' else 'draft'), active=picked('active', True), decision_note=picked('decision_note'),
             facts=resolved.model_dump(mode='json'), lines=line_values,
             custom_fields=_custom_semantic(custom_plan.snapshot))
         custom_snapshot = custom_plan.snapshot
@@ -795,6 +852,12 @@ def prepare(s, ctx, inp, kind, operation):
     work_tax.prepare(s,header['id'],value)
     if operation != 'void':
         _lifecycle(kind, before, value, inp, ctx)
+    if kind == 'sales_order' and old and value['status'] == 'closed' and before['status'] != 'closed':
+        # Closing is not refused for held money, as the anchor does not refuse it; it is said.
+        from bookflow.company.sales_orders import held_prepayment
+        if held_prepayment(s, old):
+            warnings.append('customer prepayments are still held on this order; apply them to an invoice or '
+                            'pay them back with `prepayment refund`')
     _dependencies(s, old, before, value)
     from bookflow.company.prepayments import guard_work_status
     guard_work_status(s, old, value, before)
@@ -820,8 +883,8 @@ def prepare(s, ctx, inp, kind, operation):
 def _prepare_destination(s, ctx, inp, kind, operation):
     source = resolve(s, getattr(inp, kind), kind)
     source_rev = revision(s, source)
-    destination_kind = kind if operation == 'copy' else 'estimate' if operation == 'estimate' else 'work_order'
-    relation = 'copy' if operation == 'copy' else 'proposal_estimate' if kind == 'proposal' else 'estimate_work_order'
+    destination_kind = kind if operation == 'copy' else operation.replace('-', '_')
+    relation = 'copy' if operation == 'copy' else 'proposal_estimate' if kind == 'proposal' else 'estimate_' + destination_kind
     key_hash = request_hash = None
     if relation != 'copy':
         key_hash = hashlib.sha256(inp.conversion_key.encode()).hexdigest()
@@ -841,6 +904,9 @@ def _prepare_destination(s, ctx, inp, kind, operation):
     if destination_kind == 'estimate':
         from bookflow.company.work_preferences import require_estimates
         require_estimates(s)
+    if destination_kind == 'sales_order':
+        from bookflow.company.sales_orders import require_enabled
+        require_enabled(s)
     if relation != 'copy' and source['status'] == 'voided':
         # Said before the availability refusal, because "inactive" is a thing an estimate
         # comes back from and a void is not.
@@ -850,14 +916,17 @@ def _prepare_destination(s, ctx, inp, kind, operation):
         raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': kind, 'record_id': source['id']})
     if relation == 'proposal_estimate' and source['status'] not in ('draft', 'open', 'accepted'):
         raise _invalid('proposal', 'select an active draft, open or accepted proposal')
-    if relation == 'estimate_work_order':
+    if relation in DESTINATION_RELATIONS:
+        noun = destination_kind.replace('_', ' ')
         if source['status'] != 'accepted' or source_rev['accepted_revision_id'] is None:
-            raise _invalid('estimate', 'explicitly accept the estimate before creating its work order')
+            raise _invalid('estimate', f'explicitly accept the estimate before creating its {noun}')
+        # One operational destination per estimate, permanently: a work order or a sales order.
         existing = rows(s, c.work_links, c.work_links.c.source_document_id == source['id'],
-            c.work_links.c.relation == 'estimate_work_order')
+            c.work_links.c.relation.in_(DESTINATION_RELATIONS))
         if existing:
+            held = existing[0]['relation'].removeprefix('estimate_').replace('_', ' ')
             raise BookflowError('E_WORK_DEPENDENCY', details={'destination_id': existing[0]['destination_document_id'],
-                'problem': 'this estimate already has its work order'})
+                'problem': f'this estimate already has its {held}; an estimate has one work order or one sales order, never both'})
     source_lines = saved_lines(s, source_rev)
     if destination_kind == 'estimate' and not source_lines:
         raise _invalid('lines', 'an estimate needs at least one priced line in the selected source')
@@ -876,20 +945,35 @@ def _prepare_destination(s, ctx, inp, kind, operation):
                 f[field] = getattr(inp, field)
         if 'assignees' in inp.model_fields_set:
             f['assignees'] = [value.model_dump() for value in _assignees(s, inp.assignees)]
+    if relation == 'estimate_sales_order':
+        if 'ship_date' in inp.model_fields_set:
+            f['profile']['ship_date'] = inp.ship_date
+            f['profile'].setdefault('origins', {})['ship_date'] = {'kind': 'explicit'}
+        if 'ship_method' in inp.model_fields_set:
+            f['profile'].setdefault('origins', {})['ship_method'] = {'kind': 'explicit'}
+            from bookflow.company import sales_defaults
+            f['profile']['ship_method'] = (sales_defaults._ref(sales_defaults._row(s.company, 'ship_method', inp.ship_method))
+                                           .model_dump(mode='json') if inp.ship_method else None)
     _validated_input_facts(f)
     warnings = _carry_warnings(s, source_rev, source_lines)
     custom_plan, custom_warnings = _custom_plan(s, inp, destination_kind, header['id'], carry=source_rev)
     warnings += custom_warnings
     number, sequence = _number(s, destination_kind, inp.number, header['id'])
+    def fresh(line):
+        # A new document starts with nothing completed and nothing cancelled.
+        payload = dict(json.loads(line['facts_snapshot']), completed_quantity_microunits=0)
+        payload.pop('cancelled_quantity_microunits', None)
+        return payload
     value = dict(date=inp.date, number=number, title=getattr(inp, 'title', None) or source_rev['title'],
-        status='draft', active=True, decision_note=None, facts=f, custom_fields=_custom_semantic(custom_plan.snapshot),
-        lines=[dict(line_id=None, facts=dict(json.loads(line['facts_snapshot']), completed_quantity_microunits=0)) for line in source_lines])
+        status='open' if destination_kind == 'sales_order' else 'draft', active=True, decision_note=None, facts=f,
+        custom_fields=_custom_semantic(custom_plan.snapshot),
+        lines=[dict(line_id=None, facts=fresh(line)) for line in source_lines])
     work_tax.prepare(s,header['id'],value)
     _state_invariants(destination_kind, value)
     fingerprint = _fingerprint(s, inp, kind, operation, value, source_rev, warnings, header['id'])
     pending = {table: [] for table, _ in TABLE_KINDS}
     rev = _new_revision(s, ctx, header, value, custom_plan.snapshot, None, pending, event, at,
-        source_lines=source_lines, inherit_roots=relation == 'estimate_work_order')
+        source_lines=source_lines, inherit_roots=relation in DESTINATION_RELATIONS)
     headers, before = [header], {}
     source_current = source
     if relation != 'copy':

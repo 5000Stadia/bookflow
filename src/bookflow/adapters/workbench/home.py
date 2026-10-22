@@ -451,6 +451,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Refund", "customer-refund post", "/customer-refund/post"),
             _new("Statement charge", "statement-charge post", "/statement-charge/post"),
             _new("Time entry", "time-activity create", "/time-activity/create"),
+            _new("Sales order", "sales-order create", "/sales-order/create"),
             _new("Work order", "work-order create", "/work-order/create"),
             _new("Proposal", "proposal create", "/proposal/create"),
             _new("Customer", "customer create", "/customer/create"),
@@ -459,6 +460,7 @@ SECTIONS: tuple[Section, ...] = (
         lists=(
             _list("Invoices", "invoice query", "/invoice"),
             _list("Estimates", "estimate query", "/estimate"),
+            _list("Sales orders", "sales-order query", "/sales-order"),
             _list("Sales receipts", "sales-receipt query", "/sales-receipt"),
             _list("Payments", "payment query", "/payment"),
             _list("Credit memos", "credit-memo query", "/credit-memo"),

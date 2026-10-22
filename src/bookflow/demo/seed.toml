@@ -2515,3 +2515,23 @@ command = "payment receive"
 capture = "write_off_payment"
 reason = "Customer closed; the balance will never be paid"
 input = { customer = "${write_off_customer.id}", date = "2026-12-11", amount = "0.00", number = "DEMO-WO-PAY-1", operation_key = "DEMO-WO-PAY-1-receive", discounts = [{ invoice = "${write_off_invoice.id}", amount = "150.00", expected_version = 1 }], discount_account = "${bad_debt_account.id}" }
+
+# R101: a sales order for stocked valves and a site visit, two valves since cancelled, and a work
+# order carrying a stocked part. Neither posts nor moves stock; the invoices made from them will.
+[[commands]]
+command = "sales-order create"
+capture = "demo_sales_order"
+reason = "Riverside ordered ten valves and a visit"
+input = { customer = "${customer.id}", date = "2026-10-20", number = "DEMO-SO-1", customer_purchase_order = "RA-2210", ship_date = "2026-10-27", memo = "Deliver to the office entrance", lines = [{ item = "${inventory_item.id}", quantity = "10" }, { item = "${service_item.id}", quantity = "1" }] }
+
+[[commands]]
+command = "sales-order update"
+capture = "demo_sales_order_revised"
+reason = "Riverside no longer needs two of the valves"
+input = { sales_order = "${demo_sales_order.id}", expected_version = 1, lines = [{ line_id = "${demo_sales_order.revision.lines.0.line_id}", item = "${inventory_item.id}", cancelled_quantity = "2" }, { line_id = "${demo_sales_order.revision.lines.1.line_id}", item = "${service_item.id}" }] }
+
+[[commands]]
+command = "work-order create"
+capture = "demo_stocked_work_order"
+reason = "Replace two shutoff valves on site"
+input = { customer = "${customer.id}", date = "2026-10-21", number = "DEMO-SO-WO-1", title = "Replace two shutoff valves", lines = [{ item = "${inventory_item.id}", quantity = "2" }, { item = "${service_item.id}", quantity = "1" }] }

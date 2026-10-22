@@ -66,7 +66,7 @@ LIST_VALUE_SCOPES = frozenset({"customer", "vendor", "employee", "other_name", "
 # than repeating it, because the copy it used to hold went stale three document types ago.
 SUPPORTED_TRANSACTION_SCOPES = frozenset(
     {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate",
-     "work_order", "time_activity", "deposit", "bill", "credit_memo", "statement_charge"}
+     "work_order", "time_activity", "sales_order", "deposit", "bill", "credit_memo", "statement_charge"}
 )
 SUPPORTED_VALUE_SCOPES = LIST_VALUE_SCOPES | SUPPORTED_TRANSACTION_SCOPES
 TRANSACTION_SCOPES = frozenset(

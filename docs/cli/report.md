@@ -7164,7 +7164,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].account_id` | string \| null | no | yes | null | — |
 | `rows[].account_label` | string \| null | no | yes | null | — |
 | `rows[].description` | string \| null | no | yes | null | — |
-| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge"] \| null | no | yes | null | — |
+| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge", "cancelled"] \| null | no | yes | null | — |
 | `rows[].quantity` | string \| null | no | yes | null | — |
 | `rows[].billed_quantity` | string \| null | no | yes | null | — |
 | `rows[].remaining_quantity` | string \| null | no | yes | null | — |

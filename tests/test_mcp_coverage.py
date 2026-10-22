@@ -50,7 +50,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +18 budgets, budget and comparison reports, memorized reports (R109).
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
-    assert len(rows) == 564
+    # +8 the sales order (R101): sales-order create, update, copy, show, query, history, void; estimate sales-order.
+    assert len(rows) == 572
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -244,7 +245,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3061 -> 3093 (R124), measured: the eight prepayment commands, 32 nodes -- the null branches of their optional
     # fields: receive 9, attach 1, apply 5, refund 7, show 3, query 5, report customer-prepayments 2 (unapply none).
     # apply_prepayment on the invoice conversions is a plain boolean and adds none. No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==3093
+    # 3093 -> 3221 (R101, the sales order), measured per command on both trees: sales-order create 51 and update 54
+    # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
+    # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
+    # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==3221
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

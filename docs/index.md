@@ -97,6 +97,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`register`](cli/register.md)
 - [`report`](cli/report.md)
 - [`review`](cli/review.md)
+- [`sales-order`](cli/sales-order.md)
 - [`sales-receipt`](cli/sales-receipt.md)
 - [`sales-rep`](cli/sales-rep.md)
 - [`sales-rep query`](cli/sales-rep-query.md)

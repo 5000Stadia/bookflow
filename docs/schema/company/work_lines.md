@@ -17,6 +17,7 @@ Database: `company`.
 | `unit_id` | VARCHAR(26) | yes | — | — | — | unit_conversions.id | Captured selected unit. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Positive ordered quantity in millionths. |
 | `completed_quantity_microunits` | BIGINT | no | — | — | — | — | Completed quantity in millionths. |
+| `cancelled_quantity_microunits` | BIGINT | no | — | — | — | — | Cancelled quantity in millionths: nonzero only on sales-order and work-order lines. |
 | `unit_factor_nanounits` | BIGINT | no | — | — | — | — | Captured base units per selected unit in billionths. |
 | `base_quantity_microunits` | BIGINT | no | — | — | — | — | Rounded base quantity in millionths. |
 | `unit_price_minor_units` | BIGINT | yes | — | — | — | — | Captured unit price; null in amount mode. |

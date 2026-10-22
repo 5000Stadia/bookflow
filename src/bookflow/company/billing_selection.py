@@ -45,6 +45,9 @@ def rebill_spans(s, reference, root, facts, policy=None):
     return spans
 
 
+from bookflow.company.items import TRACKED_TYPES
+
+
 def derived(facts):
     """A quoted subtotal or discount, which a sale carries along rather than bills."""
     from bookflow.company.sales_adjustments import kind
@@ -90,6 +93,12 @@ def select(s, inp, source, revision, lines, identities):
                 dependency('selected line is already billed', source_line_id=key)
             continue
         request = entry[1] if entry else None
+        if facts.profile.item_type in TRACKED_TYPES and (
+                (request and request.net_amount is not None) or
+                (request.percent if request else inp.percent) is not None):
+            # Stock leaves by the unit: a stocked line is billed by quantity, never by share.
+            raise _invalid(f'selections.{entry[0]}' if entry else 'percent',
+                           'a stocked line is billed by quantity; select a quantity or the whole line')
         if request and request.rebill_allocation_id:
             spans = rebill_spans(s, request.rebill_allocation_id, root, facts, policy)
         else:
@@ -125,6 +134,9 @@ def select(s, inp, source, revision, lines, identities):
                 problem='conversion exceeds 2000 allocation spans', recovery='select fewer source lines'))
         proof = None if spans == ((0,d),) and facts.schema_version==1 else alloc.make_proof(s, source, revision, line, root, facts, spans)
         selected.append(SelectedLine(line, root, facts, spans, proof))
-    if not selected or sum(item.proof.net() if item.proof else item.facts.net_minor_units for item in selected) <= 0:
+    # A free stocked part still ships, so an invoice for it may total zero, as `invoice post` allows;
+    # all-zero lines that move nothing are still refused.
+    if not selected or (sum(item.proof.net() if item.proof else item.facts.net_minor_units for item in selected) <= 0
+                        and not any(item.facts.profile.item_type in TRACKED_TYPES for item in selected)):
         dependency('No charge remains; zero-price lines were not invoiced', source_id=source['id'])
     return selected

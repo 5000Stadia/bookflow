@@ -54,7 +54,7 @@ _USES = """
 _LINE_TABLES = ('purchase_item_lines', 'vendor_credit_item_lines', 'sales_line_profiles',
                 'credit_line_profiles', 'money_out_item_lines')
 _OPEN_WORK = {'proposal': ('draft', 'open', 'accepted'), 'estimate': ('draft', 'open', 'accepted'),
-              'work_order': ('draft', 'scheduled', 'in_progress', 'on_hold')}
+              'work_order': ('draft', 'scheduled', 'in_progress', 'on_hold'), 'sales_order': ('open',)}
 _OPEN_ORDERS = ('open', 'partly_received')
 
 

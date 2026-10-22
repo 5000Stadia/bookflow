@@ -36,7 +36,7 @@ from bookflow.core.exact import format_quantity_micro_units
 # A row is listed unless the work behind it is finished or was never chargeable.
 # Derived from the declared billing states so a new state is listed rather than
 # silently filed under "nothing to do".
-SETTLED_STATES = frozenset({"billed", "nonbillable"})
+SETTLED_STATES = frozenset({"billed", "nonbillable", "cancelled"})
 LISTED_STATES = frozenset(get_args(BillingLineState)) - SETTLED_STATES
 
 NO_CUSTOMER = "No name"
@@ -132,7 +132,7 @@ def _lines(s, header, revision):
         free_length, free_net, _spans = query.free_amounts(s, root, facts, policy)
         used = alloc.active_totals(s, root)
         remaining = free_net if facts.billable else 0
-        state = query.line_state(free_length, used["count"], facts.billable, remaining)
+        state = query.line_state(free_length, used["count"], facts.billable, remaining, bool(facts.cancelled_quantity_microunits))
         if state in SETTLED_STATES:
             continue
         if state not in LISTED_STATES:

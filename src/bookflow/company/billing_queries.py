@@ -40,7 +40,7 @@ def free_amounts(s, root, facts, policy, pending=None):
         spans = proof.intervals() if proof else ((0, denominator),)
     occupied = heapq.merge(alloc.occupied_spans(s, root, facts, policy=policy), spans)
     length = net = count = 0
-    for start, end in math.free_spans(occupied, denominator):
+    for start, end in alloc.without_cancelled(facts, math.free_spans(occupied, denominator)):
         length += end - start
         net += math.portion(facts.net_minor_units, start, end, denominator)
         count += 1
@@ -50,24 +50,24 @@ def free_amounts(s, root, facts, policy, pending=None):
 def scope_fractions(facts, free_length):
     """Billed scope, remaining scope and billed percentage of one root's original scope.
 
-    Exact fractions of the quantity originally quoted, never a rounded quantity:
-    the billing window and the unbilled-cost report print the same numbers because
-    they are these numbers.
+    Exact fractions of the quantity originally quoted, never a rounded quantity: the billing window and the
+    unbilled-cost report print the same numbers because they are these numbers. Cancelled is neither.
     """
     from bookflow.company import billing_math as math
     denominator = math.denominator(facts.quantity_microunits, facts.net_minor_units)
-    return (Fraction(facts.quantity_microunits * (denominator - free_length), denominator * 1_000_000),
+    denominator_billed = denominator - free_length - denominator // facts.quantity_microunits * getattr(facts, 'cancelled_quantity_microunits', 0)
+    return (Fraction(facts.quantity_microunits * denominator_billed, denominator * 1_000_000),
             Fraction(facts.quantity_microunits * free_length, denominator * 1_000_000),
-            Fraction(100 * (denominator - free_length), denominator))
+            Fraction(100 * denominator_billed, denominator))
 
 
-def line_state(free_length, allocation_count, billable, free_net):
+def line_state(free_length, allocation_count, billable, free_net, cancelled=False):
     """The one word for what has happened to a billing root so far.
 
-    `free_net` is what the caller counts as remaining charge -- zero on a line
-    that is not billable. Every surface that names a billing state calls this,
-    so the billing window and the unbilled-cost report cannot drift apart.
+    `free_net` is what the caller counts as remaining charge -- zero on a line that is not billable. Every
+    surface that names a billing state calls this, so the billing window and the unbilled-cost report agree.
     """
+    if not free_length and not allocation_count and cancelled: return 'cancelled'  # cancelled before anything billed it
     return ('billed' if not free_length else 'partially_billed' if allocation_count else
             'nonbillable' if not billable else 'no_charge' if free_net == 0 else 'unbilled')
 
@@ -82,9 +82,9 @@ def root_identities(s, header):
 def current_owner(s, header):
     if header['kind'] == 'estimate':
         links = work.rows(s, c.work_links, c.work_links.c.source_document_id == header['id'],
-            c.work_links.c.relation == 'estimate_work_order')
+            c.work_links.c.relation.in_(work.DESTINATION_RELATIONS))
         if links:
-            return work.resolve(s, links[0]['destination_document_id'], 'work_order')
+            return work.resolve(s, links[0]['destination_document_id'], links[0]['relation'].removeprefix('estimate_'))
     return header
 
 
@@ -173,7 +173,7 @@ def billing(s, ctx, inp, kind):
         used = alloc.active_totals(s, root)
         free_length, free_net = forecast_values[line['line_id']]['length'],forecast_values[line['line_id']]['net']
         billed_quantity, remaining_quantity, percent = scope_fractions(lf, free_length)
-        state = line_state(free_length, used['count'], lf.billable, free_net)
+        state = line_state(free_length, used['count'], lf.billable, free_net, bool(lf.cancelled_quantity_microunits))
         remaining_net = free_net if lf.billable else 0
         remaining_tax = forecast_values[line['line_id']]['tax']
         recovery, recommendation = policy.recovery(s, root, lf, rev['currency'],alloc.source_policy(s,line))
