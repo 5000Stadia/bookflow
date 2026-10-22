@@ -1198,3 +1198,5 @@ from bookflow.company.list_merge_schema import define_tables as _define_list_mer
 globals().update(_define_list_merge_tables(metadata, _column, _table))
 from bookflow.company.fixed_asset_schema import define_tables as _define_fixed_asset_tables
 globals().update(_define_fixed_asset_tables(metadata, _column, _table, _common))
+from bookflow.company.assembly_build_schema import define_tables as _define_assembly_build_tables
+globals().update(_define_assembly_build_tables(metadata, _column, _table))

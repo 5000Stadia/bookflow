@@ -145,6 +145,12 @@ def translate(inp, s, operation, *, moving=False, expected_version=_FROM_INPUT, 
     expected = (getattr(inp, 'expected_version', None) if expected_version is _FROM_INPUT
                 else expected_version)
     header = journals.resolve(s, inp.journal) if operation == 'update' else None
+    if header and owner in (None, journals.REGISTER):
+        # An inventory document (an adjustment or an assembly build) is refused by what it is,
+        # pointing at its own commands, before its shape is judged against the register's.
+        refusal = journals.foreign_document(s, header['id'], verb=operation, owner=journals.REGISTER)
+        if refusal is not None:
+            raise refusal
     if header:
         journals.version_meta(s, header, expected)
     currency = _home(s)
