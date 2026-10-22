@@ -383,6 +383,30 @@ unset BOOKFLOW_TOKEN TOKEN_DOCUMENT
 
 Confirm that the host has stopped before removing anything. If this was an isolated documentation trial, remove only the exact `BOOKFLOW_TRIAL_ROOT` created by `mktemp`; it contains the isolated data root and, for a source run, the isolated environment. Never remove a normal Bookflow data root or a source checkout. Cleanup is intentionally not a recursive copy-paste command because the trial-root path must be inspected by the operator first. If the data root is retained, revoke the short-lived guide token with [`token revoke`](cli/token.md) when it is no longer needed.
 
+## Finding a transaction
+
+Asked to find, look up or open a document ("the $412.50 check to Acme", "everything we billed Riverside
+in March", "invoice 1043"), call `transaction find` first. One read searches every kind of document --
+invoices, sales receipts, credit memos, statement charges, customer payments and refunds, estimates,
+proposals, work orders, purchase orders, item receipts, bills, bill payments, vendor credits, checks,
+card charges and credits, deposits, transfers, journal entries, sales tax payments and adjustments and
+inventory adjustments -- by any mix of:
+
+- `types`: e.g. `["check"]`; omit for every type.
+- `name`: a customer, job, vendor, employee or other name, by id or full name. Part of a name finds every
+  party whose name contains it (`names` in the result says which). A customer brings its jobs, and a name
+  merged into another is found under the one it was merged into.
+- `number`: the document's number or a check's own number, exact.
+- `amount` (exact, e.g. `"412.50"`) or `amount_from` / `amount_to`, on the document total.
+- `date_from` / `date_to`, `memo` (text the memo contains) and `account` (full name or id).
+
+Each row has the date, type, number, name, account, memo, amount and `status` (open or paid for an
+invoice, statement charge or bill; open or closed for an order, estimate, proposal or work order; void;
+otherwise posted), with `id` and `show_command`: open the document with `<show_command> <id>`. Voided
+documents are included unless `include_voided` is false; deleted ones never are. A type you may not read
+is left out and listed in `withheld_types`. Results are sorted by date, then number; follow `next_cursor`
+for more.
+
 ## When the account is unclear: Ask My Accountant
 
 Every company has two accounts for entries whose right account is not yet known:

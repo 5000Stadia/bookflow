@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block title %}Find transactions · {{ company.display_name }}{% endblock %}{% block body %}
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+<h1>Find transactions</h1>
+<p class="muted">Search every kind of document at once: by type, name, number, amount, date, memo or account, in any mix.</p>
+<form method="get" action="/c/{{ company_id }}/find" class="find-filters" id="find-filters" role="search" aria-label="Find transactions">
+<label>Name<input name="name" value="{{ form.name }}" placeholder="Customer, job, vendor…" autocomplete="off"></label>
+<label>Number<input name="number" value="{{ form.number }}" placeholder="Document or check number" autocomplete="off"></label>
+<label>Amount<input name="amount" value="{{ form.amount }}" inputmode="decimal" placeholder="Exact total, e.g. 412.50"></label>
+<label>Amount from<input name="amount_from" value="{{ form.amount_from }}" inputmode="decimal"></label>
+<label>Amount to<input name="amount_to" value="{{ form.amount_to }}" inputmode="decimal"></label>
+<label>Date from<input type="date" name="date_from" value="{{ form.date_from }}"></label>
+<label>Date to<input type="date" name="date_to" value="{{ form.date_to }}"></label>
+<label>Memo contains<input name="memo" value="{{ form.memo }}" autocomplete="off"></label>
+<label>Account<input name="account" value="{{ form.account }}" placeholder="Full name, e.g. Checking" autocomplete="off"></label>
+<fieldset class="find-types"><legend>Types <span class="muted">(none ticked: every type)</span></legend>
+{% for key, text in families %}<label class="find-type"><input type="checkbox" name="types" value="{{ key }}"{% if key in form.types %} checked{% endif %}>{{ text }}</label>{% endfor %}
+</fieldset>
+<label class="find-type"><input type="hidden" name="include_voided" value="0"><input type="checkbox" name="include_voided" value="1"{% if form.include_voided %} checked{% endif %}>Include voided documents</label>
+<p class="actions"><button type="submit">Find</button> <a href="/c/{{ company_id }}/find">Clear</a></p>
+</form>
+{% if error %}<div class="error" role="alert" id="find-error"><strong>{{ error.message }}</strong>{% if error.details and error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(', ') }}?</p>{% endif %}</div>{% endif %}
+{% if found %}<section class="document-detail basic-report find-results" aria-label="Matching transactions">
+<p id="find-count" role="status"><strong>{{ found.matching_total }}</strong> {{ 'transaction' if found.matching_total == 1 else 'transactions' }} found{% if found.names %} for {{ found.names | map(attribute='name') | join(', ') }}{% endif %}{% if found.next_url %}; showing {{ found.count }}{% endif %}.</p>
+{% if found.note %}<p class="report-state" role="note" id="find-withheld">{{ found.note }}</p>{% endif %}
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="find-lines" role="table">
+<thead role="rowgroup"><tr role="row"><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Number</th><th scope="col">Name</th><th scope="col">Account</th><th scope="col">Memo</th><th scope="col">Status</th><th scope="col" class="num">Amount</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in found.rows %}<tr role="row" data-type="{{ row.type }}" data-status="{{ row.status }}">
+<td role="cell">{{ label('Date') }}{{ row.date }}</td>
+<td role="cell">{{ label('Type') }}{{ row.type_label }}</td>
+<td role="cell">{{ label('Number') }}<a href="{{ row.url }}">{{ row.number }}</a></td>
+<td role="cell">{{ label('Name') }}{{ row.name or '—' }}</td>
+<td role="cell">{{ label('Account') }}{{ row.account or '—' }}</td>
+<td role="cell" class="document-wide">{{ label('Memo') }}{{ row.memo or '' }}</td>
+<td role="cell">{{ label('Status') }}{{ row.status_label }}</td>
+<td role="cell" class="num document-total">{{ label('Amount') }}{{ row.amount | money }}</td>
+</tr>{% else %}<tr role="row"><td role="cell" colspan="8">Nothing matches. Loosen a filter, or tick fewer types.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if found.next_url %}<p><a href="{{ found.next_url }}" id="find-next">Next page</a></p>{% endif %}
+</section>{% endif %}
+{% endblock %}

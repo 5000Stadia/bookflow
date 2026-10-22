@@ -132,3 +132,13 @@
 .receivables-worklist .contact-lines li { list-style: none; }
 .receivables-worklist .contact-person { display: block; font-size: .9rem; }
 .receivables-worklist .report-state { display: block; font-size: .85rem; color: #3c4a5a; font-weight: 400; }
+
+/* The Find page's filters: a grid of labelled fields that folds to one column on a phone. */
+.find-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: .6rem .9rem; margin: 1rem 0; }
+.find-filters > label { display: flex; flex-direction: column; gap: .2rem; font-weight: 600; }
+.find-filters input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
+.find-filters .find-types, .find-filters .actions { grid-column: 1 / -1; }
+.find-filters .find-types { display: flex; flex-wrap: wrap; gap: .3rem 1rem; border: 1px solid #c3d0de; padding: .5rem .75rem; }
+.find-filters > label.find-type { flex-direction: row; }
+.find-results .ledger-table td:nth-last-child(2) { text-align: left; white-space: normal; }
+.find-filters .find-type { display: inline-flex; align-items: center; gap: .3rem; font-weight: 400; }

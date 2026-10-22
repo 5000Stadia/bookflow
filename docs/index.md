@@ -109,6 +109,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`term query`](cli/term-query.md)
 - [`time-activity`](cli/time-activity.md)
 - [`token`](cli/token.md)
+- [`transaction`](cli/transaction.md)
 - [`transfer`](cli/transfer.md)
 - [`undo`](cli/undo.md)
 - [`unit-of-measure`](cli/unit-of-measure.md)
