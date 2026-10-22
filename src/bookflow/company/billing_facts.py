@@ -18,7 +18,7 @@ from bookflow.core.exact import INT64_MAX, round_ratio_half_even
 # Recorded time is here for the same reason an estimate is: it is work a customer owes for,
 # recorded against a job, and it reaches an invoice through this one path -- with the same
 # allocation ledger deciding what is left, so a stretch of time cannot be billed twice.
-BILLING_KINDS = ('estimate', 'work_order', 'time_activity')
+BILLING_KINDS = ('estimate', 'work_order', 'time_activity', 'mileage')
 
 UnsignedText = Annotated[str, Field(pattern=r'^(0|[1-9][0-9]*)$', max_length=100)]
 Coordinate = Annotated[str, Field(pattern=r'^(0|[1-9][0-9]*)$', max_length=49)]

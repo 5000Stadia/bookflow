@@ -21,7 +21,7 @@ from bookflow.core.exact import (
 # The customer-work document kinds, declared once. The service, the default resolver, the
 # sales-profile reader, the outputs and the custom-field scopes all derive their copy from
 # this tuple, so a new kind arrives in one place rather than in seven that drift apart.
-WORK_KINDS = ('proposal', 'estimate', 'work_order', 'time_activity', 'sales_order')
+WORK_KINDS = ('proposal', 'estimate', 'work_order', 'time_activity', 'sales_order', 'mileage')
 
 WorkKind = Literal[WORK_KINDS]
 WorkStatus = Literal['draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled',
@@ -576,3 +576,20 @@ class _TimeActivityWorkCreateInput(WorkCreateInput, OperationalFields):
 class _TimeActivityWorkUpdateInput(WorkUpdateInput, OperationalFields):
     time_activity: Selector
     status: Literal['recorded'] = 'recorded'
+
+
+class _MileageWorkCreateInput(WorkCreateInput, OperationalFields):
+    """The customer-work input a billable trip's billing document is, built by `mileage` (R118)."""
+
+    status: Literal['recorded'] = 'recorded'
+
+
+class _MileageWorkUpdateInput(WorkUpdateInput, OperationalFields):
+    mileage: Selector
+    status: Literal['recorded'] = 'recorded'
+
+
+class _MileageWorkVoidInput(StrictModel):
+    mileage: Selector
+    expected_version: _Version
+    expected_facts_fingerprint: Fingerprint | None = None

@@ -748,6 +748,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R118: Enter Vehicle Mileage with the Vehicle List and Mileage Rates on one page.
+    from bookflow.adapters.workbench import mileage_pages as MileagePages
+    MileagePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                       role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R109: the Set Up Budgets grid, Memorize on any report, and opening a memorized report.
     from bookflow.adapters.workbench import budget_pages as BudgetPages
     BudgetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)

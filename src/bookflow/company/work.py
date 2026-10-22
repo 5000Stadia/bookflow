@@ -44,8 +44,9 @@ TIME_STATES = ('recorded', 'voided')
 ORDER_STATES = ('open', 'closed', 'voided')
 # The states each kind can hold, in one place, so a reader that needs them for a kind asks
 # rather than re-deciding which enumeration applies.
+# A billable trip's one-line billing document (R118) is recorded mileage, shaped as recorded time is.
 STATES = dict(proposal=QUOTE_STATES, estimate=QUOTE_STATES, work_order=WORK_STATES,
-              time_activity=TIME_STATES, sales_order=ORDER_STATES)
+              time_activity=TIME_STATES, sales_order=ORDER_STATES, mileage=TIME_STATES)
 # An estimate's operational destination: at most one of these, ever.
 DESTINATION_RELATIONS = ('estimate_work_order', 'estimate_sales_order')
 TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'work_line'),
@@ -391,7 +392,7 @@ def _lifecycle(kind, old, value, inp, ctx):
     status = value['status']
     if status not in STATES[kind]:
         raise _invalid('status', 'status does not apply to this document kind')
-    if kind == 'time_activity':
+    if kind in ('time_activity', 'mileage'):
         # Time that was worked has no decision to move through and no schedule to run down.
         # `recorded` is the only state this path writes; `time-activity void` writes the other
         # one without coming here, exactly as `estimate void` does.
@@ -450,6 +451,11 @@ def _state_invariants(kind, value):
     f, status = value['facts'], value['status']
     if f['expires_on'] and f['expires_on'] < value['date']:
         raise _invalid('expires_on', 'must not precede the document date')
+    if kind == 'mileage':
+        # A billable trip's billing document is the trip's miles: one line, kept by `trip`.
+        if len(value['lines']) != 1:
+            raise _invalid('miles', 'a trip is billed as one line')
+        return
     if kind == 'time_activity':
         # A time entry is one person's one stretch of work: the two facts that make it that
         # rather than a work order are checked here, where every path reaches them, so the
@@ -854,7 +860,11 @@ def prepare(s, ctx, inp, kind, operation):
         resolved, warnings = _resolve_facts(s, inp, kind, old_facts, old_rev['date'] if old else None, old['status'] if old else None)
         line_values, line_warnings = _resolve_lines(s, inp, kind, resolved.profile, old_rev, old_facts.profile if old else None)
         warnings += [w for w in line_warnings if w not in warnings]
-        custom_plan, custom_warnings = _custom_plan(s, inp, kind, header['id'], old_rev)
+        if kind == 'mileage':
+            # A trip's billing document carries no custom fields of its own (R118): the trip is the record.
+            custom_plan, custom_warnings = None, []
+        else:
+            custom_plan, custom_warnings = _custom_plan(s, inp, kind, header['id'], old_rev)
         warnings += custom_warnings
         number, sequence = _number(s, kind, inp.number if inp.number is not None else old['number'] if old else None, header['id'])
         def picked(key, default=None):
@@ -866,8 +876,8 @@ def prepare(s, ctx, inp, kind, operation):
         value = dict(date=picked('date'), number=number, title=title,
             status=picked('status', 'open' if kind == 'sales_order' else 'draft'), active=picked('active', True), decision_note=picked('decision_note'),
             facts=resolved.model_dump(mode='json'), lines=line_values,
-            custom_fields=_custom_semantic(custom_plan.snapshot))
-        custom_snapshot = custom_plan.snapshot
+            custom_fields=_custom_semantic(custom_plan.snapshot if custom_plan else {}))
+        custom_snapshot = custom_plan.snapshot if custom_plan else {}
     # Report invalid completion timestamps before captured-fact parsing in tax preparation.
     _state_invariants(kind, value)
     work_tax.prepare(s,header['id'],value)

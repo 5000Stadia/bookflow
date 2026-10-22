@@ -32,10 +32,11 @@ def _constraint(table_, name):
 
 
 def test_the_frozen_replacements_are_what_the_metadata_declares():
-    # Its own place in the chain, not that it is the head (co0080 came after).
+    # Its own place in the chain, not that it is the head (co0080, co0079 and co0083 came after);
+    # co0083 (mileage) has since sat on top and appended its own kind; what this migration wrote is the prefix.
     assert M.revision == 'co0077' and M.revision in _chain()
     assert M.CHANGED == ('work_documents', 'work_links', 'work_billing_conversions')
-    assert KIND in _constraint(c.work_documents, 'ck_work_kind')
+    assert KIND[:-1] in _constraint(c.work_documents, 'ck_work_kind')
     assert ORDER_STATES in _constraint(c.work_documents, 'ck_work_status')
     assert "'estimate_sales_order'" in _constraint(c.work_links, 'ck_work_link_key')
     assert "'sales_order_invoice'" in _constraint(c.work_billing_conversions, 'ck_work_billing_relation')
