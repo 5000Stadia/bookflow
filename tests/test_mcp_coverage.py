@@ -54,7 +54,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +10 the five fixed-asset and five loan commands (R119).
     # +7 assembly build, update, finalize, void, delete, show and list (R103).
     # +1 report open-sales-orders (R102).
-    assert len(rows) == 590
+    # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
+    assert len(rows) == 601
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -261,7 +262,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # status and item. No new variant kind.
     # 3265 -> 3269 (R102), measured: report open-sales-orders is new with 4, the null branches of its optional
     # customer, item, date_from and cursor (date_to is required). No existing command moved. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3269
+    # 3269 -> 3299 (R111), measured as a whole: the eleven todo, notice and reminders commands' optional inputs
+    # and company update's five scheduler and overdue notice preferences, their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3299
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

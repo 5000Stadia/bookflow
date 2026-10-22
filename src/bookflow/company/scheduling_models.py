@@ -203,6 +203,7 @@ class MemorizedReminder(BaseModel):
 
 class InvoiceReminder(BaseModel):
     transaction_id: str
+    document_type: str = Field(description='invoice or statement_charge.')
     number: str | None
     customer_id: str | None
     customer_name: str | None

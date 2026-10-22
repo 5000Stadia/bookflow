@@ -161,6 +161,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `notices_ready[].print_path` | string | yes | no | — | Browser path of the printable PDF (relative to the host). |
 | `overdue_invoices` | array[object] | yes | no | — | — |
 | `overdue_invoices[].transaction_id` | string | yes | no | — | — |
+| `overdue_invoices[].document_type` | string | yes | no | — | invoice or statement_charge. |
 | `overdue_invoices[].number` | string \| null | yes | yes | — | — |
 | `overdue_invoices[].customer_id` | string \| null | yes | yes | — | — |
 | `overdue_invoices[].customer_name` | string \| null | yes | yes | — | — |

@@ -60,7 +60,7 @@ def _invoices(s, as_of, currency):
             and days_past_due(as_of, d['aging_date']) > 0]
     names = {r[0]: r[1] for r in s.company.conn.execute(sa.select(c.customers.c.id, c.customers.c.full_name).where(
         c.customers.c.id.in_({d['party'] for d in docs})))} if docs else {}
-    return [dict(transaction_id=d['tx'], number=d['document_number'], customer_id=d['party'],
+    return [dict(transaction_id=d['tx'], document_type=d['document_type'], number=d['document_number'], customer_id=d['party'],
                  customer_name=names.get(d['party']), date=d['document_date'], due_date=d['aging_date'],
                  open_balance=int(d['net']), days_overdue=days_past_due(as_of, d['aging_date'])) for d in docs]
 
