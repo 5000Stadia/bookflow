@@ -1423,3 +1423,20 @@ EXAMPLES.update({
         'bookflow price-rule set-preferences --conflict-policy priority --reason "Rules over price levels"' + _PRICE_CO,
         {'conflict_policy': 'priority'}),
 })
+# R101 increment 4: bill what can ship on an order; retries with the same key return the same invoice.
+EXAMPLES['sales-order invoice'] = Example(
+    'bookflow sales-order invoice DEMO-SO-1 --expected-version 2 --conversion-key "riverside-ship-1" --date 2026-10-22'
+    ' --company "Demo Plumbing Co" --reason "Shipped what we had" --json',
+    {'sales_order': 'DEMO-SO-1', 'expected_version': 2, 'conversion_key': 'riverside-ship-1', 'date': '2026-10-22'})
+EXAMPLES['sales-order billing'] = Example('bookflow sales-order billing DEMO-SO-1 --company "Demo Plumbing Co" --json',
+                                          {'sales_order': 'DEMO-SO-1'})
+# R101 increment 5: order what an order is short from the items' preferred vendor; a retry orders nothing.
+EXAMPLES['sales-order purchase-order'] = Example(
+    'bookflow sales-order purchase-order DEMO-SO-1 --date 2026-10-22 --company "Demo Plumbing Co" --reason "Order the backorder" --json',
+    {'sales_order': 'DEMO-SO-1', 'date': '2026-10-22'})
+EXAMPLES['work-order purchase-order'] = Example(
+    'bookflow work-order purchase-order DEMO-SO-WO-1 --date 2026-10-22 --vendor "Central Supply" --lines '
+    + _shlex.quote(_json.dumps([{'item': 'Brass Shutoff Valve', 'quantity': '3'}]))
+    + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
+    {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
+     'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})

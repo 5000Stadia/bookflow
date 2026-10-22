@@ -242,15 +242,18 @@ def _check_version(current, expected):
             'expected_version': expected, 'current_version': current['revision_number']})
 
 
-def reserved(s, *, exclude=None):
-    """Component quantities reserved by pending builds, by item id (the anchor's 'pending builds')."""
+def reserved(s, *, exclude=None, as_of=None):
+    """Component quantities reserved by pending builds, by item id (the anchor's 'pending builds').
+
+    With `as_of`, only builds dated on or before it count, as a report of that date reads open orders.
+    """
     t = c.assembly_builds
     latest = sa.select(t.c.build_id, sa.func.max(t.c.revision_number).label('n')).group_by(t.c.build_id).subquery()
     rows = s.company.conn.execute(sa.select(t).join(latest, sa.and_(
         latest.c.build_id == t.c.build_id, latest.c.n == t.c.revision_number)).where(t.c.status == 'pending')).mappings()
     held: dict[str, int] = {}
     for row in rows:
-        if row['build_id'] == exclude:
+        if row['build_id'] == exclude or (as_of is not None and row['build_date'] > as_of):
             continue
         for component in json.loads(row['components']):
             if component['kind'] == 'stock':

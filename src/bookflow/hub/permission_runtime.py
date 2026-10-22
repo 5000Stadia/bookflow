@@ -145,6 +145,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.MILEAGE_POLICY_VERSION: '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24',
     c.COLLECTIONS_POLICY_VERSION: '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c',
     c.PRICING_RULES_POLICY_VERSION: 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2',
+    c.ORDER_INVOICING_POLICY_VERSION: '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531',
+    c.SHORTFALL_PO_POLICY_VERSION: 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -265,6 +267,8 @@ def known_catalog(version):
     from . import permission_mileage_catalog
     from . import permission_collections_catalog
     from . import permission_pricing_rules_catalog
+    from . import permission_order_invoicing_catalog
+    from . import permission_shortfall_po_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -311,6 +315,8 @@ def known_catalog(version):
         c.MILEAGE_POLICY_VERSION: permission_mileage_catalog,
         c.COLLECTIONS_POLICY_VERSION: permission_collections_catalog,
         c.PRICING_RULES_POLICY_VERSION: permission_pricing_rules_catalog,
+        c.ORDER_INVOICING_POLICY_VERSION: permission_order_invoicing_catalog,
+        c.SHORTFALL_PO_POLICY_VERSION: permission_shortfall_po_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -321,7 +327,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.PRICING_RULES_POLICY_VERSION)
+    return known_catalog(c.SHORTFALL_PO_POLICY_VERSION)
 
 
 def catalog_for_root(tx):
