@@ -1264,3 +1264,11 @@ EXAMPLES["prepayment show"] = Example(
 EXAMPLES["prepayment query"] = Example('bookflow prepayment query --held-only' + _C, {"held_only": True})
 EXAMPLES["report customer-prepayments"] = Example(
     'bookflow report customer-prepayments --as-of 2026-12-31' + _C, {"as_of": "2026-12-31"})
+EXAMPLES["customer-credit transfer"] = Example(
+    'bookflow customer-credit transfer --from-customer "Payment Example Customer:Job B"'
+    ' --to-customer "Payment Example Customer:Job A" --amount 10.00 --date 2026-10-20 --operation-key xfer-b-to-a'
+    ' --reason "Customer asked to use the Job B credit on Job A"' + _C,
+    {"from_customer": "Payment Example Customer:Job B", "to_customer": "Payment Example Customer:Job A",
+     "amount": "10.00", "date": "2026-10-20", "operation_key": "xfer-b-to-a"})
+EXAMPLES["customer-credit transfer-void"] = Example(
+    f'bookflow customer-credit transfer-void {ID} --reason "Moved to the wrong job"' + _C, {"transfer": ID})

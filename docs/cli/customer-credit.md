@@ -253,6 +253,374 @@ Example JSON output:
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
+## `customer-credit transfer`
+
+Move a customer's credit from one job to another (or between the parent customer and a job), as the anchor's guides do with a pair of entries through a clearing account, in one step. The source is charged the amount on an invoice that its own credit pays at once (its open credit memos and unapplied receipts, oldest first, or the one named in `credit_memo` or `payment`), and the target gets a credit memo for it. Both use the Credit Transfer item posting to the Credit Transfer Clearing account (set up on first use), which nets to zero; Accounts Receivable moves from one job to the other, so aging, balances and statements read each job right. Give `apply_to` to use the credit on the target's invoices at once (as `customer-credit apply`), or apply the credit memo later. A reason is required. Everything is written together or nothing is; dry run previews it and gives `facts_fingerprint`. Undo it with `customer-credit transfer-void`. Example, use the 120.00 credit on job Kitchen for job Bath: {"from_customer": "Acme:Kitchen", "to_customer": "Acme:Bath", "amount": "120.00", "date": "2026-07-15", "operation_key": "xfer-1", "apply_to": [{"invoice": "1088", "expected_version": 1}]}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer-credit.transfer` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer-credit transfer --from-customer "Payment Example Customer:Job B" --to-customer "Payment Example Customer:Job A" --amount 10.00 --date 2026-10-20 --operation-key xfer-b-to-a --reason "Customer asked to use the Job B credit on Job A" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer-credit transfer", "input": {"from_customer": "Payment Example Customer:Job B", "to_customer": "Payment Example Customer:Job A", "amount": "10.00", "date": "2026-10-20", "operation_key": "xfer-b-to-a"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `from_customer` | `--from-customer` | string | yes | no | — | The customer or job that has the credit now (an unapplied payment or an open credit memo).; minimum length 1 |
+| `to_customer` | `--to-customer` | string | yes | no | — | The customer or job of the same customer that gets the credit: another job, the parent, or a job of the parent.; minimum length 1 |
+| `amount` | `--amount` | string | yes | no | — | How much credit to move, as a decimal string more than zero, such as "120.00". |
+| `date` | `--date` | string | yes | no | — | Date of the transfer; on or after the credit it draws on, in an open period.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `operation_key` | `--operation-key` | string | yes | no | — | A unique key for this transfer; asking again with it returns the first result instead of moving the credit twice. At most 100 characters.; pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$" |
+| `credit_memo` | `--credit-memo` | string \| null | no | yes | null | Draw the credit from this credit memo only. Omit both this and `payment` to draw on the source's credits oldest first. |
+| `payment` | `--payment` | string \| null | no | yes | null | Draw the credit from this receipt's unapplied money only. |
+| `apply_to[].invoice` | inside `--apply-to` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `apply_to[].expected_version` | inside `--apply-to` JSON array | integer | yes | no | — | minimum 1 |
+| `apply_to[].amount` | inside `--apply-to` JSON array | string \| object \| null | no | yes | null | How much of the credit goes to this invoice; omit to use as much as this invoice still owes, taking the invoices in the order you list them. |
+| `memo` | `--memo` | string \| null | no | yes | null | Memo on both documents; a line naming the two jobs by default. |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | `facts_fingerprint` from a dry run; the write is refused with E_PREVIEW_STALE if anything it depends on changed since. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer-credit.transfer`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+| `transfer_id` | string \| null | yes | yes | — | Id of the transfer; null on a dry run. |
+| `operation_key` | string | yes | no | — | — |
+| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `date` | string | yes | no | — | — |
+| `from_customer` | string | yes | no | — | — |
+| `to_customer` | string | yes | no | — | — |
+| `amount` | object | yes | no | — | — |
+| `amount.amount` | string | yes | no | — | — |
+| `amount.currency` | string | yes | no | — | — |
+| `amount.minor_units` | integer | yes | no | — | — |
+| `sources` | array[object] | yes | no | — | The credits drawn on the source, oldest first. |
+| `sources[].type` | literal["credit_memo", "payment"] | yes | no | — | — |
+| `sources[].id` | string | yes | no | — | — |
+| `sources[].number` | string | yes | no | — | — |
+| `sources[].amount` | object | yes | no | — | Credit drawn from this document for the transfer. |
+| `sources[].amount.amount` | string | yes | no | — | — |
+| `sources[].amount.currency` | string | yes | no | — | — |
+| `sources[].amount.minor_units` | integer | yes | no | — | — |
+| `charge` | object | yes | no | — | The charge on the source, paid in full by its credit. |
+| `charge.id` | string \| null | yes | yes | — | — |
+| `charge.number` | string | yes | no | — | — |
+| `charge.type` | literal["invoice", "credit_memo"] | yes | no | — | — |
+| `charge.customer` | string | yes | no | — | — |
+| `charge.amount` | object | yes | no | — | — |
+| `charge.amount.amount` | string | yes | no | — | — |
+| `charge.amount.currency` | string | yes | no | — | — |
+| `charge.amount.minor_units` | integer | yes | no | — | — |
+| `credit_memo` | object | yes | no | — | The credit the target now has. |
+| `credit_memo.id` | string \| null | yes | yes | — | — |
+| `credit_memo.number` | string | yes | no | — | — |
+| `credit_memo.type` | literal["invoice", "credit_memo"] | yes | no | — | — |
+| `credit_memo.customer` | string | yes | no | — | — |
+| `credit_memo.amount` | object | yes | no | — | — |
+| `credit_memo.amount.amount` | string | yes | no | — | — |
+| `credit_memo.amount.currency` | string | yes | no | — | — |
+| `credit_memo.amount.minor_units` | integer | yes | no | — | — |
+| `applied` | array[object] | no | no | [] | Target invoices the moved credit was used on. |
+| `applied[].invoice_id` | string | yes | no | — | — |
+| `applied[].number` | string | yes | no | — | — |
+| `applied[].amount` | object | yes | no | — | — |
+| `applied[].amount.amount` | string | yes | no | — | — |
+| `applied[].amount.currency` | string | yes | no | — | — |
+| `applied[].amount.minor_units` | integer | yes | no | — | — |
+| `applied[].still_due` | object | yes | no | — | — |
+| `applied[].still_due.amount` | string | yes | no | — | — |
+| `applied[].still_due.currency` | string | yes | no | — | — |
+| `applied[].still_due.minor_units` | integer | yes | no | — | — |
+| `clearing_account` | string | yes | no | — | Account both documents post through; it nets to zero. |
+| `facts_fingerprint` | string | yes | no | — | — |
+| `summary` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "amount": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "applied": [],
+  "changed": true,
+  "charge": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "customer": "value",
+    "id": null,
+    "number": "value",
+    "type": "invoice"
+  },
+  "clearing_account": "value",
+  "credit_memo": {
+    "amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "customer": "value",
+    "id": null,
+    "number": "value",
+    "type": "invoice"
+  },
+  "date": "2026-01-01",
+  "dry_run": false,
+  "facts_fingerprint": "value",
+  "from_customer": "value",
+  "idempotent_replay": false,
+  "operation_key": "value",
+  "sources": [],
+  "status": "posted",
+  "summary": "value",
+  "to_customer": "value",
+  "transfer_id": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_CREDIT_UNAVAILABLE` | That credit has already been applied or refunded; it is not worth what was asked for. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PAYMENT_OPERATION_KEY_REUSED` | This permanent operation key belongs to a different original request. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `customer-credit transfer-void`
+
+Undo a credit transfer: the target invoices the moved credit paid are owed again, the source's credit comes off the transfer charge, and the charge invoice and the credit memo are voided at the transfer's own date (so its period must be open). Refused while any of the moved credit was refunded (void the refund first). A reason is required. Voiding a transfer already voided writes nothing.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer-credit.transfer-void` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer-credit transfer-void 01ARZ3NDEKTSV4RRFFQ69G5FAV --reason "Moved to the wrong job" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer-credit transfer-void", "input": {"transfer": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `transfer` | `TRANSFER` | string | yes | no | — | The transfer id `customer-credit transfer` returned (`transfer_id`).; minimum length 1 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer-credit.transfer-void`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `transfer_id` | string | yes | no | — | — |
+| `status` | literal["voided"] | yes | no | — | — |
+| `reopened` | array[object] | no | no | [] | Target invoices the moved credit had paid, owed again. |
+| `reopened[].invoice_id` | string | yes | no | — | — |
+| `reopened[].number` | string | yes | no | — | — |
+| `reopened[].amount` | object | yes | no | — | — |
+| `reopened[].amount.amount` | string | yes | no | — | — |
+| `reopened[].amount.currency` | string | yes | no | — | — |
+| `reopened[].amount.minor_units` | integer | yes | no | — | — |
+| `reopened[].still_due` | object | yes | no | — | — |
+| `reopened[].still_due.amount` | string | yes | no | — | — |
+| `reopened[].still_due.currency` | string | yes | no | — | — |
+| `reopened[].still_due.minor_units` | integer | yes | no | — | — |
+| `summary` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "dry_run": false,
+  "reopened": [],
+  "status": "voided",
+  "summary": "value",
+  "transfer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_DEPENDENCY` | The receipt is claimed by a deposit; an atomic coordinated correction is required. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `customer-credit unapply`
 
 Take a credit application back off an invoice. The invoice owes what it owed before and the credit is worth what it was worth before. The reversal is dated on the original application's own date, never today, so a settlement is undone in the period where it happened -- which means that period has to be open. Name the applications by the ids `customer-credit apply` returned or `credit-memo show` lists.

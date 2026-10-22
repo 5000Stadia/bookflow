@@ -1977,3 +1977,40 @@ MATRIX['report customer-prepayments'] = {
     'E_RECORD_NOT_FOUND': 'unknown customer',
     'E_INTERNAL': 'the Customer Prepayments account differs from what the receipts hold (an unattributed posting)',
 }
+# R148: moving credit between jobs is an invoice, the source credit's applications to it and a credit
+# memo (and its applications) in one transaction, so it can be refused for what any of them can.
+MATRIX['customer-credit transfer'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or job, credit memo, receipt or target invoice',
+    'E_VERSION_CONFLICT': 'stale expected_version on a target invoice in apply_to',
+    'E_VALIDATION': 'the two are the same or not jobs of one customer, the amount is not more than zero, both a credit memo and a receipt are named, a named credit is not the source\'s, an apply_to invoice is not the target\'s or takes more than it owes or than is moved, or the Credit Transfer item or clearing account cannot carry it',
+    'E_VALUE_RANGE': 'an amount outside signed 64-bit minor units',
+    'E_AMOUNT_PRECISION': 'more decimals than the home currency has',
+    'E_REASON_REQUIRED': 'the transfer has no reason, or an agent/system write supplies neither reason nor directive',
+    'E_PERIOD_CLOSED': 'the transfer date is on or before the closing date',
+    'E_PREVIEW_STALE': 'expected_facts_fingerprint no longer matches the books',
+    'E_INACTIVE_REFERENCE': 'the source or target customer or job is inactive',
+    'E_APPLICATION_CAPACITY': 'a step would apply more than a document holds',
+    'E_APPLICATION_INCOMPATIBLE': 'a credit on another receivable account or currency',
+    'E_APPLICATION_INACTIVE': 'the named credit memo or receipt is voided',
+    'E_CREDIT_UNAVAILABLE': 'the source has less credit dated on or before the transfer date than the amount',
+    'E_PAYMENT_OPERATION_KEY_REUSED': 'the operation_key belongs to a transfer between other jobs',
+    'E_DUPLICATE_NUMBER': 'a document number is already used',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['customer-credit transfer-void'] = {
+    'E_RECORD_NOT_FOUND': 'unknown transfer id',
+    'E_VERSION_CONFLICT': 'a document of the transfer changed while it was being voided',
+    'E_VALIDATION': 'a document of the transfer cannot be voided as it stands',
+    'E_REASON_REQUIRED': 'the void has no reason, or an agent/system write supplies neither reason nor directive',
+    'E_PERIOD_CLOSED': 'the transfer, or a use of the moved credit, is dated on or before the closing date',
+    'E_PREVIEW_STALE': 'the transfer\'s documents changed between preview and write',
+    'E_HAS_REFUND': 'part of the moved credit was refunded to the customer; void that refund first',
+    'E_HAS_APPLICATIONS': 'something still stands on the charge invoice or the credit memo',
+    'E_APPLICATION_INACTIVE': 'a document of the transfer is already voided',
+    'E_DEPOSIT_DEPENDENCY': 'a receipt the transfer drew on is held by a deposit change',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}

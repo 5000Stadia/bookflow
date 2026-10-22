@@ -112,13 +112,13 @@ Required follow-ups remain required under the active project goal.
 | CP09 | Paged invoice date/job/number/original/applied/due/payment grid and complete preview. Discount/credit-memo/aging columns depend on their owning increments. |
 | CP10 | Independent automatic-application preference plus explicit matching/oldest suggestions; draft preparation precedes preview/save. |
 | CP11 | Explicit partial per-invoice amounts; unapplied remainder is permitted. |
-| CP12 | Remaining invoice due stays open until paid or written off: a bad debt is written off with a receipt of 0.00 (see Bad-debt write-offs). |
+| CP12 | Underpayment: left open by default, or `underpayment` "write_off" takes each paid invoice's short part to `discount_account` with `discount_class` in the same receipt; a bad debt is written off with a receipt of 0.00 (see Short payments and overpayments, Bad-debt write-offs). |
 | CP13 | Unapplied cash remains payer-owned credit, and `customer-refund post` sends it back: name the receipt as a `payment` source and the refund debits Accounts Receivable, credits the funding account, and consumes that overage so it stops reporting as available. |
 | CP14 | Explicit immutable unapply and same-party reapply; no mutation of old applications. |
 | CP15–CP16 | Available payment credit can partially settle exact-party invoices. Unified credit-source selection and credit memos remain required follow-ups. |
 | CP17 | Credit memo document, corrections and application are a required sales-credit increment. |
 | CP18 | Refund/check/provider execution is a required dependent increment. |
-| CP19 | Existing cross-job credit transfer requires its own explicit balanced operation; new family receipt never implicitly transfers old credit. |
+| CP19 | `customer-credit transfer` moves existing credit between jobs of one customer as an explicit balanced pair (charge paid by the source's credit, credit memo on the target, through a clearing account); a new family receipt never implicitly transfers old credit. |
 | CP20 | Existing captured terms facts remain readable on invoices; no fabricated discount settlement. |
 | CP21 | Typed discount account/class, eligibility and settlement are required follow-up work. |
 | CP22 | Explicit unapply/void for wrong-payer correction; banking/deposit correction is a dependency. D104 Delete ships as `payment delete`: an explicit family grant separate from `ledger.post`, immutable history and number retention, and balanced cancellation of the cash and receivable postings at their original dates. |
@@ -229,6 +229,45 @@ that is waived a discount account such as Sales Discounts; it is never defaulted
   not corrected in place.
 - A write-off an agent made is listed on `report entries-to-review` as `write_off`, and the
   agent's result warns that it will be.
+
+## Short payments and overpayments
+
+The anchor's Receive Payments asks what to do when the cash does not match the invoices it pays.
+`payment receive` answers the same two questions.
+
+- **Underpayment** (cash less than the invoices it pays). `underpayment` "leave_open" (the default,
+  "Leave this as an underpayment"): each invoice keeps what it still owes, and `summary.underpayment`
+  gives the amount with `next`, the 0.00 receipt that writes it off later. `underpayment`
+  "write_off" ("Write off the extra amount"): every invoice the receipt gives cash to is settled in
+  full, the short part taken as a discount to `discount_account` (required; an expense account such
+  as Bad Debt, or a discount account) with `discount_class` as its class, in the same receipt. It is
+  the bad-debt mechanism with cash beside it: no early-payment terms warning, sales tax unchanged,
+  cash basis counts it as payment, a correction keeps it and its class, `payment unapply` and
+  `payment void` reverse it, and an agent's is listed on `report entries-to-review`.
+- **Overpayment** (cash more than the invoices). It stays as the customer's credit ("Leave the credit
+  to be used later"), and `summary.overpayment.next` is the `customer-refund post` that pays it back
+  ("Refund the amount to the customer").
+
+The Receive Payments window shows both choices after a preview finds a short or extra amount;
+choosing Refund opens the refund window on the saved receipt.
+
+## Moving a credit between jobs
+
+The anchor has no ready-made transfer; its guides move a job's credit with a pair of entries
+through a clearing account. `customer-credit transfer` writes that pair as documents in one step:
+an invoice on the source for the amount, paid at once by the source's own credit (its credit memos
+and unapplied receipts oldest first, or the `credit_memo` or `payment` named), and a credit memo on
+the target, both on the Credit Transfer item posting to the Credit Transfer Clearing account (an
+other current asset set up on first use; it nets to zero). Accounts Receivable moves from one job
+to the other and nothing else changes, on either basis. `apply_to` uses the moved credit on the
+target's invoices at once; otherwise apply the credit memo later with `customer-credit apply`.
+Source and target are jobs of one customer, or the customer and one of its jobs. The transfer is
+dated on or after the credit it draws on, in an open period; a reason is required.
+
+`customer-credit transfer-void` takes it back: the target invoices the moved credit paid are owed
+again, the source's credit comes off the charge, and both documents are voided at the transfer's
+date. It is refused while any of the moved credit was refunded. Asking again with a transfer's
+`operation_key` returns it unchanged; voiding a voided transfer writes nothing.
 
 ## A customer's check comes back
 

@@ -170,6 +170,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/customer_addresses`](schema/company/customer_addresses.md)
 - [`company/customer_contact_points`](schema/company/customer_contact_points.md)
 - [`company/customer_contacts`](schema/company/customer_contacts.md)
+- [`company/customer_credit_transfers`](schema/company/customer_credit_transfers.md)
 - [`company/customer_messages`](schema/company/customer_messages.md)
 - [`company/customer_refund_consumptions`](schema/company/customer_refund_consumptions.md)
 - [`company/customer_refund_profiles`](schema/company/customer_refund_profiles.md)
