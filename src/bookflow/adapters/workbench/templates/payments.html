@@ -28,6 +28,15 @@
 <label>Memo<textarea id="payment-memo" maxlength="2000"></textarea></label>
 <label id="payment-discount-account-label">Discount account (a bad-debt expense account for a write-off)<input id="payment-discount-account" maxlength="200" placeholder="Company discount account" autocomplete="off"></label>
 </div>
+<fieldset id="payment-underpayment" data-underpayment hidden><legend>Underpayment <span id="payment-underpayment-amount"></span></legend>
+<label style="display:block"><input type="radio" name="payment-underpayment" id="payment-underpayment-open" value="leave_open" checked> Leave this as an underpayment</label>
+<label style="display:block"><input type="radio" name="payment-underpayment" id="payment-underpayment-write-off" value="write_off"> Write off the extra amount (to the discount account above, such as Bad Debt)</label>
+<label style="display:block">Class for the write-off<input id="payment-discount-class" maxlength="200" placeholder="No class" autocomplete="off"></label>
+</fieldset>
+<fieldset id="payment-overpayment" data-overpayment hidden><legend>Overpayment <span id="payment-overpayment-amount"></span></legend>
+<label style="display:block"><input type="radio" name="payment-overpayment" id="payment-overpayment-credit" value="credit" checked> Leave the credit to be used later</label>
+<label style="display:block"><input type="radio" name="payment-overpayment" id="payment-overpayment-refund" value="refund"> Refund the amount to the customer (the refund window opens after saving)</label>
+</fieldset>
 <div id="payment-custom" class="payment-grid"></div>
 <button type="button" id="payment-load">Use this customer and date</button>
 </fieldset>

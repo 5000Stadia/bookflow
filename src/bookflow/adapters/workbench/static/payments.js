@@ -328,6 +328,11 @@
         ...(versions.has(invoice)?{expected_version:versions.get(invoice)}:{})}));
       if(taken.length) input.discounts=taken;
       if($('discount-account').value.trim()) input.discount_account=$('discount-account').value.trim();
+      // The anchor's Underpayment choice: shown once a preview finds the cash short.
+      if(!$('underpayment').hidden&&$('underpayment-write-off').checked) {
+        input.underpayment='write_off';
+        if($('discount-class').value.trim()) input.discount_class=$('discount-class').value.trim();
+      }
     }
     else Object.assign(input,{payment:payment.id,expected_version:payment.version});
     if(mode==='apply') Object.assign(input,{date:$('date').value,applications:selectionRef()});
@@ -386,6 +391,13 @@
     for(const warning of preview.out.warnings||[]) {const p=el('p',warning);p.className='warn';p.setAttribute('data-payment-warning','');area.append(p);}
     // The command's own summary line: invoices paid, what each still owes, credit left, discounts.
     if(preview.out.summary) {const p=el('p',preview.out.summary.text);p.setAttribute('data-payment-summary','');area.append(p);}
+    // The anchor's Underpayment and Overpayment boxes: the command says which applies and how much.
+    if(mode==='receive') {
+      const under=preview.out.summary?.underpayment, over=preview.out.summary?.overpayment;
+      $('underpayment').hidden=!under;$('overpayment').hidden=!over;
+      if(under) $('underpayment-amount').textContent=shown(under.amount);
+      if(over) $('overpayment-amount').textContent=shown(over.amount);
+    }
     area.append(el('p',`Received ${cash(preview.out.current.received_minor_units)}; applied ${cash(preview.out.current.applied_minor_units)}; available ${cash(preview.out.current.available_minor_units)}.`));
     // A 0.00 receipt that takes discounts writes the balance off: nothing is deposited, so say where it went.
     const writeOff=mode==='receive'&&preview.out.current.received_minor_units===0&&preview.out.current.discount_minor_units>0;
@@ -423,6 +435,9 @@
         $('amount').value='';$('memo').value='';$('reference').value='';$('number').value='';
         const url=new URL(location.href);url.search='';history.replaceState(null,'',url);await drawCustom();await loadInvoices();
         note('Payment '+payment.number+' saved. '+(out.summary?out.summary.text+' ':'')+'New blank payment started; customer/date/method/destination retained.');
+      } else if(performed==='payment receive'&&out.summary?.overpayment&&!$('overpayment').hidden&&$('overpayment-refund').checked) {
+        // "Refund the amount to the customer": the refund window opens on this receipt's overpayment.
+        location.href=`/c/${config.company}/customer-refund/post?payment=${encodeURIComponent(out.id)}`;
       } else {mode='show';await drawRecord(payment);note(out.idempotent_replay?'Recovered original payment. No new financial effect.':
         performed==='payment delete'?'Payment deleted. Its history is retained and readable below.':'Payment saved successfully.'+(out.summary?' '+out.summary.text:''));}
     } catch(err) {
@@ -784,6 +799,7 @@
   function syncWriteOff() {
     const zero=isWriteOff();
     $('discount-account-label').hidden=mode!=='receive';
+    if(mode!=='receive') {$('underpayment').hidden=true;$('overpayment').hidden=true;}
     if(mode==='receive') {$('reason-label').hidden=!zero;$('reason').required=zero;}
   }
   for(const event of ['input','change']) $('amount').addEventListener(event,syncWriteOff);
@@ -870,7 +886,7 @@
     customerPending=true;invalidate();$('balances').hidden=true;$('invoices').replaceChildren();
     note('Choose a matching customer. The previous preview cannot be saved; any prior shared selection remains in Saved selections.');
   });
-  for(const id of ['number','method','destination','memo','reference','reason','date','ar']) $(id).addEventListener('change',invalidate);
+  for(const id of ['number','method','destination','memo','reference','reason','date','ar','underpayment-open','underpayment-write-off','discount-class','discount-account']) $(id).addEventListener('change',invalidate);
   $('method').addEventListener('change',()=>{methodFromCustomer=false;});
   $('more').addEventListener('click',()=>perform(async()=>loadInvoices(nextCursor)));
   $('auto').addEventListener('click',()=>perform(autoApply));$('calculate').addEventListener('click',()=>perform(calculate));

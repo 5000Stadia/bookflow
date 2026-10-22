@@ -8,6 +8,8 @@ decides accounting.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from bookflow.company.journal_outputs import JournalMoneyOutput
@@ -33,6 +35,31 @@ class SettledDocument(StrictModel):
     paid_in_full: bool
 
 
+class NextStep(StrictModel):
+    command: str
+    input: dict = Field(description='The input to give it; replace each <...> placeholder.')
+
+
+class Underpayment(StrictModel):
+    """The anchor's Underpayment box: cash short of the invoices it pays, and which choice was taken."""
+    amount: JournalMoneyOutput
+    choice: Literal['left_open', 'written_off'] = Field(description=(
+        '"left_open": the invoices still owe it ("Leave this as an underpayment"). '
+        '"written_off": it went to `account` ("Write off the extra amount").'))
+    account: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    text: str
+    next: NextStep | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'For "left_open": the 0.00 receipt that writes it off later, as the anchor\'s bad-debt write-off.'))
+
+
+class Overpayment(StrictModel):
+    """The anchor's Overpayment box: cash beyond the invoices it pays, left as the customer's credit."""
+    amount: JournalMoneyOutput
+    choice: Literal['left_as_credit']
+    text: str
+    next: NextStep = Field(description='The refund that pays it back instead ("Refund the amount to the customer").')
+
+
 class PaymentSummary(StrictModel):
     text: str = Field(description='One plain paragraph: documents paid, what each still owes, credit left, discounts.')
     documents: list[SettledDocument] = Field(description=f'The documents this write settled, at most {LISTED}.')
@@ -44,6 +71,10 @@ class PaymentSummary(StrictModel):
         'Absent for a bill payment.'))
     discount: JournalMoneyOutput | None = Field(default=None, exclude_if=lambda v: v is None,
                                                 description='Early-payment discounts taken in total.')
+    underpayment: Underpayment | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'A customer receipt whose cash left an invoice it paid partly due, or whose shortfall was written off.'))
+    overpayment: Overpayment | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'A customer receipt with cash no invoice took: left as credit, with the refund that sends it back.'))
 
 
 def _names(rows, limit=NAMED):
@@ -51,7 +82,8 @@ def _names(rows, limit=NAMED):
     return ', '.join(shown) + (f' and {len(rows) - limit} more' if len(rows) > limit else '')
 
 
-def summarize(rows, currency, *, opening, credit=None, party_label=None, discount_label='Early-payment discount taken') -> PaymentSummary:
+def summarize(rows, currency, *, opening, credit=None, party_label=None, discount_label='Early-payment discount taken',
+              written_off=0) -> PaymentSummary:
     """``rows``: dicts of document_id, document_type, number, applied, discount, still_due (minor units).
 
     ``opening`` is the sentence that starts the paragraph, e.g. "Received 150.00 USD from Jones."
@@ -74,8 +106,9 @@ def summarize(rows, currency, *, opening, credit=None, party_label=None, discoun
         words.append(f'{len(owing) - NAMED} more {plural(len(owing) - NAMED)} still partly due.')
     if not rows:
         words.append('Nothing was applied to any document.')
-    if discount:
-        words.append(f'{discount_label}: {money(discount)}.')
+    # An underpayment written off is carried as a discount but said in its own sentence.
+    if discount - written_off:
+        words.append(f'{discount_label}: {money(discount - written_off)}.')
     if credit is not None:
         words.append(f'{money(credit)} left as credit' + (f' for {party_label}' if party_label else '') + '.'
                      if credit else 'Nothing left as credit.')

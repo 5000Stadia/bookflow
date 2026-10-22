@@ -160,12 +160,12 @@ def prepare_effect(s, ctx, inp, provenance):
         if payer_key is not None:
             capacities[payer_key] = payer_capacity
         old_components = {row['component_key_id']: row for row in funding['components']}
-        def leg(account, units, debit, party, position):
+        def leg(account, units, debit, party, position, klass=(None, None)):
             row = dict(**created(), transaction_id=old['id'], batch_id=batch['id'], line_no=position,
                 account_id=account.id, account_snapshot=query.canonical(account.model_dump()),
                 debit_minor_units=units if debit else 0, credit_minor_units=0 if debit else units,
                 currency=prior['currency'], name_type='customer', name_id=party['id'], party_name=party['label'],
-                class_id=None, class_name=None, description=memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
+                class_id=klass[0], class_name=klass[1], description=memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
             pending['posting_lines'].append(row)
             return row
         cash = leg(profile.deposit_account, amount, True, profile.payer.model_dump(), 1)
@@ -177,8 +177,13 @@ def prepare_effect(s, ctx, inp, provenance):
             captured = json.loads(old_components[key_id]['component_snapshot'])
             account = defaults._account(s.company, taken[0]['discount_account_id'], 'discount_account',
                                         early.DISCOUNT_ACCOUNT_TYPES)
+            # The class a discount or write-off was posted with stays with it (`discount_class`).
+            pl = c.posting_lines
+            klass = s.company.conn.execute(sa.select(pl.c.class_id, pl.c.class_name).where(
+                pl.c.transaction_id == old['id'], pl.c.account_id == account.id, pl.c.debit_minor_units > 0,
+                pl.c.name_id == captured['party']['id'], pl.c.class_id.is_not(None)).order_by(pl.c.created_at.desc())).first()
             discount_legs[key_id] = leg(account, discounted[key_id], True, captured['party'],
-                                        len(live_keys) + 2 + position)
+                                        len(live_keys) + 2 + position, tuple(klass) if klass else (None, None))
         new_components, sources = {}, {}
         for key_id, key in sorted(keys.items(), key=lambda pair: (pair[1]['party_id'], pair[0])):
             capacity = capacities.get(key_id, 0)

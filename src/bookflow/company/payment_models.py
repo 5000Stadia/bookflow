@@ -190,7 +190,19 @@ class PaymentReceiveInput(StrictModel):
         'Account debited for the discounts; defaults to the company customer discount account, '
         'else an active account named "Discounts Given"; with none of these the receipt is refused '
         'and the error lists the discount accounts in the chart (nothing is created). '
-        'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt.'))
+        'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt, '
+        'and for underpayment "write_off".'))
+    underpayment: Literal['leave_open', 'write_off'] = Field(default='leave_open', description=(
+        'What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. '
+        '"leave_open" (the default): each invoice keeps what it still owes, and the result\'s '
+        '`summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra '
+        'amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay '
+        'taken as a discount to `discount_account` (required; an expense account such as Bad Debt, or a discount '
+        'account) with `discount_class` if given. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", '
+        'applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, '
+        'underpayment "write_off", discount_account "Bad Debt".'))
+    discount_class: Selector | None = Field(default=None, description=(
+        'Class on the discount or write-off posting (the anchor\'s Write Off Amount asks for an account and a class).'))
     payment_method: Selector | None = None
     ar_account: Selector | None = None
     deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')
@@ -206,6 +218,8 @@ class PaymentReceiveInput(StrictModel):
         invoices = [row.invoice for row in self.discounts]
         if len(set(invoices)) != len(invoices):
             raise ValueError('name each discounted invoice once')
+        if self.discount_class is not None and not self.discounts and self.underpayment != 'write_off':
+            raise ValueError('discount_class is the class of a discount or write-off; this receipt takes none')
         return self
 
 

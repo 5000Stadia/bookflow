@@ -317,6 +317,64 @@ def _discounts(s, inp, targets, currency, context_):
     return targets
 
 
+def _write_off_short(inp, targets, currency):
+    """The anchor's "Write off the extra amount": what each paid invoice still owes becomes a discount.
+
+    Only invoices this receipt gives cash to are short-paid; an invoice named in ``discounts`` alone
+    is settled as listed. The written-off part joins any discount listed for the same invoice, on the
+    same edge, so the invoice is paid in full by cash plus discount and every reader sees it paid.
+    """
+    if inp.discount_account is None:
+        raise _invalid('discount_account', 'writing off an underpayment names the account it goes to: an expense '
+                       'account such as Bad Debt, or a discount account such as Sales Discounts')
+    short = 0
+    for target in targets:
+        if not target['amount']:
+            continue
+        remainder = target['facts']['due'] - target['amount'] - target['discount']
+        if remainder > 0:
+            target['discount'] += remainder
+            target['short_written_off'] = remainder
+            short += remainder
+    if not short:
+        raise _invalid('underpayment', 'nothing is short: the cash and discounts pay every invoice this receipt applies '
+                       'to in full; leave underpayment out (the default "leave_open")')
+    return short
+
+
+def _short_and_over(inp, settled, available, currency, payment_id, discount_account):
+    """The anchor's Underpayment and Overpayment boxes, each with the choice made and the other one."""
+    from bookflow.company.payment_summaries import Overpayment, Underpayment
+    plain = lambda units: Money(units, currency).to_dict()['amount']
+    written = [row for row in settled if row.get('short_written_off')]
+    owing = [row for row in settled if row['applied'] and row['still_due'] > 0]
+    under = None
+    if written:
+        units = sum(row['short_written_off'] for row in written)
+        under = Underpayment(amount=Money(units, currency).to_dict(), choice='written_off',
+            account=discount_account.full_name,
+            text=f"Underpayment of {Money(units, currency)} written off to {discount_account.full_name}.")
+    elif owing:
+        units = sum(row['still_due'] for row in owing)
+        rows = [dict(invoice=row['document_id'], amount=plain(row['still_due']), expected_version=row['version'])
+                for row in owing]
+        under = Underpayment(amount=Money(units, currency).to_dict(), choice='left_open', text=(
+            f"Underpayment of {Money(units, currency)} left open on "
+            + ', '.join(row['number'] for row in owing[:10]) + (' and more' if len(owing) > 10 else '')
+            + '. To write it off instead, run `next` with the account it goes to (an expense account such as Bad Debt).'),
+            next=dict(command='payment receive', input=dict(customer=inp.customer, date=inp.date, amount='0.00',
+                discounts=rows, discount_account='<account, e.g. Bad Debt>', operation_key='<new key>')))
+    over = None
+    if available > 0:
+        over = Overpayment(amount=Money(available, currency).to_dict(), choice='left_as_credit', text=(
+            f"Overpayment of {Money(available, currency)} left as credit to use later. To refund it to the customer "
+            'instead, run `next` with the account the money leaves and the method.'),
+            next=dict(command='customer-refund post', input=dict(date=inp.date,
+                sources=[dict(payment=payment_id, amount=plain(available))],
+                funding_account='<bank account>', method='<payment method>')))
+    return under, over
+
+
 def _method_names(s):
     """The active payment methods by name, for an error that has to say which ones there are."""
     table = c.payment_methods
@@ -478,11 +536,14 @@ def _prepare(s, ctx, inp, operation):
         targets, selected = _applications(s, inp, context_, amount=amount)
         _capacity('source', sum(row['amount'] for row in targets), amount, context_['currency'], context_['customer_id'])
         targets = _discounts(s, inp, targets, context_['currency'], context_)
+        if inp.underpayment == 'write_off':
+            _write_off_short(inp, targets, context_['currency'])
         discounted = sum(row['discount'] for row in targets)
         discount_account = account_mutation = None
         if discounted:
             facts_, account_mutation = early.resolve_account(s, ctx, 'customer', inp.discount_account, at=at)
             discount_account = defaults.Account(**facts_)
+        klass = defaults._row(s.company, 'class_id', inp.discount_class) if inp.discount_class is not None else None
         # A discount is capacity beside the cash: the component of the invoice's customer carries
         # both, which is what lets every open-balance reader settle the invoice unchanged.
         components = calc.receipt_components(context_['customer_id'], amount + discounted,
@@ -519,12 +580,13 @@ def _prepare(s, ctx, inp, operation):
         batch = dict(**audited(), transaction_id=header['id'], revision_id=revision['id'], kind='original', effective_date=inp.date,
                      reverses_batch_id=None, replaces_batch_id=None)
         pending['posting_batches'].append(batch)
-        def leg(account, units, debit, party, line_no):
+        def leg(account, units, debit, party, line_no, klass=None):
             value = dict(**created(), transaction_id=header['id'], batch_id=batch['id'], line_no=line_no,
                 account_id=account.id, account_snapshot=query.canonical(account.model_dump()),
                 debit_minor_units=units if debit else 0, credit_minor_units=0 if debit else units,
                 currency=context_['currency'], name_type='customer', name_id=party['id'], party_name=party['full_name'],
-                class_id=None, class_name=None, description=inp.memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
+                class_id=klass['id'] if klass else None, class_name=(klass.get('full_name') or klass.get('name')) if klass else None,
+                description=inp.memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
             pending['posting_lines'].append(value)
             return value
         payer = customer(context_['customer_id'])
@@ -535,7 +597,7 @@ def _prepare(s, ctx, inp, operation):
         keys, component_rows, source_rows = {}, {}, {}
         # One discount debit per customer whose invoice took one, after the receivable credits.
         discount_legs = {party_id: leg(discount_account, units, True, customer(party_id),
-                                       len(components) + first + position)
+                                       len(components) + first + position, klass)
                          for position, (party_id, units) in enumerate(sorted(party_discounts.items()))}
         for position, (party_id, capacity) in enumerate(sorted(components.items()), first):
             party = customer(party_id)
@@ -613,7 +675,7 @@ def _prepare(s, ctx, inp, operation):
         changed_headers.append((invoice, changed))
         discount_view = {}
         # A write-off is not an early-payment discount: no terms suggestion beside it.
-        if not write_off and target['terms'] is not None and (target['terms'].percent_millionths is not None or target['discount']):
+        if not write_off and not target.get('short_written_off') and target['terms'] is not None and (target['terms'].percent_millionths is not None or target['discount']):
             discount_view = dict(suggested_discount=Money(target['suggested'], context_['currency']).to_dict(),
                                  discount_date=target['terms'].discount_date)
         if target['discount']:
@@ -626,14 +688,15 @@ def _prepare(s, ctx, inp, operation):
             discount_view['discount'] = Money(target['discount'], context_['currency']).to_dict()
             # A write-off's "discount" is the debt written off, not an early-payment discount,
             # so whether the terms offered one is beside the point.
-            late = None if write_off else early.late_warning(invoice['type'].replace('_', ' '), invoice['number'], terms, inp.date)
+            late = None if write_off or target.get('short_written_off') else early.late_warning(invoice['type'].replace('_', ' '), invoice['number'], terms, inp.date)
             if late:
                 warnings.append(late)
         app_outputs.append(dict(application_id=app['id'], invoice_id=invoice['id'], invoice_version=changed['version'],
             source_component_key_id=keys[party]['id'], party_id=party, amount=Money(units, context_['currency']).to_dict(), effective_date=inp.date,
             **discount_view))
         settled.append(dict(document_id=invoice['id'], document_type=invoice['type'], number=invoice['number'],
-            applied=target['amount'], discount=target['discount'], still_due=facts['due'] - units))
+            applied=target['amount'], discount=target['discount'], still_due=facts['due'] - units,
+            version=changed['version'], short_written_off=target.get('short_written_off', 0)))
         changes.append(dict(invoice_id=invoice['id'], version=changed['version'], revision_id=invoice_revision['id'],
             gross_minor_units=facts['gross'], applied_minor_units=facts['applied'] + units, due_minor_units=facts['due'] - units,
             currency=context_['currency'], status='paid' if facts['due'] == units else 'partial'))
@@ -697,8 +760,14 @@ def _prepare(s, ctx, inp, operation):
     elif operation == 'receive':
         opening += ' ' + _where_the_money_went(s, profile.deposit_account)
     summary = summarize(settled, context_['currency'], opening=opening, credit=current['available_minor_units'],
-                        party_label=payer_label,
+                        party_label=payer_label, written_off=sum(row.get('short_written_off', 0) for row in settled),
                         **({'discount_label': 'Written off'} if operation == 'receive' and not revision['total_minor_units'] else {}))
+    if operation == 'receive' and revision['total_minor_units']:
+        under, over = _short_and_over(inp, settled, current['available_minor_units'], context_['currency'],
+                                      header['id'], discount_account)
+        if under or over:
+            summary = summary.model_copy(update=dict(underpayment=under, overpayment=over,
+                text=' '.join([summary.text] + [part.text for part in (under, over) if part])))
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
         facts_fingerprint=fp, effect=effect, current=current, summary=summary,
         warnings=(repeated + warnings) if operation == 'receive' else [],
