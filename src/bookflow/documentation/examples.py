@@ -1195,3 +1195,24 @@ EXAMPLES["vendor-credit refund"] = Example(
     ' --reason "Acme sent a refund check for our return" --json',
     {"credit": ID, "deposit_to": "Checking", "date": "2026-05-20", "amount": "120.00",
      "payment_method": "Check", "check_number": "8812"})
+# R103: build finished assemblies from their components; run with --dry-run first to see max_buildable.
+EXAMPLES["assembly build"] = Example(
+    'bookflow assembly build --item "Two-Valve Kit" --quantity 2 --date 2026-07-31 --reason "Built two kits today"'
+    ' --company "Demo Plumbing Co" --json', {"item": "Two-Valve Kit", "quantity": "2", "date": "2026-07-31"})
+EXAMPLES["assembly update"] = Example(
+    'bookflow assembly update 01JASSEMBLYBUILD0000000001 --quantity 3 --reason "Three, not two"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001", "quantity": "3"})
+EXAMPLES["assembly finalize"] = Example(
+    'bookflow assembly finalize 01JASSEMBLYBUILD0000000001 --reason "Valves arrived"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly void"] = Example(
+    'bookflow assembly void 01JASSEMBLYBUILD0000000001 --reason "Entered twice"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly delete"] = Example(
+    'bookflow assembly delete 01JASSEMBLYBUILD0000000001 --reason "Not building these after all"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly show"] = Example(
+    'bookflow assembly show 01JASSEMBLYBUILD0000000001 --company "Demo Plumbing Co" --json',
+    {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly list"] = Example(
+    'bookflow assembly list --status pending --company "Demo Plumbing Co" --json', {"status": "pending"})

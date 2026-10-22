@@ -47,7 +47,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 item convert (R154).
     # +1 finance-charge assess (R120).
     # +1 vendor-credit refund (R149: a vendor's refund check for an open credit).
-    assert len(rows) == 534
+    # +7 assembly build, update, finalize, void, delete, show and list (R103).
+    assert len(rows) == 541
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -235,7 +236,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3002 -> 3013 (R149): vendor-credit refund is new with 7 (its optional expected_version, amount, number, memo,
     # check_number and payment_method); vendor-credit apply and unapply gain 4 between them (the refund-deposit
     # rows' optional amount and expected_version, and unapply's optional deposits). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3013
+    # 3013 -> 3024 (R103 assembly builds), measured: 11 null branches -- build's memo; update's expected_version,
+    # quantity, date and memo; finalize's expected_version and date; void's and delete's expected_version; list's
+    # status and item. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3024
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

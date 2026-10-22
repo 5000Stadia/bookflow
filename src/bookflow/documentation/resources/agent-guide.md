@@ -677,6 +677,27 @@ owner which item and why, and suggest `--dry-run` to see the accounts it will ca
 posted changes; stock starts at 0 on the conversion date and is counted with `inventory adjust`.
 After a conversion, no stock line for that item may be dated before the conversion date.
 
+## We built 5 water heater kits today
+
+A finished item made from parts is an inventory assembly; record the work with `assembly build`.
+Preview it first: the dry run lists each component with what one kit needs, what is on hand that
+day and what pending builds hold, and `max_buildable`, the most the parts allow.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "assembly build", "reason": "Owner: we built 5 water heater kits today",
+ "input": {"item": "Water Heater Kit", "quantity": "5", "date": "2026-07-14"}}
+```
+
+The parts leave stock at their average cost and the kits arrive at the sum; a service or other
+non-stock part on the bill of materials adds its purchase cost. A component that is itself an
+assembly is taken from stock, never built for you: build it first. More than the parts allow is
+refused with the shortages and `max_buildable`; if the owner wants the build held until parts
+arrive, send `"pending": true` (nothing posts, the parts are reserved) and later `assembly finalize
+BUILD`. `assembly list --status pending` is the pending builds report. Correct a build with
+`assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
+use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

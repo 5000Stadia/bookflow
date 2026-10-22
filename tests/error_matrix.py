@@ -1873,3 +1873,36 @@ MATRIX['vendor-credit refund'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+# Assembly builds (R103): an assembly built from its components, posted, pending, edited, voided or deleted.
+_BUILD_COMMON = {
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+}
+MATRIX['assembly build'] = {
+    'E_RECORD_NOT_FOUND': 'unknown assembly item',
+    'E_INACTIVE_REFERENCE': 'the assembly item is inactive',
+    'E_VALIDATION': 'not an inventory assembly, no bill of materials, a quantity not above zero, components short of the build without pending, a component on hand at no cost, or a change that leaves a later build short',
+    'E_VALUE_RANGE': 'a quantity or cost outside signed 64-bit storage',
+    'E_PERIOD_CLOSED': 'the build date or a correction date falls in a closed period',
+    **_BUILD_COMMON,
+}
+for _verb, _extra in (('update', 'a deleted or voided build, or components short of the new quantity'),
+                      ('finalize', 'a build that is not pending, or components still short'),
+                      ('void', 'a build that is not built (a pending build is deleted instead)'),
+                      ('delete', 'a build already deleted')):
+    MATRIX['assembly ' + _verb] = {
+        'E_RECORD_NOT_FOUND': 'no build with that id or journal number',
+        'E_INACTIVE_REFERENCE': 'the assembly item is inactive',
+        'E_VALIDATION': _extra,
+        'E_VALUE_RANGE': 'a quantity or cost outside signed 64-bit storage',
+        'E_PERIOD_CLOSED': 'the build date, old or new, or a correction date falls in a closed period',
+        'E_VERSION_CONFLICT': 'stale expected_version',
+        **_BUILD_COMMON,
+    }
+MATRIX['assembly show'] = {'E_RECORD_NOT_FOUND': 'no build with that id or journal number'}
+MATRIX['assembly list'] = {
+    'E_RECORD_NOT_FOUND': 'unknown item filter',
+    'E_VALIDATION': 'bad status or limit',
+}
