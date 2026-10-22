@@ -220,7 +220,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2967 -> 2969 (fix batch 5), measured per command: cutover plan 6 -> 8, the null branches of its new optional
     # limit and cursor (a long plan read in pages; it now takes CutoverPlanInput). cutover apply stays at 6, journal
     # post at 10 (a journal line's account gains a description, not a node). No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2969
+    # 2969 -> 2977 (R154), measured: item convert, a new command, 8 nodes -- the null branches of its optional
+    # date, cogs_account, asset_account, income_account, description, purchase_description, price and cost.
+    # No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2977
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
