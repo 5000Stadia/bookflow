@@ -7,7 +7,7 @@ deducts "Quantity reserved for Pending Builds" when that setting is chosen. One 
 from alembic import op
 
 revision = 'co0082'
-down_revision = 'co0079'
+down_revision = 'co0081'
 branch_labels = depends_on = None
 DDL = ("ALTER TABLE company_info ADD COLUMN available_deducts_pending_builds BOOLEAN DEFAULT '1' NOT NULL",)
 

@@ -426,7 +426,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order", "mileage"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -1247,7 +1247,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order", "mileage"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -2132,7 +2132,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order", "mileage"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -3794,6 +3794,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
+| `settlement.effect.applications[].write_off` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].write_off.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].write_off.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].write_off.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -3919,6 +3923,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else an active account named "Discounts Given"; with none of these the receipt is refused and the error lists the discount accounts in the chart (nothing is created). Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.underpayment` | literal["leave_open", "write_off"] | no | no | "leave_open" | What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. "leave_open" (the default): each invoice keeps what it still owes, and the result's `summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay (after any early-payment discount listed) going to `write_off_account` (required; an expense account such as Bad Debt, or a discount account) with `write_off_class` if given. An early-payment discount on the same invoice still goes to `discount_account`. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, underpayment "write_off", write_off_account "Bad Debt". Unapplying the invoice later takes the write-off back with it. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.write_off_account` | string \| null | no | yes | null | Account the underpayment is written off to, for underpayment "write_off": an expense account such as Bad Debt, or a discount account (the anchor's Write Off Amount asks for the account and a class). Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.write_off_class` | string \| null | no | yes | null | Class on the underpayment write-off posting. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_class` | string \| null | no | yes | null | Class on the early-payment discount (or 0.00 write-off) posting. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -3999,7 +4007,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "mileage", "sales_order"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -4853,7 +4861,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
-| `items[].kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `items[].kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order", "mileage"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].status` | string | yes | no | — | — |
 | `items[].active` | boolean | yes | no | — | — |
@@ -5666,6 +5674,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
 | `settlement.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.applications[].discount_date` | string \| null | no | yes | null | — |
+| `settlement.effect.applications[].write_off` | object \| null | no | yes | null | — |
+| `settlement.effect.applications[].write_off.amount` | string | yes | no | — | — |
+| `settlement.effect.applications[].write_off.currency` | string | yes | no | — | — |
+| `settlement.effect.applications[].write_off.minor_units` | integer | yes | no | — | — |
 | `settlement.effect.allocations` | array[object] | yes | no | — | — |
 | `settlement.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `settlement.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -5791,6 +5803,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else an active account named "Discounts Given"; with none of these the receipt is refused and the error lists the discount accounts in the chart (nothing is created). Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.underpayment` | literal["leave_open", "write_off"] | no | no | "leave_open" | What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. "leave_open" (the default): each invoice keeps what it still owes, and the result's `summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay (after any early-payment discount listed) going to `write_off_account` (required; an expense account such as Bad Debt, or a discount account) with `write_off_class` if given. An early-payment discount on the same invoice still goes to `discount_account`. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, underpayment "write_off", write_off_account "Bad Debt". Unapplying the invoice later takes the write-off back with it. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.write_off_account` | string \| null | no | yes | null | Account the underpayment is written off to, for underpayment "write_off": an expense account such as Bad Debt, or a discount account (the anchor's Write Off Amount asks for the account and a class). Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.write_off_class` | string \| null | no | yes | null | Class on the underpayment write-off posting. Present in ReceivePreviewRequest. |
+| `settlement.prospective_pages[].request.input.discount_class` | string \| null | no | yes | null | Class on the early-payment discount (or 0.00 write-off) posting. Present in ReceivePreviewRequest. |
 | `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -5871,7 +5887,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "mileage", "sales_order"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -6308,7 +6324,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order", "mileage"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -7176,7 +7192,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order", "mileage"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |

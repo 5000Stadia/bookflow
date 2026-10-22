@@ -3369,6 +3369,292 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report mileage-by-job`
+
+Mileage by Job: for each customer:job, the trips and miles ending in the period, the billable miles, and the billable amount at the mileage item price. detail true lists each trip with its end date, miles, billing status (unbilled, billed, not_billable), rate and billable amount.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.mileage-by-job` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report mileage-by-job --date-from 2026-01-01 --date-to 2026-12-31 --detail --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report mileage-by-job", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31", "detail": true}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string \| null | no | yes | null | First trip end date; omitted, the start of the calendar year of date_to. |
+| `date_to` | `--date-to` | string \| null | no | yes | null | Last trip end date; omitted, today in the company's timezone. |
+| `detail` | `--detail` | boolean | no | no | false | One row per trip instead of one per group. |
+| `customer` | `--customer` | string \| null | no | yes | null | One customer or job; a job is its own customer. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.mileage-by-job`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `report` | string | yes | no | — | — |
+| `date_from` | string | yes | no | — | — |
+| `date_to` | string | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].key` | string \| null | yes | yes | — | — |
+| `rows[].name` | string | yes | no | — | — |
+| `rows[].trips` | integer | yes | no | — | — |
+| `rows[].miles` | string | yes | no | — | — |
+| `rows[].billable_miles` | string \| null | no | yes | null | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].unrated_miles` | string | no | no | "0" | Miles on trips whose end date has no mileage rate (vehicle report). |
+| `rows[].detail` | array[object] | no | no | [] | — |
+| `rows[].detail[].trip_id` | string | yes | no | — | — |
+| `rows[].detail[].trip_start_date` | string | yes | no | — | — |
+| `rows[].detail[].trip_end_date` | string | yes | no | — | — |
+| `rows[].detail[].vehicle_name` | string | yes | no | — | — |
+| `rows[].detail[].customer_name` | string \| null | yes | yes | — | — |
+| `rows[].detail[].miles` | string | yes | no | — | — |
+| `rows[].detail[].billable` | boolean | yes | no | — | — |
+| `rows[].detail[].rate` | string \| null | yes | yes | — | — |
+| `rows[].detail[].amount` | object \| null | yes | yes | — | — |
+| `rows[].detail[].amount.amount` | string | yes | no | — | — |
+| `rows[].detail[].amount.currency` | string | yes | no | — | — |
+| `rows[].detail[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].detail[].billing_status` | string \| null | no | yes | null | — |
+| `rows[].detail[].notes` | string \| null | yes | yes | — | — |
+| `total_miles` | string | yes | no | — | — |
+| `total_amount` | object | yes | no | — | — |
+| `total_amount.amount` | string | yes | no | — | — |
+| `total_amount.currency` | string | yes | no | — | — |
+| `total_amount.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "currency": "USD",
+  "date_from": "value",
+  "date_to": "value",
+  "report": "value",
+  "rows": [],
+  "total_amount": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "total_miles": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `report mileage-by-vehicle`
+
+Mileage by Vehicle, the anchor's tax documentation: for each vehicle, the trips and miles ending in the period and the mileage deduction, miles x the mileage rate in effect on each trip end date (rounded per trip, half to even). detail true lists each trip with its end date, miles, rate and amount. Miles on a trip whose date has no rate are counted and reported as unrated_miles. Dates default to this calendar year.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.mileage-by-vehicle` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report mileage-by-vehicle --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report mileage-by-vehicle", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string \| null | no | yes | null | First trip end date; omitted, the start of the calendar year of date_to. |
+| `date_to` | `--date-to` | string \| null | no | yes | null | Last trip end date; omitted, today in the company's timezone. |
+| `detail` | `--detail` | boolean | no | no | false | One row per trip instead of one per group. |
+| `vehicle` | `--vehicle` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.mileage-by-vehicle`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `report` | string | yes | no | — | — |
+| `date_from` | string | yes | no | — | — |
+| `date_to` | string | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].key` | string \| null | yes | yes | — | — |
+| `rows[].name` | string | yes | no | — | — |
+| `rows[].trips` | integer | yes | no | — | — |
+| `rows[].miles` | string | yes | no | — | — |
+| `rows[].billable_miles` | string \| null | no | yes | null | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].unrated_miles` | string | no | no | "0" | Miles on trips whose end date has no mileage rate (vehicle report). |
+| `rows[].detail` | array[object] | no | no | [] | — |
+| `rows[].detail[].trip_id` | string | yes | no | — | — |
+| `rows[].detail[].trip_start_date` | string | yes | no | — | — |
+| `rows[].detail[].trip_end_date` | string | yes | no | — | — |
+| `rows[].detail[].vehicle_name` | string | yes | no | — | — |
+| `rows[].detail[].customer_name` | string \| null | yes | yes | — | — |
+| `rows[].detail[].miles` | string | yes | no | — | — |
+| `rows[].detail[].billable` | boolean | yes | no | — | — |
+| `rows[].detail[].rate` | string \| null | yes | yes | — | — |
+| `rows[].detail[].amount` | object \| null | yes | yes | — | — |
+| `rows[].detail[].amount.amount` | string | yes | no | — | — |
+| `rows[].detail[].amount.currency` | string | yes | no | — | — |
+| `rows[].detail[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].detail[].billing_status` | string \| null | no | yes | null | — |
+| `rows[].detail[].notes` | string \| null | yes | yes | — | — |
+| `total_miles` | string | yes | no | — | — |
+| `total_amount` | object | yes | no | — | — |
+| `total_amount.amount` | string | yes | no | — | — |
+| `total_amount.currency` | string | yes | no | — | — |
+| `total_amount.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "currency": "USD",
+  "date_from": "value",
+  "date_to": "value",
+  "report": "value",
+  "rows": [],
+  "total_amount": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "total_miles": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report missing-checks`
 
 Holes and repeats in each bank account's check-number sequence as of as_of, so an unrecorded or twice-entered check can be found. The number read is the one written on the face of the cheque, which belongs to the bank account it was written from and not to the shared document series the journal it posts as takes its reference from. One row per hole, naming the first and last missing number and the checks occupying the numbers immediately below and above it; one row per number two or more checks carry; and one row per number a correction gave up, which is accounted for rather than missing and is never handed out again. A correction that moves a check to another bank account moves it to that account's sequence here too, and a voided check still occupies its number because the paper it was written on is still gone. A check whose number is not a plain run of digits has no position in a sequence and is counted rather than placed; so is one whose lines no longer credit the account it was written from. A cheque written to pay a bill is the same piece of paper and takes its number from the same chequebook, so it is counted here beside the checks. disclosure says what the evidence cannot settle: gaps marked legacy_uncertain sit among numbers an upgrade carried into the chequebook rather than allocated from it, whether from the shared document series or from a number typed on a bill payment. account limits the report to one bank account. Totals cover every examined check and rows are paged.

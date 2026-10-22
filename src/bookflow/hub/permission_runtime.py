@@ -142,8 +142,10 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.FIXED_ASSET_POLICY_VERSION: '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc',
     c.ASSEMBLY_BUILD_POLICY_VERSION: 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2',
     c.COMMITTED_STOCK_POLICY_VERSION: 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5',
-    c.ORDER_INVOICING_POLICY_VERSION: '549926f27b35d9566aba7627cd3af873c04b1cb19bf794fb0293f44009a22d85',
-    c.SHORTFALL_PO_POLICY_VERSION: '1e3ddca16fce5f8e6d6cb955e372f462cedb76491947d5a3eab52a11e98ece9d',
+    c.MILEAGE_POLICY_VERSION: '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24',
+    c.COLLECTIONS_POLICY_VERSION: '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c',
+    c.ORDER_INVOICING_POLICY_VERSION: '310427f725cbde5856e70e4d311420885e9713896c03da4b8f6b7f7c506db54c',
+    c.SHORTFALL_PO_POLICY_VERSION: '23c90fce3c70bd6941c40d56e3c6d6df8f628819bc64e3fd8891ffa8dff553b4',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -261,6 +263,8 @@ def known_catalog(version):
     from . import permission_fixed_asset_catalog
     from . import permission_assembly_build_catalog
     from . import permission_committed_stock_catalog
+    from . import permission_mileage_catalog
+    from . import permission_collections_catalog
     from . import permission_order_invoicing_catalog
     from . import permission_shortfall_po_catalog
     known = {
@@ -306,6 +310,8 @@ def known_catalog(version):
         c.FIXED_ASSET_POLICY_VERSION: permission_fixed_asset_catalog,
         c.ASSEMBLY_BUILD_POLICY_VERSION: permission_assembly_build_catalog,
         c.COMMITTED_STOCK_POLICY_VERSION: permission_committed_stock_catalog,
+        c.MILEAGE_POLICY_VERSION: permission_mileage_catalog,
+        c.COLLECTIONS_POLICY_VERSION: permission_collections_catalog,
         c.ORDER_INVOICING_POLICY_VERSION: permission_order_invoicing_catalog,
         c.SHORTFALL_PO_POLICY_VERSION: permission_shortfall_po_catalog,
     }

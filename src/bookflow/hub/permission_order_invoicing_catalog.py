@@ -8,7 +8,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_committed_stock_catalog as previous, permission_catalog as c
+from . import permission_collections_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '2ac04ad24b0512dbbbf95ad30897a5f93bbe4990'

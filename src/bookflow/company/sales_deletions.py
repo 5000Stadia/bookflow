@@ -95,6 +95,8 @@ def prepare(s, ctx, inp, noun):
         return Plan(found.output, dict(recovered=True, input=inp, noun=noun))
     kind = noun.replace('-', '_')
     old = sales.resolve(s, getattr(inp, kind), kind)
+    from bookflow.company.credit_transfers import guard_document
+    guard_document(s, old['id'], 'deleted')
     # Ahead of the version guard: a second delete is told the sale is already deleted, which
     # ends the attempt, rather than that its version is stale, which invites another one.
     require_not_deleted(s, old['id'], deleting=True)

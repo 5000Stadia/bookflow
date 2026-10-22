@@ -248,12 +248,58 @@ def _target_components(s, facts, pending, created, event):
 
 
 def discount_rows(s, payment_id):
-    """Every early-payment discount this receipt took, by the application it was taken on."""
+    """Every discount this receipt still holds, by the application it was taken on.
+
+    A discount belongs to its application: once that application is unapplied the discount is
+    no longer part of the receipt (the unapply restates the receipt without it), so only the
+    discounts on edges nothing has unapplied are returned.
+    """
     known = prefetch.receipt(s, payment_id)
     if known is not None:
-        return {key: dict(row) for key, row in known['discounts'].items()}
-    return {row['application_id']: row for row in effects.rows(
-        s, c.payment_discounts, c.payment_discounts.c.transaction_id == payment_id)}
+        rows = {key: dict(row) for key, row in known['discounts'].items()}
+    else:
+        rows = {row['application_id']: row for row in effects.rows(
+            s, c.payment_discounts, c.payment_discounts.c.transaction_id == payment_id)}
+    if not rows:
+        return rows
+    a = c.applications
+    undone = {row[0] for row in s.company.conn.execute(sa.select(a.c.reverses_application_id).where(
+        a.c.reverses_application_id.in_(sorted(rows))))}
+    return {key: row for key, row in rows.items() if key not in undone}
+
+
+def live_discount_where(transaction_clause):
+    """Where-clauses for the discounts a receipt still holds (see ``discount_rows``).
+
+    ``transaction_clause`` is a condition on ``payment_discounts.transaction_id``.
+    """
+    d, a = c.payment_discounts, alias(c.applications, 'discount_inverse')
+    return (transaction_clause,
+            ~sa.exists(sa.select(a.c.id).where(a.c.reverses_application_id == d.c.application_id)))
+
+
+def discount_parts(s, payment_id):
+    """{component key: {account id: units}} of the discounts this receipt still holds.
+
+    An edge's discount posts its early-payment part to its own discount account and any
+    underpayment written off (``payment_write_offs``) to the write-off account.
+    """
+    rows = discount_rows(s, payment_id)
+    parts = {}
+    if not rows:
+        return parts
+    w = c.payment_write_offs
+    written = {row['discount_id']: dict(row) for row in s.company.conn.execute(sa.select(w).where(
+        w.c.discount_id.in_(sorted(row['id'] for row in rows.values())))).mappings()}
+    for row in rows.values():
+        own = parts.setdefault(row['component_key_id'], {})
+        off = written.get(row['id'])
+        early_units = row['amount_minor_units'] - (off['amount_minor_units'] if off else 0)
+        if early_units:
+            own[row['discount_account_id']] = own.get(row['discount_account_id'], 0) + early_units
+        if off:
+            own[off['account_id']] = own.get(off['account_id'], 0) + off['amount_minor_units']
+    return parts
 
 
 def discounts_by_invoice(s, invoice_ids):
@@ -315,6 +361,127 @@ def _discounts(s, inp, targets, currency, context_):
         target['suggested'] = early.suggested(target['terms'], facts['gross'], inp.date,
                                               taken=already, due=facts['due'])
     return targets
+
+
+import contextvars as _contextvars
+
+_REATTACH = _contextvars.ContextVar('payment_reattach', default=None)
+
+
+class reattaching:
+    """Within it, ``payment apply`` of an invoice named here carries that invoice's old discount.
+
+    A bounced check returns the receipt's cash; what the receipt gave the invoice beyond the cash
+    (an early-payment discount, an underpayment written off) was never money and stays on the
+    invoice. The bounce unapplies the whole edge and applies the discount part back on a new one,
+    with the same discount rows, so the receipt's free credit is its cash alone.
+    ``kept`` is {invoice id: {'discount': old discount row, 'write_off': old write-off row or None}}.
+    """
+    def __init__(self, kept):
+        self.kept = kept
+
+    def __enter__(self):
+        self.token = _REATTACH.set(self.kept)
+
+    def __exit__(self, *exc):
+        _REATTACH.reset(self.token)
+
+
+def kept_discounts(s, payment_id, application_ids):
+    """{invoice id: {'discount', 'write_off'}} of the live discounts on these applications."""
+    rows = {key: row for key, row in discount_rows(s, payment_id).items() if key in set(application_ids)}
+    if not rows:
+        return {}
+    w = c.payment_write_offs
+    offs = {row['discount_id']: dict(row) for row in s.company.conn.execute(sa.select(w).where(
+        w.c.discount_id.in_(sorted(row['id'] for row in rows.values())))).mappings()}
+    provenance = ('id', 'created_at', 'created_by', 'created_via', 'audit_event_id')
+    strip = lambda row: {k: v for k, v in dict(row).items() if k not in provenance}
+    return {row['invoice_id']: dict(discount=strip(row), write_off=strip(offs[row['id']]) if row['id'] in offs else None)
+            for row in rows.values()}
+
+
+def restate_after_unapply(s, ctx, payment_id, operation_key):
+    """After `payment unapply`: a discount leaves the receipt with its application.
+
+    The anchor's discount (and an underpayment written off) belongs to the payment's application
+    to that invoice, so removing the application removes it. The receipt is restated without it
+    at its own date (a correction, as editing the payment in the anchor is), so its free credit is
+    its cash; a write-off receipt left holding nothing is voided. Returns the last write's output.
+    """
+    from bookflow.company.payment_corrections import discount_state
+    from bookflow.company.payment_dependencies import issue
+    from bookflow.company.payment_models import PaymentUpdateInput, PaymentVoidInput
+    funding = query.payment_facts(s, payment_id, write=True)
+    _, discounted, stale = discount_state(s, funding)
+    if not stale:
+        return None
+    key = operation_key[:118]
+    version = funding['header']['version']
+    if not funding['revision']['total_minor_units'] and not sum(discounted.values()):
+        plan = prepare(s, ctx, PaymentVoidInput(payment=payment_id, expected_version=version, operation_key=key + '.void'), 'void')
+    else:
+        plan = prepare(s, ctx, PaymentUpdateInput(payment=payment_id, expected_version=version, operation_key=key + '.restate',
+                                                  settlement_guard=issue(s, 'payment', payment_id)), 'update')
+    return apply(plan, ctx, s).output
+
+
+def _write_off_short(inp, targets, currency):
+    """The anchor's "Write off the extra amount": what each paid invoice still owes becomes a discount.
+
+    Only invoices this receipt gives cash to are short-paid; an invoice named in ``discounts`` alone
+    is settled as listed. The written-off part joins any discount listed for the same invoice, on the
+    same edge, so the invoice is paid in full by cash plus discount and every reader sees it paid.
+    """
+    if inp.write_off_account is None:
+        raise _invalid('write_off_account', 'writing off an underpayment names the account it goes to: an expense '
+                       'account such as Bad Debt, or a discount account such as Sales Discounts')
+    short = 0
+    for target in targets:
+        if not target['amount']:
+            continue
+        remainder = target['facts']['due'] - target['amount'] - target['discount']
+        if remainder > 0:
+            target['discount'] += remainder
+            target['short_written_off'] = remainder
+            short += remainder
+    if not short:
+        raise _invalid('underpayment', 'nothing is short: the cash and discounts pay every invoice this receipt applies '
+                       'to in full; leave underpayment out (the default "leave_open")')
+    return short
+
+
+def _short_and_over(inp, settled, available, currency, payment_id, discount_account):
+    """The anchor's Underpayment and Overpayment boxes, each with the choice made and the other one."""
+    from bookflow.company.payment_summaries import Overpayment, Underpayment
+    plain = lambda units: Money(units, currency).to_dict()['amount']
+    written = [row for row in settled if row.get('short_written_off')]
+    owing = [row for row in settled if row['applied'] and row['still_due'] > 0]
+    under = None
+    if written:
+        units = sum(row['short_written_off'] for row in written)
+        under = Underpayment(amount=Money(units, currency).to_dict(), choice='written_off',
+            account=discount_account.full_name,
+            text=f"Underpayment of {Money(units, currency)} written off to {discount_account.full_name}.")
+    elif owing:
+        units = sum(row['still_due'] for row in owing)
+        rows = [dict(invoice=row['document_id'], amount=plain(row['still_due']), expected_version=row['version'])
+                for row in owing]
+        under = Underpayment(amount=Money(units, currency).to_dict(), choice='left_open', text=(
+            f"Underpayment of {Money(units, currency)} left open on "
+            + ', '.join(row['number'] for row in owing[:10]) + (' and more' if len(owing) > 10 else '')
+            + '. To write it off instead, run `next` with the account it goes to (an expense account such as Bad Debt).'),
+            next=dict(command='payment receive', input=dict(customer=inp.customer, date=inp.date, amount='0.00',
+                discounts=rows, discount_account='<account, e.g. Bad Debt>', operation_key='<new key>')))
+    over = None
+    if available > 0:
+        over = Overpayment(amount=Money(available, currency).to_dict(), choice='left_as_credit', text=(
+            f"Overpayment of {Money(available, currency)} left as credit to use later. To refund it to the customer "
+            'instead, run `next` with the account the money leaves and the method.'),
+            next=dict(command='customer-refund post', input=dict(date=inp.date,
+                sources=[dict(payment=payment_id, amount=plain(available))],
+                funding_account='<bank account>', method='<payment method>')))
+    return under, over
 
 
 def _method_names(s):
@@ -425,7 +592,7 @@ def _prepare(s, ctx, inp, operation):
     merged_away = {row[0] for row in s.company.raw.execute(merged_sql('customer'))}
     def customer(party_id, active=True):
         # A write-off may name a customer who has since been made inactive (see `_profile`).
-        active = active and not inactive_ok
+        active = active and not inactive_ok and party_id not in defaults.INACTIVE_CUSTOMERS_OK.get()
         # A customer merged into the payer's family is paid through its survivor although the
         # merge made it inactive (party_merges.py); its old invoices stay payable.
         active = active and party_id not in merged_away
@@ -478,20 +645,36 @@ def _prepare(s, ctx, inp, operation):
         targets, selected = _applications(s, inp, context_, amount=amount)
         _capacity('source', sum(row['amount'] for row in targets), amount, context_['currency'], context_['customer_id'])
         targets = _discounts(s, inp, targets, context_['currency'], context_)
+        if inp.underpayment == 'write_off':
+            _write_off_short(inp, targets, context_['currency'])
         discounted = sum(row['discount'] for row in targets)
-        discount_account = account_mutation = None
-        if discounted:
+        written_off_total = sum(row.get('short_written_off', 0) for row in targets)
+        discount_account = write_off_account = account_mutation = None
+        if discounted - written_off_total:
             facts_, account_mutation = early.resolve_account(s, ctx, 'customer', inp.discount_account, at=at)
             discount_account = defaults.Account(**facts_)
+        if written_off_total:
+            facts_, _ = early.resolve_account(s, ctx, 'customer', inp.write_off_account, at=at, field='write_off_account')
+            write_off_account = defaults.Account(**facts_)
+        klass = defaults._row(s.company, 'class_id', inp.discount_class) if inp.discount_class is not None else None
+        write_off_klass = defaults._row(s.company, 'class_id', inp.write_off_class) if inp.write_off_class is not None else None
         # A discount is capacity beside the cash: the component of the invoice's customer carries
         # both, which is what lets every open-balance reader settle the invoice unchanged.
         components = calc.receipt_components(context_['customer_id'], amount + discounted,
             [(row['facts']['profile']['customer_id'], row['amount'] + row['discount']) for row in targets])
-        party_discounts = {}
+        # Each customer's discount legs: the early-payment part to the discount account, an
+        # underpayment written off to its own account, one leg per account and class.
+        party_discounts, party_parts = {}, {}
         for row in targets:
             if row['discount']:
                 party = row['facts']['profile']['customer_id']
                 party_discounts[party] = party_discounts.get(party, 0) + row['discount']
+                parts = party_parts.setdefault(party, {})
+                for account_, klass_, units_ in ((discount_account, klass, row['discount'] - row.get('short_written_off', 0)),
+                                                 (write_off_account, write_off_klass, row.get('short_written_off', 0))):
+                    if units_:
+                        slot = (account_.id, klass_['id'] if klass_ else None)
+                        parts[slot] = [account_, klass_, parts.get(slot, [None, None, 0])[2] + units_]
         header = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type='payment', status='posted',
             voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
         number, sequence = effects.allocate(s, 'payment', inp.number)
@@ -519,12 +702,13 @@ def _prepare(s, ctx, inp, operation):
         batch = dict(**audited(), transaction_id=header['id'], revision_id=revision['id'], kind='original', effective_date=inp.date,
                      reverses_batch_id=None, replaces_batch_id=None)
         pending['posting_batches'].append(batch)
-        def leg(account, units, debit, party, line_no):
+        def leg(account, units, debit, party, line_no, klass=None):
             value = dict(**created(), transaction_id=header['id'], batch_id=batch['id'], line_no=line_no,
                 account_id=account.id, account_snapshot=query.canonical(account.model_dump()),
                 debit_minor_units=units if debit else 0, credit_minor_units=0 if debit else units,
                 currency=context_['currency'], name_type='customer', name_id=party['id'], party_name=party['full_name'],
-                class_id=None, class_name=None, description=inp.memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
+                class_id=klass['id'] if klass else None, class_name=(klass.get('full_name') or klass.get('name')) if klass else None,
+                description=inp.memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
             pending['posting_lines'].append(value)
             return value
         payer = customer(context_['customer_id'])
@@ -534,9 +718,12 @@ def _prepare(s, ctx, inp, operation):
         first = 2 if amount else 1
         keys, component_rows, source_rows = {}, {}, {}
         # One discount debit per customer whose invoice took one, after the receivable credits.
-        discount_legs = {party_id: leg(discount_account, units, True, customer(party_id),
-                                       len(components) + first + position)
-                         for position, (party_id, units) in enumerate(sorted(party_discounts.items()))}
+        discount_legs, position = {}, len(components) + first
+        for party_id in sorted(party_parts):
+            for slot in sorted(party_parts[party_id], key=lambda slot: (slot[0], slot[1] or '')):
+                account_, klass_, units_ = party_parts[party_id][slot]
+                discount_legs.setdefault(party_id, []).append((leg(account_, units_, True, customer(party_id), position, klass_), units_))
+                position += 1
         for position, (party_id, capacity) in enumerate(sorted(components.items()), first):
             party = customer(party_id)
             key = dict(**audited(), transaction_id=header['id'], line_id=identity['id'], party_id=party_id,
@@ -553,7 +740,7 @@ def _prepare(s, ctx, inp, operation):
             shares = [(cash, capacity - discount)] if capacity > discount else []
             shares.append((ar, capacity))
             if discount:
-                shares.append((discount_legs[party_id], discount))
+                shares.extend(discount_legs[party_id])
             for posting, units in shares:
                 source = dict(**created(), transaction_id=header['id'], posting_line_id=posting['id'], revision_id=revision['id'],
                     document_line_id=line['id'], amount_minor_units=units, currency=context_['currency'],
@@ -577,9 +764,18 @@ def _prepare(s, ctx, inp, operation):
         targets, selected = _applications(s, inp, context_)
         if not targets:
             raise _invalid('applications', 'select at least one invoice')
+        reattach = _REATTACH.get()
         for target in targets:
             target.update(discount=0, terms=None, suggested=None)
-        discount_account = account_mutation = None
+            # A bounce puts back, on a new edge, the discounts its unapply took off: what the edge
+            # carries is the discount, not cash (see ``reattaching``).
+            kept = (reattach or {}).get(target['facts']['header']['id'])
+            if kept is not None:
+                if target['amount'] != kept['discount']['amount_minor_units']:
+                    raise BookflowError('E_INTERNAL')
+                target.update(discount=target['amount'], amount=0, kept=kept,
+                              short_written_off=kept['write_off']['amount_minor_units'] if kept['write_off'] else 0)
+        discount_account = write_off_account = account_mutation = None
         keys = {key['party_id']: key for key in funding['keys'].values()}
         component_rows = {funding['keys'][row['component_key_id']]['party_id']: row for row in funding['components']}
         available = {funding['keys'][key]['party_id']: value for key, value in funding['available'].items()}
@@ -595,7 +791,7 @@ def _prepare(s, ctx, inp, operation):
             source_rows[party] = dict(matches[0])
     journals.open_dates(s, [inp.date])
     changed_headers, app_outputs, allocation_outputs, changes, recipes = [], [], [], [], []
-    pending_discounts, warnings = [], []
+    pending_discounts, pending_write_offs, warnings = [], [], []
     settled = []
     for target in targets:
         facts, units = target['facts'], target['amount'] + target['discount']
@@ -613,27 +809,45 @@ def _prepare(s, ctx, inp, operation):
         changed_headers.append((invoice, changed))
         discount_view = {}
         # A write-off is not an early-payment discount: no terms suggestion beside it.
-        if not write_off and target['terms'] is not None and (target['terms'].percent_millionths is not None or target['discount']):
+        written = target.get('short_written_off', 0)
+        early_part = target['discount'] - written
+        if not write_off and target['terms'] is not None and (target['terms'].percent_millionths is not None or early_part):
             discount_view = dict(suggested_discount=Money(target['suggested'], context_['currency']).to_dict(),
                                  discount_date=target['terms'].discount_date)
-        if target['discount']:
+        if target.get('kept'):
+            old_row, old_off = target['kept']['discount'], target['kept']['write_off']
+            pending_discounts.append(dict(old_row, **audited(), component_key_id=keys[party]['id'], application_id=app['id']))
+            if old_off:
+                pending_write_offs.append(dict(old_off, **audited(), discount_id=pending_discounts[-1]['id'], application_id=app['id']))
+                discount_view['write_off'] = Money(written, context_['currency']).to_dict()
+            if early_part:
+                discount_view['discount'] = Money(early_part, context_['currency']).to_dict()
+        elif target['discount']:
             terms = target['terms']
             pending_discounts.append(dict(**audited(), transaction_id=header['id'], component_key_id=keys[party]['id'],
-                application_id=app['id'], invoice_id=invoice['id'], discount_account_id=discount_account.id,
+                application_id=app['id'], invoice_id=invoice['id'],
+                discount_account_id=(discount_account if early_part else write_off_account).id,
                 amount_minor_units=target['discount'], currency=context_['currency'],
                 suggested_minor_units=target['suggested'], discount_date=terms.discount_date,
                 terms_percent_millionths=terms.percent_millionths))
-            discount_view['discount'] = Money(target['discount'], context_['currency']).to_dict()
+            if early_part:
+                discount_view['discount'] = Money(early_part, context_['currency']).to_dict()
+            if written:
+                discount_view['write_off'] = Money(written, context_['currency']).to_dict()
+                pending_write_offs.append(dict(**audited(), transaction_id=header['id'], discount_id=pending_discounts[-1]['id'],
+                    application_id=app['id'], invoice_id=invoice['id'], account_id=write_off_account.id,
+                    amount_minor_units=written, currency=context_['currency']))
             # A write-off's "discount" is the debt written off, not an early-payment discount,
-            # so whether the terms offered one is beside the point.
-            late = None if write_off else early.late_warning(invoice['type'].replace('_', ' '), invoice['number'], terms, inp.date)
+            # so whether the terms offered one is beside the point; an early discount beside it still is.
+            late = None if write_off or not early_part else early.late_warning(invoice['type'].replace('_', ' '), invoice['number'], terms, inp.date)
             if late:
                 warnings.append(late)
         app_outputs.append(dict(application_id=app['id'], invoice_id=invoice['id'], invoice_version=changed['version'],
             source_component_key_id=keys[party]['id'], party_id=party, amount=Money(units, context_['currency']).to_dict(), effective_date=inp.date,
             **discount_view))
         settled.append(dict(document_id=invoice['id'], document_type=invoice['type'], number=invoice['number'],
-            applied=target['amount'], discount=target['discount'], still_due=facts['due'] - units))
+            applied=target['amount'], discount=target['discount'], still_due=facts['due'] - units,
+            version=changed['version'], short_written_off=target.get('short_written_off', 0)))
         changes.append(dict(invoice_id=invoice['id'], version=changed['version'], revision_id=invoice_revision['id'],
             gross_minor_units=facts['gross'], applied_minor_units=facts['applied'] + units, due_minor_units=facts['due'] - units,
             currency=context_['currency'], status='paid' if facts['due'] == units else 'partial'))
@@ -670,6 +884,7 @@ def _prepare(s, ctx, inp, operation):
     financial_context = {key: context_[key] for key in ('mode', 'customer_id', 'ar_account_id', 'payment_id', 'date', 'currency')}
     fp = query.digest([operations.facts_request(inp, ctx, s, command), financial_context, recipes,
         early.account_identity(discount_account.model_dump(), account_mutation) if discount_account else None,
+        write_off_account.id if write_off_account else None,
         [header['number'], revision['date'], revision['total_minor_units'], revision['memo']],
         profile_dependencies if operation == 'receive' else [previous['id'], previous['version'], funding['available']],
         selected['revision']['manifest_hash'] if selected else None, components,
@@ -697,8 +912,14 @@ def _prepare(s, ctx, inp, operation):
     elif operation == 'receive':
         opening += ' ' + _where_the_money_went(s, profile.deposit_account)
     summary = summarize(settled, context_['currency'], opening=opening, credit=current['available_minor_units'],
-                        party_label=payer_label,
+                        party_label=payer_label, written_off=sum(row.get('short_written_off', 0) for row in settled),
                         **({'discount_label': 'Written off'} if operation == 'receive' and not revision['total_minor_units'] else {}))
+    if operation == 'receive' and revision['total_minor_units']:
+        under, over = _short_and_over(inp, settled, current['available_minor_units'], context_['currency'],
+                                      header['id'], write_off_account)
+        if under or over:
+            summary = summary.model_copy(update=dict(underpayment=under, overpayment=over,
+                text=' '.join([summary.text] + [part.text for part in (under, over) if part])))
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
         facts_fingerprint=fp, effect=effect, current=current, summary=summary,
         warnings=(repeated + warnings) if operation == 'receive' else [],
@@ -706,7 +927,7 @@ def _prepare(s, ctx, inp, operation):
     return Plan(output, dict(input=inp, operation=operation, header=header, before=previous, pending=pending,
         changed_headers=changed_headers, event=event, operation_id=operation_id, selected=selected,
         custom_plan=custom_plan, sequence=sequence, context=context_, targets=targets, fingerprint=fp,
-        discounts=pending_discounts, account_mutation=account_mutation))
+        discounts=pending_discounts, write_offs=pending_write_offs, account_mutation=account_mutation))
 
 
 def apply(plan, ctx, s):
@@ -743,6 +964,8 @@ def apply(plan, ctx, s):
         touched.extend(custom.touches(data['custom_plan']))
     touched.extend(Touched('payment_discount', row['id'], 'create', None, 1, effects.decoded(row), db='company')
                    for row in data.get('discounts', ()))
+    touched.extend(Touched('payment_write_off', row['id'], 'create', None, 1, effects.decoded(row), db='company')
+                   for row in data.get('write_offs', ()))
     touched[:0] = early.created_account_touches(data.get('account_mutation'))
     operation = dict(id=data['operation_id'], operation_key=data['input'].operation_key, command='payment ' + data['operation'],
         request_schema_version=1, request_hash=operations.request_hash(data['input'], ctx, s, 'payment ' + data['operation']),
@@ -790,6 +1013,8 @@ def apply(plan, ctx, s):
             s.company.conn.execute(getattr(c, table).insert(), pending[table])
     if data.get('discounts'):
         s.company.conn.execute(c.payment_discounts.insert(), data['discounts'])
+    if data.get('write_offs'):
+        s.company.conn.execute(c.payment_write_offs.insert(), data['write_offs'])
     if data['custom_plan']:
         custom.apply(s.company, data['custom_plan'])
     s.company.conn.execute(c.payment_operations.insert().values(**operation))
