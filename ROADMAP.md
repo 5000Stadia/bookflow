@@ -157,8 +157,8 @@ review cb5fcd7 (gate g96052d).
 - [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones
 - [x] R151 Restore a deleted document from its preserved history
 - [~] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors done and merged 2026-10-09; items and accounts remain.)
-- [ ] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
-- [ ] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
+- [~] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
+- [~] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [ ] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [ ] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
@@ -178,7 +178,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
 - [ ] R122 Approvals: purchase and bill approval steps before posting.
 - [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
-- [ ] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
+- [~] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
 - [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review.
 - [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
