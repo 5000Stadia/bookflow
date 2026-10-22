@@ -1184,3 +1184,7 @@ EXAMPLES["transaction find"] = Example(
 EXAMPLES["item convert"] = Example(
     'bookflow item convert "Copper Coupling" --to inventory --reason "We stock couplings now"'
     ' --company "Demo Plumbing Co" --json', {"item": "Copper Coupling", "to": "inventory"})
+# R120: month-end finance charges by the company policy; run with --dry-run first to see the rows.
+EXAMPLES["finance-charge assess"] = Example(
+    'bookflow finance-charge assess --date 2026-07-31 --reason "Month-end finance charges" --company "Demo Plumbing Co" --json',
+    {"date": "2026-07-31"})

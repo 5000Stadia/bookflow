@@ -466,6 +466,26 @@ on `report entries-to-review`, so say why in it.
 Discounts for a charge that is waived, not a bad debt); `applications` stays empty. To reverse it, `payment
 unapply` then `payment void` the receipt.
 
+## Assess this month's finance charges
+
+Late charges follow the company's policy (`company update --finance-charge-annual-rate 18
+--finance-charge-minimum 2.00 --finance-charge-account-id "Finance Charge Income"`, plus grace days,
+from due date or invoice date, and charging on overdue charges); an agent does not set the policy.
+Apply payments and credits first: a customer with `has_unapplied_credits` is charged on the full
+overdue balance. Preview with `dry_run`, read the rows, then assess with the preview's fingerprint,
+usually dated the last day of the month, before printing statements.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "finance-charge assess", "reason": "Month-end finance charges, owner's standing policy",
+ "input": {"date": "2026-07-31", "expected_facts_fingerprint": "<facts_fingerprint from the dry run>"}}
+```
+
+Leaving out `customers` assesses every proposed row; to leave a customer out or change an amount, list
+the ones to charge (`"customers": [{"customer": "Acme"}, {"customer": "Birch", "amount": "1.50"}]`).
+Each charge is a statement charge dated that day; assessing the same date again charges nobody twice.
+To take one back, `statement-charge void` it.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:

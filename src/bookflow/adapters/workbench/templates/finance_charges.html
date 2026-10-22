@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}Assess finance charges{% endblock %}{% block body %}<section id="finance-charges">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Assess finance charges</nav>
+<h1>Assess finance charges</h1>
+{% if result %}<div role="status" class="notice" data-finance-charge-result>
+<p><strong>{{ result.summary }}</strong></p>
+<ul>{% for row in result.rows if row.status == 'assessed' %}<li>{{ row.customer_label }}: {{ display_money(row.charge) }}, statement charge <a href="/c/{{ company_id }}/statement-charge/{{ row.transaction_id }}">{{ row.number }}</a></li>{% endfor %}</ul>
+<p>Each charge is a statement charge on the {{ result.item }} item. To take one back, void it from its page.</p>
+</div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if off %}<section class="workspace-card" data-finance-charge-off>
+<p>Finance charges are off. Set the annual interest rate, minimum charge, grace period and the finance charge account in the company settings first{% if can_set %}: <a href="/c/{{ company_id }}/company/self/update">Company settings</a>{% else %}; a company administrator sets them{% endif %}.</p>
+</section>{% endif %}
+<form method="post" action="/c/{{ company_id }}/finance-charge/assess">
+<section class="workspace-card" aria-label="Assessment">
+<label>Assessment date <input type="date" name="date" value="{{ date }}" data-finance-charge-date></label>
+<button type="submit" name="action" value="preview">Recalculate</button>
+{% if preview %}<p data-finance-charge-policy>{{ preview.annual_rate }}% a year, minimum {{ display_money(preview.minimum) }}, {{ preview.grace_days }} grace day{{ '' if preview.grace_days == 1 else 's' }}, counted from the {{ 'due date' if preview.calculated_from == 'due_date' else 'invoice date' }}{% if preview.on_overdue_charges %}, overdue finance charges included{% endif %}; credited to {{ preview.account }}.</p>{% endif %}
+</section>
+{% if preview %}
+<input type="hidden" name="fingerprint" value="{{ preview.facts_fingerprint }}">
+{% if preview.rows %}<div class="table-wrap"><table class="list-table finance-charge-list"><thead><tr><th>Assess</th><th>Customer or job</th><th>Last finance charge</th><th>Overdue balance</th><th>Finance charge</th></tr></thead><tbody>
+{% for row in preview.rows %}<tr data-finance-charge-row="{{ row.customer_id }}">
+<td data-label="Assess">{% if row.status == 'already_assessed' %}charged{% else %}<input type="checkbox" name="sel:{{ row.customer_id }}" value="yes" aria-label="Assess {{ row.customer_label }}" {% if (values and values.get('sel:' ~ row.customer_id)) or (not values and row.status == 'will_assess') %}checked{% endif %}>{% endif %}</td>
+<td data-label="Customer or job">{% if row.has_unapplied_credits %}<span title="Has {{ display_money(row.unapplied_credits) }} of payments or credits not applied; apply them first" data-unapplied>*</span>{% endif %}{{ row.customer_label }}</td>
+<td data-label="Last finance charge">{{ row.last_finance_charge_date or '' }}</td>
+<td data-label="Overdue balance">{{ display_money(row.overdue_balance) }}</td>
+<td data-label="Finance charge">{% if row.status == 'already_assessed' %}<a href="/c/{{ company_id }}/statement-charge/{{ row.transaction_id }}">{{ row.number }}</a>{% else %}<input type="hidden" name="computed:{{ row.customer_id }}" value="{{ row.computed.amount }}"><input name="amount:{{ row.customer_id }}" inputmode="decimal" size="10" aria-label="Finance charge for {{ row.customer_label }}" value="{{ values.get('amount:' ~ row.customer_id, row.charge.amount) if values else row.charge.amount }}">{% endif %}</td>
+</tr>{% endfor %}</tbody></table></div>
+{% if preview.rows | selectattr('has_unapplied_credits') | list %}<p class="warning">* has payments or credits not yet applied. They are not subtracted; apply them first, then recalculate.</p>{% endif %}
+<section class="workspace-card" aria-label="Assess">
+<p><label><input type="checkbox" name="mark_to_print" value="yes" {% if preview.mark_to_print %}checked{% endif %}> Mark finance charges to be printed</label></p>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') if values else '' }}" placeholder="Month-end finance charges"></label>
+<div class="actions"><button type="submit" name="action" value="assess" data-finance-charge-assess>Assess charges</button><a href="/c/{{ company_id }}/_group/customers">Cancel</a></div>
+</section>
+{% else %}<p data-finance-charge-none>No customer has a balance overdue past the grace period on this date.</p>{% endif %}
+{% endif %}
+</form>
+</section>{% endblock %}

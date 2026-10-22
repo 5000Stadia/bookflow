@@ -79,4 +79,11 @@ Database: `company`.
 | `use_undeposited_funds_for_payments` | BOOLEAN | no | — | — | — | — | Default new receipts to Undeposited Funds unless explicitly overridden. |
 | `customer_discount_account_id` | VARCHAR(26) | yes | — | — | ix_company_info_customer_discount_account_id | accounts.id | Default account for early-payment discounts given to customers; null means Discounts Given. |
 | `vendor_discount_account_id` | VARCHAR(26) | yes | — | — | ix_company_info_vendor_discount_account_id | accounts.id | Default account for early-payment discounts taken from vendors; null means Discounts Taken. |
+| `finance_charge_annual_rate` | VARCHAR(16) | yes | — | — | — | — | Annual interest rate in percent charged on overdue customer balances, canonical decimal text; null while finance charges are off. |
+| `finance_charge_minimum` | VARCHAR(24) | yes | — | — | — | — | Minimum finance charge in the home currency, canonical decimal text; null when there is none. |
+| `finance_charge_grace_days` | INTEGER | no | — | — | — | — | Days a balance may be past due before finance charges are assessed on it. |
+| `finance_charge_account_id` | VARCHAR(26) | yes | — | — | ix_company_info_finance_charge_account_id | accounts.id | Income account finance charges are credited to; null while finance charges are off. |
+| `finance_charge_on_overdue_charges` | BOOLEAN | no | — | — | — | — | Whether overdue finance charges are themselves charged finance charges. |
+| `finance_charge_from` | VARCHAR(12) | no | — | — | — | — | Whether finance charges count days from the due_date or the invoice_date. |
+| `finance_charge_mark_to_print` | BOOLEAN | no | — | — | — | — | Whether assessed finance charges are marked to be printed. |
 | `negative_number_style` | VARCHAR(12) | no | — | — | — | — | How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign. |
