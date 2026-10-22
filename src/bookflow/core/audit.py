@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 import hashlib
 import json
@@ -17,22 +15,6 @@ from bookflow.core.ids import new_id
 from bookflow.core.performance import measured
 from bookflow.core.registry import Touched
 from bookflow.core.session import Session, now_iso
-
-# The host's scheduler acts for a person: while it runs an entry it is the actor of record
-# (the system principal, client "scheduler") and the person whose authority it uses is
-# `on_behalf_of`. Set only by `company/scheduler.py`, inside one writer job.
-_SCHEDULED_AS: ContextVar[str | None] = ContextVar("bookflow_scheduled_as", default=None)
-
-
-@contextmanager
-def scheduled_as(system_id: str | None):
-    """Record every audit event written inside this block as the scheduler acting for its actor."""
-    token = _SCHEDULED_AS.set(system_id)
-    try:
-        yield
-    finally:
-        _SCHEDULED_AS.reset(token)
-
 
 SECRET_FIELDS = {"password_hash", "token_hash", "tax_id"}
 RAW, ZIP = b"\x00", b"\x01"
@@ -91,10 +73,6 @@ def prepare_event_to(db, ctx: Context, command: str, summary: str, touched: list
     """Encode one event without DML; uses the ordinary snapshot codec and ID order."""
     events, _ = _tables(db)
     event_id = event_id or new_id()
-    on_behalf_of = ctx.on_behalf_of
-    scheduler = _SCHEDULED_AS.get()
-    if scheduler is not None and actor_id != scheduler:
-        on_behalf_of, actor_id, actor_kind = on_behalf_of or actor_id, scheduler, "system"
     seq = next_seq(db, events)
     if seq > 9223372036854775807:
         from bookflow.core.errors import BookflowError
@@ -102,7 +80,7 @@ def prepare_event_to(db, ctx: Context, command: str, summary: str, touched: list
     event = dict(
         id=event_id, seq=seq, at=now_iso() if at is None else at, command=command,
         actor_id=actor_id, actor_kind=actor_kind,
-        on_behalf_of=on_behalf_of, interface=ctx.interface.value, client_name=ctx.client_name,
+        on_behalf_of=ctx.on_behalf_of, interface=ctx.interface.value, client_name=ctx.client_name,
         client_version=ctx.client_version, client_host=ctx.client_host, session_id=ctx.session_id,
         request_id=ctx.request_id, idempotency_key=ctx.idempotency_key, reason=ctx.reason,
         directive_id=ctx.directive_id, directive_code=directive_code, source_ref=ctx.source_ref, summary=summary[:512],

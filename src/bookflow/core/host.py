@@ -69,9 +69,12 @@ class Host:
         self.shutdown_wait_seconds = shutdown_wait_seconds
         self.backup_check_seconds = backup_check_seconds
         self.schedule_check_seconds = schedule_check_seconds
+        self._notices_checked: dict[str, Any] = {}  # company id -> when the scheduler last looked at notices
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
+        from bookflow.core.identity_admin_binding import SCHEDULER_THREADS
+        SCHEDULER_THREADS.add(self._writer)  # only this host's writer may act for a schedule's author (R111)
         self._commit_hooks = CommitHooks(self.publication_admission, writer=self._writer)
         self._hub: Database | None = None  # writer's writable hub
         self._hub_cm = None  # the context manager that owns the hub connection; it closes the database when it is released
@@ -755,13 +758,21 @@ class Host:
         for row in rows:
             # A company not yet upgraded is left for `bookflow upgrade`: the scheduler never migrates.
             if row["schema_revision"] != HEADS["company"]:
+                log.warning("scheduler skipped company %s: its database is at %s, not %s; run `bookflow upgrade`",
+                            row["id"], row["schema_revision"], HEADS["company"])
+                done[row["id"]] = {"skipped": "schema_behind", "schema_revision": row["schema_revision"]}
                 continue
             s = self._writer_session()
             try:
                 _load_actor_by_id(s, system["id"])
                 s.company_row = row
                 open_company(s, scheduler.context(), True)
-                done[row["id"]] = scheduler.run_company(s, system["id"], now)
+                # Overdue notices scan every receivable, so they are looked at once an hour, not every tick.
+                last = self._notices_checked.get(row["id"])
+                notices = last is None or not timedelta(0) <= now - last < scheduler.NOTICE_INTERVAL
+                done[row["id"]] = scheduler.run_company(s, system["id"], now, notices=notices)
+                if notices:
+                    self._notices_checked[row["id"]] = now
             except Exception as e:  # noqa: BLE001 - one company failing never stops the others or the host
                 log.warning("scheduler for %s failed: %s", row["id"], e)
                 done[row["id"]] = {"error": getattr(e, "code", type(e).__name__)}

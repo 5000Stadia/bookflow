@@ -110,8 +110,14 @@ def prepare_entry(s, ctx, inp, verb):
     return Plan(preview, data)
 
 
-def _due_work(s, inp, as_of):
-    """Every slot whose due date has arrived, oldest first: what is waiting, then what is new."""
+def _due_work(s, inp, as_of, keep_waiting=None):
+    """Every slot whose due date has arrived, oldest first: what is waiting, then what is new.
+
+    ``keep_waiting(occurrence, mode)`` narrows the waiting occurrences, so a caller that will not
+    act on some of them (the scheduler, on reminder slots) never lets them fill the limit. The
+    limit never splits one group slot: its members are taken together or not at all, because the
+    claim advances the group past every slot it takes.
+    """
     work: list[dict[str, Any]] = []
     limit = inp.limit
     only = service._resolve_template(s, inp.memorized)['id'] if getattr(inp, 'memorized', None) else None
@@ -125,13 +131,15 @@ def _due_work(s, inp, as_of):
                      key=lambda row: (row['slot_date'], row['id']))
     for occurrence in waiting:
         template = templates_by_id.get(occurrence['template_id'])
-        if template is None or (only is not None and template['id'] != only):
+        if template is None or template['status'] == 'deleted' or (only is not None and template['id'] != only):
             continue
         mode = template['mode']
         if template['group_id']:
             group = service._one(s, c.memorized_groups, c.memorized_groups.c.id == template['group_id'])
             if group is not None and group['frequency'] != 'never':
                 mode = group['mode']
+        if keep_waiting is not None and not keep_waiting(occurrence, mode):
+            continue
         work.append({'template': template, 'slot': occurrence['slot_date'], 'occurrence': occurrence,
                      'origin': occurrence['origin'], 'enter': mode == 'enter_automatically',
                      'advance': False, 'group_run': occurrence['group_run_id'],
@@ -162,7 +170,15 @@ def _due_work(s, inp, as_of):
             work.append({'template': template, 'slot': slot, 'origin': 'scheduled',
                          'enter': template['mode'] == 'enter_automatically', 'advance': True,
                          'group_run': None, 'group_ordinal': None})
-    return work[:limit]
+    taken, units = [], {}
+    for item in work:
+        key = (item['group_run'], item['slot']) if item.get('group_run') and item.get('advance') else id(item)
+        units.setdefault(key, []).append(item)
+    for unit in units.values():
+        if taken and len(taken) + len(unit) > limit:
+            break
+        taken.extend(unit)
+    return taken
 
 
 def _entry_preview(s, work, as_of):
@@ -386,7 +402,7 @@ def _recover(s, occurrence):
     return {'output': {'id': entry, 'recovered_from': 'audit'}, 'source': 'company audit trail'}
 
 
-def _enter_one(s, ctx, occurrence):
+def _enter_one(s, ctx, occurrence, reason=None):
     """Replay one occurrence through the ordinary command, or recover the entry it already made."""
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session
@@ -394,14 +410,16 @@ def _enter_one(s, ctx, occurrence):
     if recovered is not None:
         return {'occurrence': occurrence, 'output': recovered['output'], 'recovered': recovered['source']}
     command = registry.get(occurrence['command'])
+    if not edges.enterable(command):
+        # What may be memorized can change between the save and the slot (a command made a
+        # person's act since): checked again at the moment of entry, never assumed.
+        return {'occurrence': occurrence, 'error': BookflowError('E_VALIDATION', message=(
+            f"`{occurrence['command']}` can no longer be entered from a memorized transaction."),
+            details={'fields': [{'field': 'command', 'problem': 'not a memorizable create or post command'}]})}
     revision = service._one(s, c.memorized_transaction_revisions,
                             c.memorized_transaction_revisions.c.id == occurrence['revision_id'])
     payload = dict(json.loads(revision['payload']), date=occurrence['slot_date'])
-    reason = ctx.reason or f"Memorized entry for {occurrence['slot_date']}"
-    if ctx.client_name == 'scheduler':
-        # The host's scheduler gives the schedule itself as the reason for each entry it makes.
-        template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == occurrence['template_id'])
-        reason = f"On schedule: {template['name']} ({template['frequency'].replace('_', ' ')}) for {occurrence['slot_date']}"
+    reason = reason or ctx.reason or f"Memorized entry for {occurrence['slot_date']}"
     entry_ctx = ctx.model_copy(update={
         'idempotency_key': occurrence['entry_key'],
         'source_ref': (SOURCE_MARK + occurrence['id'])[:512],

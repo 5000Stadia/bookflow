@@ -225,8 +225,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
                        "finance_charge_account_id", "finance_charge_on_overdue_charges", "finance_charge_from",
                        "finance_charge_mark_to_print"):
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0074's seven preferences
-        for table in ("todos", "overdue_notices"):
-            conn.execute(f"DROP TABLE {table}")  # co0085's two tables
+        for table in ("todos", "overdue_notices", "memorized_revision_authority"):
+            conn.execute(f"DROP TABLE {table}")  # co0085's three tables
         for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
                        "overdue_notice_minimum", "overdue_notice_template"):
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences

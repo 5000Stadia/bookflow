@@ -60,3 +60,94 @@ def test_reminders_to_dos_and_the_notice_queue(hosted):  # noqa: F811
     assert "Order envelopes" in reminders.text
     company_group = browser.get(f"/c/{company}/_group/company", headers=HEADERS).text
     assert f"/c/{company}/reminders" in company_group and f"/c/{company}/todo" in company_group
+
+
+def _agent_template(hosted, name='Cleaner'):
+    """An agent, acting for the installer, memorizes a monthly journal it wants entered automatically."""
+    from bookflow.core.config import Config
+    from tests.conftest import hosted_call, make_agent
+    from tests.test_entry_review import Caller
+    principal = Config.load(hosted.root / 'config.toml').user_table(hosted.login)['user_id']
+    agent = make_agent(hosted_call(hosted), 'sched-bot', principals=principal, company=hosted.company_id, role='standard')
+    secret = hosted.ok('token.issue', {'user': agent, 'principal': principal, 'label': 'sched'})['secret']
+    person, bot = Caller(hosted, hosted.secret), Caller(hosted, secret, reason='Owner: post the monthly sweep')
+    # A round month-end amount into a bank account with no memo, by an agent: the review's agent flag.
+    bank = person.ok('account create', {'name': 'Sched Checking', 'type': 'bank'})['id']
+    income = person.ok('account create', {'name': 'Sched sundry income', 'type': 'income'})['id']
+    bot.ok('memorized create', {'name': name, 'command': 'journal post', 'frequency': 'monthly',
+                                'start_date': '2099-01-31', 'mode': 'enter_automatically',
+                                'payload': {'lines': [{'account': bank, 'side': 'debit', 'amount': '500.00'},
+                                                      {'account': income, 'side': 'credit', 'amount': '500.00'}]}})
+    return person, principal, agent
+
+
+def _tick(hosted):
+    from datetime import datetime, timezone
+    return hosted.handle.host.schedule_now(now=datetime(2099, 1, 31, 18, tzinfo=timezone.utc))[hosted.company_id]
+
+
+def test_E_an_agents_scheduled_entry_is_recorded_as_that_agents_write(hosted):  # noqa: F811
+    """The scheduler replays an agent-authored template as the agent, for the person it acted for: review flags
+    and the audit filters see it exactly as a direct agent write."""
+    person, principal, agent = _agent_template(hosted)
+    done = _tick(hosted)
+    assert done['memorized']['entered'] == 1, done
+    [occurrence] = person.ok('memorized show', {'memorized': 'Cleaner'})['occurrences']
+    entry = occurrence['transaction_id']
+    events = person.ok('audit list', {'actor': agent, 'principal': principal, 'command': 'journal post', 'limit': 10})['items']
+    assert [e['actor_kind'] for e in events] == ['agent'] and events[0]['on_behalf_of'] == principal, events
+    assert events[0]['interface'] == 'system' and events[0]['client_name'] == 'scheduler'
+    review = person.ok('report entries-to-review', {'as_of': '2099-12-31', 'limit': 200})
+    assert any(row['transaction_id'] == entry and row['actor_kind'] == 'agent' for row in review['rows'])
+
+
+def _suspended_agents_template_is_blocked(hosted):
+    import sqlite3
+    person, principal, agent = _agent_template(hosted)
+    with sqlite3.connect(hosted.root / 'hub.db') as hub:
+        hub.execute("UPDATE agent_authority SET suspended_at = '2099-01-01T00:00:00Z', suspension_reason = 'probe' "
+                    "WHERE agent_user_id = ?", (agent,))
+    done = _tick(hosted)
+    assert done['memorized']['entered'] == 0 and done['memorized']['blocked'] == 1, done
+    [occurrence] = person.ok('memorized show', {'memorized': 'Cleaner'})['occurrences']
+    assert occurrence['error_code'] == 'E_PERMISSION' and 'suspended' in occurrence['error_message']
+    todo = next(t for t in person.ok('todo list', {'status': 'all'})['items']
+                if t['source_ref'] == 'memorized-occurrence:' + occurrence['id'])
+    assert todo['assignee_id'] == principal and todo['assignee_id'] != agent
+
+
+def test_P_a_suspended_agents_template_is_blocked_under_the_current_policy(hosted):  # noqa: F811
+    _suspended_agents_template_is_blocked(hosted)
+
+
+def test_P_an_agent_unassigned_from_its_person_is_blocked(hosted):  # noqa: F811
+    from tests.conftest import hosted_call
+    person, principal, agent = _agent_template(hosted)
+    hosted_call(hosted)('agent unassign', {'agent': agent, 'principal': principal})
+    done = _tick(hosted)
+    assert done['memorized']['entered'] == 0 and done['memorized']['blocked'] == 1, done
+
+
+def test_M_a_member_denied_notes_and_customers_sees_neither_on_reminders_or_home(hosted):  # noqa: F811
+    from tests.conftest import make_actor
+    make_actor(hosted.root, 'mallory')
+    hosted.ok('membership.grant', {'user': 'mallory', 'company': hosted.company_id, 'role': 'standard',
+                                   'denies': ['note', 'customer'], 'expected_version': 0})
+    hosted.ok('user.set-password', {'username': 'mallory', 'password': PASSWORD})
+    owner = TestClient(hosted.handle.app)
+    assert owner.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    company = hosted.company_id
+    for name, body in (('todo.create', {'title': 'HR: review salaries'}),
+                       ('company.update', {'overdue_notice_days': 1, 'overdue_notice_template': 'letter'}),
+                       ('notice.generate', {'as_of': AS_OF})):
+        made = owner.post(f"/companies/{company}/commands/{name}", json=body, headers={**HEADERS, "X-Bookflow-Reason": "set up"})
+        assert made.status_code == 200, made.text[:400]
+    mallory = TestClient(hosted.handle.app)
+    assert mallory.post("/login", json={"username": "mallory", "password": PASSWORD}).status_code == 200
+    page = mallory.get(f"/c/{company}/reminders?as_of={AS_OF}", headers=HEADERS)
+    assert page.status_code == 200 and 'data-reminder-section="overdue_invoices"' in page.text
+    assert 'data-reminder-section="todos_due"' not in page.text and 'data-reminder-section="notices_ready"' not in page.text
+    assert 'HR: review salaries' not in page.text and 'Dear ' not in page.text
+    home = mallory.get(f"/c/{company}/_overview", headers=HEADERS)
+    assert home.status_code == 200 and 'HR: review salaries' not in home.text
+    assert 'data-reminder="todos_due"' not in home.text and 'data-reminder="notices_ready"' not in home.text

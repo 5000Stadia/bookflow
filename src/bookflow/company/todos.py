@@ -61,10 +61,11 @@ def resolve_assignee(s, selector: str | None) -> dict[str, Any]:
     if selector is None or selector.strip().casefold() == 'me':
         return {'id': s.actor.id, 'kind': s.actor.kind, 'display_name': s.actor.display_name, 'username': s.actor.username}
     user = find_user(s, username=selector.strip()) or find_user(s, id=selector.strip())
-    if user is None or not user.get('active', True):
-        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'user', 'selector': selector, 'suggestions': []})
-    if user['kind'] == 'system':
-        raise _invalid('assignee', 'must be a person or an agent')
+    # One answer for "no such user" and "not a member here": a to-do form must not tell a member
+    # of one company who the users of another are.
+    not_member = _invalid('assignee', 'is not a person or agent who is a member of this company')
+    if user is None or not user.get('active', True) or user['kind'] == 'system':
+        raise not_member
     row = s.company_row or {}
     member = s.hub.conn.execute(sa.select(h.memberships.c.id).where(
         h.memberships.c.user_id == user['id'], h.memberships.c.revoked_at.is_(None),
@@ -72,7 +73,7 @@ def resolve_assignee(s, selector: str | None) -> dict[str, Any]:
                sa.and_(h.memberships.c.scope_type == 'organization', h.memberships.c.scope_id == row.get('organization_id'))))
     ).first()
     if member is None and not user.get('hub_admin'):
-        raise _invalid('assignee', f"{user['username']} is not a member of this company, so could never see the to-do")
+        raise not_member
     return user
 
 

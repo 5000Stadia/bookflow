@@ -73,15 +73,17 @@ def test_the_scheduler_enters_a_due_slot_once_across_ticks_and_a_restart(books):
     assert dates(books) == ['2026-01-31', '2026-02-28']
     assert [o['status'] for o in occurrences(books)] == ['entered', 'entered']
 
-    # The host is the actor of record, for the template's owner, with the schedule as the reason.
+    # Each posting is its author's write, made through the scheduler, with the schedule as the reason;
+    # the bookkeeping around it is the host's own.
     posted = events(books, 'bill post')
     assert len(posted) == 2
-    owner = books.run('memorized show', {'memorized': 'Monthly office rent'})['created_by']
     for command, kind, behalf, client, interface, reason in posted:
-        assert (kind, behalf, client, interface) == ('system', owner, 'scheduler', 'system')
+        assert (kind, behalf, client, interface) == ('human', None, 'scheduler', 'system')
         assert reason.startswith('On schedule: Monthly office rent (monthly) for 2026-')
+    owner = books.run('memorized show', {'memorized': 'Monthly office rent'})['created_by']
+    assert actors(books, 'bill post') == {owner}
     claims = events(books, 'memorized process')
-    assert claims and all(row[1:5] == ('system', owner, 'scheduler', 'system') for row in claims)
+    assert claims and all(row[1:5] == ('system', None, 'scheduler', 'system') for row in claims)
     # Quiet ticks write nothing: no audit event per minute.
     before = len(events(books))
     tick(books, '2026-03-01')
@@ -112,24 +114,207 @@ def test_a_closed_period_is_a_blocked_occurrence_with_a_to_do_and_is_not_retried
     assert [(r['slot_date'], r['error_code']) for r in reminders['memorized_failed']] == [('2026-01-31', 'E_PERIOD_CLOSED')]
 
 
-def test_an_owner_who_lost_the_right_to_post_is_a_blocked_occurrence(books):
-    memorize(books)
-    owner = books.run('memorized show', {'memorized': 'Monthly office rent'})['created_by']
-    hub = sqlite3.connect(Path(books.root) / 'hub.db')
-    with hub:
-        hub.execute("UPDATE memberships SET revoked_at = '2026-01-01T00:00:00Z' WHERE user_id = ?", (owner,))
-        hub.execute("UPDATE users SET hub_admin = 0 WHERE id = ?", (owner,))
-    try:
-        out = tick(books, '2026-01-31')
-    finally:
-        with hub:
-            hub.execute("UPDATE memberships SET revoked_at = NULL WHERE user_id = ?", (owner,))
-            hub.execute("UPDATE users SET hub_admin = 1 WHERE id = ?", (owner,))
-        hub.close()
+def actors(books, command):
+    with company_db(books) as db:
+        return {row[0] for row in db.execute('SELECT actor_id FROM audit_events WHERE command = ?', (command,))}
+
+
+def member(books, name, role='standard', denies=None):
+    """A second person of the company with their own login: (user id, a client acting as them)."""
+    from tests.conftest import as_user, make_actor
+    uid = make_actor(Path(books.root), name)
+    books.client.run('membership grant', {'user': name, 'company': books.company, 'role': role, 'expected_version': 0,
+                                          **({'denies': denies} if denies else {})})
+    client = as_user(Path(books.root), name)
+    return uid, lambda command, raw=None, **context: client.run(command, raw or {}, company=books.company, **context)
+
+
+def all_bills(books):
+    found, cursor = [], None
+    while True:
+        page = books.run('bill query', {'limit': 200, **({'cursor': cursor} if cursor else {})})
+        found += page['items']
+        cursor = page.get('next_cursor')
+        if not cursor:
+            return found
+
+
+def amounts(books):
+    return sorted(b['total_minor_units'] for b in all_bills(books))
+
+
+def hub_set(books, sql, *args):
+    with sqlite3.connect(Path(books.root) / 'hub.db') as hub:
+        hub.execute(sql, args)
+
+
+def admin_id(books):
+    return books.client.run('company show', {}, company=books.company)['created_by']
+
+
+def todo_for(books, occurrence_id):
+    return next(t for t in books.run('todo list', {'status': 'all'})['items']
+                if t['source_ref'] == 'memorized-occurrence:' + occurrence_id)
+
+
+def test_D_a_deactivated_author_is_a_clear_blocked_reason_and_an_admins_to_do(books):
+    bob, as_bob = member(books, 'bob')
+    as_bob('memorized create', dict(name='Bob rent', command='bill post', payload=rent_payload(),
+                                    frequency='monthly', start_date='2026-01-31', mode='enter_automatically'))
+    hub_set(books, 'UPDATE users SET active = 0 WHERE id = ?', bob)
+    out = tick(books, '2026-01-31')
     assert out['memorized']['blocked'] == 1 and out['memorized']['entered'] == 0, out
-    [occurrence] = occurrences(books)
-    assert occurrence['status'] == 'blocked' and occurrence['error_code'] in ('E_PERMISSION', 'E_COMPANY_NOT_FOUND')
+    [occurrence] = occurrences(books, 'Bob rent')
+    assert occurrence['error_code'] == 'E_PERMISSION' and 'deactivated' in occurrence['error_message']
     assert dates(books) == []
+    todo = todo_for(books, occurrence['id'])
+    assert todo['assignee_id'] == admin_id(books) != bob and 'can no longer post it' in todo['title']
+
+
+def test_an_author_who_left_the_company_is_blocked_not_company_not_found(books):
+    bob, as_bob = member(books, 'bob')
+    as_bob('memorized create', dict(name='Bob rent', command='bill post', payload=rent_payload(),
+                                    frequency='monthly', start_date='2026-01-31', mode='enter_automatically'))
+    hub_set(books, "UPDATE memberships SET revoked_at = '2026-01-01T00:00:00Z' WHERE user_id = ?", bob)
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['blocked'] == 1, out
+    [occurrence] = occurrences(books, 'Bob rent')
+    assert occurrence['error_code'] == 'E_PERMISSION' and 'no longer a member' in occurrence['error_message']
+    assert todo_for(books, occurrence['id'])['assignee_id'] == admin_id(books)
+    assert dates(books) == []
+
+
+def _admin_group_with_bobs_member(books, as_bob):
+    books.run('memorized-group create', {'name': 'Month end', 'frequency': 'monthly', 'start_date': '2026-01-31',
+                                         'mode': 'enter_automatically'}, reason='Create the group')
+    books.run('memorized create', {'name': 'Rent', 'command': 'bill post', 'payload': rent_payload(),
+                                   'group': 'Month end', 'group_ordinal': 1}, reason='Add rent')
+    as_bob('memorized create', {'name': 'Bob extra', 'command': 'bill post',
+                                'payload': rent_payload(vendor='Tool Depot', account='Tool Hire', amount='9999.00'),
+                                'group': 'Month end', 'group_ordinal': 2})
+
+
+def test_A_a_group_member_runs_on_its_own_authors_authority_not_the_groups(books):
+    bob, as_bob = member(books, 'bob')
+    _admin_group_with_bobs_member(books, as_bob)
+    hub_set(books, 'UPDATE users SET active = 0 WHERE id = ?', bob)
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['entered'] == 1 and out['memorized']['blocked'] == 1, out
+    assert amounts(books) == [180000], 'the deactivated member\'s 9,999 never posts under the admin'
+    assert actors(books, 'bill post') == {admin_id(books)}
+    [blocked] = [o for o in occurrences(books, 'Bob extra')]
+    assert blocked['status'] == 'blocked' and todo_for(books, blocked['id'])['assignee_id'] == admin_id(books)
+
+
+def test_B_a_group_member_whose_author_lost_the_capability_is_blocked(books):
+    bob, as_bob = member(books, 'bob')
+    _admin_group_with_bobs_member(books, as_bob)
+    books.client.run('membership grant', {'user': 'bob', 'company': books.company, 'role': 'standard',
+                                          'denies': ['ledger.post'], 'expected_version': 1})
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['entered'] == 1 and out['memorized']['blocked'] == 1, out
+    [blocked] = occurrences(books, 'Bob extra')
+    assert blocked['error_code'] == 'E_PERMISSION'
+    assert amounts(books) == [180000]
+    assert todo_for(books, blocked['id'])['assignee_id'] == admin_id(books)
+
+
+def test_C_a_waiting_slot_replays_the_current_revision_as_its_authors_write(books):
+    bob, as_bob = member(books, 'bob')
+    as_bob('memorized create', dict(name='Supplies', command='bill post',
+                                    payload=rent_payload(amount='9999.00'), frequency='monthly',
+                                    start_date='2026-01-31', mode='remind'))
+    assert tick(books, '2026-01-31')['memorized']['waiting'] == 1   # claimed on Bob's revision
+    shown = books.run('memorized show', {'memorized': 'Supplies'})
+    books.run('memorized update', {'memorized': 'Supplies', 'expected_version': shown['version'],
+                                   'payload': rent_payload(amount='120.00'), 'mode': 'enter_automatically'},
+              reason='Correct the amount')
+    out = tick(books, '2026-02-01')
+    assert out['memorized']['entered'] == 1, out
+    assert amounts(books) == [12000]
+    assert actors(books, 'bill post') == {admin_id(books)}
+    [occurrence] = occurrences(books, 'Supplies')
+    assert occurrence['revision_id'] == books.run('memorized show', {'memorized': 'Supplies'})['current_revision_id']
+
+
+def test_F_a_client_calling_itself_scheduler_keeps_its_own_reason(books):
+    import bookflow
+    memorize(books)
+    pretender = bookflow.connect(data_root=str(books.root), client_name='scheduler')
+    pretender.run('memorized process', {'as_of': '2026-01-31'}, company=books.company, reason='My own month end')
+    with company_db(books) as db:
+        reasons = {row[0] for row in db.execute("SELECT reason FROM audit_events WHERE command = 'bill post'")}
+    assert reasons == {'My own month end'}
+
+
+def test_G_waiting_reminders_never_starve_automatic_entries(books):
+    memorize(books, name='Daily check', mode='remind', frequency='daily', start_date='2026-01-01')
+    memorize(books, name='Rent', start_date='2026-08-31')
+    tick(books, '2026-07-31')                       # 200+ reminder slots now wait
+    assert len([o for o in occurrences(books, 'Daily check') if o['status'] == 'pending']) >= 50
+    out = tick(books, '2026-09-01')
+    assert out['memorized']['entered'] == 1 and dates(books) == ['2026-08-31'], out
+
+
+def test_H_a_group_backlog_past_the_batch_limit_loses_no_members_slot(books):
+    books.run('memorized-group create', {'name': 'Daily three', 'frequency': 'daily', 'start_date': '2026-01-01',
+                                         'mode': 'enter_automatically'}, reason='Create the group')
+    for ordinal in (1, 2, 3):
+        books.run('memorized create', {'name': f'Part {ordinal}', 'command': 'bill post',
+                                       'payload': rent_payload(amount=f'{ordinal}.00'),
+                                       'group': 'Daily three', 'group_ordinal': ordinal}, reason='Add a part')
+    entered = []
+    with host(books) as running:
+        for minute in range(12):                    # 69 slots of 3, a group slot never split by a batch
+            out = running.schedule_now(now=at('2026-03-10').replace(minute=minute))[books.company]['memorized']
+            assert out['entered'] % 3 == 0, out
+            entered.append(out['entered'])
+    assert entered[0] == 24 and sum(entered) == 207, entered
+    bills = all_bills(books)
+    for ordinal in (1, 2, 3):
+        days = sorted(b['date'] for b in bills if b['total_minor_units'] == ordinal * 100)
+        assert len(days) == 69 and days[0] == '2026-01-01' and days[-1] == '2026-03-10', ordinal
+
+
+def test_K_deleting_a_template_sets_its_waiting_slots_aside(books):
+    memorize(books, mode='remind')
+    tick(books, '2026-02-28')
+    assert [o['status'] for o in occurrences(books)] == ['pending', 'pending']
+    shown = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    books.run('memorized delete', {'memorized': shown['id'], 'expected_version': shown['version']}, reason='No longer rented')
+    assert books.run('memorized process', {'as_of': '2026-03-31'}, reason='Run')['entered_count'] == 0
+    tick(books, '2026-03-31')
+    assert dates(books) == []
+    assert books.run('reminders', {'as_of': '2026-03-31'})['memorized_due'] == []
+
+
+def test_L_an_unknown_user_and_a_non_member_get_the_same_answer(books):
+    from tests.conftest import make_actor
+    make_actor(Path(books.root), 'stranger')
+    answers = []
+    for who in ('stranger', 'nobody-at-all', '01ZZZZZZZZZZZZZZZZZZZZZZZZ'):
+        with pytest.raises(BookflowError) as refused:
+            books.run('todo create', {'title': 'x', 'assignee': who})
+        answers.append((refused.value.code, json.dumps(refused.value.details, sort_keys=True), refused.value.message))
+    assert len(set(answers)) == 1 and answers[0][0] == 'E_VALIDATION'
+
+
+def test_M_reminders_leave_out_what_the_reader_may_not_list(books):
+    _invoice(books, 'Rivera Construction', '2026-01-02', '500.00')
+    books.run('todo create', {'title': 'HR: review salaries', 'due_date': '2026-03-01'})
+    books.run('company update', {'overdue_notice_days': 1, 'overdue_notice_template': 'letter'}, reason='Notices on')
+    books.run('notice generate', {'as_of': '2026-03-05'}, reason='Generate')
+    mallory, as_mallory = member(books, 'mallory', denies=['note', 'customer'])
+    for refused_command in ('todo list', 'notice list'):
+        with pytest.raises(BookflowError) as refused:
+            as_mallory(refused_command, {})
+        assert refused.value.code == 'E_PERMISSION'
+    seen = as_mallory('reminders', {'as_of': '2026-03-05'})
+    assert {s['key'] for s in seen['sections']} == {'memorized_due', 'memorized_failed', 'overdue_invoices', 'bills_to_pay'}
+    assert seen['todos_due'] == [] and seen['notices_ready'] == []
+    assert 'HR: review salaries' not in json.dumps(seen) and 'Dear' not in json.dumps(seen)
+    full = books.run('reminders', {'as_of': '2026-03-05'})
+    assert {'todos_due', 'notices_ready'} <= {s['key'] for s in full['sections']}
 
 
 def test_catch_up_enters_recent_missed_slots_and_leaves_older_ones_for_a_person(books):
@@ -288,7 +473,7 @@ def test_co0085_is_exactly_the_current_metadata_and_a_fresh_company_reaches_it(t
     from bookflow.storage.engine import open_database
     from bookflow.storage.migrate import HEADS, migrate_to_head
     m = importlib.import_module('bookflow.storage.company_migrations.versions.0085_scheduling')
-    tables = ('todos', 'overdue_notices')
+    tables = ('todos', 'overdue_notices', 'memorized_revision_authority')
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())) for name in tables)
     indexes = tuple(str(CreateIndex(index).compile(dialect=dialect())) for name in tables
                     for index in sorted(c.metadata.tables[name].indexes, key=lambda index: index.name))

@@ -88,4 +88,12 @@ def define_tables(metadata, C, T, common):
         sa.Index('ix_overdue_notices_status_as_of', 'status', 'as_of'),
         description='Overdue notices the scheduler generated: one per customer and notice period, waiting to be sent or dismissed.')
 
-    return {'todos': todos, 'overdue_notices': notices}
+    authority = T('memorized_revision_authority',
+        C('revision_id', sa.String(26), 'Memorized transaction revision an agent saved.', primary_key=True),
+        C('agent_id', sa.String(26), 'The agent that saved it.', nullable=False),
+        C('principal_id', sa.String(26), 'The person the agent acted for when it saved it.', nullable=True),
+        C('authority_epoch', sa.Integer, "The agent's authority epoch at the save; the scheduler replays the revision only while it is unchanged, as a bearer token is honoured only for its own epoch.", nullable=True),
+        C('created_at', sa.String(32), 'UTC time the revision was saved.', nullable=False),
+        description="The authority an agent held when it saved a memorized transaction revision, so the scheduler applies a token's checks to it.")
+
+    return {'todos': todos, 'overdue_notices': notices, 'memorized_revision_authority': authority}

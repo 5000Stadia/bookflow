@@ -300,12 +300,25 @@ def apply_write(plan, ctx, s):
         after = dict(row, status='deleted', next_date=None, version=row['version'] + 1,
                      updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         touched.append(Touched('memorized_transaction', row['id'], 'delete', row['version'], after['version'], after, row, db='company'))
+        # A deleted template owes nothing more: the slots still waiting are set aside, on the record
+        # as skipped, so neither a person's run nor the host's scheduler can enter them later.
+        waiting = _rows(s, c.memorized_occurrences, c.memorized_occurrences.c.template_id == row['id'],
+                        c.memorized_occurrences.c.status == 'pending')
+        for occurrence in waiting:
+            skipped = dict(occurrence, status='skipped', version=occurrence['version'] + 1, updated_at=at,
+                           updated_by=s.actor.id, updated_via=ctx.interface.value)
+            touched.append(Touched('memorized_occurrence', occurrence['id'], 'update', occurrence['version'],
+                                   skipped['version'], skipped, occurrence, db='company'))
         summary = f"deleted memorized transaction {row['name']}"
         _audit(s, ctx, data['command_name'], summary, touched, event)
         s.company.conn.execute(c.memorized_transactions.update()
             .where(c.memorized_transactions.c.id == row['id'])
             .values(status='deleted', next_date=None, version=after['version'],
                     updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value))
+        for occurrence in waiting:
+            s.company.conn.execute(c.memorized_occurrences.update().where(c.memorized_occurrences.c.id == occurrence['id'])
+                .values(status='skipped', version=occurrence['version'] + 1, updated_at=at,
+                        updated_by=s.actor.id, updated_via=ctx.interface.value))
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         out = _row_write_output(s, after, revision, [], warnings, deleted=True)
         return Applied(out, touched, summary, audited=True)
@@ -351,6 +364,13 @@ def apply_write(plan, ctx, s):
             .where(c.memorized_transactions.c.id == row['id'])
             .values(**{k: row[k] for k in row if k not in ('id', 'created_at', 'created_by', 'created_via')}))
     s.company.conn.execute(c.memorized_transaction_revisions.insert().values(**revision))
+    if s.actor.kind == 'agent':
+        # The scheduler replays an agent's revision only while the agent still holds the authority it
+        # saved it with -- the checks a bearer token gets: assignment, suspension and epoch (R111).
+        from bookflow.hub.credentials import _binding
+        _, epoch = _binding(s.hub, s.actor.id, ctx.on_behalf_of)
+        s.company.conn.execute(c.memorized_revision_authority.insert().values(
+            revision_id=revision_id, agent_id=s.actor.id, principal_id=ctx.on_behalf_of, authority_epoch=epoch, created_at=at))
     for edge in index:
         s.company.conn.execute(c.memorized_references.insert().values(
             id=new_id(), template_id=row['id'], revision_id=revision_id, created_at=at,

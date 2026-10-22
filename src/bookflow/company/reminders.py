@@ -33,21 +33,29 @@ def _memorized(s, as_of, limit):
         .order_by(o.c.slot_date, o.c.id)).mappings().all()
     for row in rows:
         template = templates.get(row['template_id'])
-        if template is None:
+        if template is None or template['status'] == 'deleted':
             continue
         item = dict(template_id=template['id'], template_name=template['name'], occurrence_id=row['id'],
                     slot_date=row['slot_date'], due_date=row['due_date'],
                     state='blocked' if row['status'] == 'blocked' else 'due', mode=template['mode'],
                     error_code=row['error_code'], error_message=row['error_message'])
         (failed if row['status'] == 'blocked' else due).append(item)
-    # Slots of remind templates no run has listed yet: the schedule says they are due.
+    # Slots the schedule says are due that no run has listed yet: a reminder's, or an automatic one
+    # that fell due while no host was running ("due, not yet entered"). Groups carry their members.
+    def projected(owner, members, mode):
+        for slot in service._projected_slots(owner, as_of, limit):
+            for member in members:
+                due.append(dict(template_id=member['id'], template_name=member['name'], occurrence_id=None,
+                                slot_date=slot, due_date=service.schedule.due_date(slot, owner['days_in_advance']),
+                                state='due', mode=mode, error_code=None, error_message=None))
     for template in templates.values():
-        if template['status'] != 'active' or template['mode'] != 'remind' or template['frequency'] == 'never':
-            continue
-        for slot in service._projected_slots(template, as_of, limit):
-            due.append(dict(template_id=template['id'], template_name=template['name'], occurrence_id=None,
-                            slot_date=slot, due_date=service.schedule.due_date(slot, template['days_in_advance']),
-                            state='due', mode=template['mode'], error_code=None, error_message=None))
+        if (template['status'] == 'active' and template['mode'] in ('remind', 'enter_automatically')
+                and template['frequency'] != 'never'):
+            projected(template, [template], template['mode'])
+    for group in service._rows(s, c.memorized_groups, c.memorized_groups.c.status == 'active',
+                               c.memorized_groups.c.frequency != 'never'):
+        if group['mode'] in ('remind', 'enter_automatically'):
+            projected(group, service._members(s, group['id']), group['mode'])
     due.sort(key=lambda item: (item['slot_date'], item['template_name']))
     return due, failed
 
@@ -79,20 +87,43 @@ def _bills(s, as_of, ahead):
             for tx, party, net, number, on, due, name in cursor.fetchall()]
 
 
+# Each heading is shown only to a reader its own list command would answer: a member denied
+# notes never sees a to-do here, one denied customers never sees a notice letter.
+SECTION_CAPABILITY = {'memorized_due': 'ledger.read', 'memorized_failed': 'ledger.read', 'todos_due': 'note',
+                      'notices_ready': 'customer', 'overdue_invoices': 'reports', 'bills_to_pay': 'reports'}
+
+
+def _may(s, capability, cache):
+    from bookflow.core.errors import BookflowError
+    from bookflow.hub import access
+    if capability not in cache:
+        try:
+            access.require_resource(s, capability, 'member')
+            cache[capability] = True
+        except BookflowError as error:
+            if error.code not in ('E_PERMISSION', 'E_UNAUTHENTICATED', 'E_COMPANY_NOT_FOUND'):
+                raise
+            cache[capability] = False
+    return cache[capability]
+
+
 def reminders(s, inp):
     from bookflow.company import notices, todos
     from bookflow.company.scheduling_models import RemindersOutput, ReminderSection
     as_of = inp.as_of or todos.today(s)
     currency = s.company.conn.execute(sa.select(c.company_info.c.home_currency)).scalar_one()
     limit = inp.limit
-    due, failed = _memorized(s, as_of, limit)
-    todo_rows, _ = todos.query(s, assignee_id=s.actor.id if inp.mine else None, status='open', due_by=as_of, limit=500)
+    cache: dict[str, bool] = {}
+    may = {key: _may(s, capability, cache) for key, capability in SECTION_CAPABILITY.items()}
+    due, failed = _memorized(s, as_of, limit) if may['memorized_due'] else ([], [])
+    todo_rows = todos.query(s, assignee_id=s.actor.id if inp.mine else None, status='open', due_by=as_of,
+                            limit=500)[0] if may['todos_due'] else []
     labels = todos._labels(s, todo_rows)
-    notice_rows, _ = notices.query(s, status='ready', limit=500)
+    notice_rows = notices.query(s, status='ready', limit=500)[0] if may['notices_ready'] else []
     names = notices._names(s, notice_rows)
     company_name = notices.policy(s)['company_name']
-    invoices = _invoices(s, as_of, currency)
-    bills = _bills(s, as_of, inp.bills_days_ahead)
+    invoices = _invoices(s, as_of, currency) if may['overdue_invoices'] else []
+    bills = _bills(s, as_of, inp.bills_days_ahead) if may['bills_to_pay'] else []
     total = lambda rows, key: _money(sum(row[key] for row in rows), currency)  # noqa: E731
     sections = [
         ReminderSection(key='memorized_due', title='Memorized transactions due', count=len(due), total=None),
@@ -103,6 +134,7 @@ def reminders(s, inp):
         ReminderSection(key='overdue_invoices', title='Overdue invoices', count=len(invoices), total=total(invoices, 'open_balance')),
         ReminderSection(key='bills_to_pay', title='Bills to pay', count=len(bills), total=total(bills, 'open_balance')),
     ]
+    sections = [section for section in sections if may[section.key]]
     with_money = lambda rows: [dict(row, open_balance=_money(row['open_balance'], currency)) for row in rows[:limit]]  # noqa: E731
     return RemindersOutput(
         as_of=as_of, sections=sections, memorized_due=due[:limit], memorized_failed=failed[:limit],

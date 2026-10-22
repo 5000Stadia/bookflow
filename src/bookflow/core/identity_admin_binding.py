@@ -7,6 +7,7 @@ Hosted entry is writer-only, after dequeue. Local entry obtains RootLock itself.
 from contextlib import contextmanager
 from pathlib import Path
 from threading import current_thread
+import weakref
 
 from bookflow.hub import identity_admin as b, credentials, permission_runtime as runtime
 from bookflow.hub.agent_authority import fail
@@ -14,6 +15,11 @@ from bookflow.storage.engine import open_database
 from .config import os_login, _parse
 from .locks import RootLock
 from .publication import OSBinding
+
+
+# The host writer threads, registered by each Host as it is built: the only threads on which the
+# scheduler may build a ScheduledBinding. Identity, not a thread name anyone can give a thread.
+SCHEDULER_THREADS: "weakref.WeakSet" = weakref.WeakSet()
 
 
 class ScheduledBinding:
@@ -24,12 +30,12 @@ class ScheduledBinding:
     It is built only on the host's writer thread, by ``company/scheduler.py``, for an active
     user; no request, token or JSON body can produce one.
     """
-    __slots__ = ('user_id', 'on_behalf_of')
+    __slots__ = ('user_id', 'on_behalf_of', 'authority_epoch')
 
-    def __init__(self, user_id, on_behalf_of=None):
-        if current_thread().name != 'bookflow-writer' or type(user_id) is not str:
+    def __init__(self, user_id, on_behalf_of=None, authority_epoch=None):
+        if current_thread() not in SCHEDULER_THREADS or type(user_id) is not str:
             fail('invalid_input', 'binding')
-        self.user_id, self.on_behalf_of = user_id, on_behalf_of
+        self.user_id, self.on_behalf_of, self.authority_epoch = user_id, on_behalf_of, authority_epoch
 
 
 def _file(root):
@@ -74,8 +80,10 @@ class BoundOperation:
         self._guard.validate(self._tx, self._guard.request_id, purpose)
         b._require_tx(self._tx, purpose == 'apply')
         if type(self._admitted) is ScheduledBinding:
-            row = self._tx.raw.execute('SELECT active FROM main.users WHERE id=?', (self._admitted.user_id,)).fetchone()
-            if purpose != 'preview' or row is None or not row[0]:
+            # The checks a bearer token gets, read now: active, and for an agent its assignment to the
+            # person it acts for, no suspension, and the same authority epoch it held when it saved.
+            eligible, epoch = credentials._binding(self._tx, self._admitted.user_id, self._admitted.on_behalf_of)
+            if purpose != 'preview' or not eligible or epoch != self._admitted.authority_epoch:
                 fail('not_administrator', 'binding')
             return None
         if type(self._admitted) is OSBinding:
