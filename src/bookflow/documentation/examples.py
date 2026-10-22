@@ -1289,3 +1289,53 @@ EXAMPLES['estimate sales-order'] = Example(
     f'bookflow estimate sales-order {ID} --expected-version 2 --conversion-key "riverside-order-2026-10" --date 2026-10-22'
     ' --ship-date 2026-10-29 --company "Demo Plumbing Co" --reason "Make the order from the accepted estimate" --json',
     {'estimate': ID, 'expected_version': 2, 'conversion_key': 'riverside-order-2026-10', 'date': '2026-10-22', 'ship_date': '2026-10-29'})
+
+# Mileage (R118): a trip by total miles, billed to a job, and the rate that prices the deduction.
+EXAMPLES["trip create"] = Example(
+    'bookflow trip create --vehicle "Service van" --trip-end-date 2026-10-20 --total-miles 42 --billable'
+    ' --customer "Riverside Apartments" --item "Mainline Clearing" --billing-rate 0.70 --notes "Site visit"'
+    ' --reason "Mileage log" --company "Demo Plumbing Co" --json',
+    {'vehicle': 'Service van', 'trip_end_date': '2026-10-20', 'total_miles': '42', 'billable': True,
+     'customer': 'Riverside Apartments', 'item': 'Mainline Clearing', 'billing_rate': '0.70', 'notes': 'Site visit'})
+EXAMPLES["trip invoice"] = Example(
+    f'bookflow trip invoice {ID} --expected-version 1 --conversion-key riverside-miles-oct --date 2026-10-22'
+    ' --reason "Bill October mileage" --company "Demo Plumbing Co" --json',
+    {'trip': ID, 'expected_version': 1, 'conversion_key': 'riverside-miles-oct', 'date': '2026-10-22'})
+EXAMPLES["mileage-rate set"] = Example(
+    'bookflow mileage-rate set --effective-date 2026-01-01 --rate 0.70 --reason "Standard rate for 2026"'
+    ' --company "Demo Plumbing Co" --json', {'effective_date': '2026-01-01', 'rate': '0.70'})
+_MILES_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'vehicle create': Example('bookflow vehicle create --name "Service van" --description "Ford Transit, plate 7ABC123"'
+                              ' --reason "New van"' + _MILES_CO, {'name': 'Service van', 'description': 'Ford Transit, plate 7ABC123'}),
+    'vehicle update': Example('bookflow vehicle update "Service van" --active false --reason "Sold the van"' + _MILES_CO,
+                              {'vehicle': 'Service van', 'active': False}),
+    'vehicle show': Example('bookflow vehicle show "Service van"' + _MILES_CO, {'vehicle': 'Service van'}),
+    'vehicle list': Example('bookflow vehicle list' + _MILES_CO, {}),
+    'mileage-rate delete': Example('bookflow mileage-rate delete 2027-01-01 --reason "Entered a year early"' + _MILES_CO,
+                                   {'effective_date': '2027-01-01'}),
+    'mileage-rate list': Example('bookflow mileage-rate list' + _MILES_CO, {}),
+    'trip update': Example(f'bookflow trip update {ID} --expected-version 1 --total-miles 40 --reason "Odometer note said 40"'
+                           + _MILES_CO, {'trip': ID, 'expected_version': 1, 'total_miles': '40'}),
+    'trip void': Example(f'bookflow trip void {ID} --expected-version 2 --reason "Logged twice"' + _MILES_CO,
+                         {'trip': ID, 'expected_version': 2}),
+    'trip show': Example(f'bookflow trip show {ID}' + _MILES_CO, {'trip': ID}),
+    'trip query': Example('bookflow trip query --vehicle "Service van" --date-from 2026-10-01 --date-to 2026-10-31 --unreimbursed'
+                          + _MILES_CO, {'vehicle': 'Service van', 'date_from': '2026-10-01', 'date_to': '2026-10-31',
+                                        'unreimbursed': True}),
+    'trip billing': Example(f'bookflow trip billing {ID}' + _MILES_CO, {'trip': ID}),
+    'trip sales-receipt': Example(
+        f'bookflow trip sales-receipt {ID} --expected-version 1 --conversion-key riverside-miles-cash --date 2026-10-22'
+        ' --deposit-to "Undeposited Funds" --amount-received 29.40 --reason "Paid on site"' + _MILES_CO,
+        {'trip': ID, 'expected_version': 1, 'conversion_key': 'riverside-miles-cash', 'date': '2026-10-22',
+         'deposit_to': 'Undeposited Funds', 'amount_received': '29.40'}),
+    'trip reimburse': Example(
+        f'bookflow trip reimburse --trips {ID} --pay-to \'{{"name_type": "employee", "name_id": "Casey Worker"}}\''
+        ' --account Checking --expense-account "Travel Mileage" --date 2026-10-31 --reason "October mileage"' + _MILES_CO,
+        {'trips': [ID], 'pay_to': {'name_type': 'employee', 'name_id': 'Casey Worker'}, 'account': 'Checking',
+         'expense_account': 'Travel Mileage', 'date': '2026-10-31'}),
+    'report mileage-by-vehicle': Example('bookflow report mileage-by-vehicle --date-from 2026-01-01 --date-to 2026-12-31'
+                                         + _MILES_CO, {'date_from': '2026-01-01', 'date_to': '2026-12-31'}),
+    'report mileage-by-job': Example('bookflow report mileage-by-job --date-from 2026-01-01 --date-to 2026-12-31 --detail'
+                                     + _MILES_CO, {'date_from': '2026-01-01', 'date_to': '2026-12-31', 'detail': True}),
+})

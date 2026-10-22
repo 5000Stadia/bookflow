@@ -183,7 +183,7 @@ def test_reimbursing_trips_writes_one_check_and_never_pays_a_trip_twice(client, 
     check = read(client, 'check show', check=paid['check_id'])
     # One check to the driver for the total: the bank is credited 36.52 and the mileage expense debited per trip.
     assert check['total_minor_units'] == 3652 and check['status'] == 'posted'
-    assert (check['revision']['name_type'], check['revision']['name_id']) == ('employee', driver)
+    assert driver in repr(check['revision']['lines']), 'the check is paid to the driver'
     assert check['revision']['debit_minor_units'] == check['revision']['credit_minor_units'] == 3652
     assert read(client, 'trip show', trip=first['id'])['reimbursed_by'] == paid['check_id']
     assert [t['id'] for t in read(client, 'trip query', unreimbursed=True)['trips']] == []

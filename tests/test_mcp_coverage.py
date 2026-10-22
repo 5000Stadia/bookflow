@@ -51,7 +51,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
     # +8 the sales order (R101): sales-order create, update, copy, show, query, history, void; estimate sales-order.
-    assert len(rows) == 572
+    # +18 mileage (R118): vehicle create/update/show/list, mileage-rate set/delete/list, trip create/update/void/show/
+    # query/invoice/sales-receipt/billing/reimburse, report mileage-by-vehicle and mileage-by-job.
+    assert len(rows) == 590
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -249,7 +251,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
     # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
     # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==3221
+    # 3221 -> 3295 (R118, mileage), measured per command: trip create 10, update 13, query 6, invoice 14,
+    # sales-receipt 15 (the work billing conversion's optional fields, as time-activity's have), billing 1,
+    # reimburse 4, vehicle create 1 and update 4, report mileage-by-vehicle 3 and mileage-by-job 3 -- 74. No
+    # existing command moved. No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==3295
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

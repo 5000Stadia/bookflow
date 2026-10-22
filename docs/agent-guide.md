@@ -512,6 +512,26 @@ the ones to charge (`"customers": [{"customer": "Acme"}, {"customer": "Birch", "
 Each charge is a statement charge dated that day; assessing the same date again charges nobody twice.
 To take one back, `statement-charge void` it.
 
+## Log mileage: "42 miles to the Smith job, billable"
+
+A trip is a vehicle, the trip end date (and start date, if it ran over several days), and either both
+odometer readings or `total_miles`. Billable miles name the customer:job and the mileage item (a service
+or other-charge item; its price is the price per mile). Recording a trip posts nothing.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "trip create", "reason": "Mileage log",
+ "input": {"vehicle": "Service van", "trip_end_date": "2026-10-20", "total_miles": "42",
+           "billable": true, "customer": "Smith", "item": "Mileage", "notes": "Site visit"}}
+```
+
+Bill it with `trip invoice` (the trip ID, its `version` as `expected_version`, a `conversion_key` and a
+date): the miles are billed exactly once, and `report unbilled-costs` lists billable trips not yet billed.
+A billed trip cannot be voided or have its miles changed until its invoice is voided. To pay a driver back,
+`trip reimburse` writes one check for chosen trips at the mileage rate in effect on each trip's end date
+(`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
+for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
+
 ## How are we doing against budget?
 
 A budget is a named plan for one fiscal year: an amount per account per month, entered positive for

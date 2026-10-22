@@ -1998,3 +1998,46 @@ for _verb in ('query', 'history'):
 MATRIX['estimate sales-order'] = dict(_WORK_WRITE_ERRORS,
     E_WORK_DEPENDENCY='the estimate is not accepted, is voided, or already has its work order or sales order',
     E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)')
+
+# Mileage (R118): vehicles, mileage rates, trips, trip billing and reimbursement, mileage reports.
+_MILEAGE_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+                 'E_DIRECTIVE_INACTIVE': 'deactivated --directive', 'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive'}
+MATRIX['vehicle create'] = {'E_VALIDATION': 'a blank name', 'E_NAME_TAKEN': 'a vehicle already has the name'} | _MILEAGE_TAIL
+MATRIX['vehicle update'] = {'E_VALIDATION': 'a blank name', 'E_RECORD_NOT_FOUND': 'unknown vehicle',
+                            'E_NAME_TAKEN': 'another vehicle has the name', 'E_VERSION_CONFLICT': 'stale expected_version'} | _MILEAGE_TAIL
+MATRIX['vehicle show'] = {'E_RECORD_NOT_FOUND': 'unknown vehicle'}
+MATRIX['vehicle list'] = {}
+MATRIX['mileage-rate set'] = {'E_VALIDATION': 'not a rate from 0 through 1000', 'E_AMOUNT_PRECISION': 'more than four decimal places'} | _MILEAGE_TAIL
+MATRIX['mileage-rate delete'] = {'E_VALIDATION': 'not a date', 'E_RECORD_NOT_FOUND': 'no rate starts on the date'} | _MILEAGE_TAIL
+MATRIX['mileage-rate list'] = {}
+_TRIP_WRITE = {'E_VALIDATION': 'one odometer reading, odometer end not above start, total_miles disagreeing with the readings, no miles, a start after the end, or billable without a customer:job or item; a non-service, non-other-charge item',
+               'E_RECORD_NOT_FOUND': 'unknown vehicle, customer, item or class',
+               'E_INACTIVE_REFERENCE': 'a newly named vehicle, customer, item or class is inactive',
+               'E_VALUE_RANGE': 'miles beyond range', 'E_AMOUNT_PRECISION': 'a billing rate finer than the currency allows',
+               'E_PREVIEW_STALE': 'the books changed since the preview'} | _MILEAGE_TAIL
+MATRIX['trip create'] = dict(_TRIP_WRITE)
+MATRIX['trip update'] = _TRIP_WRITE | {'E_VERSION_CONFLICT': 'stale expected_version',
+                                       'E_WORK_DEPENDENCY': 'an invoice carries the trip, or a posted check paid it back, and the change would move what they stand on'}
+MATRIX['trip void'] = {'E_RECORD_NOT_FOUND': 'unknown trip', 'E_VALIDATION': 'a reason over 140 characters',
+                       'E_VERSION_CONFLICT': 'stale expected_version',
+                       'E_WORK_DEPENDENCY': 'an invoice carries the trip, or a posted check paid it back'} | _MILEAGE_TAIL
+MATRIX['trip show'] = {'E_RECORD_NOT_FOUND': 'unknown trip'}
+MATRIX['trip query'] = {'E_RECORD_NOT_FOUND': 'unknown vehicle or customer', 'E_VALIDATION': 'a cursor not from the previous page'}
+_TRIP_BILL = {'E_RECORD_NOT_FOUND': 'unknown trip', 'E_VERSION_CONFLICT': 'stale trip expected_version',
+              'E_WORK_DEPENDENCY': 'the trip is voided, not billable, or already billed', 'E_CONVERSION_KEY_REUSED': 'the key was used for other work or input',
+              'E_PERIOD_CLOSED': 'the sale date is on or before the closing date', 'E_DUPLICATE_NUMBER': 'the sale number is taken',
+              'E_INACTIVE_REFERENCE': 'an inactive customer or item', 'E_VALUE_RANGE': 'an amount beyond range',
+              'E_AMOUNT_PRECISION': 'an amount finer than the currency allows', 'E_PREVIEW_STALE': 'the trip billing changed since the preview',
+              'E_FEATURE_DISABLED': 'a partial billing mode the company turned off'} | _MILEAGE_TAIL
+MATRIX['trip invoice'] = dict(_TRIP_BILL)
+MATRIX['trip sales-receipt'] = dict(_TRIP_BILL)
+MATRIX['trip billing'] = {'E_RECORD_NOT_FOUND': 'unknown trip', 'E_QUERY_STALE': 'billing changed between pages',
+                          'E_WORK_DEPENDENCY': 'the trip is voided or not billable'}
+MATRIX['trip reimburse'] = {'E_VALIDATION': 'a trip named twice, a voided trip, no mileage rate on a trip end date, or a zero amount',
+                            'E_RECORD_NOT_FOUND': 'unknown trip, payee or account', 'E_INACTIVE_REFERENCE': 'an inactive payee or account',
+                            'E_WORK_DEPENDENCY': 'a trip already paid back by a posted check', 'E_PERIOD_CLOSED': 'the check date is on or before the closing date',
+                            'E_AMOUNT_PRECISION': 'a rate with more than four decimal places', 'E_VALUE_RANGE': 'an amount beyond range',
+                            'E_DUPLICATE_NUMBER': 'the check number is taken on the account',
+                            'E_PREVIEW_STALE': 'the trips or rates changed since the preview whose fingerprint was given'} | _MILEAGE_TAIL
+MATRIX['report mileage-by-vehicle'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown vehicle'}
+MATRIX['report mileage-by-job'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown customer'}

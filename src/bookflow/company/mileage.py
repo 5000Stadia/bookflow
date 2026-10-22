@@ -685,7 +685,7 @@ def _billing_input(s, inp, model):
         raise BookflowError('E_WORK_DEPENDENCY', details={'problem': 'a voided trip cannot be billed', 'source_id': trip['id']})
     if not trip['work_document_id']:
         raise BookflowError('E_WORK_DEPENDENCY', details={
-            'problem': 'this trip is not billable; make it billable with `trip update --billable true` naming a customer:job and item',
+            'problem': 'this trip is not billable; make it billable with `trip update` (billable true), naming a customer:job and item',
             'source_id': trip['id']})
     header = work.resolve(s, trip['work_document_id'], KIND)
     values = inp.model_dump(exclude={'trip'}, exclude_unset=True)
