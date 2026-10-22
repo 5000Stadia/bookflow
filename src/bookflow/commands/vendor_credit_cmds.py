@@ -8,6 +8,7 @@ from bookflow.core.registry import Plan, command
 from bookflow.company import vendor_credits
 from bookflow.company.vendor_credit_models import (
     VendorCreditApplyInput, VendorCreditHistoryInput, VendorCreditHistoryOutput,
+    VendorCreditRefundInput, VendorCreditRefundOutput,
     VendorCreditOutput, VendorCreditPageOutput, VendorCreditPostInput, VendorCreditQueryInput,
     VendorCreditShowInput, VendorCreditUnapplyInput, VendorCreditUpdateInput, VendorCreditVoidInput,
     VendorCreditWriteOutput,
@@ -87,7 +88,26 @@ ERRORS = {
               'E_APPLICATION_INCOMPATIBLE', 'E_APPLICATION_INACTIVE'],
     'unapply': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_INACTIVE',
                 'E_VALIDATION', 'E_PERIOD_CLOSED'],
+    'refund': ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', 'E_VALUE_RANGE',
+               'E_AMOUNT_PRECISION', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER', 'E_VERSION_CONFLICT',
+               'E_APPLICATION_CAPACITY', 'E_APPLICATION_INACTIVE', 'E_APPLICATION_INCOMPATIBLE'],
 }
+
+_REFUND = (
+    'Record a vendor’s refund check for an open vendor credit -- the vendor pays you back'
+    ' instead of letting you use the credit on a later bill -- in one write. It banks one'
+    ' deposit into `deposit_to` (debit the bank, credit Accounts Payable with the vendor’s'
+    ' name) and applies the credit to that deposit, so the credit is settled, the vendor owes'
+    ' you nothing more for it, and the deposit shows on the deposit detail report and in the'
+    ' bank reconciliation like any other. `amount` defaults to everything the credit still has'
+    ' free; a smaller amount leaves the rest of the credit open, and more than is free is'
+    ' refused with `E_APPLICATION_CAPACITY`. `date` is the deposit date and may not be before the'
+    ' credit. `check_number`, `payment_method`, `number` and `memo` go on the deposit.'
+    ' Voiding or deleting that deposit reopens the credit. The same result, the anchor’s two'
+    ' steps: `deposit post` with an `additional` line whose `from_account` is Accounts Payable'
+    ' and whose `received_from` is the vendor, then `vendor-credit apply` naming that deposit in'
+    ' `deposits`.'
+)
 
 DESCRIPTIONS = {
     'post': _POST,
@@ -97,11 +117,17 @@ DESCRIPTIONS = {
              ' settles must be unapplied first, so voiding never silently reopens a bill. A'
              ' credit typed wrong is corrected with `vendor-credit update` rather than voided:'
              ' that keeps one document where one credit note arrived.'),
-    'apply': _APPLY,
+    'apply': _APPLY + (
+        ' Name refund deposits in `deposits` to apply the credit to a vendor’s refund check that'
+        ' was banked as a deposit line drawn from Accounts Payable with the vendor’s name;'
+        ' `vendor-credit refund` does both steps at once.'),
+    'refund': _REFUND,
     'unapply': ('Take a vendor credit back off the bills it settled, without moving any money.'
                 ' The bills go back to open for what was applied and no account changes, which'
                 ' leaves the credit standing as an unapplied debit against the vendor. Name'
                 ' `bills` to detach only those; leave it out to detach everything still applied.'
+                ' Name `deposits` to detach refund deposits the same way; naming only `bills`'
+                ' leaves them standing.'
                 ' Each detachment is dated at the settlement date it takes back, so an'
                 ' application dated on or before the closing date cannot be undone here.'),
     'show': ('Show a vendor credit: its captured vendor and payable, its credited lines, its'
@@ -156,10 +182,28 @@ vendor_credit_update = _write('update', VendorCreditUpdateInput)
 vendor_credit_void = _write('void', VendorCreditVoidInput)
 vendor_credit_apply = _write('apply', VendorCreditApplyInput)
 vendor_credit_unapply = _write('unapply', VendorCreditUnapplyInput)
+def _refund():
+    from bookflow.company import vendor_refunds
+
+    def planner(inp, ctx, s):
+        return vendor_refunds.plan_refund(s, ctx, inp, getattr(s, 'credential', None))
+
+    cmd = command(
+        'vendor-credit refund', scope='company', description=DESCRIPTIONS['refund'],
+        input_model=VendorCreditRefundInput, output_model=VendorCreditRefundOutput, writes={'company'},
+        required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
+        positional=['credit'], version_source=('vendor-credit show', 'credit', 'version'),
+        error_codes=ERRORS['refund'])(planner)
+    cmd.ledger = True
+    cmd.applier(lambda plan, ctx, s: vendor_refunds.apply_refund(plan, ctx, s, getattr(s, 'credential', None)))
+    return cmd
+
+
+vendor_credit_refund = _refund()
 vendor_credit_show = _read('show', VendorCreditShowInput, VendorCreditOutput)
 vendor_credit_query = _read('query', VendorCreditQueryInput, VendorCreditPageOutput)
 vendor_credit_history = _read('history', VendorCreditHistoryInput, VendorCreditHistoryOutput)
 
 VENDOR_CREDIT_COMMANDS = [vendor_credit_post, vendor_credit_update, vendor_credit_show,
                           vendor_credit_query, vendor_credit_history, vendor_credit_void,
-                          vendor_credit_apply, vendor_credit_unapply]
+                          vendor_credit_apply, vendor_credit_unapply, vendor_credit_refund]

@@ -1176,3 +1176,10 @@ EXAMPLES["vendor 1099-opening"] = Example(
     {"vendor": "Delgado, Ray", "year": 2026, "as_of": "2026-06-30", "amount": "7550.00"})
 # R170 blind July: a small text attachment read as text -- a statement's summary box, kept as an attachment.
 EXAMPLES["attachment text"] = Example(f'bookflow attachment text {ID} --company "Demo Plumbing Co" --json', {"attachment": ID})
+# R149: a vendor's refund check for an open vendor credit, banked and settled in one step.
+EXAMPLES["vendor-credit refund"] = Example(
+    f'bookflow vendor-credit refund {ID} --deposit-to Checking --date 2026-05-20 --amount 120.00'
+    ' --payment-method Check --check-number 8812 --company "Demo Plumbing Co"'
+    ' --reason "Acme sent a refund check for our return" --json',
+    {"credit": ID, "deposit_to": "Checking", "date": "2026-05-20", "amount": "120.00",
+     "payment_method": "Check", "check_number": "8812"})

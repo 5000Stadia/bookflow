@@ -1083,16 +1083,25 @@ def prepare_apply(s, ctx, inp):
 
     if not available:
         raise beyond(0)
-    chosen = bill_payments._selected(s, inp.bills, date, currency, capacity=available)
+    at, event = clock.now_iso(), new_id()
+    pending = {table: [] for table, _, _ in table_kinds_for('apply')}
+    chosen = bill_payments._selected(s, inp.bills, date, currency, capacity=available) if inp.bills else []
     bill_payments._compatible(source, chosen, header['id'])
+    if inp.deposits:
+        # A refund check banked against this credit: the deposit line drawn from Accounts
+        # Payable with this vendor's name is settled the way a bill is (company/vendor_refunds).
+        from bookflow.company import vendor_refunds
+        left = available - sum(row['amount'] for row in chosen)
+        chosen += vendor_refunds.selected_deposits(
+            s, inp.deposits, date, source, capacity=left, pending=pending,
+            created=lambda: dict(created_at=at, created_by=s.actor.id,
+                                 created_via=ctx.interface.value, audit_event_id=event))
     # An application posts nothing, but it does change what the books say was open on a date,
     # so a closed period refuses it exactly as `bill payment apply` refuses one.
     journals.open_dates(s, [date])
     total = checked_sum((row['amount'] for row in chosen), 'bills.total')
     if total > available:
         raise beyond(total)
-    at, event = clock.now_iso(), new_id()
-    pending = {table: [] for table, _, _ in SETTLEMENT_TABLE_KINDS}
     position = 0
     for row in chosen:
         remaining = row['amount']
@@ -1123,13 +1132,22 @@ def prepare_apply(s, ctx, inp):
 def prepare_unapply(s, ctx, inp):
     header, revision = _credit_for_write(s, inp)
     active = ap_settlement.active_applications(s, header['id'])
-    if inp.bills is not None:
-        wanted = {bills.resolve(s, selector)['id'] for selector in inp.bills}
+    if inp.bills is not None or inp.deposits is not None:
+        wanted = {bills.resolve(s, selector)['id'] for selector in inp.bills or ()}
         missing = wanted - {row['obligation_transaction_id'] for row in active}
         if missing:
             raise BookflowError('E_APPLICATION_INACTIVE', details={
                 'credit_id': header['id'], 'bill_ids': sorted(missing),
                 'next': 'This credit has nothing still applied to that bill.'})
+        if inp.deposits:
+            from bookflow.company import vendor_refunds
+            named = {vendor_refunds.resolve_deposit(s, selector)['id'] for selector in inp.deposits}
+            missing = named - {row['obligation_transaction_id'] for row in active}
+            if missing:
+                raise BookflowError('E_APPLICATION_INACTIVE', details={
+                    'credit_id': header['id'], 'deposit_ids': sorted(missing),
+                    'next': 'This credit has nothing still applied to that deposit.'})
+            wanted |= named
         active = [row for row in active if row['obligation_transaction_id'] in wanted]
     if not active:
         return Plan(_output(s, header, revision, model=VendorCreditWriteOutput, changed=False),
@@ -1185,6 +1203,10 @@ def prepare(s, ctx, inp, operation):
 def table_kinds_for(operation):
     if operation == 'update':
         return UPDATE_TABLE_KINDS
+    if operation == 'apply':
+        # The first application to a refund deposit mints that deposit's payable key; the key
+        # goes first because the edge names it.
+        return (('ap_obligation_keys', 'ap_obligation_key', 'id'),) + SETTLEMENT_TABLE_KINDS
     return SETTLEMENT_TABLE_KINDS if operation in ('apply', 'unapply') else TABLE_KINDS
 
 
@@ -1215,7 +1237,7 @@ def apply(plan, ctx, s):
     header, before = data['header'], data['before']
     touched = [Touched('transaction', header['id'], 'update', before['version'], header['version'],
                        header, before, db='company')]
-    for table, kind, key in SETTLEMENT_TABLE_KINDS:
+    for table, kind, key in table_kinds_for(operation):
         touched.extend(Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
                        for row in data['pending'][table])
     touched.extend(Touched('transaction', after['id'], 'update', old['version'], after['version'],
@@ -1226,7 +1248,7 @@ def apply(plan, ctx, s):
                          directive_code=getattr(s, 'directive_code', None), event_id=data['event'])
     s.company.conn.execute(c.transactions.update().where(
         c.transactions.c.id == header['id']).values(**header))
-    for table, _, _ in SETTLEMENT_TABLE_KINDS:
+    for table, _, _ in table_kinds_for(operation):
         if data['pending'][table]:
             s.company.conn.execute(getattr(c, table).insert(), data['pending'][table])
     for _, after in data['changed_headers']:
