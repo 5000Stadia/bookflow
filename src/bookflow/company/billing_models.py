@@ -109,6 +109,59 @@ class WorkOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
     work_order: CanonicalId
 
 
+class OrderSelection(StrictModel):
+    """One order line and the quantity to invoice from it: name the line, or the item one open line carries."""
+    line_id: CanonicalId | None = None
+    item: Selector | None = None
+    quantity: PartialQuantity
+
+    @model_validator(mode='after')
+    def one_line(self):
+        if (self.line_id is None) == (self.item is None):
+            raise ValueError('name exactly one of line_id or item')
+        return self
+
+    # The billing selection reads these; an order selection is a quantity only.
+    @property
+    def net_amount(self):
+        return None
+
+    @property
+    def percent(self):
+        return None
+
+    @property
+    def rebill_allocation_id(self):
+        return None
+
+
+class SalesOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
+    sales_order: Selector
+    selections: list[OrderSelection] | None = Field(default=None, min_length=1, max_length=200)
+    all_open: bool = Field(default=False, description=(
+        'Bill every open quantity whatever the stock. Without it (and without line_ids or selections) the invoice '
+        'bills what can ship.'))
+
+    @field_validator('selections', 'line_ids')
+    @classmethod
+    def unique_lines(cls, values, info):
+        seen = set()
+        for value in values or []:
+            key = (value.line_id or ('item', value.item)) if info.field_name == 'selections' else value
+            if key in seen:
+                raise ValueError('name each order line once')
+            seen.add(key)
+        return values
+
+    @model_validator(mode='after')
+    def order_choices(self):
+        if 'percent' in self.model_fields_set:
+            raise ValueError('an order is invoiced by quantity; percent is not offered')
+        if self.all_open and self.model_fields_set & {'line_ids', 'selections'}:
+            raise ValueError('choose all_open, line_ids or selections, not more than one')
+        return self
+
+
 class ReceiptConversionInput(ConversionInput, ReceiptFields):
     deposit_to: Selector
     amount_received: str | SalesMoneyInput
@@ -133,6 +186,10 @@ class TimeActivitySalesReceiptInput(ReceiptConversionInput):
 class BillingReadInput(StrictModel):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=8192)
+
+
+class SalesOrderBillingInput(BillingReadInput):
+    sales_order: Selector
 
 
 class EstimateBillingInput(BillingReadInput):

@@ -62,6 +62,9 @@ HEADLINES = {
     "profit-and-loss-comparison": (None, "This period against the earlier one"),
     "balance-sheet-comparison": (None, "This year against last"),
 }
+# Reports of documents that post nothing: a cash or accrual basis means nothing to them, so the
+# summary line does not name one. (Open purchase orders keeps its long-standing line.)
+BASISLESS = {"open-sales-orders"}
 # Inputs the summary line already names, or that only steer paging.
 SUMMARISED = {"date_from", "date_to", "as_of", "basis", "limit", "cursor"}
 
@@ -108,7 +111,7 @@ def context(cmd, company_id: str, company: dict | None, result: dict | None,
     return {
         "date_from": period.get("date_from"),
         "date_to": period.get("date_to"),
-        "basis": metadata.get("basis"),
+        "basis": None if verb in BASISLESS else metadata.get("basis"),
         "extra_filters": len(extra),
         "chips": chips,
         "headline": label,

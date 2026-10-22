@@ -299,6 +299,7 @@ FIELDS = {
         'close_estimates_after_billing': ('bool', False, False, 'dependency_field'),
         'sales_orders_enabled': ('bool', False, False, 'dependency_field'),
         'available_deducts_sales_orders': ('bool', False, False, 'dependency_field'),
+        'available_deducts_pending_builds': ('bool', False, False, 'dependency_field'),
         'automatically_apply_payments': ('bool', False, False, 'dependency_field'),
         'automatically_calculate_payments': ('bool', False, False, 'dependency_field'),
         'use_undeposited_funds_for_payments': ('bool', False, False, 'dependency_field'),
@@ -1663,7 +1664,8 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # optional discount fields (omitted when absent). Re-pinned again for R175: its producer literal is
 # ledger_schema.TRANSACTION_TYPES, which gained sales_tax_adjustment.
 # R110: Effect, LifecycleOutput, CoordinateOutput and Manifest rehashed for SalesLineProfile.pricing_rule.
-CODECS = {'CoordinateOutput': '8bdb5bdbe4c26c8f148e6f785bdaa4e812684b34b3ddb5b21475b15955ff646b', 'Effect': '7808ba1b94a7b285d8af46fa5abfe6bc6c1bc65945932115d572fa3678d217fb', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'd1a97fd2438cd733e29a83cc6bee5ea293c42c562f9e99406ec9c19e519307d1', 'Manifest': 'cd41072899be327b0f41199b18c243edbfd61361ba7be55bb1e0defee22a0a4c', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
+CODECS = {'CoordinateOutput': 'f82cd5a3eecf8e1279cd50c64b42b28485921a3d8650fc01c3ba4ba36f7ca11d', 'Effect': '7808ba1b94a7b285d8af46fa5abfe6bc6c1bc65945932115d572fa3678d217fb', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'd1a97fd2438cd733e29a83cc6bee5ea293c42c562f9e99406ec9c19e519307d1', 'Manifest': 'cd41072899be327b0f41199b18c243edbfd61361ba7be55bb1e0defee22a0a4c', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

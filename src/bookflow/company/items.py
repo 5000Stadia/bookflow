@@ -1492,7 +1492,7 @@ class _ProjectionCache:
     home_currency: str
     stock: Mapping[str, tuple[int, int]] = field(default_factory=dict)
     # Committed, on order and reserved for builds per stocked item, read once per page.
-    figures: Mapping[str, tuple[int, int, int, bool]] | None = None
+    figures: Mapping[str, tuple[int, int, int, bool, bool]] | None = None
 
 
 # The stock-carrying item types, and the running sums that value them. Both come from the
@@ -1530,7 +1530,7 @@ def quantity_on_hand_expression(owner: sa.Table | None = None) -> sa.ColumnEleme
     return sa.case((owner.c.type.in_(tuple(STOCK_TYPES)), sa.func.coalesce(moved, 0)), else_=0)
 
 
-def _stock_figures(db: Database, item_ids) -> dict[str, tuple[int, int, int, bool]]:
+def _stock_figures(db: Database, item_ids) -> dict[str, tuple[int, int, int, bool, bool]]:
     """Committed (open sales orders and work orders), on order and reserved for builds, per item.
 
     The same owners `report stock-status` reads: `commitments` and `receiving.order_remaining`.
@@ -1544,8 +1544,9 @@ def _stock_figures(db: Database, item_ids) -> dict[str, tuple[int, int, int, boo
     committed = commitments.committed(s, items=item_ids)
     on_order, _ = _incoming(s, clock.today_iso())
     builds = commitments.for_assemblies(s)
-    deducts = commitments.deducts_documents(s)
-    return {item: (committed.get(item, 0), on_order.get(item, 0), builds.get(item, 0), deducts) for item in item_ids}
+    deducts, deducts_builds = commitments.deducts_documents(s), commitments.deducts_builds(s)
+    return {item: (committed.get(item, 0), on_order.get(item, 0), builds.get(item, 0), deducts, deducts_builds)
+            for item in item_ids}
 
 
 def _build_projection_cache(
@@ -1860,12 +1861,12 @@ def project_item(
         quantity, value = 0, 0
     average = 0 if quantity <= 0 else round_ratio_half_even(value * 10 ** 6, quantity)
     committed = on_order = builds = 0
-    deducts = True
+    deducts = deducts_builds = True
     if stocked:
         if cache is not None and cache.figures is not None:
-            committed, on_order, builds, deducts = cache.figures.get(owner_id, (0, 0, 0, True))
+            committed, on_order, builds, deducts, deducts_builds = cache.figures.get(owner_id, (0, 0, 0, True, True))
         else:
-            committed, on_order, builds, deducts = _stock_figures(db, [owner_id]).get(owner_id, (0, 0, 0, True))
+            committed, on_order, builds, deducts, deducts_builds = _stock_figures(db, [owner_id]).get(owner_id, (0, 0, 0, True, True))
     return ItemOutput(
         **{field: owner[field] for field in (
             "id", "version", "created_at", "created_by", "created_via", "updated_at",
@@ -1901,7 +1902,8 @@ def project_item(
         vendor_profiles=[_vendor_output(db, row, cache) for row in vendor_profiles],
         custom_fields=[CustomFieldValueOutput.model_validate(row) for row in custom_values],
         quantity_on_hand=format_quantity_micro_units(quantity),
-        quantity_available=format_quantity_micro_units(quantity - (committed if deducts else 0)),
+        quantity_available=format_quantity_micro_units(
+            quantity - (committed if deducts else 0) - (builds if deducts_builds else 0)),
         quantity_committed=format_quantity_micro_units(committed),
         quantity_on_order=format_quantity_micro_units(on_order),
         quantity_pending_build=format_quantity_micro_units(builds),
