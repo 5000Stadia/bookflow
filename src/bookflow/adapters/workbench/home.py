@@ -592,6 +592,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Account", "account create", "/account/create"),
             _new("Memorized transaction", "memorized create", "/memorized/create"),
             _new("Budget", "budget create", "/budget/create"),
+            _new("Loan", "loan create", "/loan/create"),
         ),
         lists=(
             _list("Journal entries", "journal query", "/journal"),
@@ -599,9 +600,12 @@ SECTIONS: tuple[Section, ...] = (
             _list("Memorized groups", "memorized-group list", "/memorized-group"),
             _list("Budgets", "budget list", "/budget"),
             _list("Memorized reports", "memorized-report list", "/memorized-report"),
+            _list("Fixed assets", "fixed-asset list", "/fixed-asset"),
+            _list("Loans", "loan list", "/loan"),
             _list("Exchange rates", "rate query", "/rate"),
         ),
         tasks=(
+            Action("Post depreciation", WRITE, ("fixed-asset depreciate",), "/fixed-asset/depreciate"),
             Action("Enter memorized transactions", WRITE, ("memorized process",), "/memorized/process"),
             _report("Trial balance", "trial-balance"),
             _report("General ledger", "general-ledger"),
