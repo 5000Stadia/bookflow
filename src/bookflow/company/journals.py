@@ -27,7 +27,7 @@ TABLES = ('transaction_revisions', 'document_line_identities', 'document_lines',
 # owning ledger cannot explain -- the inventory asset on the balance sheet would stop being
 # the total of the stock reports -- so the journal editor is refused here and only the owner
 # may write it. `owner` is threaded from `prepare` for exactly this.
-OWNED_SYSTEM_ROLES = {'inventory_asset': 'inventory'}
+OWNED_SYSTEM_ROLES = {'inventory_asset': 'inventory', 'customer_prepayments': 'customer prepayment'}
 TYPES = ('transaction_revision', 'document_line_identity', 'document_line',
          'posting_batch', 'posting_line', 'posting_line_source')
 
@@ -187,6 +187,10 @@ def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=No
         raise invalid('account', 'must be a posting account')
     role = account.get('system_role')
     if role in OWNED_SYSTEM_ROLES and owner != OWNED_SYSTEM_ROLES[role]:
+        if role == 'customer_prepayments':
+            raise invalid('account', f'"{account["name"]}" is written by the customer prepayment ledger that '
+                                     'owns it, which records what each receipt holds; take a deposit with '
+                                     '`prepayment receive` and use it with `prepayment apply` or `prepayment refund`')
         raise invalid('account', f'"{account["name"]}" is written by the {OWNED_SYSTEM_ROLES[role]} '
                                  'ledger that owns it, which records what each item holds; an '
                                  'entry posted straight to it would be an amount no item owns')

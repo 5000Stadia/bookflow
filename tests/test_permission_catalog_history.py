@@ -59,6 +59,7 @@ ACCEPTED = {
     'attachment-text-v1': (528, 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284'),
     'transaction-find-v1': (529, '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1'),
     'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
+    'customer-prepayment-v1': (538, '4ca87186b111a40b9ff698df855d78ceed1065bfbeb79206425a9389e164a723'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -111,6 +112,8 @@ CHAIN_ADDITIONS = {
     'attachment-text-v1': {'attachment text'},
     'transaction-find-v1': {'transaction find'},
     'item-convert-v1': {'item convert'},
+    'customer-prepayment-v1': {'prepayment receive', 'prepayment attach', 'prepayment apply', 'prepayment unapply',
+                               'prepayment refund', 'prepayment show', 'prepayment query', 'report customer-prepayments'},
 }
 
 _ANCESTOR_EDIT = """

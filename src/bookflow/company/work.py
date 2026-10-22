@@ -796,6 +796,8 @@ def prepare(s, ctx, inp, kind, operation):
     if operation != 'void':
         _lifecycle(kind, before, value, inp, ctx)
     _dependencies(s, old, before, value)
+    from bookflow.company.prepayments import guard_work_status
+    guard_work_status(s, old, value)
     _accepted_group(s, header, value['status'])
     fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings, header['id'])
     changes = _changes(work_tax.normalized(before), work_tax.normalized(value)) if before else list(value)

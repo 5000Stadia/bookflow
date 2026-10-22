@@ -822,6 +822,8 @@ def prepare_post(s, ctx, inp, released=None):
 def prepare_update(s, ctx, inp):
     """Correct a posted refund with another revision, or say plainly why it cannot be corrected."""
     header = resolve(s, inp.refund)
+    from bookflow.company.prepayments import guard_refund_change
+    guard_refund_change(s, header['id'], 'corrected')
     if inp.expected_version is not None:
         journals.version_meta(s, header, inp.expected_version)
     if header['status'] != 'posted':
@@ -857,6 +859,8 @@ def prepare_update(s, ctx, inp):
 
 def prepare_void(s, ctx, inp):
     header = resolve(s, inp.refund)
+    from bookflow.company.prepayments import guard_refund_change
+    guard_refund_change(s, header['id'], 'voided')
     if inp.expected_version is not None:
         journals.version_meta(s, header, inp.expected_version)
     revision = journals.revision(s, header)

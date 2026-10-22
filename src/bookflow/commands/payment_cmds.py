@@ -25,6 +25,9 @@ def _financial(verb, model):
         if s.dry_run and not plan.data.get('recovered'):
             from bookflow.company.payment_pages import preview_output
             plan.preview = preview_output(s, ctx, inp, plan)
+        if verb == 'receive' and not plan.data.get('recovered'):
+            from bookflow.company.prepayments import add_note
+            add_note(s, plan.preview, inp.customer, 'payment')
         return plan
     cmd = command('payment ' + verb, scope='company',
         description={
@@ -48,7 +51,11 @@ def _financial(verb, model):
             +(['E_APPLIED_EXCEEDS_TOTAL'] if verb == 'update' else []))(planner)
     cmd.ledger = True
     cmd.permanent_recovery = lambda inp, ctx, s: payment_operations.recover(inp, ctx, s, 'payment ' + verb)
-    cmd.applier(payments.apply)
+    if verb == 'receive':
+        from bookflow.company.prepayments import noted
+        cmd.applier(noted(payments.apply, 'payment'))
+    else:
+        cmd.applier(payments.apply)
     return cmd
 
 
