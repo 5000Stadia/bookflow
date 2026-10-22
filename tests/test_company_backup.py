@@ -215,6 +215,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("DROP TABLE prepayment_links")  # co0076's, with its triggers
         for table in ("loan_payments", "loans", "fixed_asset_disposals", "fixed_asset_depreciations", "fixed_asset_setups"):
             conn.execute(f"DROP TABLE {table}")  # co0080's five tables, with their triggers
+        for table in ("payment_write_offs", "customer_credit_transfers"):
+            conn.execute(f"DROP TABLE {table}")  # co0081's two tables, with their triggers
         conn.execute("DROP TABLE list_merge_references")  # co0075's, with their triggers
         conn.execute("DROP TABLE list_merges")
         # co0070 added a table and widened two empty ones (a CHECK and a column each): its own text, run backwards.
@@ -243,7 +245,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0083"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0081"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

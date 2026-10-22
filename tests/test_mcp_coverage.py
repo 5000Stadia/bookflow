@@ -56,7 +56,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 report open-sales-orders (R102).
     # +18 mileage (R118): vehicle create/update/show/list, mileage-rate set/delete/list, trip create/update/void/show/
     # query/invoice/sales-receipt/billing/reimburse, report mileage-by-vehicle and mileage-by-job.
-    assert len(rows) == 608
+    # +2 customer-credit transfer, customer-credit transfer-void (R148).
+    assert len(rows) == 610
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -267,7 +268,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # sales-receipt 15 (the work billing conversion's optional fields, as time-activity's have), billing 1,
     # reimburse 4, vehicle create 1 and update 4, report mileage-by-vehicle 3 and mileage-by-job 3 -- 74. No
     # existing command moved. No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==3343
+    # 3343 -> 3355 (R148), measured: payment receive's optional discount_class, write_off_account and
+    # write_off_class wherever the receive input is carried, and customer-credit transfer's optional credit_memo,
+    # payment, memo, expected_facts_fingerprint and apply_to amount -- their null branches. underpayment is a
+    # defaulted literal and adds none. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3355
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

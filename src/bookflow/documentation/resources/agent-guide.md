@@ -492,6 +492,50 @@ on `report entries-to-review`, so say why in it.
 Discounts for a charge that is waived, not a bad debt); `applications` stays empty. To reverse it, `payment
 unapply` then `payment void` the receipt.
 
+## Acme paid 480 of a 500 invoice; write off the 20
+
+A short payment is an underpayment, and the anchor asks whether to leave it or write it off. To write
+it off, record the receipt for the cash with `underpayment` `"write_off"` and the account it goes to:
+the invoice is paid in full, 480.00 to the bank and 20.00 to Bad Debt, in one receipt.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "payment receive", "reason": "Acme short-paid invoice 1043 by 20.00; owner agreed to write it off",
+ "input": {"customer": "Acme", "date": "2026-07-15", "amount": "480.00", "operation_key": "acme-1043",
+           "payment_method": "Check", "reference": "5521",
+           "applications": {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]},
+           "underpayment": "write_off", "write_off_account": "Bad Debt"}}
+```
+
+`write_off_class` puts a class on the write-off; an early-payment discount on the same invoice goes to
+`discount_account` as usual. Unapplying the invoice later takes the write-off back with it. Leave `underpayment` out and the 20.00 stays owed;
+the result's `summary.underpayment.next` is then the 0.00 receipt that writes it off later. Cash
+beyond the invoices stays as the customer's credit, and `summary.overpayment.next` is the
+`customer-refund post` that sends it back. An agent's write-off is listed on `report entries-to-review`.
+
+## Use the credit on job A for job B
+
+A credit (an open credit memo or a receipt's unapplied money) belongs to the job it was written for.
+To use it on another job of the same customer, move it with `customer-credit transfer`, and name the
+other job's invoices in `apply_to` to use it at once (leave `amount` out of a row to pay what it owes).
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "customer-credit transfer", "reason": "Acme asked to use the Kitchen overpayment on the Bath job",
+ "input": {"from_customer": "Acme:Kitchen", "to_customer": "Acme:Bath", "amount": "120.00", "date": "2026-07-15",
+           "operation_key": "acme-kitchen-bath", "apply_to": [{"invoice": "1088", "expected_version": 1}]}}
+```
+
+It charges Kitchen 120.00 on an invoice that Kitchen's own credit pays (oldest credit first, or the
+`credit_memo` or `payment` named) and gives Bath a credit memo for 120.00, both through the Credit
+Transfer item and the Credit Transfer Clearing account (set up on first use; it nets to zero), as the
+anchor's guides do it with a clearing account. It works between the parent customer and a job too, never
+between two customers (pay one back with `customer-refund post` instead). `payment invoices` lists a
+job's credit memos as `available_credits`; `payment query` with `has_available_credit` lists receipts
+holding money. The job the credit leaves may be inactive. Never void or edit the charge invoice or the
+credit memo yourself; to undo it, `customer-credit transfer-void <transfer_id>`: what the moved credit paid is
+owed again and both documents are voided at the transfer's date.
+
 ## Assess this month's finance charges
 
 Late charges follow the company's policy (`company update --finance-charge-annual-rate 18

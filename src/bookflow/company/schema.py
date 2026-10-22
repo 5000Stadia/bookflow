@@ -1202,3 +1202,5 @@ from bookflow.company.assembly_build_schema import define_tables as _define_asse
 globals().update(_define_assembly_build_tables(metadata, _column, _table))
 from bookflow.company.mileage_schema import define_tables as _define_mileage_tables
 globals().update(_define_mileage_tables(metadata, _column, _table, _common))
+from bookflow.company.credit_transfer_schema import define_tables as _define_credit_transfer_tables
+globals().update(_define_credit_transfer_tables(metadata, _column, _table))

@@ -1385,3 +1385,11 @@ EXAMPLES.update({
     'report mileage-by-job': Example('bookflow report mileage-by-job --date-from 2026-01-01 --date-to 2026-12-31 --detail'
                                      + _MILES_CO, {'date_from': '2026-01-01', 'date_to': '2026-12-31', 'detail': True}),
 })
+EXAMPLES["customer-credit transfer"] = Example(
+    'bookflow customer-credit transfer --from-customer "Payment Example Customer:Job B"'
+    ' --to-customer "Payment Example Customer:Job A" --amount 10.00 --date 2026-10-20 --operation-key xfer-b-to-a'
+    ' --reason "Customer asked to use the Job B credit on Job A"' + _C,
+    {"from_customer": "Payment Example Customer:Job B", "to_customer": "Payment Example Customer:Job A",
+     "amount": "10.00", "date": "2026-10-20", "operation_key": "xfer-b-to-a"})
+EXAMPLES["customer-credit transfer-void"] = Example(
+    f'bookflow customer-credit transfer-void {ID} --reason "Moved to the wrong job"' + _C, {"transfer": ID})
