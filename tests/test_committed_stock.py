@@ -104,27 +104,27 @@ def test_nothing_committed_reports_exactly_as_before(books, stocked):
 
 def test_open_sales_orders_by_customer_and_by_item_page_and_tie(books, stocked):
     run = books['run']
-    whole = run('report open-sales-orders', dict(limit=200))
+    whole = run('report open-sales-orders', dict(date_to='2017-12-31', limit=200))
     assert whole['totals']['lines'] == 4                       # A, B, C and the partly invoiced order
     assert [row['number'] for row in whole['rows']][-1] == stocked['b']['number']   # Baker Bros sorts after Adams
     paged, cursor = [], None
     while True:
-        page = run('report open-sales-orders', dict(limit=1, **({'cursor': cursor} if cursor else {})))
+        page = run('report open-sales-orders', dict(date_to='2017-12-31', limit=1, **({'cursor': cursor} if cursor else {})))
         paged += page['rows']
         cursor = page['next_cursor']
         if not cursor:
             break
     assert [row['line_id'] for row in paged] == [row['line_id'] for row in whole['rows']]
-    by_item = run('report open-sales-orders', dict(by='item', limit=2))
+    by_item = run('report open-sales-orders', dict(date_to='2017-12-31', by='item', limit=2))
     row = by_item['rows'][0]
     assert (row['quantity_on_hand'], row['quantity_available'], row['quantity_on_order']) == ('18', '-6', '5')
     a = next(row for row in whole['rows'] if row['sales_order_id'] == stocked['a']['id'])
     assert (a['ordered'], a['invoiced'], a['cancelled'], a['backordered'], a['open_amount']['amount']) == ('10', '0', '2', '8', '36.00')
-    assert run('report open-sales-orders', dict(customer=stocked['other']))['totals']['lines'] == 1
+    assert run('report open-sales-orders', dict(date_to='2017-12-31', customer=stocked['other']))['totals']['lines'] == 1
     assert run('report open-sales-orders', dict(date_to='2017-03-31'))['totals']['lines'] == 3
-    assert run('report open-sales-orders', dict(short_only=True))['totals']['lines'] == 4
+    assert run('report open-sales-orders', dict(date_to='2017-12-31', short_only=True))['totals']['lines'] == 4
     books['run']('company update', dict(available_deducts_sales_orders=False), reason='Show on hand')
-    assert run('report open-sales-orders', dict(short_only=True))['totals']['lines'] == 0
+    assert run('report open-sales-orders', dict(date_to='2017-12-31', short_only=True))['totals']['lines'] == 0
 
 
 def test_selling_or_ordering_past_available_warns_and_proceeds(books, stocked):

@@ -1291,4 +1291,4 @@ EXAMPLES['estimate sales-order'] = Example(
     {'estimate': ID, 'expected_version': 2, 'conversion_key': 'riverside-order-2026-10', 'date': '2026-10-22', 'ship_date': '2026-10-29'})
 # R102: what customers have ordered and not yet received, by item, with on hand, available and on order.
 EXAMPLES['report open-sales-orders'] = Example(
-    'bookflow report open-sales-orders --by item --company "Demo Plumbing Co" --json', {'by': 'item'})
+    'bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json', {'by': 'item', 'date_to': '2026-10-31'})

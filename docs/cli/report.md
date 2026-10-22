@@ -3967,14 +3967,14 @@ What customers have ordered and not yet received: one row per open line of every
 
 ### CLI
 
-`bookflow report open-sales-orders --by item --company "Demo Plumbing Co" --json`
+`bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "report open-sales-orders", "input": {"by": "item"}, "company": "Company ID or name"}
+{"command": "report open-sales-orders", "input": {"by": "item", "date_to": "2026-10-31"}, "company": "Company ID or name"}
 ```
 
 ### Input
@@ -3985,7 +3985,7 @@ The same example as complete `bookflow_run` arguments:
 | `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job: ID or full name. |
 | `item` | `--item` | string \| null | no | yes | null | Only this item: ID or full name. |
 | `date_from` | `--date-from` | string \| null | no | yes | null | Earliest order date, YYYY-MM-DD. |
-| `date_to` | `--date-to` | string \| null | no | yes | null | Latest order date, YYYY-MM-DD. |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.; minimum length 10; maximum length 10 |
 | `short_only` | `--short-only` | boolean | no | no | false | Only lines for stocked items with more committed than on hand (available below zero). |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -3995,6 +3995,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4016,7 +4017,26 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `by` | literal["customer", "item"] | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.open_amount` | object | yes | no | — | — |
+| `totals.open_amount.amount` | string | yes | no | — | — |
+| `totals.open_amount.currency` | string | yes | no | — | — |
+| `totals.open_amount.minor_units` | integer | yes | no | — | — |
+| `totals.lines` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].sales_order_id` | string | yes | no | — | — |
 | `rows[].number` | string | yes | no | — | — |
@@ -4040,25 +4060,26 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].quantity_on_hand` | string \| null | no | yes | null | By item, stocked items: on hand now. |
 | `rows[].quantity_available` | string \| null | no | yes | null | By item, stocked items: on hand less committed. |
 | `rows[].quantity_on_order` | string \| null | no | yes | null | By item, stocked items: still to arrive on live purchase orders. |
-| `totals` | object | yes | no | — | — |
-| `totals.open_amount` | object | yes | no | — | — |
-| `totals.open_amount.amount` | string | yes | no | — | — |
-| `totals.open_amount.currency` | string | yes | no | — | — |
-| `totals.open_amount.minor_units` | integer | yes | no | — | — |
-| `totals.lines` | integer | yes | no | — | — |
-| `count` | integer | yes | no | — | — |
-| `has_more` | boolean | yes | no | — | — |
-| `next_cursor` | string \| null | yes | yes | — | — |
-| `audit_watermark` | integer | yes | no | — | — |
 
 Example JSON output:
 
 ```json
 {
-  "audit_watermark": 1,
   "by": "customer",
   "count": 0,
-  "has_more": false,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
   "next_cursor": null,
   "rows": [],
   "totals": {

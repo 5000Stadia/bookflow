@@ -250,9 +250,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
     # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
     # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
-    # 3221 -> 3226 (R102), measured: report open-sales-orders is new with 5, the null branches of its optional
-    # customer, item, date_from, date_to and cursor. No existing command moved. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3226
+    # 3221 -> 3225 (R102), measured: report open-sales-orders is new with 4, the null branches of its optional
+    # customer, item, date_from and cursor (date_to is required). No existing command moved. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3225
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

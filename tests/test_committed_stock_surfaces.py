@@ -23,8 +23,8 @@ def test_the_same_open_orders_report_through_python_cli_http_and_mcp(root, tmp_p
         matrix = Matrix()
         try:
             await matrix.open(root, tmp_path)
-            return {surface: (await matrix.call(surface, 'report open-sales-orders', {}),
-                              await matrix.call(surface, 'report open-sales-orders', {'by': 'item', 'limit': 10}))
+            return {surface: (await matrix.call(surface, 'report open-sales-orders', {'date_to': '2099-12-31'}),
+                              await matrix.call(surface, 'report open-sales-orders', {'by': 'item', 'limit': 10, 'date_to': '2099-12-31'}))
                     for surface in SURFACES}
         finally:
             await matrix.close()

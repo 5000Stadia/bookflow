@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from bookflow.company import ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
 
 
@@ -24,7 +25,7 @@ class OpenSalesOrdersInput(StrictModel):
     customer: str | None = Field(None, min_length=1, max_length=1000, description="Only this customer or job: ID or full name.")
     item: str | None = Field(None, min_length=1, max_length=1000, description="Only this item: ID or full name.")
     date_from: str | None = Field(None, min_length=10, max_length=10, description="Earliest order date, YYYY-MM-DD.")
-    date_to: str | None = Field(None, min_length=10, max_length=10, description="Latest order date, YYYY-MM-DD.")
+    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.")
     short_only: bool = Field(False, description="Only lines for stocked items with more committed than on hand (available below zero).")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
@@ -65,14 +66,10 @@ class OpenSalesOrdersTotals(StrictModel):
     lines: int
 
 
-class OpenSalesOrdersOutput(StrictModel):
+class OpenSalesOrdersOutput(ledger.Page):
     by: Literal["customer", "item"]
-    rows: list[OpenSalesOrderRow]
     totals: OpenSalesOrdersTotals
-    count: int
-    has_more: bool
-    next_cursor: str | None
-    audit_watermark: int
+    rows: list[OpenSalesOrderRow]
 
 
 def _plain(microunits):
@@ -86,20 +83,21 @@ def _plain(microunits):
 
 
 def open_sales_orders(inp: OpenSalesOrdersInput, s, *, principal_id=None) -> OpenSalesOrdersOutput:
+    with ledger._snapshot(s.company):
+        ledger.register_ledger_functions(s.company)
+        return _open_sales_orders(inp, s, principal_id)
+
+
+def _open_sales_orders(inp, s, principal_id):
     import json
     import sqlalchemy as sa
     from bookflow.company import commitments, schema as c
     from bookflow.company.items import TRACKED_TYPES
     from bookflow.company.inventory_reports import _incoming
-    from bookflow.company.query import page_state, continuation
     from bookflow.core import clock
-    class Contract:  # the query paging contract: this report's filters, with no free-text query
-        cursor = inp.cursor
-        query = None
-
-        def model_dump(self, **kw):
-            return inp.model_dump(**kw)
-    state = page_state(s, "open-sales-orders report", Contract(), principal_id)
+    # The same continuation contract open-purchase-orders uses: orders are read as they stand now
+    # and date_to bounds which orders by their own date.
+    state, offset = ledger._state(s, inp, "open-sales-orders", principal_id, None, account_scoped=False)
     customer_id = item_id = None
     if inp.customer:
         from bookflow.company.parties import resolve_party
@@ -132,10 +130,10 @@ def open_sales_orders(inp: OpenSalesOrdersInput, s, *, principal_id=None) -> Ope
     else:
         key = lambda line: (items[line.item_id]["full_name"].casefold(), line.item_id, line.date, line.number, line.position)
     lines.sort(key=key)
-    currency = s.company_info_row["home_currency"]
+    currency = state.metadata.currency
     on_order = _incoming(s, clock.today_iso())[0] if inp.by == "item" and stocked else {}
     total = sum(line.open_net for line in lines)
-    page = lines[state.offset:state.offset + inp.limit + 1]
+    page = lines[offset:offset + inp.limit + 1]
     more, page = len(page) > inp.limit, page[:inp.limit]
     rows = []
     for line in page:
@@ -153,6 +151,6 @@ def open_sales_orders(inp: OpenSalesOrdersInput, s, *, principal_id=None) -> Ope
             item_name=items[line.item_id]["full_name"], ordered=_plain(line.ordered), invoiced=_plain(line.invoiced),
             cancelled=_plain(line.cancelled), backordered=_plain(line.open), open_amount=money(line.open_net, currency),
             stocked=is_stocked, **extra))
-    return OpenSalesOrdersOutput(by=inp.by, rows=rows, count=len(rows), has_more=more,
+    return OpenSalesOrdersOutput(metadata=state.metadata, by=inp.by, rows=rows, count=len(rows),
         totals=OpenSalesOrdersTotals(open_amount=money(total, currency), lines=len(lines)),
-        next_cursor=continuation(state, len(rows), more), audit_watermark=state.sequence)
+        next_cursor=ledger._continuation(state, offset, len(rows), more, s.company))

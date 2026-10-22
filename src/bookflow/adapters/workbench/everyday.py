@@ -17,6 +17,7 @@ COMMANDS = {
     "report open-purchase-orders", "report purchases-by-vendor", "report purchases-by-item",
     "report deposit-detail", "report transaction-list-by-date", "report vendor-1099-summary",
     "report reconciliation-discrepancy", "report entries-to-review", "report prior-balances",
+    "report open-sales-orders",
 }
 
 # One column: (heading, row field, how the cell is written). `label` is the row's first
@@ -36,6 +37,11 @@ LAYOUTS = {
                              ("Vendor", "display_vendor_label", T), ("Expected", "expected_date", D),
                              ("Status", "status_label", T), ("Amount", "amount", M),
                              ("Received", "received", M), ("Open balance", "open_balance", M)),
+    "open-sales-orders": (("Sales order", "number", "label"), ("Date", "date", D), ("Customer", "customer_name", T),
+                          ("P.O.", "customer_purchase_order", T), ("Ship", "ship_date", D), ("Item", "item_name", T),
+                          ("Ordered", "ordered", "num"), ("Invoiced", "invoiced", "num"), ("Backordered", "backordered", "num"),
+                          ("On hand", "quantity_on_hand", "num"), ("Available", "quantity_available", "num"),
+                          ("Open amount", "open_amount", M)),
     "purchases-by-vendor": (("Vendor", "display_vendor_label", "label"), ("Amount", "amount", M),
                             ("% of total", "display_percent", "num")),
     "purchases-by-item": (("Item", "display_item_label", "label"), ("Quantity", "quantity", "num"),
@@ -77,6 +83,7 @@ TOTALS = {
     "customer-balance-detail": (("balance", "Total balance"),),
     "vendor-balance-detail": (("balance", "Total balance"),),
     "open-purchase-orders": (("amount", "Ordered"), ("received", "Received"), ("open_balance", "Open balance")),
+    "open-sales-orders": (("open_amount", "Open amount"), ("lines", "Open lines")),
     "purchases-by-vendor": (("amount", "Total purchases"),),
     "purchases-by-item": (("amount", "Total purchases"),),
     "deposit-detail": (("deposited", "Total deposited"), ("deposits", "Deposits")),
@@ -101,6 +108,7 @@ NOTES = {
     "customer-balance-detail": "Every transaction that makes up each customer's balance, oldest first, with the balance after each. A total row closes each customer; it is the customer's line on the customer balance summary. Select a transaction to open it.",
     "vendor-balance-detail": "Every transaction that makes up each vendor's balance, oldest first, with the balance after each. A total row closes each vendor; it is the vendor's line on the vendor balance summary. Select a transaction to open it.",
     "open-purchase-orders": "Purchase orders with something still to receive. Received is the ordered amount of what has arrived; Open balance is the ordered amount of what has not. Select an order to open it.",
+    "open-sales-orders": "What customers have ordered and not yet received, one row per open line. Backordered is ordered less invoiced less cancelled. By item, On hand and Available (on hand less what open sales orders and work orders commit) are shown for stocked items. Select an order to open it.",
     "purchases-by-vendor": "What was bought as items from each vendor in the period: bills, checks, credit card charges and item receipts, at the cost each purchase posted. Purchases entered on an expense account rather than an item are on Expenses by vendor instead.",
     "purchases-by-item": "What was bought of each item in the period, with the quantity bought and its average cost. Stock items count what arrived from vendors; a customer return, an inventory adjustment and a sale are not purchases.",
     "deposit-detail": "Each deposit, then the payments, sales receipts and other lines it gathered, at the amount each took out of the account it came from. Select a transaction to open it.",
@@ -130,6 +138,8 @@ def _link(company_id, verb, row, result):
             {"f:as_of": as_of, f"f:{party}": row[f"{party}_id"], "source_report_watermark": watermark})
     if verb == "open-purchase-orders":
         return f"/c/{company_id}/purchase-order/{row['purchase_order_id']}"
+    if verb == "open-sales-orders":
+        return f"/c/{company_id}/sales-order/{row['sales_order_id']}"
     if verb in ("purchases-by-vendor", "vendor-1099-summary"):
         return f"/c/{company_id}/vendor/{row['vendor_id']}" if row.get("vendor_id") else None
     if verb == "purchases-by-item":
