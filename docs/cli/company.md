@@ -1276,6 +1276,13 @@ The same example as complete `bookflow_run` arguments:
 | `customer_discount_account_id` | `--customer-discount-account-id` | string \| null | no | yes | null | Account debited for early-payment discounts given on receipts; null means an active account named Discounts Given; with none a discount is refused until one is named |
 | `vendor_discount_account_id` | `--vendor-discount-account-id` | string \| null | no | yes | null | Account credited for early-payment discounts taken on bill payments; null means an active account named Discounts Taken; with none a discount is refused until one is named |
 | `negative_number_style` | `--negative-number-style` | literal["minus", "parentheses"] \| null | no | yes | null | How reports, lists and forms show a negative amount: minus (-40.00) or parentheses ((40.00)). Display only; JSON, exports and inputs keep the minus sign. |
+| `finance_charge_annual_rate` | `--finance-charge-annual-rate` | string \| null | no | yes | null | Finance charges: annual interest rate in percent charged on overdue customer balances, prorated by the day (18 for 18%; up to 6 decimals, 0 to 100). Finance charges are off until a rate or a minimum and the finance charge account are set; null turns the rate off. |
+| `finance_charge_minimum` | `--finance-charge-minimum` | string \| null | no | yes | null | Finance charges: the least charge assessed on any overdue customer, in the home currency (e.g. 2.00); null for none. |
+| `finance_charge_grace_days` | `--finance-charge-grace-days` | integer \| null | no | yes | null | Finance charges: days a balance may be past due before it is charged; counted days still start at the due date (or invoice date). |
+| `finance_charge_account_id` | `--finance-charge-account-id` | string \| null | no | yes | null | Finance charges: the income account they are credited to, usually an Other Income account named Finance Charge Income; null turns finance charges off. |
+| `finance_charge_on_overdue_charges` | `--finance-charge-on-overdue-charges` | boolean \| null | no | yes | null | Finance charges: also charge on finance charges that are themselves overdue (off by default; some laws restrict it). |
+| `finance_charge_from` | `--finance-charge-from` | literal["due_date", "invoice_date"] \| null | no | yes | null | Finance charges: count days overdue from the due_date (the lenient default) or from the invoice_date. |
+| `finance_charge_mark_to_print` | `--finance-charge-mark-to-print` | boolean \| null | no | yes | null | Finance charges: mark assessed charges to be printed; leave off when the charges are sent on statements. |
 
 ### Command and context options
 

@@ -1176,3 +1176,7 @@ EXAMPLES["vendor 1099-opening"] = Example(
     {"vendor": "Delgado, Ray", "year": 2026, "as_of": "2026-06-30", "amount": "7550.00"})
 # R170 blind July: a small text attachment read as text -- a statement's summary box, kept as an attachment.
 EXAMPLES["attachment text"] = Example(f'bookflow attachment text {ID} --company "Demo Plumbing Co" --json', {"attachment": ID})
+# R120: month-end finance charges by the company policy; run with --dry-run first to see the rows.
+EXAMPLES["finance-charge assess"] = Example(
+    'bookflow finance-charge assess --date 2026-07-31 --reason "Month-end finance charges" --company "Demo Plumbing Co" --json',
+    {"date": "2026-07-31"})

@@ -208,6 +208,13 @@ company_info = _table(
     _column("use_undeposited_funds_for_payments", sa.Boolean, "Default new receipts to Undeposited Funds unless explicitly overridden.", nullable=False, server_default="1"),
     _column("customer_discount_account_id", sa.String(26), "Default account for early-payment discounts given to customers; null means Discounts Given.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("vendor_discount_account_id", sa.String(26), "Default account for early-payment discounts taken from vendors; null means Discounts Taken.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
+    _column("finance_charge_annual_rate", sa.String(16), "Annual interest rate in percent charged on overdue customer balances, canonical decimal text; null while finance charges are off.", nullable=True),
+    _column("finance_charge_minimum", sa.String(24), "Minimum finance charge in the home currency, canonical decimal text; null when there is none.", nullable=True),
+    _column("finance_charge_grace_days", sa.Integer, "Days a balance may be past due before finance charges are assessed on it.", sa.CheckConstraint("finance_charge_grace_days >= 0", name="ck_company_finance_charge_grace"), nullable=False, server_default="0"),
+    _column("finance_charge_account_id", sa.String(26), "Income account finance charges are credited to; null while finance charges are off.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
+    _column("finance_charge_on_overdue_charges", sa.Boolean, "Whether overdue finance charges are themselves charged finance charges.", nullable=False, server_default="0"),
+    _column("finance_charge_from", sa.String(12), "Whether finance charges count days from the due_date or the invoice_date.", sa.CheckConstraint("finance_charge_from IN ('due_date','invoice_date')", name="ck_company_finance_charge_from"), nullable=False, server_default="due_date"),
+    _column("finance_charge_mark_to_print", sa.Boolean, "Whether assessed finance charges are marked to be printed.", nullable=False, server_default="0"),
     _column("negative_number_style", sa.String(12), "How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign.", sa.CheckConstraint("negative_number_style IN ('minus','parentheses')", name="ck_company_negative_number_style"), nullable=False, server_default="minus"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
@@ -1177,3 +1184,5 @@ from bookflow.company.payment_bounce_schema import define_tables as _define_paym
 globals().update(_define_payment_bounce_tables(metadata, _column, _table))
 from bookflow.company.vendor_1099_opening_schema import define_tables as _define_vendor_1099_opening_tables
 globals().update(_define_vendor_1099_opening_tables(metadata, _column, _table))
+from bookflow.company.finance_charge_schema import define_tables as _define_finance_charge_tables
+globals().update(_define_finance_charge_tables(metadata, _column, _table))

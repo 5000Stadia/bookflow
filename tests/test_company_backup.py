@@ -158,7 +158,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
 
     # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 only added tables; putting the old CHECK back
     # and dropping the index, triggers and tables is the exact co0062 file. co0067 widened two CHECKs and one trigger
-    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068, co0069 and co0071 only added a table each, and co0070 widened two empty ones and added another. The demo holds a sales tax
+    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068, co0069 and co0071 only added a table each, co0074 a table and seven company_info columns, and co0070 widened two empty ones and added another. The demo holds a sales tax
     # adjustment (DEMO-STADJ-1), which no co0062 file can, so the older archive is made from a company without one.
     client.organization.new(name="Older Books Organization")
     company = client.company.new(legal_name="Older Books", home_currency="USD", timezone="UTC",
@@ -198,12 +198,18 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("PRAGMA writable_schema=OFF")
         conn.execute("DROP TABLE vendor_credit_item_lines")
         conn.execute("DROP TABLE payment_bounces")  # co0069's, with its triggers
+        conn.execute("DROP TABLE finance_charges")  # co0074's, with its triggers
+        conn.execute("DROP INDEX ix_company_info_finance_charge_account_id")
+        for column in ("finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_grace_days",
+                       "finance_charge_account_id", "finance_charge_on_overdue_charges", "finance_charge_from",
+                       "finance_charge_mark_to_print"):
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0074's seven preferences
         conn.execute("UPDATE alembic_version SET version_num = 'co0062'")
 
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0071"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0074"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

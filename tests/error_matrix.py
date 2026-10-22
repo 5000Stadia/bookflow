@@ -1820,3 +1820,18 @@ MATRIX['attachment text'] = {
     'E_IO': 'missing, collected, corrupt or unsafe body',
     'E_DB_BUSY': 'collection pending',
 }
+
+# Finance charges (R120): assessed by the company policy, each written as a statement charge.
+MATRIX['finance-charge assess'] = {
+    'E_VALIDATION': 'finance charges are off (no account, or neither rate nor minimum), a named customer has nothing overdue, a changed amount is not above 0.00, or a customer is named twice',
+    'E_RECORD_NOT_FOUND': 'unknown customer',
+    'E_INACTIVE_REFERENCE': 'a selected customer or job is inactive',
+    'E_AMOUNT_PRECISION': 'a changed amount has more decimal places than the currency allows',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_PERIOD_CLOSED': 'the assessment date is on or before the closing date',
+    'E_PREVIEW_STALE': 'the books or the policy changed since the preview whose fingerprint was given',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
