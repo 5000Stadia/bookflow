@@ -215,6 +215,8 @@ class CompanyUpdateInput(BaseModel):
     estimates_enabled: bool = Field(None, strict=True, description="Enable new estimates; omission preserves the saved setting; null rejects")
     progress_billing_enabled: bool = Field(None, strict=True, description="Enable partial work billing; disabling retains remaining-line and bounded recovery billing; omission preserves, null rejects")
     close_estimates_after_billing: bool = Field(None, strict=True, description="Make estimates inactive after final positive net billing; effective only while progress billing is disabled; omission preserves, null rejects")
+    sales_orders_enabled: bool = Field(None, strict=True, description="Enable new sales orders and new estimate-to-order conversions; existing orders stay readable and invoiceable; omission preserves, null rejects")
+    available_deducts_sales_orders: bool = Field(None, strict=True, description="Quantity available deducts what open sales orders and work orders have committed; omission preserves, null rejects")
     automatically_apply_payments: bool = Field(None, strict=True, description="Suggest exact-match then oldest invoice allocations; omission preserves, null rejects")
     automatically_calculate_payments: bool = Field(None, strict=True, description="Calculate selected invoice amounts; omission preserves, null rejects")
     use_undeposited_funds_for_payments: bool = Field(None, strict=True, description="Default receipts to Undeposited Funds; omission preserves, null rejects")
@@ -232,6 +234,7 @@ SCALARS = [f for f in CompanyUpdateInput.model_fields if f not in ("expected_ver
 NOT_NULLABLE = {
     "automatically_apply_payments", "automatically_calculate_payments", "use_undeposited_funds_for_payments",
     "estimates_enabled", "progress_billing_enabled", "close_estimates_after_billing",
+    "sales_orders_enabled", "available_deducts_sales_orders",
     "legal_name", "tax_id_kind", "entity_type", "income_tax_form", "fiscal_year_start_month",
     "tax_year_start_month", "report_basis", "timezone", "recent_activity_window_seconds",
     "use_account_numbers", "show_lowest_subaccount_only", "required_employee_profile_fields",

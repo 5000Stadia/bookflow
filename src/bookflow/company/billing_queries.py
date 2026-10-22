@@ -82,9 +82,9 @@ def root_identities(s, header):
 def current_owner(s, header):
     if header['kind'] == 'estimate':
         links = work.rows(s, c.work_links, c.work_links.c.source_document_id == header['id'],
-            c.work_links.c.relation == 'estimate_work_order')
+            c.work_links.c.relation.in_(work.DESTINATION_RELATIONS))
         if links:
-            return work.resolve(s, links[0]['destination_document_id'], 'work_order')
+            return work.resolve(s, links[0]['destination_document_id'], links[0]['relation'].removeprefix('estimate_'))
     return header
 
 

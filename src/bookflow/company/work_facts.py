@@ -84,6 +84,9 @@ class WorkLineFacts(StrictModel):
     description: Text | None
     quantity_microunits: int = Field(gt=0, le=INT64_MAX)
     completed_quantity_microunits: MinorUnits = 0
+    # The part of a sales-order or work-order line the customer no longer wants. Absent (zero)
+    # on every other line, so every document saved before it existed reads exactly as it did.
+    cancelled_quantity_microunits: MinorUnits = 0
     unit_id: str | None
     unit_factor_nanounits: int = Field(gt=0, le=INT64_MAX)
     base_quantity_microunits: int = Field(gt=0, le=INT64_MAX)
@@ -110,6 +113,8 @@ class WorkLineFacts(StrictModel):
         for key in ('discount_minor_units', 'taxable_minor_units'):
             if getattr(self, key) is None:
                 values.pop(key, None)
+        if not self.cancelled_quantity_microunits:
+            values.pop('cancelled_quantity_microunits', None)
         return values
 
     @model_validator(mode='after')
@@ -125,6 +130,8 @@ class WorkLineFacts(StrictModel):
             raise ValueError('base quantity disagrees with selected quantity and factor')
         if self.completed_quantity_microunits > self.quantity_microunits:
             raise ValueError('completed quantity cannot exceed ordered quantity')
+        if self.cancelled_quantity_microunits > self.quantity_microunits:
+            raise ValueError('cancelled quantity cannot exceed ordered quantity')
         if self.pricing_basis == 'amount':
             if self.unit_price_minor_units is not None:
                 raise ValueError('amount pricing has no unit price')

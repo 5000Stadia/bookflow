@@ -14,7 +14,7 @@ TRANSACTIONS = {
         'credit-memo post', 'customer-refund post', 'vendor-credit post',
         'item-receipt post', 'purchase-order post', 'inventory adjust',
         'statement-charge post', 'sales-tax pay', 'sales-tax adjust', 'batch-invoice post',
-        'estimate create', 'proposal create', 'work-order create',
+        'estimate create', 'proposal create', 'work-order create', 'sales-order create',
         'time-activity create', 'payment receive', 'payment bounce', 'bill pay',
     )},
     'deposit post': 'document.date',

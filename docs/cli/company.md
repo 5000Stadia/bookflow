@@ -1270,6 +1270,8 @@ The same example as complete `bookflow_run` arguments:
 | `estimates_enabled` | `--estimates-enabled` | boolean | no | no | null | Enable new estimates; omission preserves the saved setting; null rejects |
 | `progress_billing_enabled` | `--progress-billing-enabled` | boolean | no | no | null | Enable partial work billing; disabling retains remaining-line and bounded recovery billing; omission preserves, null rejects |
 | `close_estimates_after_billing` | `--close-estimates-after-billing` | boolean | no | no | null | Make estimates inactive after final positive net billing; effective only while progress billing is disabled; omission preserves, null rejects |
+| `sales_orders_enabled` | `--sales-orders-enabled` | boolean | no | no | null | Enable new sales orders and new estimate-to-order conversions; existing orders stay readable and invoiceable; omission preserves, null rejects |
+| `available_deducts_sales_orders` | `--available-deducts-sales-orders` | boolean | no | no | null | Quantity available deducts what open sales orders and work orders have committed; omission preserves, null rejects |
 | `automatically_apply_payments` | `--automatically-apply-payments` | boolean | no | no | null | Suggest exact-match then oldest invoice allocations; omission preserves, null rejects |
 | `automatically_calculate_payments` | `--automatically-calculate-payments` | boolean | no | no | null | Calculate selected invoice amounts; omission preserves, null rejects |
 | `use_undeposited_funds_for_payments` | `--use-undeposited-funds-for-payments` | boolean | no | no | null | Default receipts to Undeposited Funds; omission preserves, null rejects |

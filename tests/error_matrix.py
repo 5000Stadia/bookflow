@@ -1842,3 +1842,24 @@ MATRIX['item convert'] = {
     'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
     'E_DIRECTIVE_INACTIVE': 'context directive inactive',
 }
+
+# The sales order (R101): a fifth customer-work kind. It refuses for the family's reasons, plus its own:
+# new orders while the company has them off, and a void or a consumed-line change while an invoice
+# consumes the order (or, once prepayments land, while one is held on it).
+_ORDER_WRITE_ERRORS = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='an invoice consumes the order: its customer and invoiced lines are fixed and it cannot be voided; '
+                      'or a customer prepayment is held on it',
+    E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)',
+    E_REASON_REQUIRED='closing, reopening or voiding an order lacks its reason')
+for _verb in ('create', 'update', 'copy', 'void'):
+    MATRIX[f'sales-order {_verb}'] = dict(_ORDER_WRITE_ERRORS)
+MATRIX['sales-order show'] = {'E_RECORD_NOT_FOUND': 'order or selected revision does not exist',
+    'E_QUERY_STALE': 'company audit changed between source-link pages'}
+for _verb in ('query', 'history'):
+    MATRIX[f'sales-order {_verb}'] = {
+        'E_RECORD_NOT_FOUND': 'order or customer filter absent from selected company',
+        'E_QUERY_STALE': 'company audit changed between bounded pages',
+    }
+MATRIX['estimate sales-order'] = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='the estimate is not accepted, is voided, or already has its work order or sales order',
+    E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)')

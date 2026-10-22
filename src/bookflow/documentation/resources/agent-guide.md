@@ -476,6 +476,8 @@ Use the same business nouns in conversation and commands:
 | Make an estimate from that proposal | `proposal estimate` with the source version and a permanent conversion key |
 | Record the customer's accepted estimate | `estimate update` with `status="accepted"` and a fresh decision note |
 | Make a work order from that estimate | `estimate work-order` with the accepted source version and a permanent conversion key |
+| Take a customer's order for goods (stocked parts included) | `sales-order create` with customer, date and lines; the title defaults to the customer |
+| Turn the accepted estimate into the customer's order | `estimate sales-order` with the accepted source version and a permanent conversion key |
 | Mark the work complete | `work-order complete` with actual start/end; preview fills remaining completed quantities |
 | Find the customer's work and previous versions | Each noun's `query`, `show` and `history` |
 
@@ -495,6 +497,27 @@ interfaces; read [customer payment workflows](customer-payment-workflows.md) bef
 preparing a remittance or correcting an applied document. Delivery remains staged.
 Never report a document sent when only its record was
 created, or improvise an external send from a create-only request.
+
+## Taking a customer's order
+
+"Take an order for 10 widgets for Acme" is `sales-order create --customer Acme --date ...
+--lines '[{"item":"Widget","quantity":"10"}]'`. An order posts nothing and moves no stock; the
+invoice made from it does. Its show output gives each line `order.ordered`, `invoiced`,
+`cancelled` and `open` (what is still to ship, the backorder), and the order's `order.progress`
+(open, partly_invoiced, invoiced, closed, voided) with its exact open amount.
+
+- The customer no longer wants part of a line: `sales-order update` with that line's
+  `cancelled_quantity`, or `close: true` to cancel whatever is still open on it. Cancelling back
+  to `0` reopens it. Only what is not yet invoiced can be cancelled.
+- Nothing more will ship: `sales-order update --status closed` with a reason; `--status open`
+  with a reason brings back what was open. A wrong order is `sales-order void` with a reason; it
+  is refused while an invoice consumes any line, so void or remove that invoice first.
+- An accepted estimate becomes either the order (`estimate sales-order`) or a work order
+  (`estimate work-order`), never both, and its billing then goes there. Keep the conversion key
+  for retries: the same key returns the same order; a different request under it is refused.
+- Estimates, proposals, work orders and orders may carry stocked parts. A stocked line is billed
+  by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
+- `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
 
 ## Bill work in installments
 

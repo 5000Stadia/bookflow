@@ -23,7 +23,7 @@ def _digest(values):
 def _basis_values(line, root, policy):
     if line.schema_version==2:return economic_basis(line,policy), 'economics'
     return dict(basis_version=1, root_document_id=root[0], root_line_id=root[1],
-        line=line.model_dump(mode='json', exclude={'completed_quantity_microunits', 'billable'})), 'line'
+        line=line.model_dump(mode='json', exclude={'completed_quantity_microunits', 'cancelled_quantity_microunits', 'billable'})), 'line'
 
 
 def basis(line, root, policy=None):
@@ -261,8 +261,9 @@ def _occupied_spans(s, root, facts, excluding, policy):
 
 def free_spans(s, root, facts, *, excluding=None, policy=None):
     from bookflow.company import billing_math as math
-    free = lambda: math.free_spans(occupied_spans(s, root, facts, excluding=excluding, policy=policy),
-                                   math.denominator(facts.quantity_microunits, facts.net_minor_units))
+    free = lambda: without_cancelled(facts, math.free_spans(
+        occupied_spans(s, root, facts, excluding=excluding, policy=policy),
+        math.denominator(facts.quantity_microunits, facts.net_minor_units)))
     reads = _reads(s)
     if reads is None:
         return free()
@@ -270,6 +271,37 @@ def free_spans(s, root, facts, *, excluding=None, policy=None):
     if key not in reads:
         reads[key] = tuple(free())
     return iter(reads[key])
+
+
+def without_cancelled(facts, spans):
+    """Free spans less a line's cancelled quantity, carved from the top of what is free.
+
+    Invoicing takes the lowest free spans, so the two never meet; a line that cancels nothing
+    (every line but a sales-order or work-order line someone cancelled part of) is unchanged.
+    """
+    from bookflow.company import billing_math as math
+    cancelled = getattr(facts, 'cancelled_quantity_microunits', 0)
+    spans = list(spans)
+    if not cancelled:
+        return iter(spans)
+    d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
+    cut = d // facts.quantity_microunits * cancelled
+    kept = []
+    for start, end in reversed(spans):
+        if cut >= end - start:
+            cut -= end - start
+            continue
+        kept.append((start, end - cut))
+        cut = 0
+    return iter(reversed(kept))
+
+
+def invoiced_length(s, root, facts, *, policy=None):
+    """How much of one line's span an active invoice or sales receipt has taken, as a length."""
+    from bookflow.company import billing_math as math
+    d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
+    free = sum(b - a for a, b in math.free_spans(occupied_spans(s, root, facts, policy=policy), d))
+    return d - free, d
 
 
 def remaining(s, root, facts, *, policy=None):

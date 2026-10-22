@@ -21,11 +21,14 @@ from bookflow.core.exact import (
 # The customer-work document kinds, declared once. The service, the default resolver, the
 # sales-profile reader, the outputs and the custom-field scopes all derive their copy from
 # this tuple, so a new kind arrives in one place rather than in seven that drift apart.
-WORK_KINDS = ('proposal', 'estimate', 'work_order', 'time_activity')
+WORK_KINDS = ('proposal', 'estimate', 'work_order', 'time_activity', 'sales_order')
 
 WorkKind = Literal[WORK_KINDS]
 WorkStatus = Literal['draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled',
-                     'scheduled', 'in_progress', 'on_hold', 'complete', 'recorded']
+                     'scheduled', 'in_progress', 'on_hold', 'complete', 'recorded', 'closed']
+# What a person decides about a sales order. Progress (partly invoiced, invoiced in full) is
+# read from the billing ledger and never stored; `voided` is written only by `sales-order void`.
+OrderStatus = Literal['open', 'closed']
 DecisionStatus = Literal['draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled']
 OperationalStatus = Literal['draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled']
 Priority = Literal['low', 'normal', 'high', 'urgent']
@@ -44,6 +47,13 @@ def _completed(value):
     units = parse_quantity_micro_units(value, field='completed_quantity')
     if units < 0:
         raise ValueError('completed_quantity must be nonnegative')
+    return format_quantity_micro_units(units)
+
+
+def _cancelled(value):
+    units = parse_quantity_micro_units(value, field='cancelled_quantity')
+    if units < 0:
+        raise ValueError('cancelled_quantity must be nonnegative')
     return format_quantity_micro_units(units)
 
 
@@ -68,6 +78,7 @@ def _timestamp(value):
 
 Timestamp = Annotated[str, BeforeValidator(_timestamp)]
 CompletedQuantity = Annotated[str, BeforeValidator(_completed)]
+CancelledQuantity = Annotated[str, BeforeValidator(_cancelled)]
 Markup = Annotated[str, BeforeValidator(_markup)]
 
 
@@ -76,6 +87,12 @@ class WorkLineInput(SalesLineInput):
     markup_percent: Markup | None = None
     net_amount: str | SalesMoneyInput | None = None
     completed_quantity: CompletedQuantity = '0'
+    cancelled_quantity: CancelledQuantity = Field('0', description=(
+        'Sales orders and work orders: the part of this line the customer no longer wants, taken '
+        'from what is not yet invoiced. Setting it back to 0 reopens the line.'))
+    close: bool = Field(False, description=(
+        'Sales orders and work orders: cancel whatever is still open on this line (the "Clsd" '
+        'checkbox). Conflicts with cancelled_quantity.'))
     billable: bool = True
     use_defaults: list[WorkLineDefault] = Field(default_factory=list, max_length=7)
 
@@ -92,6 +109,8 @@ class WorkLineInput(SalesLineInput):
             raise ValueError('price_level conflicts with markup_percent or net_amount')
         if modes and 'unit_price' in self.use_defaults:
             raise ValueError('price mode conflicts with use_defaults unit_price')
+        if 'close' in supplied and 'cancelled_quantity' in supplied:
+            raise ValueError('choose close or cancelled_quantity, not both')
         if ('completed_quantity' in supplied and 'quantity' in supplied
                 and parse_quantity_micro_units(self.completed_quantity) > parse_quantity_micro_units(self.quantity)):
             raise ValueError('completed_quantity cannot exceed quantity')
@@ -189,6 +208,8 @@ class DecisionLines(StrictModel):
     def no_completion(self):
         if any('completed_quantity' in line.model_fields_set for line in (self.lines or [])):
             raise ValueError('completed_quantity is only available on work orders')
+        if any(line.model_fields_set & {'cancelled_quantity', 'close'} for line in (self.lines or [])):
+            raise ValueError('cancelled_quantity and close are only available on sales orders and work orders')
         return self
 
 
@@ -214,6 +235,27 @@ class WorkOrderCreateInput(WorkCreateInput, OperationalFields):
             if getattr(self, prefix + '_end') and not getattr(self, prefix + '_start'):
                 raise ValueError(f'{prefix}_end requires {prefix}_start')
         return self
+
+
+class OrderLines(StrictModel):
+    """A sales order bills every line by quantity, so nothing on it is non-billable or completed."""
+
+    @model_validator(mode='after')
+    def order_lines(self):
+        for line in self.lines or []:
+            if 'completed_quantity' in line.model_fields_set:
+                raise ValueError('completed_quantity is only available on work orders; a sales order is invoiced, not completed')
+            if 'billable' in line.model_fields_set:
+                raise ValueError('every sales order line is billable; leave billable out')
+        return self
+
+
+OrderLinesList = Annotated[list[WorkLineInput], Field(min_length=1, max_length=200)]
+
+
+class SalesOrderCreateInput(WorkCreateInput, OrderLines):
+    title: Title | None = Field(None, description="Optional; defaults to the customer's name.")
+    lines: OrderLinesList
 
 
 class WorkUpdateInput(WorkFields):
@@ -259,6 +301,14 @@ class WorkOrderUpdateInput(WorkUpdateInput, OperationalFields):
     status: OperationalStatus = 'draft'
 
 
+class SalesOrderUpdateInput(WorkUpdateInput, OrderLines):
+    sales_order: Selector
+    lines: OrderLinesList | None = None
+    status: OrderStatus = Field('open', description=(
+        'open or closed. Closing (a reason is required) leaves nothing open on any line; reopening '
+        'brings back what was open, with cancelled quantities as they were. Void with sales-order void.'))
+
+
 class WorkShowInput(StrictModel):
     links_cursor: str | None = Field(default=None, max_length=2048)
     revision_number: _Version | None = None
@@ -274,6 +324,14 @@ class EstimateShowInput(WorkShowInput):
 
 class WorkOrderShowInput(WorkShowInput):
     work_order: Selector
+
+
+class SalesOrderShowInput(WorkShowInput):
+    sales_order: Selector
+
+
+class SalesOrderHistoryInput(SalesPageInput):
+    sales_order: Selector
 
 
 class ProposalHistoryInput(SalesPageInput):
@@ -355,6 +413,10 @@ class WorkOrderCopyInput(WorkCopyInput):
     work_order: CanonicalId
 
 
+class SalesOrderCopyInput(WorkCopyInput):
+    sales_order: CanonicalId
+
+
 class ConversionInput(DestinationInput):
     conversion_key: str = Field(min_length=1, max_length=128)
 
@@ -384,6 +446,20 @@ class EstimateWorkOrderInput(ConversionInput):
                 datetime.fromisoformat(self.scheduled_end) < datetime.fromisoformat(self.scheduled_start)):
             raise ValueError('scheduled_end requires a start no later than end')
         return self
+
+
+class EstimateSalesOrderInput(ConversionInput):
+    estimate: CanonicalId
+    ship_date: _Date | None = None
+    ship_method: Selector | None = None
+
+
+class SalesOrderVoidInput(StrictModel):
+    """Void a sales order. Non-posting, so nothing is reversed; the reason is the record."""
+
+    sales_order: Selector
+    expected_version: _Version
+    expected_facts_fingerprint: Fingerprint | None = None
 
 
 class EstimateVoidInput(StrictModel):

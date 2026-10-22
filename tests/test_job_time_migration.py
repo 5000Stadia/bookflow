@@ -30,6 +30,9 @@ from tests.test_estimate_void_migration import _at, _chain
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0055_job_time')
 
 KIND = "kind IN ('proposal','estimate','work_order','time_activity')"
+# co0077 has since appended the sales order to the same enumeration; what this migration wrote
+# is still its prefix.
+KIND_NOW = KIND[:-1]
 TIME_STATES = "(kind = 'time_activity' AND status IN ('recorded','voided'))"
 RELATIONS = "'time_activity_invoice','time_activity_sales_receipt'"
 
@@ -58,7 +61,7 @@ def test_the_frozen_replacements_are_the_constraints_the_metadata_now_declares()
 
     stored_kind = _constraint(c.work_documents, 'ck_work_kind')
     stored_status = _constraint(c.work_documents, 'ck_work_status')
-    assert KIND in stored_kind and TIME_STATES in stored_status
+    assert KIND_NOW in stored_kind and TIME_STATES in stored_status
 
     scope_before, scope_after = M.REPLACEMENTS['custom_field_scopes'][0]
     assert scope_after == scope_before.replace("'estimate',", "'estimate','time_activity',")
@@ -82,11 +85,11 @@ def test_a_fresh_database_reaches_the_head_carrying_every_widened_object(tmp_pat
             return db.raw.execute(
                 'SELECT sql FROM sqlite_schema WHERE name=?', (name,)).fetchone()[0]
 
-        assert KIND in sql('work_documents') and TIME_STATES in sql('work_documents')
+        assert KIND_NOW in sql('work_documents') and TIME_STATES in sql('work_documents')
         assert "'time_activity'" in sql('custom_field_scopes')
         assert RELATIONS in sql('work_billing_conversions')
         assert "(d.kind = 'time_activity' AND NEW.status IN ('recorded','voided'))" in sql('work_revision_kind')
-        assert "s.kind IN ('estimate','work_order','time_activity')" in sql('work_billing_conversion_birth')
+        assert "s.kind IN ('estimate','work_order','time_activity'" in sql('work_billing_conversion_birth')
         # The clauses it did not touch are untouched in all of them.
         assert "'on_hold','complete','cancelled')" in sql('work_documents')
         assert "'on_hold','complete','cancelled')" in sql('work_revision_kind')
@@ -220,7 +223,7 @@ def test_a_populated_co0052_database_keeps_every_value_and_every_local_object(tm
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())
         assert objects <= after, 'a local table, index, view or trigger was lost'
-        assert KIND in db.raw.execute(
+        assert KIND_NOW in db.raw.execute(
             "SELECT sql FROM sqlite_schema WHERE name='work_documents'").fetchone()[0]
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]

@@ -1184,3 +1184,28 @@ EXAMPLES["transaction find"] = Example(
 EXAMPLES["item convert"] = Example(
     'bookflow item convert "Copper Coupling" --to inventory --reason "We stock couplings now"'
     ' --company "Demo Plumbing Co" --json', {"item": "Copper Coupling", "to": "inventory"})
+# R101: the sales order. "Take an order for 10 valves for Riverside; 4 of the visit's parts are not wanted."
+_ORDER = {'customer': 'Riverside Apartments', 'date': '2026-10-22',
+          'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '10'}, {'item': 'Mainline Clearing', 'quantity': '1'}]}
+EXAMPLES['sales-order create'] = Example(
+    'bookflow sales-order create --customer "Riverside Apartments" --date 2026-10-22 --lines '
+    + _shlex.quote(_json.dumps(_ORDER['lines'])) + ' --company "Demo Plumbing Co" --reason "Riverside ordered 10 valves" --json', _ORDER)
+EXAMPLES['sales-order show'] = Example(f'bookflow sales-order show {ID} --company "Demo Plumbing Co" --json', {'sales_order': ID})
+EXAMPLES['sales-order update'] = Example(
+    f'bookflow sales-order update {ID} --expected-version 1 --status closed --company "Demo Plumbing Co"'
+    ' --reason "Nothing more will ship" --json', {'sales_order': ID, 'expected_version': 1, 'status': 'closed'})
+EXAMPLES['sales-order copy'] = Example(
+    f'bookflow sales-order copy {ID} --expected-version 1 --date 2026-11-01 --company "Demo Plumbing Co" --reason "Same order again" --json',
+    {'sales_order': ID, 'expected_version': 1, 'date': '2026-11-01'})
+EXAMPLES['sales-order void'] = Example(
+    f'bookflow sales-order void {ID} --expected-version 2 --company "Demo Plumbing Co" --reason "Order withdrawn" --json',
+    {'sales_order': ID, 'expected_version': 2})
+EXAMPLES['sales-order query'] = Example(
+    'bookflow sales-order query --customer "Riverside Apartments" --status open --limit 25 --company "Demo Plumbing Co" --json',
+    {'customer': 'Riverside Apartments', 'status': 'open', 'limit': 25})
+EXAMPLES['sales-order history'] = Example(f'bookflow sales-order history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+                                          {'sales_order': ID, 'limit': 25})
+EXAMPLES['estimate sales-order'] = Example(
+    f'bookflow estimate sales-order {ID} --expected-version 2 --conversion-key "riverside-order-2026-10" --date 2026-10-22'
+    ' --ship-date 2026-10-29 --company "Demo Plumbing Co" --reason "Make the order from the accepted estimate" --json',
+    {'estimate': ID, 'expected_version': 2, 'conversion_key': 'riverside-order-2026-10', 'date': '2026-10-22', 'ship_date': '2026-10-29'})

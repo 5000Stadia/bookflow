@@ -6,8 +6,8 @@ document captured when it was written. Nothing here knows about HTTP, PDF or a b
 so the same description can be drawn to paper, attached to a record, or asserted in a
 test.
 
-The four documents a customer can receive are `invoice`, `sales-receipt`, `estimate` and
-`statement`. Their headers differ, their line tables differ and their totals differ; the
+The documents a customer can receive are `invoice`, `sales-receipt`, `estimate`,
+`sales-order`, `credit-memo` and `statement`. Their headers differ, their line tables differ and their totals differ; the
 shape below is what they share.
 """
 from __future__ import annotations
@@ -448,11 +448,72 @@ def _credit_memo(read: Read, company_id: str, document_id: str) -> PrintedDocume
         footer=f"{title} {revision['number']} \u00b7 {revision['currency']}",
         name=f"{title} {revision['number']}", contact=_contact(info))
 
+def _sales_order(read: Read, company_id: str, document_id: str) -> PrintedDocument:
+    """A sales order: what the customer ordered, what has been invoiced and what is still to ship.
+
+    Shaped like the invoice it becomes, with Ordered, Invoiced and Backordered in place of one
+    quantity. Every figure is the one `sales-order show` returned; nothing is worked out here.
+    """
+    record = read("sales-order show", {"sales_order": document_id}, company_id)
+    info = _company(read, company_id)
+    revision = record["revision"]
+    facts_block, profile = revision["facts"], revision["facts"]["profile"]
+    taxed = any(line["tax"]["minor_units"] for line in revision["lines"])
+    columns = [Column("Item", 1.3, wrap=True), Column("Description", 2.0, wrap=True),
+               Column("Ordered", 1.05, align="right"), Column("Invoiced", 1.05, align="right"),
+               Column("Backordered", 1.4, align="right"), Column("Rate", 0.9, align="right")]
+    if taxed:
+        columns.append(Column("Tax", 0.8, align="right"))
+    columns.append(Column("Amount", 1.0, align="right"))
+    rows = []
+    for line in revision["lines"]:
+        snapshot, figures = line["facts"]["profile"], line.get("order")
+        adjustment = snapshot.get("adjustment")
+        unit = _label(snapshot.get("unit"))
+        suffix = f" {unit}" if unit else ""
+        if adjustment or not figures:
+            ordered = invoiced = backordered = ""
+            rate = _adjustment_rate(adjustment, _shown(line)) if adjustment else ""
+        else:
+            ordered, invoiced, backordered = (figures["ordered"] + suffix, figures["invoiced"], figures["open"])
+            rate = line["unit_price"]["amount"] if line.get("unit_price") else ""
+        row = [_label(snapshot["item"]) or "", line["facts"].get("description") or "",
+               ordered, invoiced, backordered, rate]
+        if taxed:
+            row.append(line["tax"]["amount"])
+        row.append(_shown(line)["amount"])
+        rows.append(tuple(row))
+    facts = [("Date", revision["date"]), ("Status", str((record.get("order") or {}).get("progress", revision["status"])).replace("_", " ")),
+             ("P.O. number", profile.get("customer_purchase_order")),
+             ("Terms", _label(profile.get("terms"))),
+             ("Rep", _label(profile.get("sales_rep"))),
+             ("Ship date", profile.get("ship_date")),
+             ("Ship via", _label(profile.get("ship_method")))]
+    alerts = []
+    if record.get("status") == "voided":
+        alerts.append("VOIDED" + (f" — {revision['decision_note']}" if revision.get("decision_note") else ""))
+    elif record.get("status") == "closed":
+        alerts.append("This order is closed.")
+    totals = [Total("Subtotal", revision["net"]["amount"]),
+              Total("Sales tax", revision["tax"]["amount"]),
+              Total("Total", revision["total"]["amount"], emphasis=True)]
+    if record.get("order"):
+        totals.append(Total("Still to invoice (before tax)", record["order"]["open_amount"]["amount"]))
+    name = f"Sales Order {revision['number']}"
+    return PrintedDocument(
+        kind="sales-order", title="Sales Order", number=revision["number"],
+        issuer=_issuer_party(facts_block.get("issuer_snapshot") or {}, info),
+        parties=(_customer_party(profile), _ship_party(profile)),
+        facts=_facts(facts), columns=tuple(columns), rows=tuple(rows), totals=tuple(totals),
+        notes=_notes(profile, dict(memo=facts_block.get("memo"))), alerts=tuple(alerts),
+        footer=f"{name} · {revision['currency']}", name=name, contact=_contact(info))
+
 
 BUILDERS = {
     "invoice": lambda read, company_id, identity: _sale(read, company_id, "invoice", identity["document"]),
     "sales-receipt": lambda read, company_id, identity: _sale(read, company_id, "sales-receipt", identity["document"]),
     "estimate": lambda read, company_id, identity: _estimate(read, company_id, identity["document"]),
+    "sales-order": lambda read, company_id, identity: _sales_order(read, company_id, identity["document"]),
     "credit-memo": lambda read, company_id, identity: _credit_memo(read, company_id, identity["document"]),
     "statement": _statement,
 }
