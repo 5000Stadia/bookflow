@@ -397,10 +397,15 @@ def _enter_one(s, ctx, occurrence):
     revision = service._one(s, c.memorized_transaction_revisions,
                             c.memorized_transaction_revisions.c.id == occurrence['revision_id'])
     payload = dict(json.loads(revision['payload']), date=occurrence['slot_date'])
+    reason = ctx.reason or f"Memorized entry for {occurrence['slot_date']}"
+    if ctx.client_name == 'scheduler':
+        # The host's scheduler gives the schedule itself as the reason for each entry it makes.
+        template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == occurrence['template_id'])
+        reason = f"On schedule: {template['name']} ({template['frequency'].replace('_', ' ')}) for {occurrence['slot_date']}"
     entry_ctx = ctx.model_copy(update={
         'idempotency_key': occurrence['entry_key'],
         'source_ref': (SOURCE_MARK + occurrence['id'])[:512],
-        'reason': (ctx.reason or f"Memorized entry for {occurrence['slot_date']}")[:140],
+        'reason': reason[:140],
     })
     saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run)
     try:

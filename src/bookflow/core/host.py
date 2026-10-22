@@ -48,7 +48,7 @@ class Host:
                  sweep_seconds: float = 3600.0, filesystem_wait_seconds: float = 5.0,
                  transfer_limit: int = 8, principal_transfer_limit: int = 2,
                  transfer_lifetime_seconds: float = 300.0, shutdown_wait_seconds: float = 30.0,
-                 backup_check_seconds: float = 60.0):
+                 backup_check_seconds: float = 60.0, schedule_check_seconds: float = 60.0):
         if (type(transfer_limit) is not int or not 0 < transfer_limit <= 8
                 or type(principal_transfer_limit) is not int or not 0 < principal_transfer_limit <= 2
                 or not math.isfinite(transfer_lifetime_seconds) or not 0 < transfer_lifetime_seconds <= 300
@@ -68,6 +68,7 @@ class Host:
         self.transfer_lifetime_seconds = transfer_lifetime_seconds
         self.shutdown_wait_seconds = shutdown_wait_seconds
         self.backup_check_seconds = backup_check_seconds
+        self.schedule_check_seconds = schedule_check_seconds
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
@@ -537,9 +538,11 @@ class Host:
     # ---------------------------------------------------------------- timers
     def _timer_loop(self) -> None:
         """One daemon thread for both timers; every database touch is submitted to the writer."""
-        tick = max(0.05, min(1.0, self.idle_checkpoint_seconds, self.sweep_seconds, self.backup_check_seconds))
+        tick = max(0.05, min(1.0, self.idle_checkpoint_seconds, self.sweep_seconds, self.backup_check_seconds,
+                             self.schedule_check_seconds))
         last_sweep = time.monotonic()
         last_backup_check = time.monotonic()
+        last_schedule_check = time.monotonic()
         while not self._timer_stop.wait(tick):
             now = time.monotonic()
             with self._readers_lock:
@@ -563,6 +566,12 @@ class Host:
                     self.backups_now()
                 except BaseException as e:  # noqa: BLE001
                     log.warning("scheduled backups: %s", e)
+            if now - last_schedule_check >= self.schedule_check_seconds:
+                last_schedule_check = now
+                try:
+                    self.schedule_now()
+                except BaseException as e:  # noqa: BLE001
+                    log.warning("scheduler: %s", e)
 
     def checkpoint_now(self) -> dict[str, Any]:
         """RESTART checkpoint the hub and every pooled company connection, on the writer. Results are logged."""
@@ -714,6 +723,52 @@ class Host:
             log.warning("scheduled backup status of %s not saved: %s", row["id"], e)
         self._after_write()
         return status
+
+    # ---------------------------------------------------------------- the scheduler (R111)
+    def schedule_now(self, now=None) -> dict[str, Any]:
+        """One scheduler tick for every company at ``now`` (default: the clock), on the writer.
+
+        Enters due automatic memorized transactions, assigns to-dos for the ones that need a
+        person, and generates overdue notices (``company/scheduler.py``). Returns
+        ``{company_id: what it did}``. Tests pass ``now`` to move time; nothing here sleeps.
+        """
+        if not self._writer.is_alive():
+            return {}
+        return self.submit(lambda: self._schedule_on_writer(now), _maintenance=True)
+
+    def _schedule_on_writer(self, now=None) -> dict[str, Any]:
+        import sqlalchemy as sa
+
+        from bookflow.company import scheduler
+        from bookflow.core import clock
+        from bookflow.core.dispatch import _load_actor_by_id, open_company
+        from bookflow.hub import schema as h
+        from bookflow.storage.migrate import HEADS
+        now = now if now is not None else clock.now()
+        hub = self._ensure_hub_on_writer()
+        system = hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "system")).mappings().first()
+        if system is None:
+            return {}
+        rows = [dict(r) for r in hub.conn.execute(sa.select(h.companies).where(
+            h.companies.c.pending_path.is_(None)).order_by(h.companies.c.id)).mappings()]
+        done: dict[str, Any] = {}
+        for row in rows:
+            # A company not yet upgraded is left for `bookflow upgrade`: the scheduler never migrates.
+            if row["schema_revision"] != HEADS["company"]:
+                continue
+            s = self._writer_session()
+            try:
+                _load_actor_by_id(s, system["id"])
+                s.company_row = row
+                open_company(s, scheduler.context(), True)
+                done[row["id"]] = scheduler.run_company(s, system["id"], now)
+            except Exception as e:  # noqa: BLE001 - one company failing never stops the others or the host
+                log.warning("scheduler for %s failed: %s", row["id"], e)
+                done[row["id"]] = {"error": getattr(e, "code", type(e).__name__)}
+            finally:
+                s.close_company(release=False)
+        self._after_write()
+        return done
 
     # ---------------------------------------------------------------- descriptor
     def write_descriptor(self, bind: str, socket_path: str) -> None:

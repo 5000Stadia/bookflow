@@ -2080,3 +2080,42 @@ MATRIX['report open-sales-orders'] = {
     'E_RECORD_NOT_FOUND': 'unknown customer or item filter',
     'E_QUERY_STALE': 'company audit changed between pages',
 }
+
+# Unattended scheduling and reminders (R111): to-dos, overdue notices and the Reminders list.
+_SCHED_TAIL = {
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['todo create'] = {
+    'E_VALIDATION': 'a blank title, an assignee who is not a member of the company, or link without link_type',
+    'E_RECORD_NOT_FOUND': 'unknown assignee or linked record',
+    **_SCHED_TAIL,
+}
+MATRIX['todo update'] = {
+    'E_VALIDATION': 'a blank title, a null due date, nothing to change, or an assignee who is not a member',
+    'E_RECORD_NOT_FOUND': 'unknown to-do, assignee or linked record',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_SCHED_TAIL,
+}
+MATRIX['todo complete'] = {
+    'E_VALIDATION': 'the to-do is already done',
+    'E_RECORD_NOT_FOUND': 'unknown to-do',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_SCHED_TAIL,
+}
+MATRIX['todo show'] = {'E_VALIDATION': 'malformed selector', 'E_RECORD_NOT_FOUND': 'unknown to-do'}
+MATRIX['todo list'] = {'E_VALIDATION': 'link without link_type', 'E_RECORD_NOT_FOUND': 'unknown assignee or linked record'}
+MATRIX['notice generate'] = {'E_VALIDATION': 'overdue notices are off (no overdue_notice_days)', **_SCHED_TAIL}
+MATRIX['notice list'] = {'E_VALIDATION': 'malformed filter', 'E_RECORD_NOT_FOUND': 'unknown customer'}
+MATRIX['notice show'] = {'E_VALIDATION': 'malformed selector', 'E_RECORD_NOT_FOUND': 'unknown notice'}
+_NOTICE_WRITE = {
+    'E_VALIDATION': 'the notice is not ready to send (already sent or dismissed)',
+    'E_RECORD_NOT_FOUND': 'unknown notice',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_SCHED_TAIL,
+}
+MATRIX['notice mark-sent'] = dict(_NOTICE_WRITE)
+MATRIX['notice dismiss'] = dict(_NOTICE_WRITE)
+MATRIX['reminders'] = {'E_VALIDATION': 'a malformed as_of date'}

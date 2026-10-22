@@ -1285,6 +1285,11 @@ The same example as complete `bookflow_run` arguments:
 | `finance_charge_on_overdue_charges` | `--finance-charge-on-overdue-charges` | boolean \| null | no | yes | null | Finance charges: also charge on finance charges that are themselves overdue (off by default; some laws restrict it). |
 | `finance_charge_from` | `--finance-charge-from` | literal["due_date", "invoice_date"] \| null | no | yes | null | Finance charges: count days overdue from the due_date (the lenient default) or from the invoice_date. |
 | `finance_charge_mark_to_print` | `--finance-charge-mark-to-print` | boolean \| null | no | yes | null | Finance charges: mark assessed charges to be printed; leave off when the charges are sent on statements. |
+| `scheduler_catch_up_days` | `--scheduler-catch-up-days` | integer \| null | no | yes | null | Scheduler: an automatic memorized entry whose date is more than this many days in the past is left waiting for a person (as a reminder) instead of entered by the host's scheduler; null enters every missed one, as the anchor does when the books are next opened. |
+| `overdue_notice_days` | `--overdue-notice-days` | integer \| null | no | yes | null | Overdue notices: generate a notice for a customer whose oldest open invoice is at least this many days past due (the anchor's collection letters use 1, 31, 61 or 91); null turns overdue notices off. |
+| `overdue_notice_frequency` | `--overdue-notice-frequency` | literal["weekly", "monthly"] \| null | no | yes | null | Overdue notices: generate them once a month (the first scheduler run of each month) or once a week (from each Monday). |
+| `overdue_notice_minimum` | `--overdue-notice-minimum` | string \| null | no | yes | null | Overdue notices: the least overdue balance that earns a notice, in the home currency (e.g. 25.00); null for any amount. |
+| `overdue_notice_template` | `--overdue-notice-template` | literal["statement", "letter"] \| null | no | yes | null | Overdue notices: what each notice is, the customer statement or a short collection letter listing the overdue invoices. |
 
 ### Command and context options
 

@@ -754,6 +754,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R119: the fixed asset list and schedules, and loans with their schedule and Pay.
     from bookflow.adapters.workbench import fixed_asset_pages as FixedAssetPages
     FixedAssetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R111: Reminders, the to-do list and the overdue notice queue.
+    from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
+    SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)

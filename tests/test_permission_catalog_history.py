@@ -68,6 +68,7 @@ ACCEPTED = {
     'fixed-asset-v1': (580, '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc'),
     'assembly-build-v1': (587, 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2'),
     'committed-stock-v1': (588, 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5'),
+    'scheduling-v1': (599, 'b9c00f3dd9c2dca5267e8a5be114ee46d50a14d3049dd59c96b2b77a72e09d78'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -136,6 +137,8 @@ CHAIN_ADDITIONS = {
                        'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'},
     'assembly-build-v1': {'assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete', 'assembly show', 'assembly list'},
     'committed-stock-v1': {'report open-sales-orders'},
+    'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
+                      'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
 }
 
 _ANCESTOR_EDIT = """

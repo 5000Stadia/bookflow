@@ -89,3 +89,8 @@ Database: `company`.
 | `finance_charge_from` | VARCHAR(12) | no | — | — | — | — | Whether finance charges count days from the due_date or the invoice_date. |
 | `finance_charge_mark_to_print` | BOOLEAN | no | — | — | — | — | Whether assessed finance charges are marked to be printed. |
 | `negative_number_style` | VARCHAR(12) | no | — | — | — | — | How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign. |
+| `scheduler_catch_up_days` | INTEGER | yes | — | — | — | — | Missed automatic memorized entries older than this many days are left for a person instead of entered by the scheduler; null enters every missed one, as the anchor does. |
+| `overdue_notice_days` | INTEGER | yes | — | — | — | — | Overdue notices: days past due a customer's oldest open document must be before a notice is generated; null turns notices off. |
+| `overdue_notice_frequency` | VARCHAR(12) | no | — | — | — | — | Overdue notices: how often the scheduler generates them, weekly or monthly. |
+| `overdue_notice_minimum` | VARCHAR(24) | yes | — | — | — | — | Overdue notices: least overdue balance that earns a notice, home-currency decimal text; null for any amount. |
+| `overdue_notice_template` | VARCHAR(12) | no | — | — | — | — | Overdue notices: what each notice is, a statement or a short letter. |

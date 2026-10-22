@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}To-dos{% endblock %}{% block body %}<style>form.inline{display:inline}.prio-high{font-weight:600}</style><section id="todos">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/company">Company</a> / To-dos</nav>
+<h1>{{ 'To-dos' if everyone else 'My to-dos' }}</h1>
+<p class="muted">Things to do by a date, for a person or an agent. An agent finds its own with <code>todo list --mine</code>.</p>
+{% if notice %}<p class="notice" role="status" data-notice>{{ notice }}</p>{% endif %}
+<nav class="actions" aria-label="To-do actions"><a href="/c/{{ company_id }}/todo/create">New to-do</a> <a href="/c/{{ company_id }}/todo?{{ '' if everyone else 'all=1&' }}status={{ status }}">{{ 'Only mine' if everyone else 'Everyone’s' }}</a> {% for s in ('open', 'done', 'inactive') %}{% if s != status %}<a href="/c/{{ company_id }}/todo?{{ 'all=1&' if everyone else '' }}status={{ s }}">{{ s | capitalize }}</a> {% endif %}{% endfor %}<a href="/c/{{ company_id }}/reminders">Reminders</a></nav>
+{% set back = '/c/' ~ company_id ~ '/todo' ~ ('?all=1' if everyone else '') %}
+{% if todos %}<div class="table-wrap"><table class="list-table" data-todo-table><thead><tr><th>Due</th><th>To do</th><th>Priority</th><th>For</th><th>About</th><th></th></tr></thead><tbody>
+{% for t in todos %}<tr data-todo="{{ t.id }}"{% if t.overdue %} data-overdue{% endif %}><td data-label="Due">{{ t.due_date }}{% if t.overdue %} <span class="muted">(overdue)</span>{% endif %}</td><td data-label="To do"><a href="/c/{{ company_id }}/todo/{{ t.id }}">{{ t.title }}</a>{% if t.notes %}<br><span class="muted">{{ t.notes | truncate(120) }}</span>{% endif %}</td><td data-label="Priority" class="prio-{{ t.priority }}">{{ t.priority }}</td><td data-label="For">{{ t.assignee_name or 'Unassigned' }}{% if t.assignee_kind == 'agent' %} (agent){% endif %}</td><td data-label="About">{{ t.link_label or '' }}</td><td>{% if t.status == 'open' %}<form method="post" class="inline" action="/c/{{ company_id }}/todo/{{ t.id }}/_done"><input type="hidden" name="back" value="{{ back }}"><button type="submit">Done</button></form>{% else %}{{ t.status }}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p data-todo-none>No {{ status }} to-dos.</p>{% endif %}
+</section>{% endblock %}

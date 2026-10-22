@@ -818,6 +818,33 @@ BUILD`. `assembly list --status pending` is the pending builds report. Correct a
 `assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
 use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
 
+## What needs doing today?
+
+Start with `reminders`: one heading per kind of work with its count and total -- memorized
+transactions due (reminder slots, and missed automatic ones the company left for a person),
+memorized entries that need a person (blocked: a closed period, an inactive account, an owner who
+lost the right to post), to-dos due, overdue notices ready to send, overdue invoices and bills to
+pay. Then `todo list --mine`: the to-dos assigned to you, soonest first.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "todo list", "input": {"mine": true, "due_by": "2026-11-03"}}
+```
+
+Do each one, then `todo complete TODO`. A to-do whose `source_ref` begins `memorized-occurrence:`
+was assigned by the scheduler because an automatic entry failed: its notes carry the error; fix
+the cause and `memorized retry OCCURRENCE`, or `memorized skip OCCURRENCE` if the owner says it
+should not be entered. Leave work for a person with `todo create --assignee USERNAME` and a
+reason, linked to the customer, vendor, document or memorized transaction it is about.
+
+The host enters automatic memorized transactions and prepares overdue notices by itself while
+`bookflow serve` runs: do not run `memorized process` just because it is a new day. Overdue notices
+are never sent by Bookflow. `notice list` shows the ones ready, each with `print_path` (its PDF)
+and the letter text; sending one is the owner's decision. Once a person (or a delivery step the
+owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owner says not to,
+`notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
+notice period.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

@@ -230,8 +230,13 @@ class CompanyUpdateInput(BaseModel):
     finance_charge_on_overdue_charges: bool | None = Field(None, description="Finance charges: also charge on finance charges that are themselves overdue (off by default; some laws restrict it).")
     finance_charge_from: Literal["due_date", "invoice_date"] | None = Field(None, description="Finance charges: count days overdue from the due_date (the lenient default) or from the invoice_date.")
     finance_charge_mark_to_print: bool | None = Field(None, description="Finance charges: mark assessed charges to be printed; leave off when the charges are sent on statements.")
+    scheduler_catch_up_days: int | None = Field(None, strict=True, ge=0, le=3650, description="Scheduler: an automatic memorized entry whose date is more than this many days in the past is left waiting for a person (as a reminder) instead of entered by the host's scheduler; null enters every missed one, as the anchor does when the books are next opened.")
+    overdue_notice_days: int | None = Field(None, strict=True, ge=1, le=3650, description="Overdue notices: generate a notice for a customer whose oldest open invoice is at least this many days past due (the anchor's collection letters use 1, 31, 61 or 91); null turns overdue notices off.")
+    overdue_notice_frequency: Literal["weekly", "monthly"] | None = Field(None, description="Overdue notices: generate them once a month (the first scheduler run of each month) or once a week (from each Monday).")
+    overdue_notice_minimum: str | None = Field(None, description="Overdue notices: the least overdue balance that earns a notice, in the home currency (e.g. 25.00); null for any amount.")
+    overdue_notice_template: Literal["statement", "letter"] | None = Field(None, description="Overdue notices: what each notice is, the customer statement or a short collection letter listing the overdue invoices.")
 
-    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", mode="before")
+    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", mode="before")
     @classmethod
     def _blank(cls, v):
         return _empty_to_none(v)
@@ -249,6 +254,7 @@ NOT_NULLABLE = {
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
     "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
+    "overdue_notice_frequency", "overdue_notice_template",
 }
 
 
@@ -307,6 +313,10 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
     if changed & {"finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id"}:
         from bookflow.company.finance_charges import validate_preferences
         validate_preferences(s.company, new, changed)
+
+    if "overdue_notice_minimum" in changed and new.get("overdue_notice_minimum") is not None:
+        from bookflow.company.notices import canonical_minimum
+        new["overdue_notice_minimum"] = canonical_minimum(new["overdue_notice_minimum"], new["home_currency"])
 
     for field, table in (("default_sales_tax_item_id", cschema.items), ("default_ship_method_id", cschema.ship_methods)):
         if field not in changed or new.get(field) is None:
