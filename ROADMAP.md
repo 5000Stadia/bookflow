@@ -153,7 +153,7 @@ review cb5fcd7 (gate g96052d).
 
 ## M4 — After V1.5: concepts to develop
 
-- [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows)
+- [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows) On hold: needs the anchor desktop software and its SDK on a Windows machine, and a sample company file; none is on this machine.
 - [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
@@ -183,7 +183,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
-- [ ] R130 Windows: a supported Windows build with an authenticated local hand-off.
+- [ ] R130 Windows: a supported Windows build with an authenticated local hand-off. On hold: no Windows machine here to build and test on.
 - [x] R138 Find any transaction: search across every transaction type by name, number, amount or date range
 - [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
 - [~] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
