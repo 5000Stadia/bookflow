@@ -331,7 +331,8 @@
       // The anchor's Underpayment choice: shown once a preview finds the cash short.
       if(!$('underpayment').hidden&&$('underpayment-write-off').checked) {
         input.underpayment='write_off';
-        if($('discount-class').value.trim()) input.discount_class=$('discount-class').value.trim();
+        if($('write-off-account').value.trim()) input.write_off_account=$('write-off-account').value.trim();
+        if($('write-off-class').value.trim()) input.write_off_class=$('write-off-class').value.trim();
       }
     }
     else Object.assign(input,{payment:payment.id,expected_version:payment.version});
@@ -886,7 +887,7 @@
     customerPending=true;invalidate();$('balances').hidden=true;$('invoices').replaceChildren();
     note('Choose a matching customer. The previous preview cannot be saved; any prior shared selection remains in Saved selections.');
   });
-  for(const id of ['number','method','destination','memo','reference','reason','date','ar','underpayment-open','underpayment-write-off','discount-class','discount-account']) $(id).addEventListener('change',invalidate);
+  for(const id of ['number','method','destination','memo','reference','reason','date','ar','underpayment-open','underpayment-write-off','write-off-account','write-off-class','discount-account']) $(id).addEventListener('change',invalidate);
   $('method').addEventListener('change',()=>{methodFromCustomer=false;});
   $('more').addEventListener('click',()=>perform(async()=>loadInvoices(nextCursor)));
   $('auto').addEventListener('click',()=>perform(autoApply));$('calculate').addEventListener('click',()=>perform(calculate));

@@ -110,7 +110,7 @@ def test_an_underpayment_left_open_keeps_owing_and_says_how_to_write_it_off(book
 def test_an_underpayment_written_off_in_the_same_receipt_on_both_bases(books):
     sale = invoice(books, '500.00')
     paid = receive(books, '480.00', [(sale, 1, '480.00')], underpayment='write_off',
-                   discount_account='Bad Debt', discount_class='East')
+                   write_off_account='Bad Debt', write_off_class='East')
     under = paid['summary']['underpayment']
     assert under == dict(amount=dict(amount='20.00', currency='USD', minor_units=2000), choice='written_off',
                          account='Bad Debt', text='Underpayment of 20.00 USD written off to Bad Debt.')
@@ -130,7 +130,7 @@ def test_an_underpayment_written_off_in_the_same_receipt_on_both_bases(books):
 
 def test_a_written_off_receipt_is_unapplied_and_voided_like_any_other(books):
     sale = invoice(books, '500.00')
-    paid = receive(books, '480.00', [(sale, 1, '480.00')], underpayment='write_off', discount_account='Bad Debt')
+    paid = receive(books, '480.00', [(sale, 1, '480.00')], underpayment='write_off', write_off_account='Bad Debt')
     run = books['run']
     application = paid['effect']['applications'][0]
     undone = run('payment unapply', dict(payment=paid['id'], expected_version=paid['version'], operation_key='undo',
@@ -147,7 +147,7 @@ def test_write_off_refusals_say_what_to_do(books):
         receive(books, '480.00', [(sale, 1, '480.00')], underpayment='write_off')
     assert missing.value.code == 'E_VALIDATION' and 'Bad Debt' in str(missing.value.details)
     with pytest.raises(BookflowError) as nothing:
-        receive(books, '500.00', [(sale, 1, '500.00')], underpayment='write_off', discount_account='Bad Debt')
+        receive(books, '500.00', [(sale, 1, '500.00')], underpayment='write_off', write_off_account='Bad Debt')
     assert nothing.value.code == 'E_VALIDATION' and 'nothing is short' in str(nothing.value.details)
     assert due(books, sale) == 50000
 
@@ -174,13 +174,120 @@ def test_an_overpayment_is_left_as_credit_or_refunded(books):
 def test_closed_period_and_idempotent_retry(books):
     run = books['run']
     sale = invoice(books, '500.00')
-    first = receive(books, '480.00', [(sale, 1, '480.00')], key='same', underpayment='write_off', discount_account='Bad Debt')
-    again = receive(books, '480.00', [(sale, 1, '480.00')], key='same', underpayment='write_off', discount_account='Bad Debt')
+    first = receive(books, '480.00', [(sale, 1, '480.00')], key='same', underpayment='write_off', write_off_account='Bad Debt')
+    again = receive(books, '480.00', [(sale, 1, '480.00')], key='same', underpayment='write_off', write_off_account='Bad Debt')
     assert again['id'] == first['id'] and again['idempotent_replay'] is True
     assert balances(books)[books['bad_debt']] == 2000
     later = invoice(books, '500.00')
     run('company update', dict(expected_version=run('company show')['info_version'], closing_date='2026-03-31'))
     with pytest.raises(BookflowError) as closed:
-        receive(books, '480.00', [(later, 1, '480.00')], key='closed', underpayment='write_off', discount_account='Bad Debt')
+        receive(books, '480.00', [(later, 1, '480.00')], key='closed', underpayment='write_off', write_off_account='Bad Debt')
     assert closed.value.code == 'E_PERIOD_CLOSED'
     assert due(books, later) == 50000
+
+
+def _refund(books, payment, amount, key='refund'):
+    return books['run']('customer-refund post', dict(date='2026-05-01', sources=[dict(payment=payment, amount=amount)],
+                        funding_account=books['bank'], method=books['methods']['Check']), reason='Pay the customer back')
+
+
+def _unapply(books, paid, key='undo'):
+    application = paid['effect']['applications'][0]
+    return books['run']('payment unapply', dict(payment=paid['id'], expected_version=paid['version'], operation_key=key,
+        applications=[dict(application_id=application['application_id'],
+                           invoice_expected_version=application['invoice_version'])]), reason='Applied to the wrong invoice')
+
+
+def test_unapplying_a_written_off_receipt_takes_the_write_off_back_and_caps_a_refund_at_the_cash(books):
+    run = books['run']
+    sale = invoice(books, '500.00')
+    paid = receive(books, '480.00', [(sale, 1, '480.00')], underpayment='write_off', write_off_account='Bad Debt')
+    undone = _unapply(books, paid)
+    # The write-off left with its application: the invoice owes all 500.00, Bad Debt is back at zero,
+    # and the receipt's free credit is its 480.00 of cash.
+    assert due(books, sale) == 50000
+    assert undone['current']['available_minor_units'] == 48000
+    assert run('payment show', dict(payment=paid['id']))['current']['available_minor_units'] == 48000
+    assert balances(books) == {books['bank']: 48000, books['receivable']: 2000, books['income']: -50000}
+    # Cash basis: the invoice is unpaid again, so none of it is income yet.
+    assert pnl(books, 'cash') == {}
+    with pytest.raises(BookflowError) as too_much:
+        _refund(books, paid['id'], '500.00')
+    assert too_much.value.code in ('E_CREDIT_UNAVAILABLE', 'E_APPLICATION_CAPACITY')
+    _refund(books, paid['id'], '480.00')
+    assert balances(books) == {books['receivable']: 50000, books['income']: -50000}
+    assert receivables(books) == (50000, 50000, 50000)
+
+
+def test_unapplying_an_early_discount_takes_it_back(books):
+    run = books['run']
+    discounts = run('account create', dict(name='Discounts Given', type='income'))['id']
+    sale = invoice(books, '1000.00')
+    paid = receive(books, '980.00', [(sale, 1, '980.00')], discounts=[dict(invoice=sale['id'], amount='20.00')])
+    assert due(books, sale) == 0 and balances(books)[discounts] == 2000
+    _unapply(books, paid)
+    assert due(books, sale) == 100000
+    assert discounts not in balances(books)
+    assert run('payment show', dict(payment=paid['id']))['current']['available_minor_units'] == 98000
+    with pytest.raises(BookflowError):
+        _refund(books, paid['id'], '1000.00')
+    # Applied again, it pays 980.00 and the invoice owes the 20.00 the discount no longer covers.
+    shown = run('payment show', dict(payment=paid['id']))
+    run('payment apply', dict(payment=paid['id'], expected_version=shown['version'], date='2026-03-20', operation_key='again',
+        applications=dict(mode='inline', items=[dict(invoice=sale['id'], expected_version=run('invoice show', dict(invoice=sale['id']))['version'], amount='980.00')])), reason='Reapply')
+    assert due(books, sale) == 2000
+
+
+def test_unapplying_a_bad_debt_receipt_voids_it(books):
+    sale = invoice(books, '250.00')
+    done = books['run']('payment receive', dict(customer=books['customer'], date='2026-09-30', amount='0.00', operation_key='wo',
+        discounts=[dict(invoice=sale['id'], amount='250.00', expected_version=1)], discount_account=books['bad_debt']),
+        reason='Customer is gone')
+    _unapply(books, done)
+    assert due(books, sale) == 25000
+    assert books['run']('payment show', dict(payment=done['id']))['status'] == 'voided'
+    assert balances(books) == {books['receivable']: 25000, books['income']: -25000}
+
+
+def test_a_bounced_check_returns_only_the_cash_and_the_write_off_stays_on_the_invoice(books):
+    run = books['run']
+    fees = run('account create', dict(name='Bank Service Charges', type='expense'))['id']
+    sale = invoice(books, '500.00')
+    paid = receive(books, '480.00', [(sale, 1, '480.00')], underpayment='write_off', write_off_account='Bad Debt')
+    bounced = run('payment bounce', dict(payment=paid['id'], expected_version=paid['version'], date='2026-03-20',
+                  operation_key='bounce', bank_fee_amount='10.00', bank_fee_account=fees), reason='Bank returned it')
+    assert bounced['returned']['minor_units'] == 48000
+    assert [row['due']['minor_units'] for row in bounced['reopened_invoices']] == [48000]
+    # The 480.00 never arrived, so it is owed again; the 20.00 written off stays written off.
+    assert due(books, sale) == 48000
+    assert run('payment show', dict(payment=paid['id']))['current']['available_minor_units'] == 0
+    assert balances(books) == {books['bank']: -1000, fees: 1000, books['bad_debt']: 2000,
+                               books['receivable']: 48000, books['income']: -50000}
+    with pytest.raises(BookflowError):
+        _refund(books, paid['id'], '20.00')
+
+
+def test_an_early_discount_and_a_write_off_on_one_invoice_post_to_their_own_accounts(books):
+    run = books['run']
+    discounts = run('account create', dict(name='Discounts Given', type='income'))['id']
+    terms = {row['name']: row['id'] for row in run('term query', dict(limit=50))['items']}
+    sale = run('invoice post', dict(customer=books['customer'], date='2026-03-01', terms=terms['2% 10 Net 30'],
+               lines=[dict(item=books['item'], quantity='1', unit_price='1000.00')]), reason='Bill')
+    # 1,000.00 less the 20.00 early discount is 980.00; Acme sent 950.00, so 30.00 is written off.
+    paid = receive(books, '950.00', [(sale, 1, '950.00')], date='2026-03-08', discounts=[dict(invoice=sale['id'], amount='20.00')],
+                   underpayment='write_off', write_off_account='Bad Debt')
+    application = paid['effect']['applications'][0]
+    assert application['discount']['minor_units'] == 2000 and application['write_off']['minor_units'] == 3000
+    assert paid['warnings'] == []
+    assert due(books, sale) == 0
+    assert balances(books) == {books['bank']: 95000, discounts: 2000, books['bad_debt']: 3000, books['income']: -100000}
+    # The same after the discount date: the discount is late and says so; the write-off is not a discount.
+    later = run('invoice post', dict(customer=books['customer'], date='2026-03-01', terms=terms['2% 10 Net 30'],
+                lines=[dict(item=books['item'], quantity='1', unit_price='1000.00')]), reason='Bill')
+    late = receive(books, '950.00', [(later, 1, '950.00')], key='late', date='2026-03-25',
+                   discounts=[dict(invoice=later['id'], amount='20.00')], underpayment='write_off', write_off_account='Bad Debt')
+    assert len(late['warnings']) == 1
+    # Unapplied, both leave with the application.
+    _unapply(books, paid, key='undo-mixed')
+    assert due(books, sale) == 100000
+    assert balances(books)[discounts] == 2000 and balances(books)[books['bad_debt']] == 3000

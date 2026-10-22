@@ -74,7 +74,7 @@ class CreditTransferOutput(WriteOutput):
     idempotent_replay: bool = False
     transfer_id: str | None = Field(description='Id of the transfer; null on a dry run.')
     operation_key: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'partly_voided'] = Field(description='posted while both documents stand; voided once both are')
     date: str
     from_customer: str
     to_customer: str

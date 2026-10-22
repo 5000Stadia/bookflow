@@ -16,6 +16,35 @@ from bookflow.company.payment_models import PaymentUnapplyInput, PaymentVoidInpu
 from bookflow.company.payment_outputs import PaymentWriteOutput, PaymentOutput, PaymentShowOutput
 
 
+def _discounts_leave_with_their_application(s, inp):
+    """An unapplied edge takes its discount with it, which restates the receipt; a banked one cannot be."""
+    from bookflow.company import sales
+    from bookflow.company.deposit_dependencies import require_unclaimed
+    from bookflow.core.errors import BookflowError
+    header = sales.resolve(s, inp.payment, 'payment')
+    chosen = {str(ref.application_id) for ref in inp.applications}
+    if not any(key in chosen for key in payments.discount_rows(s, header['id'])):
+        return
+    try:
+        require_unclaimed(s, header['id'])
+    except BookflowError as error:
+        error.details['why'] = ('A discount or underpayment written off belongs to its application, so unapplying it '
+                                'restates the receipt without it, and a receipt banked on a deposit is not changed. '
+                                'If the bank returned the check, `payment bounce` keeps the discount on the invoice.')
+        raise
+
+
+def _unapply_and_restate(plan, ctx, s):
+    """`payment unapply`, then the receipt restated without the discounts that left with it."""
+    result = payments.apply(plan, ctx, s)
+    if plan.data.get('recovered') or result.output.id is None:
+        return result
+    restated = payments.restate_after_unapply(s, ctx, result.output.id, plan.data['input'].operation_key)
+    if restated is not None:
+        result.output = result.output.model_copy(update=dict(version=restated.version, current=restated.current))
+    return result
+
+
 def _financial(verb, model):
     def planner(inp, ctx, s):
         plan = payments.prepare(s, ctx, inp, verb)
@@ -25,15 +54,17 @@ def _financial(verb, model):
         if s.dry_run and not plan.data.get('recovered'):
             from bookflow.company.payment_pages import preview_output
             plan.preview = preview_output(s, ctx, inp, plan)
+        if verb == 'unapply' and not plan.data.get('recovered'):
+            _discounts_leave_with_their_application(s, inp)
         if verb == 'receive' and not plan.data.get('recovered'):
             from bookflow.company.prepayments import add_note
             add_note(s, plan.preview, inp.customer, 'payment')
         return plan
     cmd = command('payment ' + verb, scope='company',
         description={
-            'receive': 'Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), give applications {"mode": "suggested"}: the receipt applies exactly what `payment suggest` with strategy "exact_then_oldest" proposes (strategy "company" follows the company preference), and dry_run previews it; or copy chosen suggest rows into applications.items. With no applications the money stays as the customer\'s unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else an active account named "Discounts Given"; with neither the receipt is refused and the error lists the chart\'s discount accounts) and credited to Accounts Receivable. `payment invoices` shows each invoice\'s discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice leaves the discount with the payment as the customer\'s credit; voiding the payment reverses it. To write off a bad debt with no cash (the anchor\'s Receive Payments for 0.00), give amount "0.00", list each invoice in `discounts` (invoice, amount, expected_version), name `discount_account` (an expense account such as Bad Debt; a discount account such as Sales Discounts for a waived charge) and give a reason: the invoices are settled, the bank is untouched, sales tax is unchanged, and the customer may be inactive. A write-off is voided like any receipt, after `payment unapply`; an agent\'s write-off is listed on `report entries-to-review`. Cash short of the invoices it pays is an underpayment, as the anchor asks: by default it is left open on the invoices and `summary.underpayment` gives the 0.00 receipt that writes it off later; with `underpayment` "write_off" the short part of each paid invoice goes to `discount_account` (an expense account such as Bad Debt; class `discount_class`) in this same receipt, so the invoices are paid in full. Cash beyond the invoices is an overpayment left as the customer\'s credit; `summary.overpayment.next` is the `customer-refund post` that pays it back instead.',
+            'receive': 'Record money a customer paid and apply it to their invoices. To apply it oldest invoice first (or to pay off everything open), give applications {"mode": "suggested"}: the receipt applies exactly what `payment suggest` with strategy "exact_then_oldest" proposes (strategy "company" follows the company preference), and dry_run previews it; or copy chosen suggest rows into applications.items. With no applications the money stays as the customer\'s unapplied credit. To take an early-payment discount, list it in `discounts`: the invoice is settled by the cash applied to it plus the discount (an invoice given no cash here takes the discount alone and needs its expected_version), the discount is debited to `discount_account` (default: the company customer discount account, else an active account named "Discounts Given"; with neither the receipt is refused and the error lists the chart\'s discount accounts) and credited to Accounts Receivable. `payment invoices` shows each invoice\'s discount date and suggested discount; nothing is discounted unless listed, and a discount listed after the discount date is taken with a warning. Unapplying a discounted invoice takes the discount back with it (the receipt is restated as its cash); voiding the payment reverses it. To write off a bad debt with no cash (the anchor\'s Receive Payments for 0.00), give amount "0.00", list each invoice in `discounts` (invoice, amount, expected_version), name `discount_account` (an expense account such as Bad Debt; a discount account such as Sales Discounts for a waived charge) and give a reason: the invoices are settled, the bank is untouched, sales tax is unchanged, and the customer may be inactive. A write-off is voided like any receipt, after `payment unapply`; an agent\'s write-off is listed on `report entries-to-review`. Cash short of the invoices it pays is an underpayment, as the anchor asks: by default it is left open on the invoices and `summary.underpayment` gives the 0.00 receipt that writes it off later; with `underpayment` "write_off" the short part of each paid invoice goes to `write_off_account` (an expense account such as Bad Debt; class `write_off_class`) in this same receipt, so the invoices are paid in full; an early discount on the same invoice still goes to `discount_account`. `payment unapply` takes a discount or write-off back with its application. Cash beyond the invoices is an overpayment left as the customer\'s credit; `summary.overpayment.next` is the `customer-refund post` that pays it back instead.',
             'apply': 'Apply existing payment credit to its exact-party invoices without ledger posting; `payment suggest` with mode "existing_credit" and strategy "exact_then_oldest" picks them oldest first. A credit memo is not payment credit: apply it with `customer-credit apply`.',
-            'unapply': 'Reverse selected active applications and their current allocations at original dates; retain owned credit without ledger posting.',
+            'unapply': 'Reverse selected active applications and their current allocations at original dates; the cash stays as the payer\'s credit. A discount or underpayment written off on an unapplied invoice goes with its application: the receipt is restated at its own date without it (a 0.00 write-off receipt left holding nothing is voided), and a receipt banked on a deposit refuses such an unapply.',
             'void': 'Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.',
             'update': 'Correct receipt content with immutable replacement postings, fixed job ownership and complete source allocation restatement.',
         }[verb],
@@ -45,7 +76,7 @@ def _financial(verb, model):
             'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']
             # Only a void takes the cash back off the books, so only a void can strand
             # a refund that paid this receipt's overpayment back.
-            +(['E_HAS_REFUND'] if verb == 'void' else [])+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else [])
+            +(['E_HAS_REFUND'] if verb == 'void' else [])+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void','unapply') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else [])
             # Only a correction restates the payer's capacity, so only update can drop
             # it below what is already applied (payment_corrections).
             +(['E_APPLIED_EXCEEDS_TOTAL'] if verb == 'update' else []))(planner)
@@ -54,6 +85,8 @@ def _financial(verb, model):
     if verb == 'receive':
         from bookflow.company.prepayments import noted
         cmd.applier(noted(payments.apply, 'payment'))
+    elif verb == 'unapply':
+        cmd.applier(_unapply_and_restate)
     else:
         cmd.applier(payments.apply)
     return cmd

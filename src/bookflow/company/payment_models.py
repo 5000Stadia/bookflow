@@ -190,19 +190,23 @@ class PaymentReceiveInput(StrictModel):
         'Account debited for the discounts; defaults to the company customer discount account, '
         'else an active account named "Discounts Given"; with none of these the receipt is refused '
         'and the error lists the discount accounts in the chart (nothing is created). '
-        'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt, '
-        'and for underpayment "write_off".'))
+        'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt.'))
     underpayment: Literal['leave_open', 'write_off'] = Field(default='leave_open', description=(
         'What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. '
         '"leave_open" (the default): each invoice keeps what it still owes, and the result\'s '
         '`summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra '
         'amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay '
-        'taken as a discount to `discount_account` (required; an expense account such as Bad Debt, or a discount '
-        'account) with `discount_class` if given. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", '
+        '(after any early-payment discount listed) going to `write_off_account` (required; an expense account such '
+        'as Bad Debt, or a discount account) with `write_off_class` if given. An early-payment discount on the same '
+        'invoice still goes to `discount_account`. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", '
         'applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, '
-        'underpayment "write_off", discount_account "Bad Debt".'))
-    discount_class: Selector | None = Field(default=None, description=(
-        'Class on the discount or write-off posting (the anchor\'s Write Off Amount asks for an account and a class).'))
+        'underpayment "write_off", write_off_account "Bad Debt". Unapplying the invoice later takes the write-off '
+        'back with it.'))
+    write_off_account: Selector | None = Field(default=None, description=(
+        'Account the underpayment is written off to, for underpayment "write_off": an expense account such as Bad '
+        'Debt, or a discount account (the anchor\'s Write Off Amount asks for the account and a class).'))
+    write_off_class: Selector | None = Field(default=None, description='Class on the underpayment write-off posting.')
+    discount_class: Selector | None = Field(default=None, description='Class on the early-payment discount (or 0.00 write-off) posting.')
     payment_method: Selector | None = None
     ar_account: Selector | None = None
     deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')
@@ -218,8 +222,10 @@ class PaymentReceiveInput(StrictModel):
         invoices = [row.invoice for row in self.discounts]
         if len(set(invoices)) != len(invoices):
             raise ValueError('name each discounted invoice once')
-        if self.discount_class is not None and not self.discounts and self.underpayment != 'write_off':
-            raise ValueError('discount_class is the class of a discount or write-off; this receipt takes none')
+        if self.discount_class is not None and not self.discounts:
+            raise ValueError('discount_class is the class of the discounts listed in `discounts`; this receipt lists none')
+        if (self.write_off_account is not None or self.write_off_class is not None) and self.underpayment != 'write_off':
+            raise ValueError('write_off_account and write_off_class go with underpayment "write_off"')
         return self
 
 

@@ -70,7 +70,7 @@ def test_an_underpayment_is_written_off_from_the_receive_window(register_browser
     assert b.evaluate("document.querySelector('#payment-overpayment').hidden")
     assert 'Underpayment of 20.00 USD left open' in b.evaluate("document.querySelector('#payment-preview-result').innerText")
     click(b, 'underpayment-write-off')
-    field(b, 'discount-account', f'{tag} Bad Debt'); field(b, 'discount-class', f'{tag} East')
+    field(b, 'write-off-account', f'{tag} Bad Debt'); field(b, 'write-off-class', f'{tag} East')
     # Changing the choice asks for a fresh preview before saving.
     assert b.evaluate("document.querySelector('#payment-save').disabled")
     click(b, 'preview')

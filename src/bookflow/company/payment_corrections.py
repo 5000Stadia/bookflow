@@ -52,7 +52,12 @@ def prepare_effect(s, ctx, inp, provenance):
                 raise _invalid('deposit_to', 'select a bank or system Undeposited Funds account')
             profile.deposit_account = account
     amount = money(inp.amount, prior['currency'], 'amount').minor_units if inp.amount is not None else prior['total_minor_units']
-    if amount <= 0:
+    parts, discounted, stale = discount_state(s, funding)
+    # A receipt of no cash (a write-off) whose some edges were unapplied is restated with the
+    # discounts it still holds; that is the one correction it takes.
+    restating_write_off = (amount == 0 and not prior['total_minor_units'] and inp.amount is None
+                           and stale and sum(discounted.values()) > 0)
+    if amount <= 0 and not restating_write_off:
         if not prior['total_minor_units']:
             raise _invalid('payment', 'this receipt is a write-off with no cash and is not corrected in place: '
                            '`payment unapply` it, `payment void` it, and receive it again with the right '
@@ -67,7 +72,9 @@ def prepare_effect(s, ctx, inp, provenance):
     semantic = [date, amount, number, memo, reference, profile.model_dump(mode='json'), sales._custom_semantic(custom_plan.snapshot)]
     previous_semantic = [prior['date'], prior['total_minor_units'], prior['number'], prior['memo'], saved['reference'],
                          original_profile, sales._custom_semantic(json.loads(prior['custom_fields_snapshot']))]
-    changed = semantic != previous_semantic or custom_plan.changed
+    # A discount whose application was unapplied left the receipt with it: the receipt is
+    # restated without it, so its capacity is its cash and the discounts it still holds.
+    changed = semantic != previous_semantic or custom_plan.changed or bool(stale)
     targets = {}
     # Authorize all related invoices before checking caller-supplied versions.
     for app in funding['applications']:
@@ -102,6 +109,8 @@ def prepare_effect(s, ctx, inp, provenance):
             raise BookflowError('E_DUPLICATE_NUMBER')
     capacities = {key: 0 for key in funding['keys']}
     capacities.update({row['component_key_id']: row['amount_minor_units'] for row in funding['components']})
+    for key, units in stale.items():
+        capacities[key] -= units
     payer_key = next((key for key, row in funding['keys'].items() if row['party_id'] == saved['payer_id']), None)
     delta = amount - prior['total_minor_units']
     payer_capacity = capacities.get(payer_key, 0) + delta
@@ -110,13 +119,9 @@ def prepare_effect(s, ctx, inp, provenance):
     # money the receipt no longer carries.
     payer_spent = sum(app['amount_minor_units'] for app in funding['applications'] if app['source_component_key_id'] == payer_key)
     payer_spent += sum(row['amount_minor_units'] for row in funding['consumptions'] if row['payment_source_key_id'] == payer_key)
-    # Early-payment discounts are permanent parts of the receipt: each component carries its
-    # discounts beside its cash, and a correction restates them unchanged. What the corrected
-    # cash may not do is leave the payer's component with its discounts and no cash beside them.
-    discounts = list(payments.discount_rows(s, old['id']).values())
-    discounted = {}
-    for row in discounts:
-        discounted[row['component_key_id']] = discounted.get(row['component_key_id'], 0) + row['amount_minor_units']
+    # The discounts the receipt still holds are parts of it: each component carries them beside its
+    # cash, and a correction restates them unchanged. What the corrected cash may not do is leave
+    # the payer's component with its discounts and no cash beside them.
     payer_discount = discounted.get(payer_key, 0)
     if payer_capacity < payer_spent or payer_capacity < 0 or payer_capacity < payer_discount:
         raise BookflowError('E_APPLIED_EXCEEDS_TOTAL', details={'party_id': saved['payer_id'],
@@ -168,22 +173,25 @@ def prepare_effect(s, ctx, inp, provenance):
                 class_id=klass[0], class_name=klass[1], description=memo, reversed_line_id=None, **dict.fromkeys(journals.FACTS))
             pending['posting_lines'].append(row)
             return row
-        cash = leg(profile.deposit_account, amount, True, profile.payer.model_dump(), 1)
+        # A write-off receipt holds no cash and posts no cash leg; its lines count from the first credit.
+        cash = leg(profile.deposit_account, amount, True, profile.payer.model_dump(), 1) if amount else None
+        first = 2 if amount else 1
         live_keys = [key_id for key_id in keys if capacities.get(key_id, 0)]
         discount_legs = {}
-        for position, key_id in enumerate(sorted((key_id for key_id in live_keys if discounted.get(key_id)),
-                                                 key=lambda key_id: (keys[key_id]['party_id'], key_id))):
-            taken = [row for row in discounts if row['component_key_id'] == key_id]
+        position = len(live_keys) + first
+        for key_id in sorted((key_id for key_id in live_keys if discounted.get(key_id)),
+                             key=lambda key_id: (keys[key_id]['party_id'], key_id)):
             captured = json.loads(old_components[key_id]['component_snapshot'])
-            account = defaults._account(s.company, taken[0]['discount_account_id'], 'discount_account',
-                                        early.DISCOUNT_ACCOUNT_TYPES)
-            # The class a discount or write-off was posted with stays with it (`discount_class`).
-            pl = c.posting_lines
-            klass = s.company.conn.execute(sa.select(pl.c.class_id, pl.c.class_name).where(
-                pl.c.transaction_id == old['id'], pl.c.account_id == account.id, pl.c.debit_minor_units > 0,
-                pl.c.name_id == captured['party']['id'], pl.c.class_id.is_not(None)).order_by(pl.c.created_at.desc())).first()
-            discount_legs[key_id] = leg(account, discounted[key_id], True, captured['party'],
-                                        len(live_keys) + 2 + position, tuple(klass) if klass else (None, None))
+            for account_id, units in sorted(parts[key_id].items()):
+                account = defaults._account(s.company, account_id, 'discount_account', early.DISCOUNT_ACCOUNT_TYPES)
+                # The class a discount or write-off was posted with stays with it.
+                pl = c.posting_lines
+                klass = s.company.conn.execute(sa.select(pl.c.class_id, pl.c.class_name).where(
+                    pl.c.transaction_id == old['id'], pl.c.account_id == account.id, pl.c.debit_minor_units > 0,
+                    pl.c.name_id == captured['party']['id'], pl.c.class_id.is_not(None)).order_by(pl.c.created_at.desc())).first()
+                discount_legs.setdefault(key_id, []).append(
+                    (leg(account, units, True, captured['party'], position, tuple(klass) if klass else (None, None)), units))
+                position += 1
         new_components, sources = {}, {}
         for key_id, key in sorted(keys.items(), key=lambda pair: (pair[1]['party_id'], pair[0])):
             capacity = capacities.get(key_id, 0)
@@ -197,11 +205,10 @@ def prepare_effect(s, ctx, inp, provenance):
                 component_snapshot=query.canonical(captured), audit_event_id=event)
             pending['payment_components'].append(component)
             new_components[key_id] = component
-            ar = leg(profile.ar_account, capacity, False, captured['party'], len(new_components) + 1)
+            ar = leg(profile.ar_account, capacity, False, captured['party'], len(new_components) + first - 1)
             shares = [(cash, capacity - discounted.get(key_id, 0))] if capacity > discounted.get(key_id, 0) else []
             shares.append((ar, capacity))
-            if discounted.get(key_id):
-                shares.append((discount_legs[key_id], discounted[key_id]))
+            shares.extend(discount_legs.get(key_id, []))
             for posting, units in shares:
                 source = dict(**created(), transaction_id=old['id'], revision_id=revision['id'], document_line_id=line['id'],
                     posting_line_id=posting['id'], amount_minor_units=units, currency=prior['currency'],
@@ -273,6 +280,29 @@ def prepare_effect(s, ctx, inp, provenance):
         fingerprint=fp, at=at, funding=funding, old_allocations=old_allocations, semantic=semantic))
 
 
+def discount_state(s, funding):
+    """(parts, discounted, stale) of a receipt: what it holds now against what its postings carry.
+
+    ``parts`` is {key: {account: units}} of the discounts it still holds and ``discounted`` their
+    total per key. ``stale`` is, per key, a discount the current postings still carry although its
+    application was unapplied: the receipt is restated without it.
+    """
+    parts = payments.discount_parts(s, funding['header']['id'])
+    discounted = {key: sum(values.values()) for key, values in parts.items()}
+    posted = {}
+    components = {row['id']: row['component_key_id'] for row in funding['components']}
+    if components:
+        src, pl = c.posting_line_sources, c.posting_lines
+        rows = s.company.conn.execute(sa.select(src.c.payment_component_id, src.c.amount_minor_units)
+            .join(pl, pl.c.id == src.c.posting_line_id).where(
+                src.c.payment_component_id.in_(sorted(components)), src.c.reversed_source_id.is_(None),
+                pl.c.debit_minor_units > 0, pl.c.account_id != funding['profile']['deposit_account_id'])).all()
+        for component_id, units in rows:
+            posted[components[component_id]] = posted.get(components[component_id], 0) + units
+    stale = {key: units - discounted.get(key, 0) for key, units in posted.items() if units > discounted.get(key, 0)}
+    return parts, discounted, stale
+
+
 def validate(plan, s, ctx):
     data = plan.data
     pending, funding = data['pending'], query.payment_facts(s, data['header']['id'], write=True)
@@ -288,9 +318,7 @@ def validate(plan, s, ctx):
     require(data['header']['version'] == funding['header']['version'] + 1)
     journals.open_dates(s, [funding['revision']['date'], revision['date'], *(row['effective_date'] for row in funding['applications'])])
     require(all(revision['date'] <= row['effective_date'] for row in funding['applications']))
-    discounted = {}
-    for row in payments.discount_rows(s, data['header']['id']).values():
-        discounted[row['component_key_id']] = discounted.get(row['component_key_id'], 0) + row['amount_minor_units']
+    parts, discounted, stale = discount_state(s, funding)
     require(sum(row['amount_minor_units'] for row in pending['payment_components']) == revision['total_minor_units'] + sum(discounted.values()))
     keys = dict(funding['keys']) | {row['id']: row for row in pending['payment_component_keys']}
     old_capacity = {row['component_key_id']: row['amount_minor_units'] for row in funding['components']}
@@ -299,7 +327,7 @@ def validate(plan, s, ctx):
         capacity = new_capacity.get(key, 0)
         require(capacity >= sum(row['amount_minor_units'] for row in funding['applications'] if row['source_component_key_id'] == key))
         if facts['party_id'] != funding['profile']['payer_id']:
-            require(capacity == old_capacity.get(key, 0))
+            require(capacity == old_capacity.get(key, 0) - stale.get(key, 0))
     old_allocs = {row['id']: row for row in live_allocations(s, [app['id'] for app in funding['applications']])}
     inverses = [row for row in pending['application_allocations'] if row['kind'] == 'reversal']
     replacements = [row for row in pending['application_allocations'] if row['kind'] == 'allocation']
@@ -339,12 +367,19 @@ def validate(plan, s, ctx):
             require(batch['kind'] == 'replacement' and batch['effective_date'] == revision['date'])
             profile = pending['payment_profiles'][0]
             debits = [row for row in legs if row['debit_minor_units'] and row['account_id'] == profile['deposit_account_id']]
-            require(len(debits) == 1 and
-                    debits[0]['name_id'] == funding['profile']['payer_id'] and debits[0]['debit_minor_units'] == revision['total_minor_units'])
+            if revision['total_minor_units']:
+                require(len(debits) == 1 and
+                        debits[0]['name_id'] == funding['profile']['payer_id'] and debits[0]['debit_minor_units'] == revision['total_minor_units'])
+            else:
+                require(not debits)
+            cash_leg = debits[0] if debits else None
             by_party = {keys[key]['party_id']: units for key, units in discounted.items()
-                        if key in {row['component_key_id'] for row in pending['payment_components']}}
-            require(sorted((row['name_id'], row['debit_minor_units']) for row in legs
-                           if row['debit_minor_units'] and row is not debits[0]) == sorted(by_party.items()))
+                        if units and key in {row['component_key_id'] for row in pending['payment_components']}}
+            discount_legs = [row for row in legs if row['debit_minor_units'] and row is not cash_leg]
+            summed = {}
+            for row in discount_legs:
+                summed[row['name_id']] = summed.get(row['name_id'], 0) + row['debit_minor_units']
+            require(summed == by_party)
             expected = sorted((keys[row['component_key_id']]['party_id'], row['amount_minor_units']) for row in pending['payment_components'])
             require(sorted((row['name_id'], row['credit_minor_units']) for row in legs if row['credit_minor_units']) == expected)
             require(all(row['account_id'] == funding['profile']['ar_account_id'] for row in legs if row['credit_minor_units']))
@@ -354,10 +389,10 @@ def validate(plan, s, ctx):
                 by_leg = {row['posting_line_id']: row['amount_minor_units'] for row in sources}
                 credit = [row for row in legs if row['credit_minor_units'] and row['id'] in by_leg]
                 paid_in = component['amount_minor_units'] - part
-                require(len(sources) == 1 + (1 if paid_in else 0) + (1 if part else 0) and len(by_leg) == len(sources) and all(
+                require(len(sources) == 1 + (1 if paid_in else 0) + len(parts.get(component['component_key_id'], {})) and len(by_leg) == len(sources) and all(
                     row['revision_id'] == revision['id'] and row['document_line_id'] == component['document_line_id'] and
                     row['currency'] == revision['currency'] for row in sources))
-                require(by_leg.get(debits[0]['id'], 0) == paid_in
+                require((by_leg.get(cash_leg['id'], 0) if cash_leg else 0) == paid_in
                         and len(credit) == 1 and by_leg[credit[0]['id']] == component['amount_minor_units'])
     for table, rows in pending.items():
         for row in rows:

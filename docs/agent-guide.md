@@ -504,10 +504,11 @@ the invoice is paid in full, 480.00 to the bank and 20.00 to Bad Debt, in one re
  "input": {"customer": "Acme", "date": "2026-07-15", "amount": "480.00", "operation_key": "acme-1043",
            "payment_method": "Check", "reference": "5521",
            "applications": {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]},
-           "underpayment": "write_off", "discount_account": "Bad Debt"}}
+           "underpayment": "write_off", "write_off_account": "Bad Debt"}}
 ```
 
-`discount_class` puts a class on the write-off. Leave `underpayment` out and the 20.00 stays owed;
+`write_off_class` puts a class on the write-off; an early-payment discount on the same invoice goes to
+`discount_account` as usual. Unapplying the invoice later takes the write-off back with it. Leave `underpayment` out and the 20.00 stays owed;
 the result's `summary.underpayment.next` is then the 0.00 receipt that writes it off later. Cash
 beyond the invoices stays as the customer's credit, and `summary.overpayment.next` is the
 `customer-refund post` that sends it back. An agent's write-off is listed on `report entries-to-review`.
@@ -531,7 +532,8 @@ Transfer item and the Credit Transfer Clearing account (set up on first use; it 
 anchor's guides do it with a clearing account. It works between the parent customer and a job too, never
 between two customers (pay one back with `customer-refund post` instead). `payment invoices` lists a
 job's credit memos as `available_credits`; `payment query` with `has_available_credit` lists receipts
-holding money. To undo it, `customer-credit transfer-void <transfer_id>`: what the moved credit paid is
+holding money. The job the credit leaves may be inactive. Never void or edit the charge invoice or the
+credit memo yourself; to undo it, `customer-credit transfer-void <transfer_id>`: what the moved credit paid is
 owed again and both documents are voided at the transfer's date.
 
 ## Assess this month's finance charges

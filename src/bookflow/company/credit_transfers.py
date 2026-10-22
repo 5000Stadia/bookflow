@@ -64,6 +64,61 @@ def _plain(units, currency):
     return Money(units, currency).to_dict()['amount']
 
 
+# ------------------------------------------------------------------ the two documents are the transfer's
+
+import contextlib as _contextlib
+import contextvars as _contextvars
+
+_WRITING = _contextvars.ContextVar('credit_transfer_writing', default=False)
+
+
+@_contextlib.contextmanager
+def _writing():
+    token = _WRITING.set(True)
+    try:
+        yield
+    finally:
+        _WRITING.reset(token)
+
+
+def transfer_of(s, transaction_id):
+    """The transfer a charge invoice or a transfer credit memo belongs to, or None."""
+    t = c.customer_credit_transfers
+    if not sa.inspect(s.company.conn).has_table('customer_credit_transfers'):
+        return None
+    row = s.company.conn.execute(sa.select(t).where(sa.or_(t.c.charge_invoice_id == transaction_id,
+                                                           t.c.credit_memo_id == transaction_id))).mappings().first()
+    return dict(row) if row else None
+
+
+def _refuse(row, what, verb):
+    raise BookflowError('E_VALIDATION', details={
+        'fields': [{'field': 'transfer', 'problem': f'{what} belongs to credit transfer {row["id"]} and cannot be {verb} on its own'}],
+        'transfer_id': row['id'], 'action': 'customer_credit_transfer_void',
+        'next': f'{what[0].upper() + what[1:]} is half of a credit transfer between jobs; undo the whole transfer with '
+                f'`customer-credit transfer-void {row["id"]}` (its other document and the credit it used go back with it).'})
+
+
+def guard_document(s, transaction_id, verb):
+    """A transfer's charge invoice and credit memo change only through the transfer commands."""
+    if _WRITING.get():
+        return
+    row = transfer_of(s, transaction_id)
+    if row is not None:
+        what = 'this charge invoice' if transaction_id == row['charge_invoice_id'] else 'this credit memo'
+        _refuse(row, what, verb)
+
+
+def guard_applications(s, applications, verb='unapplied'):
+    """The source credit's application to a transfer's charge is undone only with the transfer."""
+    if _WRITING.get():
+        return
+    for app in applications:
+        row = transfer_of(s, app['paid_transaction_id'])
+        if row is not None and row['charge_invoice_id'] == app['paid_transaction_id']:
+            _refuse(row, "this credit's application to a transfer charge", verb)
+
+
 # ------------------------------------------------------------------ who and what
 
 
@@ -236,8 +291,16 @@ def _targets(s, intent, apply_to):
 def _intent(s, ctx, inp):
     require_reason(ctx.reason)
     currency = defaults._info(s.company)['home_currency']
-    source = defaults._row(s.company, 'customer', inp.from_customer)
-    target = defaults._row(s.company, 'customer', inp.to_customer)
+    # The job the credit leaves is often finished and made inactive: it may stay so.
+    source = defaults._row(s.company, 'customer', inp.from_customer, active=False)
+    try:
+        target = defaults._row(s.company, 'customer', inp.to_customer)
+    except BookflowError as error:
+        if error.code == 'E_INACTIVE_REFERENCE':
+            error.details.update(field='to_customer', next=(
+                'The job that gets the credit is inactive. Make it active first (`customer activate`), then move the credit; '
+                'or move it to an active job of the same customer.'))
+        raise
     if source['id'] == target['id']:
         raise _invalid('to_customer', 'the credit is already there; name another job of the same customer')
     if _root(s, source) != _root(s, target):
@@ -286,17 +349,48 @@ def _output(intent, inp, *, transfer_id, charge, credit, fingerprint, clearing, 
         facts_fingerprint=fingerprint, summary=' '.join(words))
 
 
+def request_hash(s, inp):
+    """Every business input of a transfer, resolved: a key asked again must ask for the same thing."""
+    currency = defaults._info(s.company)['home_currency']
+    resolved = lambda field, selector: defaults._row(s.company, 'customer', selector, active=False)['id']
+    def amount(value, field):
+        if value is None:
+            return None
+        raw = value if isinstance(value, str) else value.amount
+        return parse_domestic_amount(raw, currency, field).minor_units
+    def document(selector, kind):
+        if selector is None:
+            return None
+        try:
+            return sales.resolve(s, selector, kind)['id']
+        except BookflowError:
+            return str(selector)
+    value = dict(from_customer=resolved('from_customer', inp.from_customer), to_customer=resolved('to_customer', inp.to_customer),
+                 amount=amount(inp.amount, 'amount'), date=inp.date, credit_memo=document(inp.credit_memo, 'credit_memo'),
+                 payment=document(inp.payment, 'payment'), memo=inp.memo,
+                 apply_to=[[document(row.invoice, ('invoice', 'statement_charge')), amount(row.amount, f'apply_to.{i}.amount')]
+                           for i, row in enumerate(inp.apply_to)])
+    return query.digest([value])
+
+
 def _replay(s, inp):
     t = c.customer_credit_transfers
     row = s.company.conn.execute(sa.select(t).where(t.c.operation_key == inp.operation_key)).mappings().first()
     if row is None:
         return None
+    if request_hash(s, inp) != row['request_hash']:
+        raise BookflowError('E_PAYMENT_OPERATION_KEY_REUSED', details={
+            'operation_key': inp.operation_key, 'transfer_id': row['id'],
+            'next': 'This operation_key already recorded a different transfer; use a new key for a new transfer.'})
     output = _recorded(s, dict(row), inp.operation_key)
-    source = defaults._row(s.company, 'customer', inp.from_customer, active=False)
-    target = defaults._row(s.company, 'customer', inp.to_customer, active=False)
-    if (source['id'], target['id']) != (row['from_party_id'], row['to_party_id']):
-        raise BookflowError('E_PAYMENT_OPERATION_KEY_REUSED')
     return Plan(output, dict(input=inp, replay=True))
+
+
+def status_of(s, row):
+    """'posted' while both documents stand, 'voided' once both are voided; anything else is half a transfer."""
+    statuses = {s.company.conn.execute(sa.select(c.transactions.c.status).where(c.transactions.c.id == row[name])).scalar_one()
+                for name in ('charge_invoice_id', 'credit_memo_id')}
+    return 'posted' if statuses == {'posted'} else 'voided' if statuses == {'voided'} else 'partly_voided'
 
 
 def _recorded(s, row, operation_key):
@@ -307,7 +401,7 @@ def _recorded(s, row, operation_key):
     docs = {}
     for name in ('charge_invoice_id', 'credit_memo_id'):
         docs[name] = s.company.conn.execute(sa.select(c.transactions).where(c.transactions.c.id == row[name])).mappings().one()
-    status = 'posted' if docs['charge_invoice_id']['status'] == 'posted' else 'voided'
+    status = status_of(s, row)
     document = lambda key, kind, party: TransferDocument(id=docs[key]['id'], number=docs[key]['number'], type=kind,
                                                          customer=names[party], amount=_money(row['amount_minor_units'], currency))
     app = c.applications
@@ -332,7 +426,22 @@ def _recorded(s, row, operation_key):
                  f"on {row['transfer_date']}."))
 
 
+@_contextlib.contextmanager
+def _source_may_be_inactive(s, inp):
+    source = defaults._row(s.company, 'customer', inp.from_customer, active=False)['id']
+    token = defaults.INACTIVE_CUSTOMERS_OK.set(frozenset({source}))
+    try:
+        yield
+    finally:
+        defaults.INACTIVE_CUSTOMERS_OK.reset(token)
+
+
 def prepare(s, ctx, inp):
+    with _source_may_be_inactive(s, inp):
+        return _prepare(s, ctx, inp)
+
+
+def _prepare(s, ctx, inp):
     from bookflow.hub.access import one_authorization
     replay = _replay(s, inp)
     if replay is not None:
@@ -365,6 +474,11 @@ def prepare(s, ctx, inp):
 
 
 def apply(plan, ctx, s):
+    with _source_may_be_inactive(s, plan.data['input']):
+        return _apply(plan, ctx, s)
+
+
+def _apply(plan, ctx, s):
     from bookflow.company import credit_settlement, payments
     from bookflow.company.credit_settlement_models import CreditApplicationItem, CreditApplyInput
     from bookflow.company.payment_models import InlineApplications, InvoiceAmount, PaymentApplyInput
@@ -407,7 +521,7 @@ def apply(plan, ctx, s):
             date=inp.date)
         credit_settlement.apply(credit_settlement.prepare(s, ctx, step, 'apply'), ctx, s)
     event, at = new_id(), clock.now_iso()
-    record = dict(id=new_id(), operation_key=inp.operation_key, from_party_id=intent['source']['id'],
+    record = dict(id=new_id(), operation_key=inp.operation_key, request_hash=request_hash(s, inp), from_party_id=intent['source']['id'],
                   to_party_id=intent['target']['id'], transfer_date=inp.date, amount_minor_units=intent['units'],
                   currency=currency, charge_invoice_id=charge_out.id, credit_memo_id=credit_out.id,
                   reason=ctx.reason.strip()[:500], created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
@@ -454,7 +568,8 @@ def prepare_void(s, ctx, inp):
         row = _transfer_row(s, inp.transfer)
         charge = sales.resolve(s, row['charge_invoice_id'], 'invoice')
         currency = row['currency']
-        if charge['status'] != 'posted':
+        # Both documents are read: the transfer is undone only when both are voided.
+        if status_of(s, row) == 'voided':
             output = CreditTransferVoidOutput(changed=False, transfer_id=row['id'], status='voided',
                                               summary='This transfer was already voided; nothing was written again.')
             return Plan(output, dict(input=inp, replay=True))
@@ -479,10 +594,16 @@ def prepare_void(s, ctx, inp):
     if reopened:
         words.append('Owed again: ' + ', '.join(f'{item.number} ({item.still_due.amount})' for item in reopened) + '.')
     output = CreditTransferVoidOutput(transfer_id=row['id'], status='voided', reopened=reopened, summary=' '.join(words))
-    return Plan(output, dict(input=inp, row=row, fingerprint=query.digest([row['id'], charge['version'], facts['header']['version']])))
+    return Plan(output, dict(input=inp, row=row, fingerprint=query.digest([row['id'], charge['version'], charge['status'],
+                                                                          facts['header']['version'], facts['header']['status']])))
 
 
 def apply_void(plan, ctx, s):
+    with _writing():
+        return _apply_void(plan, ctx, s)
+
+
+def _apply_void(plan, ctx, s):
     from bookflow.company import credit_settlement, payments
     from bookflow.company.credit_models import CreditMemoVoidInput
     from bookflow.company.credit_settlement_models import CreditUnapplyInput, CreditUnapplyReference
@@ -523,6 +644,17 @@ def apply_void(plan, ctx, s):
                     applications=[UnapplyReference(application_id=app['id'],
                                                    invoice_expected_version=version(row['charge_invoice_id']))])
                 payments.apply(payments.prepare(s, ctx, step, 'unapply'), ctx, s)
-    credits.apply(credits.prepare_void(s, ctx, CreditMemoVoidInput(credit_memo=row['credit_memo_id'])), ctx, s)
-    sales.apply(sales.prepare(s, ctx, InvoiceVoidInput(invoice=row['charge_invoice_id']), 'invoice', 'void'), ctx, s)
-    return Applied(fresh.preview, [], f"void credit transfer {row['id']}", audited=True)
+    for name, void in (('credit_memo_id', lambda: credits.apply(credits.prepare_void(
+                           s, ctx, CreditMemoVoidInput(credit_memo=row['credit_memo_id'])), ctx, s)),
+                       ('charge_invoice_id', lambda: sales.apply(sales.prepare(
+                           s, ctx, InvoiceVoidInput(invoice=row['charge_invoice_id']), 'invoice', 'void'), ctx, s))):
+        if s.company.conn.execute(sa.select(c.transactions.c.status).where(c.transactions.c.id == row[name])).scalar_one() == 'posted':
+            void()
+    # The transfer's own audit event, naming the transfer and both documents it voided.
+    event = new_id()
+    after = dict(effects.decoded(row), status='voided', void_reason=ctx.reason.strip()[:500])
+    touched = [Touched('customer_credit_transfer', row['id'], 'update', 1, 1, after, effects.decoded(row), db='company')]
+    summary = f"void credit transfer {row['id']}"
+    audit.write_event_to(s.company, ctx, 'customer-credit transfer-void', summary, touched, actor_id=s.actor.id,
+                         actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=event)
+    return Applied(fresh.preview, touched, summary, audited=True)

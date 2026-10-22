@@ -62,6 +62,8 @@ def prepare_update(s, ctx, inp):
     header, revision = source['header'], source['revision']
     from bookflow.company.prepayments import guard_draw_change
     guard_draw_change(s, header['id'], 'corrected')
+    from bookflow.company.credit_transfers import guard_document
+    guard_document(s, header['id'], 'corrected')
     if inp.expected_version is not None:
         journals.version_meta(s, header, inp.expected_version)
     if header['status'] != 'posted':

@@ -107,6 +107,9 @@ def _prepare_effect(s, ctx, inp, operation, provenance):
             app = active.get(ref.application_id)
             if app is None:
                 raise BookflowError('E_APPLICATION_INACTIVE')
+            if operation == 'unapply':
+                from bookflow.company.credit_transfers import guard_applications
+                guard_applications(s, [app])
             invoice = query.invoice_facts(s, app['paid_transaction_id'], write=True)
             sales._version(s, invoice['header'], ref.invoice_expected_version)
             journals.open_dates(s, [app['effective_date']])

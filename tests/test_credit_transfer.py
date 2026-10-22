@@ -214,3 +214,82 @@ def test_closed_period_and_idempotent_retry(books):
     # After the closing date, a transfer is dated in the open period.
     later = transfer(books, books['kitchen'], books['bath'], '60.00', key='later', date='2026-04-02')
     assert later['status'] == 'posted' and balance(books, books['kitchen'])[0] == 0
+
+
+def test_the_two_documents_change_only_through_the_transfer(books):
+    """Half a transfer undone on its own would turn 120.00 of credit into 240.00."""
+    run = books['run']
+    sale = invoice(books, books['kitchen'], '100.00')
+    paid = overpay(books, books['kitchen'], sale, '220.00', '100.00')
+    moved = transfer(books, books['kitchen'], books['bath'], '120.00')
+    charge, memo = moved['charge']['id'], moved['credit_memo']['id']
+    before = trial_balance(books)
+
+    def refused(name, raw):
+        with pytest.raises(BookflowError) as error:
+            run(name, raw, reason='Try to undo half')
+        assert 'customer-credit transfer-void' in str(error.value.details), (name, error.value.details)
+
+    shown = run('payment show', dict(payment=paid['id']))
+    edge = next(app for app in run('payment settlement', dict(payment=paid['id'], kind='applications', limit=50))['items']
+                if app.get('invoice_id') == charge)
+    refused('payment unapply', dict(payment=paid['id'], expected_version=shown['version'], operation_key='half',
+            applications=[dict(application_id=edge['application_id'], invoice_expected_version=run('invoice show', dict(invoice=charge))['version'])]))
+    refused('invoice void', dict(invoice=charge))
+    refused('invoice update', dict(invoice=charge, expected_version=run('invoice show', dict(invoice=charge))['version'], memo='x'))
+    refused('credit-memo void', dict(credit_memo=memo))
+    refused('credit-memo update', dict(credit_memo=memo, expected_version=run('credit-memo show', dict(credit_memo=memo))['version'],
+                                       lines=[dict(item=books['item'], quantity='1', unit_price='500.00')]))
+    assert trial_balance(books) == before
+    assert balance(books, books['kitchen'])[0] == 0 and balance(books, books['bath'])[0] == -12000
+    # The transfer itself still undoes everything, and its own audit event names it.
+    run('customer-credit transfer-void', dict(transfer=moved['transfer_id']), reason='Undo the whole transfer')
+    assert balance(books, books['kitchen'])[0] == -12000 and balance(books, books['bath'])[0] == 0
+    events = run('audit list', dict(limit=20))['items']
+    assert any(event.get('command') == 'customer-credit transfer-void' for event in events), events[:3]
+
+
+def test_a_credit_memo_source_application_is_guarded_too(books):
+    run = books['run']
+    memo = credit_memo(books, books['kitchen'], '40.00')
+    moved = transfer(books, books['kitchen'], books['bath'], '40.00')
+    shown = run('credit-memo show', dict(credit_memo=memo['id']))
+    import sqlite3
+    from pathlib import Path
+    path = Path(books['client'].company.show(company=books['company'])['path']) / 'company.db'
+    with sqlite3.connect(path) as db:
+        edge = db.execute("SELECT id FROM applications WHERE paying_transaction_id=? AND paid_transaction_id=? AND kind='apply'",
+                          (memo['id'], moved['charge']['id'])).fetchone()[0]
+    with pytest.raises(BookflowError) as error:
+        run('customer-credit unapply', dict(credit_memo=memo['id'], expected_version=shown['version'], applications=[dict(
+            application_id=edge, invoice_expected_version=run('invoice show', dict(invoice=moved['charge']['id']))['version'])]),
+            reason='Half')
+    assert 'customer-credit transfer-void' in str(error.value.details)
+
+
+def test_a_reused_key_must_ask_for_the_same_transfer(books):
+    sale = invoice(books, books['kitchen'], '100.00')
+    overpay(books, books['kitchen'], sale, '220.00', '100.00')
+    bath_sale = invoice(books, books['bath'], '300.00')
+    transfer(books, books['kitchen'], books['bath'], '60.00', key='k')
+    for change in (dict(amount='70.00'), dict(date='2026-03-11'),
+                   dict(apply_to=[dict(invoice=bath_sale['id'], expected_version=1)])):
+        raw = dict(dict(amount='60.00'), **change)
+        with pytest.raises(BookflowError) as reused:
+            transfer(books, books['kitchen'], books['bath'], raw.pop('amount'), key='k', **raw)
+        assert reused.value.code == 'E_PAYMENT_OPERATION_KEY_REUSED', change
+    assert balance(books, books['bath'])[0] == 30000 - 6000
+
+
+def test_credit_moves_off_an_inactive_job_but_not_onto_one(books):
+    run = books['run']
+    sale = invoice(books, books['kitchen'], '100.00')
+    overpay(books, books['kitchen'], sale, '150.00', '100.00')
+    kitchen = run('customer show', dict(customer=books['kitchen']))
+    run('customer deactivate', dict(customer=books['kitchen'], expected_version=kitchen['version']), reason='Job finished')
+    moved = transfer(books, books['kitchen'], books['bath'], '50.00')
+    assert moved['status'] == 'posted' and balance(books, books['kitchen'])[0] == 0 and balance(books, books['bath'])[0] == -5000
+    assert run('customer show', dict(customer=books['kitchen']))['active'] is False
+    with pytest.raises(BookflowError) as inactive:
+        transfer(books, books['bath'], books['kitchen'], '10.00', key='back')
+    assert inactive.value.code == 'E_INACTIVE_REFERENCE' and 'customer activate' in inactive.value.details['next']
