@@ -541,6 +541,8 @@ SECTIONS: tuple[Section, ...] = (
         ),
         tasks=(
             Action("Adjust inventory", WRITE, ("inventory adjust",), "/inventory/adjust"),
+            Action("Build assemblies", WRITE, ("assembly build",), "/assembly/build"),
+            Action("Pending builds", READ, ("assembly list",), "/assembly/builds?status=pending"),
             _report("Inventory valuation summary", "inventory-valuation"),
             _report("Inventory stock status by item", "stock-status"),
             _report("Sales by item", "sales-by-item"),
