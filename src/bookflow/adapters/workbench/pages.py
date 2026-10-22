@@ -729,6 +729,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # reached from the company's own menu, and its upload is not a generic form.
     from bookflow.adapters.workbench import backups as Backups
     Backups.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # Assess Finance Charges: a list with a checkbox and an amount per customer, not a generic form.
+    from bookflow.adapters.workbench import finance_charges as FinanceCharges
+    FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                         role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
 
     @app.get("/static/{name}")
     @permission_read_package(host)
