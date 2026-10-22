@@ -47,6 +47,7 @@ from bookflow.company.budget_models import (
     ProfitAndLossComparisonOutput, ReportColumn, SummaryLine,
 )
 from bookflow.company.cash_report_view import reporting_connection
+from bookflow.company.party_merges import survivor_sql
 
 MONTH_NAMES = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 MEASURE_LABELS = {'actual': 'Actual', 'budget': 'Budget', 'over_budget': '$ Over Budget',
@@ -209,11 +210,13 @@ def actual_figures(raw, accounts: dict[str, dict], kind: str, date_from: str, da
 def _split_figures(raw, accounts, date_from: str, date_to: str, dimension: str) -> dict[tuple[str, str], int]:
     """Profit and loss nets per account and customer:job or class, for one period."""
     expression = "CASE WHEN l.name_type='customer' THEN l.name_id END" if dimension == 'customer' else 'l.class_id'
-    query = f"""SELECT l.account_id, {expression} AS dimension,
+    # A merged-away account reads as its survivor while the merge stands (R117), as in every ledger report.
+    account = survivor_sql('account', 'l.account_id')
+    query = f"""SELECT {account} AS account_id, {expression} AS dimension,
         bookflow_sum_int(l.debit_minor_units - l.credit_minor_units) AS net
         FROM posting_lines l JOIN posting_batches b ON b.id = l.batch_id
         WHERE b.effective_date >= :date_from AND b.effective_date <= :date_to
-        GROUP BY l.account_id, {expression}"""
+        GROUP BY {account}, {expression}"""
     out = {}
     for account_id, dim, net in raw.execute(query, {'date_from': date_from, 'date_to': date_to}):
         account = accounts.get(account_id)
@@ -410,6 +413,21 @@ def _budget_scope(s, inp, budget):
     return key, ids
 
 
+def _read_as_survivors(s, stored):
+    """Budget cells keyed by the account each reads as: a merged-away account's rows sit under its
+    survivor while the merge stands (R117), so budget and actual meet on one row."""
+    survivor = dict(s.company.raw.execute(
+        f"SELECT a.id, {survivor_sql('account', 'a.id')} FROM accounts a").fetchall())
+    out: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for (account_id, dim, month), row in stored.items():
+        cell = (survivor.get(account_id, account_id), dim, month)
+        if cell in out:
+            out[cell] = dict(out[cell], amount_minor_units=out[cell]['amount_minor_units'] + row['amount_minor_units'])
+        else:
+            out[cell] = row
+    return out
+
+
 def _budget_values(stored, budget, group: Group, key: str | None) -> dict[str, int]:
     """Budget per account over one column group: prorated month amounts, or the ending balance."""
     out: dict[str, int] = {}
@@ -442,7 +460,8 @@ def _budget_bounds(budget) -> tuple[str, str]:
 def budget_overview(inp, s, *, principal_id=None) -> BudgetOverviewOutput:
     budget = B.resolve_budget(s, inp.budget)
     key, _ = _budget_scope(s, inp, budget)
-    stored = B.cells(s, budget['id'])
+    cells = B.cells(s, budget['id'])
+    stored = _read_as_survivors(s, cells)
     first, last = _budget_bounds(budget)
     groups = groups_for(first, last, inp.columns, int(budget['first_month'][5:7]))
     values = [_budget_values(stored, budget, group, key) for group in groups]
@@ -451,14 +470,15 @@ def budget_overview(inp, s, *, principal_id=None) -> BudgetOverviewOutput:
     result = _statement(s, state, report='budget-overview', kind=budget['kind'], mode='overview', groups=groups,
                         series_of=lambda raw, accounts: _Series(values, [{} for _ in groups]),
                         principal_id=principal_id, budgeted=budgeted,
-                        extra=dict(budget=B.budget_output(budget, len(stored))))
+                        extra=dict(budget=B.budget_output(budget, len(cells))))
     return BudgetOverviewOutput(**result)
 
 
 def budget_vs_actual(inp, s, *, principal_id=None) -> BudgetVsActualOutput:
     budget = B.resolve_budget(s, inp.budget)
     key, ids = _budget_scope(s, inp, budget)
-    stored = B.cells(s, budget['id'])
+    cells = B.cells(s, budget['id'])
+    stored = _read_as_survivors(s, cells)
     first, last = _budget_bounds(budget)
     date_from, date_to = inp.date_from or first, inp.date_to or last
     if date_from > date_to:
@@ -476,7 +496,7 @@ def budget_vs_actual(inp, s, *, principal_id=None) -> BudgetVsActualOutput:
     state = _ReportInput(inp, date_from=date_from, date_to=date_to)
     result = _statement(s, state, report='budget-vs-actual', kind=budget['kind'], mode='budget', groups=groups,
                         series_of=series, principal_id=principal_id, include_zero=inp.include_zero,
-                        budgeted=budgeted, extra=dict(budget=B.budget_output(budget, len(stored))))
+                        budgeted=budgeted, extra=dict(budget=B.budget_output(budget, len(cells))))
     return BudgetVsActualOutput(**result)
 
 

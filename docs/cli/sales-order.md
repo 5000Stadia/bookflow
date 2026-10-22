@@ -131,6 +131,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `order.open_amount.amount` | string | yes | no | — | — |
 | `order.open_amount.currency` | string | yes | no | — | — |
 | `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -984,6 +988,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `order.open_amount.amount` | string | yes | no | — | — |
 | `order.open_amount.currency` | string | yes | no | — | — |
 | `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1983,6 +1991,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].order.open_amount.amount` | string | yes | no | — | — |
 | `items[].order.open_amount.currency` | string | yes | no | — | — |
 | `items[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `items[].order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `items[].order.prepayment_held.amount` | string | yes | no | — | — |
+| `items[].order.prepayment_held.currency` | string | yes | no | — | — |
+| `items[].order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -2139,6 +2151,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `order.open_amount.amount` | string | yes | no | — | — |
 | `order.open_amount.currency` | string | yes | no | — | — |
 | `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -2975,6 +2991,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `order.open_amount.amount` | string | yes | no | — | — |
 | `order.open_amount.currency` | string | yes | no | — | — |
 | `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -3771,6 +3791,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `order.open_amount.amount` | string | yes | no | — | — |
 | `order.open_amount.currency` | string | yes | no | — | — |
 | `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |

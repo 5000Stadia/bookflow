@@ -56,7 +56,7 @@ SELECTOR = {'check': 'check', 'card-charge': 'card_charge', 'card-credit': 'card
 
 def _funding(s, selector, noun):
     """The account this document is drawn on, required to be the kind that funds it."""
-    account = journals.active(accounts.resolve_account(s.company, selector), 'account')
+    account = journals.active(accounts.resolve_account(s.company, selector, follow_merge=True), 'account')
     wanted = FUNDING_TYPE[noun]
     if account['type'] != wanted:
         document, requires, _ = WORDS[noun]

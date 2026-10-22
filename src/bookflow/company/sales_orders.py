@@ -195,7 +195,7 @@ def held_prepayment(s, header, sources=()):
     """What customer prepayments hold for this order, in minor units: on the order itself and on the
     estimate it came from, which is the order's money once the estimate converts.
 
-    Invoicing from an order (increment 4) draws it: `sales-order invoice` joins BILLING_KINDS and the
+    Invoicing from an order (increment 4) draws it: the order's invoice command joins BILLING_KINDS and the
     billing conversion's `apply_prepayment` calls `prepayments.conversion_preview` / `conversion_draw`
     with kind `sales_order`, which `prepayments.HOLDING_KINDS` and `_pool_documents` already admit.
     """

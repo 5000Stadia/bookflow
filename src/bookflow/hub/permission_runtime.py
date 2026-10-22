@@ -137,7 +137,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.VENDOR_REFUND_POLICY_VERSION: 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f',
     c.BUDGET_POLICY_VERSION: 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9',
     c.CUSTOMER_PREPAYMENT_POLICY_VERSION: 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49',
-    c.SALES_ORDER_POLICY_VERSION: 'e3b1e8208a4cc093b0d95371a71f5ce1868e47e0a06c823ec2aa3d0f9964a306',
+    c.LIST_MERGE_POLICY_VERSION: 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0',
+    c.SALES_ORDER_POLICY_VERSION: '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -250,6 +251,7 @@ def known_catalog(version):
     from . import permission_vendor_refund_catalog
     from . import permission_budget_catalog
     from . import permission_customer_prepayment_catalog
+    from . import permission_list_merge_catalog
     from . import permission_sales_order_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -289,6 +291,7 @@ def known_catalog(version):
         c.VENDOR_REFUND_POLICY_VERSION: permission_vendor_refund_catalog,
         c.BUDGET_POLICY_VERSION: permission_budget_catalog,
         c.CUSTOMER_PREPAYMENT_POLICY_VERSION: permission_customer_prepayment_catalog,
+        c.LIST_MERGE_POLICY_VERSION: permission_list_merge_catalog,
         c.SALES_ORDER_POLICY_VERSION: permission_sales_order_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

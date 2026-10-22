@@ -218,6 +218,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/items`](schema/company/items.md)
 - [`company/job_types`](schema/company/job_types.md)
 - [`company/journal_deletions`](schema/company/journal_deletions.md)
+- [`company/list_merge_references`](schema/company/list_merge_references.md)
+- [`company/list_merges`](schema/company/list_merges.md)
 - [`company/memorized_group_run_members`](schema/company/memorized_group_run_members.md)
 - [`company/memorized_group_runs`](schema/company/memorized_group_runs.md)
 - [`company/memorized_groups`](schema/company/memorized_groups.md)

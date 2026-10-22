@@ -26,7 +26,7 @@ import importlib
 from alembic import op
 
 revision = 'co0077'
-down_revision = 'co0076'
+down_revision = 'co0075'
 branch_labels = None
 depends_on = None
 

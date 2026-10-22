@@ -27,12 +27,15 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # nor attachment-text-v1's `attachment text` nor transaction-find-v1's `transaction find` (reads) is one. item-convert-v1 adds
     # `item convert`, a person's act because it cannot be undone; finance-charge-v1's `finance-charge assess` is not one,
     # nor is vendor-refund-v1's `vendor-credit refund`, nor any of budget-v1's budget,
-    # report and memorized-report commands; customer-prepayment-v1 adds no people-only act.
-    # sales-order-v1 adds none either: an agent with the standard role takes, revises and voids orders as a person does.
+    # report and memorized-report commands; customer-prepayment-v1 adds no people-only act;
+    # list-merge-v1 adds merging and unmerging accounts and items.
+    # sales-order-v1 adds none: an agent with the standard role takes, revises and voids orders as a person does.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
-        'item convert'}
+        'item convert',
+        'account merge', 'account unmerge', 'item merge', 'item unmerge'}
+
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.
     writes = {d.name for d in tip.CATALOG.commands if d.capability in ("user", "membership", "token")

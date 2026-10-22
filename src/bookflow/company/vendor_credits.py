@@ -271,7 +271,7 @@ def _credited_grid(s, inp, header, previous):
         if previous and supplied is None:
             grids[family] = [dict(line_id=line['line_id'], family=family, memo=line['memo'],
                                   amount_minor_units=line['amount_minor_units'],
-                                  profile=LINE_FACTS[family].model_validate_json(line['line_snapshot']))
+                                  profile=bills._survivor_account(s, LINE_FACTS[family].model_validate_json(line['line_snapshot'])))
                              for line in kept]
             seen.update(line['line_id'] for line in kept)
             continue

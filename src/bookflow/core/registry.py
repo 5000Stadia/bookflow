@@ -333,7 +333,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.report_cmds": ["report"],
     "bookflow.commands.report_export_cmds": ["report"],
     "bookflow.commands.cutover_cmds": ["cutover"],
-    "bookflow.commands.merge_cmds": ["customer", "vendor"],
+    "bookflow.commands.merge_cmds": ["customer", "vendor", "account", "item"],
     "bookflow.commands.vendor_1099_cmds": ["vendor"],
     "bookflow.commands.inventory_cmds": ["inventory"],
     "bookflow.commands.item_convert_cmds": ["item"],

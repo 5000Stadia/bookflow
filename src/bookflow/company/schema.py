@@ -1194,3 +1194,5 @@ from bookflow.company.budget_schema import define_tables as _define_budget_table
 globals().update(_define_budget_tables(metadata, _column, _table, _common))
 from bookflow.company.prepayment_schema import define_tables as _define_prepayment_tables
 globals().update(_define_prepayment_tables(metadata, _column, _table))
+from bookflow.company.list_merge_schema import define_tables as _define_list_merge_tables
+globals().update(_define_list_merge_tables(metadata, _column, _table))

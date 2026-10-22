@@ -60,7 +60,9 @@ class UncategorizedOutput(reports.StrictModel):
 _LIVE = """
   FROM posting_lines pl
   JOIN posting_batches pb ON pb.id = pl.batch_id
-  WHERE pl.account_id = :account_id AND pb.kind IN ('original', 'replacement')
+  WHERE pl.account_id IN (SELECT :account_id UNION ALL SELECT merged_id FROM list_merges
+                          WHERE list_kind = 'account' AND survivor_id = :account_id AND undone_at IS NULL)
+    AND pb.kind IN ('original', 'replacement')
     AND NOT EXISTS (SELECT 1 FROM posting_batches r WHERE r.reverses_batch_id = pb.id)
 """
 
@@ -91,7 +93,7 @@ def uncategorized(inp: UncategorizedInput, s) -> UncategorizedOutput:
             name=name, type=account_type, active=bool(active), count=count,
             amount=reports.money(int(amount), currency), oldest_date=oldest))
         entries.extend(raw.execute(f"""
-            SELECT pb.effective_date, pl.id, pl.account_id, pl.transaction_id, t.type, m.kind, r.number,
+            SELECT pb.effective_date, pl.id, :account_id, pl.transaction_id, t.type, m.kind, r.number,
                    r.memo, pl.description, pl.party_name, {sign}
             {_LIVE.replace('WHERE', 'JOIN transactions t ON t.id = pl.transaction_id '
                            'JOIN transaction_revisions r ON r.id = pb.revision_id '
