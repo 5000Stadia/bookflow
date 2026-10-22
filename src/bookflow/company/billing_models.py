@@ -57,9 +57,12 @@ class ConversionInput(StrictModel):
         values = handler(self)
         # Both generic cache identity and permanent conversion hashes predate
         # these optional members. Omission must retain their original bytes.
-        for name in ('selections', 'percent'):
+        for name in ('selections', 'percent', 'apply_prepayment'):
             if name not in self.model_fields_set:
                 values.pop(name, None)
+        # true is the default, so naming it is the same request as leaving it out.
+        if values.get('apply_prepayment') is True:
+            values.pop('apply_prepayment')
         return values
 
     @property
@@ -91,11 +94,18 @@ class ConversionInput(StrictModel):
         return self
 
 
-class EstimateInvoiceInput(ConversionInput, InvoiceFields):
+class PrepaymentChoice(StrictModel):
+    apply_prepayment: bool = Field(default=True, description=(
+        'Use the customer prepayment held on this work (and, for a work order, on its estimate) toward the new invoice: '
+        'the lesser of what is held and the invoice total, oldest receipt first, drawn by a credit memo applied in the '
+        'same step. false leaves it held. The preview reports prepayment_applied and balance_due.'))
+
+
+class EstimateInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
     estimate: CanonicalId
 
 
-class WorkOrderInvoiceInput(ConversionInput, InvoiceFields):
+class WorkOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
     work_order: CanonicalId
 
 

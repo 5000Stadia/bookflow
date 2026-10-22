@@ -218,6 +218,8 @@ def prepare_apply(s, ctx, inp):
 def prepare_unapply(s, ctx, inp):
     source = credits.facts(s, inp.credit_memo, write=True)
     old_header, revision, key = source['header'], source['revision'], source['key']
+    from bookflow.company.prepayments import guard_draw_change
+    guard_draw_change(s, old_header['id'], 'unapplied')
     journals.version_meta(s, old_header, inp.expected_version)
     if old_header['status'] != 'posted':
         raise BookflowError('E_APPLICATION_INACTIVE', details={

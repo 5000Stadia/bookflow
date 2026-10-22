@@ -301,11 +301,19 @@ class SalesWriteOutput(SalesOutput, WriteOutput):
     changed_fields: list[str] = Field(default_factory=list)
     merged_over_versions: list[int] = Field(default_factory=list)
     idempotent_replay: bool = False
+    prepayment_applied: MoneyOutput | None = Field(default=None, description=(
+        'An invoice made from an estimate or work order (R124): the customer prepayment held on that work that this '
+        'invoice used, drawn by a credit memo applied to it. Absent when the company holds no prepayments.'))
+    balance_due: MoneyOutput | None = Field(default=None, description=(
+        'With prepayment_applied: what the invoice still owes after the prepayment.'))
 
     @model_serializer(mode='wrap')
     def compatible_payment_settlement(self, handler):
         result = handler(self)
         if self.billing_forecast is None:result.pop('billing_forecast',None)
+        if self.prepayment_applied is None:
+            result.pop('prepayment_applied', None)
+            result.pop('balance_due', None)
         if self.settlement is None:
             result.pop('settlement', None)
         if self.settlement_current is None:

@@ -1190,3 +1190,5 @@ from bookflow.company.finance_charge_schema import define_tables as _define_fina
 globals().update(_define_finance_charge_tables(metadata, _column, _table))
 from bookflow.company.budget_schema import define_tables as _define_budget_tables
 globals().update(_define_budget_tables(metadata, _column, _table, _common))
+from bookflow.company.prepayment_schema import define_tables as _define_prepayment_tables
+globals().update(_define_prepayment_tables(metadata, _column, _table))

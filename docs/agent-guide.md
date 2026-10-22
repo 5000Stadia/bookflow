@@ -447,6 +447,32 @@ elsewhere. Leave out the `bank_fee_*` or `customer_fee_*` fields when there is n
 (`customer-refund void`); there is no un-bounce command. A receipt that was never deposited did not
 bounce: unapply and void it.
 
+## A customer pays a deposit
+
+A deposit, down payment or retainer is a customer prepayment: money paid before the work bills,
+held on the Customer Prepayments liability (set up on first use) and never income. Take it with
+`prepayment receive`, naming the accepted estimate or work order it is for (or the customer when
+it is for no document yet). Do not post it with `sales-receipt post` or `payment receive`: those
+make it a sale or a receivable credit, and both commands say so when the customer holds money.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "prepayment receive",
+ "input": {"document": "work-order 1002", "amount": "200.00", "payment_method": "Check", "reference": "4471"}}
+```
+
+The receipt goes to Undeposited Funds and is banked with `deposit post` like any receipt. When the
+work bills, `estimate invoice` or `work-order invoice` uses what is held by itself (oldest receipt
+first; `apply_prepayment: false` leaves it held) and reports `prepayment_applied` and
+`balance_due`. For any other invoice, `prepayment apply --invoice N` with the document, customer
+or receipts to draw from. `prepayment show --customer` lists what is held and every draw. To
+undo a draw, `prepayment unapply <credit memo>` (a reason is required; a draw inside a closed
+period cannot be undone). To pay money back, `prepayment refund`. To keep part as a fee, invoice
+the fee and `prepayment apply` to it, then refund the rest: held money becomes income only through
+an invoice. A document holding money cannot be voided or cancelled until the money is used,
+refunded or moved with `prepayment attach`. `report customer-prepayments` ties to the account on
+any date.
+
 ## Writing off a bad debt
 
 A customer who will never pay is written off with a receipt for nothing, as the anchor does: the
