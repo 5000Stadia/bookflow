@@ -42,6 +42,7 @@ from datetime import date
 import sqlalchemy as sa
 
 from bookflow.company import schema as c
+from bookflow.company.party_merges import survivor_sql  # a merged account reads as its survivor (R117)
 
 FLAGS = ('reconciled_period', 'closed_period', 'cleared_on_arrival', 'opening_balance_equity',
          'round_unexplained', 'write_off')
@@ -167,7 +168,7 @@ def _opening_balance_equity(s, tx):
     for row in _rows(s, f"""
             SELECT b.transaction_id, b.id AS batch_id, a.full_name AS account
             FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
-            JOIN accounts a ON a.id=l.account_id
+            JOIN accounts a ON a.id={survivor_sql('account', 'l.account_id')}
             LEFT JOIN audit_events be ON be.id=b.audit_event_id
             WHERE {LIVE} AND {SCOPE}
               AND (a.system_role='opening_balance_equity' OR a.full_name=:clearing)

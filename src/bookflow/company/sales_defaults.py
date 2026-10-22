@@ -67,6 +67,9 @@ def _row(db, field, selector, *, active=True, source=None):
     noun, table = _TABLES[field]
     definition = get_list_definition(noun)
     result = list_service.resolve_selector(db, table, definition, selector)
+    if active and noun in ('item', 'account') and not result.get('active'):
+        from bookflow.company import list_merges
+        result = list_merges.resolve_saved(db, noun, dict(result))  # merged: saves as its survivor (R117)
     return _active(result, field, source) if active else result
 
 

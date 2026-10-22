@@ -159,18 +159,26 @@ def _revision_summaries(db, revision_ids, selected_id, info):
                          'category': None, 'class': None, 'mixed_class': False}
         for row in db.conn.execute(sa.select(schema.transaction_revisions.c.id,
             schema.transaction_revisions.c.memo, schema.transaction_revisions.c.revision_number).where(schema.transaction_revisions.c.id.in_(revision_ids)))}
+    merged = {row[0]: {'full_name': row[1], 'name': row[2], 'number': row[3]} for row in db.raw.execute(
+        "SELECT m.merged_id, a.full_name, a.name, a.number FROM list_merges m JOIN accounts a ON a.id=m.survivor_id "
+        "WHERE m.list_kind='account' AND m.undone_at IS NULL")}
     lines = schema.document_lines
     for row in db.conn.execute(sa.select(lines.c.revision_id, lines.c.account_id,
         lines.c.account_snapshot, lines.c.class_id, lines.c.class_name)
         .where(lines.c.revision_id.in_(revision_ids), lines.c.kind == 'journal')
         .order_by(lines.c.revision_id, lines.c.position)):
         summary = summaries[row.revision_id]
-        if row.account_id == selected_id:
+        if row.account_id in selected_id:
             summary['selected'] += 1
             continue
         class_value = (row.class_id, row.class_name)
         if summary['offsets'] == 0:
-            summary['category'] = _label(json.loads(row.account_snapshot), info)
+            snapshot = json.loads(row.account_snapshot)
+            survivor = merged.get(row.account_id)
+            if survivor is not None:
+                # A merged account's line is labelled by the account it now reads as (R117).
+                snapshot = {**snapshot, **survivor}
+            summary['category'] = _label(snapshot, info)
             summary['class'] = class_value
         elif class_value != summary['class']:
             summary['mixed_class'] = True
@@ -222,6 +230,10 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         if previous and (previous.company_id, previous.query, previous.permissions) != (company, query_hash, permissions):
             raise _invalid()
         account = accounts.resolve_account(db, previous.account_id if previous else inp.account)
+        from bookflow.company import list_merges
+        # A merged account's register is its survivor's (R117).
+        account = list_merges.resolve_saved(db, 'account', account)
+        members = list_merges.member_ids(db, 'account', account['id'])
         if account['type'] == 'non_posting':
             raise BookflowError('E_VALIDATION', details={'fields': [
                 {'field': 'account', 'problem': 'a non-posting account has no register'}]})
@@ -274,7 +286,7 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
                 report_input = report_input.model_copy(update={'cursor': result.next_cursor})
 
         revision_ids = {row.revision_id for row in result.rows if row.revision_id is not None}
-        summaries = _revision_summaries(db, revision_ids, account['id'], info)
+        summaries = _revision_summaries(db, revision_ids, members, info)
         cheques = _check_numbers(db, {row.transaction_id for row in result.rows
                                       if row.transaction_id is not None}, account['id'])
         markers = schema.money_out_documents
@@ -309,8 +321,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
                 memo=memo, category_label=category, class_summary=class_label,
                 check_number=cheques.get(row.transaction_id),
                 purchase_noun=purchases.get(row.transaction_id)))
-        net = db.raw.execute('SELECT bookflow_sum_int(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',
-                             (account['id'],)).fetchone()[0]
+        net = db.raw.execute('SELECT bookflow_sum_int(debit_minor_units-credit_minor_units) FROM posting_lines '
+                             f'WHERE account_id IN ({",".join("?" * len(members))})', tuple(members)).fetchone()[0]
         current = CurrentBalanceSnapshot(balance=reports.money(int(net or 0) * normal_sign, currency),
             generation_time=reports.now_iso(),
             audit_watermark=db.raw.execute('SELECT coalesce(max(seq),0) FROM audit_events').fetchone()[0])

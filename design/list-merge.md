@@ -166,3 +166,37 @@ fixed script run afterwards (edit an old document, void, pay, deposit, sell the 
 memorized transaction). The only allowed differences are listed: the as-posted snapshot of M's
 name on ledger rows. Undoing a merge with nothing saved since reproduces the pre-merge results,
 re-pointed references included.
+
+### As built (accounts and items)
+
+- Storage: `list_merges` (co0075), a sibling of `party_merges` rather than a wider one (widening its
+  kind CHECK and entries trigger means rebuilding an append-only, triggered table), plus
+  `list_merge_references`: one row per editable reference the merge re-pointed or ended, with the
+  value before and after, so undo puts back each one still holding what the merge wrote and leaves
+  any changed since. `party_merges.survivor_sql` answers for all four kinds, so every reader asks
+  one module. Commands `account merge|unmerge`, `item merge|unmerge` (`merge_cmds.py`, logic in
+  `list_merges.py`); people only, reason, idempotent, `--dry-run` preview. Layer `list-merge-v1`.
+- Readers resolved: the shared ledger CTE and its account filters and splits (trial balance,
+  general ledger, transaction detail, P&L, balance sheet, cash flows), net balances, income tax
+  summary, P&L by class and by job, transaction list by date, deposit detail, prior balances,
+  Uncategorized, the account register, the account list and show, `transaction find --account`,
+  sales by item, purchases by item. The cash-basis view needs nothing: it feeds rows through the
+  same resolved readers.
+- Saving again: an account or item merged away resolves to its survivor when named by a new or
+  memorized document, and when a kept line of a corrected invoice, credit memo or bill, or a
+  journal, check, register entry, transfer or deposit names it.
+- Also refused beyond the list above: an Uncategorized account merged away, an inactive survivor,
+  an item whose group lists both in different units or whose price level prices them differently, and a merge that would make a group or assembly contain itself.
+- Checked by `tests/test_list_merge_twins.py` (every report command from the registry, each basis,
+  filtered by either name, before and after a post-merge script; undo reproduces the pre-merge
+  reads). Estimate and work-order lines naming a merged item or account save as the survivor when
+  resupplied (they resolve through the sales defaults). Not yet resolved: an unposted purchase order
+  naming a merged item is refused on its next save until re-pointed, as for customers.
+- Review fixes (2026-10-22): every in-use guard on an account (type, currency, deactivate,
+  `has_transactions`, captured-snapshot use) counts the accounts merged into it; a merged-away
+  account or item cannot be edited or made active while merged; an item merge that would make a
+  group or assembly contain itself is refused; a group listing both keeps the survivor's row with
+  the summed quantity (refused when the units differ); undo puts a group's or price level's rows
+  back only when that list is unchanged since the merge; kept vendor-credit lines save as the
+  survivor. A merge re-presents closed-period reports without a closing-date check, as a customer
+  merge does; the preview's notes say so.

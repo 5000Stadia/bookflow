@@ -115,7 +115,7 @@ def validate(s, header, pending, inp):
     cache = {}
     for raw, row in zip(supplied, entered):
         from bookflow.company import accounts
-        _require(accounts.resolve_account(s.company, raw.account)['id'] == row['account_id'],
+        _require(accounts.resolve_account(s.company, raw.account, follow_merge=True)['id'] == row['account_id'],
                  'entered account differs from input')
         _require(raw.side == row['side'], 'entered side differs from input')
         key = raw.line_id.upper() if raw.line_id else None

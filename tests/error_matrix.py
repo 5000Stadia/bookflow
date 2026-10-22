@@ -191,6 +191,9 @@ MATRIX["item list"]["E_RECORD_NOT_FOUND"] = "a referenced item disappeared durin
 MATRIX["item query"]["E_RECORD_NOT_FOUND"] = "a referenced item is absent during projection"
 MATRIX["item activate"]["E_HIERARCHY_CYCLE"] = "stored hierarchy or member graph is cyclic"
 MATRIX["other-name activate"]["E_RECORD_IN_USE"] = "a converted source cannot be reactivated directly"
+# R117: a merged-away account or item changes only by undoing its merge.
+for _merged in ("account activate", "item activate", "item update"):
+    MATRIX[_merged]["E_RECORD_IN_USE"] = "the entry is merged into another; undo the merge first"
 
 # Standalone local tooling has no actor, database role, or membership capability,
 # so it is kept out of the database command matrix and its frozen capability seed.
@@ -1795,6 +1798,30 @@ for _kind in ('customer', 'vendor'):
         'E_MERGE_REFUSED': f'the {_kind} is not merged into another one',
         'E_REASON_REQUIRED': 'an undo is always given a reason',
         'E_INACTIVE_REFERENCE': f'the survivor was made inactive since, so the {_kind} cannot stand beside it again',
+        'E_PERMISSION': 'an agent asked; undoing a merge is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+
+# Merging duplicate accounts and items (R117, second part): the same alias, editable references re-pointed.
+for _kind in ('account', 'item'):
+    MATRIX[f'{_kind} merge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries either name or id',
+        'E_MERGE_REFUSED': (f'the same {_kind} twice, a different type, one already merged or a survivor of other merges, '
+                            'children of its own, a system or uncategorized account, a bank, card, A/R or A/P account with '
+                            'postings, a tax or stocked item, a group listing both in different units, a price level pricing them differently, a member cycle '
+                            '(the details say which)'),
+        'E_REASON_REQUIRED': 'a merge is always given a reason',
+        'E_PERMISSION': 'an agent asked; merging is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+    MATRIX[f'{_kind} unmerge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries that name or id',
+        'E_MERGE_REFUSED': f'the {_kind} is not merged into another one',
+        'E_REASON_REQUIRED': 'an undo is always given a reason',
         'E_PERMISSION': 'an agent asked; undoing a merge is a person\'s act',
         'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
         'E_DIRECTIVE_NOT_FOUND': 'context directive absent',

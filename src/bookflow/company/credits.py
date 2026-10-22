@@ -395,6 +395,11 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                     previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults)
                 if group is not None:
                     resolved['profile'].group = group
+                from bookflow.company import list_merges
+                # A kept line naming an account or item merged since saves with the survivor (R117).
+                resolved['profile'] = list_merges.survive(s.company, resolved['profile'])
+                if resolved.get('item_id') is not None:
+                    resolved['item_id'] = resolved['profile'].item.id
                 resolved['line_id'] = line_id
                 resolved['source'] = None
                 resolved['intervals'] = ()
