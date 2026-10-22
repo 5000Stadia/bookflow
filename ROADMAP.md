@@ -184,12 +184,12 @@ review cb5fcd7 (gate g96052d).
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
 - [ ] R130 Windows: a supported Windows build with an authenticated local hand-off.
-- [ ] R138 Find any transaction: search across every transaction type by name, number, amount or date range
+- [~] R138 Find any transaction: search across every transaction type by name, number, amount or date range
 - [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
 - [ ] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
-- [ ] R149 Vendor refunds received as deposits against vendor credits
+- [~] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment
 - [ ] R153 Very large deposits (over 200 rows) and billing part of a purchase order
-- [ ] R154 Convert a non-inventory item into an inventory item
+- [~] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
