@@ -174,9 +174,13 @@ SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 's
 FIXED_ASSET_COMMANDS = frozenset(('fixed-asset depreciate', 'fixed-asset dispose', 'fixed-asset list', 'fixed-asset schedule',
                                   'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'))
 
+# R153 billing part of a purchase order. Its witness orders ten, bills four against the order, reads the
+# line tracking and the open purchase orders report, and closes the rest through all four surfaces.
+PARTIAL_PO_COMMANDS = frozenset(('purchase-order close-lines',))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = FIXED_ASSET_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = PARTIAL_PO_COMMANDS | FIXED_ASSET_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -707,6 +711,7 @@ def execution_map():
     from tests.test_list_merge_surfaces import COMMANDS as LIST_MERGE_SURFACE_COMMANDS
     from tests.test_sales_order_surfaces import COMMANDS as SALES_ORDER_SURFACE_COMMANDS
     from tests.test_fixed_asset_surfaces import COMMANDS as FIXED_ASSET_SURFACE_COMMANDS
+    from tests.test_purchase_order_partial_surfaces import COMMANDS as PARTIAL_PO_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -786,6 +791,7 @@ def execution_map():
                    'tests/test_list_merge_surfaces.py::test_the_same_list_merge_through_python_cli_http_and_mcp' if cmd.name in LIST_MERGE_SURFACE_COMMANDS else  # all four
                    'tests/test_sales_order_surfaces.py::test_the_same_orders_through_python_cli_http_and_mcp' if cmd.name in SALES_ORDER_SURFACE_COMMANDS else  # all four
                    'tests/test_fixed_asset_surfaces.py::test_the_same_fixed_assets_and_loan_through_python_cli_http_and_mcp' if cmd.name in FIXED_ASSET_SURFACE_COMMANDS else  # all four
+                   'tests/test_purchase_order_partial_surfaces.py::test_the_same_partial_order_billing_through_python_cli_http_and_mcp' if cmd.name in PARTIAL_PO_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

@@ -14,6 +14,7 @@ from tests.mcp_matrix_support import Matrix
 from tests.test_row3_host import PASSWORD, hosted  # noqa: F401
 
 SURFACES = ('python', 'cli', 'http', 'mcp')
+COMMANDS = frozenset(('purchase-order close-lines',))
 
 
 async def _order(call):

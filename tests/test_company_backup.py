@@ -172,6 +172,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0063 = importlib.import_module("bookflow.storage.company_migrations.versions.0063_card_credits")
     co0067 = importlib.import_module("bookflow.storage.company_migrations.versions.0067_sales_tax_adjustments")
     co0070 = importlib.import_module("bookflow.storage.company_migrations.versions.0070_vendor_credit_items")
+    co0047 = importlib.import_module("bookflow.storage.company_migrations.versions.0047_receiving")
     co0073 = importlib.import_module("bookflow.storage.company_migrations.versions.0073_vendor_refund_deposits")
     co0077 = importlib.import_module("bookflow.storage.company_migrations.versions.0077_sales_orders")
 
@@ -208,6 +209,9 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             conn.execute(f"DROP TABLE {table}")  # co0080's five tables, with their triggers
         for table in ("purchase_order_line_closures", "purchase_order_bill_releases", "purchase_order_bill_claims"):
             conn.execute(f"DROP TABLE {table}")  # co0084's three tables, with their triggers
+        # co0084 also replaced co0047's receipt capacity trigger: put co0047's own text back.
+        conn.execute("DROP TRIGGER purchase_order_receipt_claim_capacity")
+        conn.execute(next(g for g in co0047.GUARDS if "purchase_order_receipt_claim_capacity" in g))
         conn.execute("DROP TABLE list_merge_references")  # co0075's, with their triggers
         conn.execute("DROP TABLE list_merges")
         # co0070 added a table and widened two empty ones (a CHECK and a column each): its own text, run backwards.
