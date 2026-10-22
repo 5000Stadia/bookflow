@@ -51,7 +51,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
     # +8 the sales order (R101): sales-order create, update, copy, show, query, history, void; estimate sales-order.
-    assert len(rows) == 572
+    # +1 report open-sales-orders (R102).
+    assert len(rows) == 573
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -249,7 +250,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
     # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
     # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==3221
+    # 3221 -> 3226 (R102), measured: report open-sales-orders is new with 5, the null branches of its optional
+    # customer, item, date_from, date_to and cursor. No existing command moved. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3226
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

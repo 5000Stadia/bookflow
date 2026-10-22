@@ -23,6 +23,14 @@ class OrderLineQuantities(StrictModel):
         "open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled)."))
 
 
+class LineStock(StrictModel):
+    """A stocked order or work-order line's item, as this document sees it, in the item's base unit."""
+    on_hand: str
+    committed_elsewhere: str = Field(description="What every other open sales order and work order commits.")
+    on_order: str = Field(description="What live purchase orders still have to deliver.")
+    available: str = Field(description="Available to this document: on hand less what others commit (on hand while the company preference is off).")
+
+
 class OrderProgress(StrictModel):
     """A sales order's progress: derived from its lines, except closed and voided, which a person decided."""
     progress: Literal['open', 'partly_invoiced', 'invoiced', 'closed', 'voided']
@@ -44,7 +52,7 @@ class WorkLineOutput(CreatedOutput):
     @model_serializer(mode='wrap')
     def legacy_ordinal(self,handler):
         result=handler(self)
-        for key in ('tax_ordinal','line_kind','amount','cancelled_quantity','order'):
+        for key in ('tax_ordinal','line_kind','amount','cancelled_quantity','order','stock'):
             if getattr(self,key) is None:result.pop(key,None)
         return result
 
@@ -61,6 +69,8 @@ class WorkLineOutput(CreatedOutput):
     cancelled_quantity: str | None = Field(default=None, description="Sales orders and work orders: the cancelled part of this line.")
     order: OrderLineQuantities | None = Field(default=None, description=(
         "Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities."))
+    stock: LineStock | None = Field(default=None, description=(
+        "Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available."))
     unit_price: MoneyOutput | None
     net: MoneyOutput
     tax: MoneyOutput

@@ -174,8 +174,9 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
     output, known, complete = [], 0, True
     from bookflow.company import sales_orders
     ordering = header is not None and header['kind'] in sales_orders.ORDER_KINDS
-    figures = (sales_orders.line_quantities(s, header, rev, lines, identities, rev['currency'])
-               if ordering and header['current_revision_id'] == rev['id'] else {})
+    current = ordering and header['current_revision_id'] == rev['id']
+    figures = sales_orders.line_quantities(s, header, rev, lines, identities, rev['currency']) if current else {}
+    stock = _line_stock(s, header, lines) if current else {}
     for line in lines:
         f, ident = line_facts(line), identities[line['line_id']]
         currency = rev['currency']
@@ -187,7 +188,7 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
             facts=f, quantity=format_quantity_micro_units(f.quantity_microunits),
             completed_quantity=format_quantity_micro_units(f.completed_quantity_microunits),
             cancelled_quantity=format_quantity_micro_units(f.cancelled_quantity_microunits) if ordering else None,
-            order=figures.get(line['line_id']),
+            order=figures.get(line['line_id']), stock=stock.get(f.item_id),
             unit_price=amount(f.unit_price_minor_units), net=amount(f.net_minor_units),
             tax=amount(f.tax_minor_units), total=amount(f.gross_minor_units),
             estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units),
@@ -201,6 +202,26 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
         custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot), lines=output,
         known_cost_total=Money(known, rev['currency']).to_dict(), cost_complete=complete,
         estimated_profit=Money(rev['net_minor_units'] - known, rev['currency']).to_dict() if complete else None)
+
+
+def _line_stock(s, header, lines):
+    """On hand, committed elsewhere, on order and available to this document, per stocked item."""
+    from bookflow.company import commitments
+    from bookflow.company.items import TRACKED_TYPES
+    from bookflow.company.inventory_reports import _incoming
+    from bookflow.company.work_outputs import LineStock
+    items = {line_facts(line).item_id for line in lines if line_facts(line).profile.item_type in TRACKED_TYPES}
+    if not items:
+        return {}
+    stock = commitments.on_hand(s, items)
+    elsewhere = commitments.committed(s, items=list(items), excluding=header['id'])
+    on_order, _ = _incoming(s, clock.today_iso())
+    deducts = commitments.deducts_documents(s)
+    plain = format_quantity_micro_units
+    return {item: LineStock(on_hand=plain(stock.get(item, 0)), committed_elsewhere=plain(elsewhere.get(item, 0)),
+                            on_order=plain(on_order.get(item, 0)),
+                            available=plain(stock.get(item, 0) - (elsewhere.get(item, 0) if deducts else 0)))
+            for item in items}
 
 
 def links(s, document_id, pending=None, headers=None, *, cursor=None, ctx=None):
@@ -874,6 +895,9 @@ def prepare(s, ctx, inp, kind, operation):
     accepted = {key: old_rev[key] for key in ('accepted_revision_id', 'accepted_at', 'accepted_by')} if old_rev else None
     rev = _new_revision(s, ctx, header, value, custom_snapshot, old_rev, pending, event, at, acceptance=accepted)
     view = output(s, header, rev, pending, [header], ctx=ctx)
+    if kind in ('sales_order', 'work_order') and operation != 'void':
+        from bookflow.company.commitments import shortage_warnings
+        warnings = warnings + shortage_warnings(s, view, header['id'])
     return Plan(WorkWriteOutput(**view.model_dump(), facts_fingerprint=fingerprint,
         changed_fields=changes, warnings=warnings), dict(input=inp, kind=kind, operation=operation,
         changed=True, headers=[header], before={old['id']: old} if old else {}, pending=pending,
@@ -990,6 +1014,9 @@ def _prepare_destination(s, ctx, inp, kind, operation):
         conversion_key_hash=key_hash, request_hash=request_hash,
         created_at=at, created_by=s.actor.id, created_via=ctx.interface.value))
     view = output(s, header, rev, pending, [header, source_current], ctx=ctx)
+    if destination_kind in ('sales_order', 'work_order'):
+        from bookflow.company.commitments import shortage_warnings
+        warnings = warnings + shortage_warnings(s, view, header['id'])
     return Plan(WorkWriteOutput(**view.model_dump(), facts_fingerprint=fingerprint,
         warnings=warnings, changed_fields=['created', 'source_link']),
         dict(input=inp, kind=kind, operation=operation, changed=True, headers=headers, before=before,

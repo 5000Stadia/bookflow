@@ -879,6 +879,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -1684,6 +1689,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -2553,6 +2563,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -6250,6 +6265,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -7102,6 +7122,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |

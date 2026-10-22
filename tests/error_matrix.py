@@ -1998,3 +1998,9 @@ for _verb in ('query', 'history'):
 MATRIX['estimate sales-order'] = dict(_WORK_WRITE_ERRORS,
     E_WORK_DEPENDENCY='the estimate is not accepted, is voided, or already has its work order or sales order',
     E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)')
+
+# Committed stock (R102): the open-sales-orders report.
+MATRIX['report open-sales-orders'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or item filter',
+    'E_QUERY_STALE': 'company audit changed between pages',
+}
