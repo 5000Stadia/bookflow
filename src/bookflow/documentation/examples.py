@@ -1184,3 +1184,26 @@ EXAMPLES["transaction find"] = Example(
 EXAMPLES["item convert"] = Example(
     'bookflow item convert "Copper Coupling" --to inventory --reason "We stock couplings now"'
     ' --company "Demo Plumbing Co" --json', {"item": "Copper Coupling", "to": "inventory"})
+# R124: customer prepayments -- a deposit held until the work bills.
+_C = ' --company "Demo Plumbing Co" --json'
+EXAMPLES["prepayment receive"] = Example(
+    'bookflow prepayment receive --document "estimate DEMO-WORK-EST-1B" --amount 200.00 --payment-method Check'
+    ' --reference 4471' + _C, {"document": "estimate DEMO-WORK-EST-1B", "amount": "200.00", "payment_method": "Check",
+                               "reference": "4471"})
+EXAMPLES["prepayment attach"] = Example(
+    'bookflow prepayment attach 57 --document "work-order DEMO-WORK-WO-2"' + _C,
+    {"receipt": "57", "document": "work-order DEMO-WORK-WO-2"})
+EXAMPLES["prepayment apply"] = Example(
+    'bookflow prepayment apply --invoice DEMO-SALE-INV-ACTIVE --document "estimate DEMO-WORK-EST-1B" --amount 150.00' + _C,
+    {"invoice": "DEMO-SALE-INV-ACTIVE", "document": "estimate DEMO-WORK-EST-1B", "amount": "150.00"})
+EXAMPLES["prepayment unapply"] = Example(
+    'bookflow prepayment unapply 1044 --reason "Applied to the wrong invoice"' + _C, {"draw": "1044"})
+EXAMPLES["prepayment refund"] = Example(
+    'bookflow prepayment refund --document "estimate DEMO-WORK-EST-1B" --bank-account Checking --payment-method Check'
+    ' --check-number 2210' + _C, {"document": "estimate DEMO-WORK-EST-1B", "bank_account": "Checking",
+                                   "payment_method": "Check", "check_number": "2210"})
+EXAMPLES["prepayment show"] = Example(
+    'bookflow prepayment show --customer "Commercial Example Customer"' + _C, {"customer": "Commercial Example Customer"})
+EXAMPLES["prepayment query"] = Example('bookflow prepayment query --held-only' + _C, {"held_only": True})
+EXAMPLES["report customer-prepayments"] = Example(
+    'bookflow report customer-prepayments --as-of 2026-12-31' + _C, {"as_of": "2026-12-31"})

@@ -1842,3 +1842,41 @@ MATRIX['item convert'] = {
     'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
     'E_DIRECTIVE_INACTIVE': 'context directive inactive',
 }
+
+# Customer prepayments (R124): deposits held on a liability until the work bills.
+_PREPAYMENT_WRITE = {
+    'E_RECORD_NOT_FOUND': 'unknown customer, document, receipt, invoice, account or payment method',
+    'E_VALIDATION': 'no or two targets, an unaccepted, voided or cancelled document, another customer\'s document, nothing held, not a prepayment receipt or draw',
+    'E_PERIOD_CLOSED': 'the date, or a draw\'s application date when undoing it, is on or before the closing date',
+    'E_INACTIVE_REFERENCE': 'an inactive customer, account, item or payment method',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the home currency has',
+    'E_VALUE_RANGE': 'an amount outside the exact range',
+    'E_DUPLICATE_NUMBER': 'the receipt number is already used',
+    'E_APPLIED_EXCEEDS_TOTAL': 'more than is held, or more than the invoice owes',
+    'E_APPLICATION_INACTIVE': 'a voided receipt, invoice or draw',
+    'E_VERSION_CONFLICT': 'a document changed between reading and writing',
+    'E_PREVIEW_STALE': 'a document the step wrote changed under it',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['prepayment receive'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment attach'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment apply'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment unapply'] = dict(_PREPAYMENT_WRITE, E_REASON_REQUIRED='an unapply always takes a reason',
+                                    E_HAS_APPLICATIONS='the draw\'s credit memo still has an application it cannot release')
+MATRIX['prepayment refund'] = dict(_PREPAYMENT_WRITE, E_APPLICATION_INCOMPATIBLE='the refund cannot pay out that credit',
+                                   E_CREDIT_UNAVAILABLE='the drawing credit memo is no longer worth the amount')
+MATRIX['prepayment show'] = {
+    'E_RECORD_NOT_FOUND': 'unknown receipt, document or customer',
+    'E_VALIDATION': 'not exactly one of receipt, document, customer; a sales receipt that is not a prepayment',
+}
+MATRIX['prepayment query'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or document',
+    'E_VALIDATION': 'bad date or cursor',
+}
+MATRIX['report customer-prepayments'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer',
+    'E_INTERNAL': 'the Customer Prepayments account differs from what the receipts hold (an unattributed posting)',
+}

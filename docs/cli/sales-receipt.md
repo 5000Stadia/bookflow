@@ -1491,6 +1491,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changed_fields` | array[string] | no | no | [] | — |
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
+| `prepayment_applied` | object \| null | no | yes | null | An invoice made from an estimate or work order (R124): the customer prepayment held on that work that this invoice used, drawn by a credit memo applied to it. Absent when the company holds no prepayments. |
+| `prepayment_applied.amount` | string | yes | no | — | — |
+| `prepayment_applied.currency` | string | yes | no | — | — |
+| `prepayment_applied.minor_units` | integer | yes | no | — | — |
+| `balance_due` | object \| null | no | yes | null | With prepayment_applied: what the invoice still owes after the prepayment. |
+| `balance_due.amount` | string | yes | no | — | — |
+| `balance_due.currency` | string | yes | no | — | — |
+| `balance_due.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -3776,6 +3784,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changed_fields` | array[string] | no | no | [] | — |
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
+| `prepayment_applied` | object \| null | no | yes | null | An invoice made from an estimate or work order (R124): the customer prepayment held on that work that this invoice used, drawn by a credit memo applied to it. Absent when the company holds no prepayments. |
+| `prepayment_applied.amount` | string | yes | no | — | — |
+| `prepayment_applied.currency` | string | yes | no | — | — |
+| `prepayment_applied.minor_units` | integer | yes | no | — | — |
+| `balance_due` | object \| null | no | yes | null | With prepayment_applied: what the invoice still owes after the prepayment. |
+| `balance_due.amount` | string | yes | no | — | — |
+| `balance_due.currency` | string | yes | no | — | — |
+| `balance_due.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -5019,6 +5035,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changed_fields` | array[string] | no | no | [] | — |
 | `merged_over_versions` | array[integer] | no | no | [] | — |
 | `idempotent_replay` | boolean | no | no | false | — |
+| `prepayment_applied` | object \| null | no | yes | null | An invoice made from an estimate or work order (R124): the customer prepayment held on that work that this invoice used, drawn by a credit memo applied to it. Absent when the company holds no prepayments. |
+| `prepayment_applied.amount` | string | yes | no | — | — |
+| `prepayment_applied.currency` | string | yes | no | — | — |
+| `prepayment_applied.minor_units` | integer | yes | no | — | — |
+| `balance_due` | object \| null | no | yes | null | With prepayment_applied: what the invoice still owes after the prepayment. |
+| `balance_due.amount` | string | yes | no | — | — |
+| `balance_due.currency` | string | yes | no | — | — |
+| `balance_due.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
