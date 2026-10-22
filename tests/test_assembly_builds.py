@@ -222,3 +222,79 @@ def test_a_closed_period_is_refused(kit):
             run(name, body, reason='Closed')
         assert error.value.code == 'E_PERIOD_CLOSED', name
     run('assembly build', dict(item=kit['kit'], quantity='1', date='2017-04-02'), reason='Open period')
+
+
+def _members(books, item, members):
+    run = books['run']
+    current = run('item show', {'item': item})
+    run('item update', {'item': item, 'expected_version': current['version'],
+                        'members': [dict(component_item_id=part, quantity=quantity) for part, quantity in members]},
+        reason='New bill of materials')
+
+
+def test_a_build_a_later_build_consumed_can_be_edited_but_not_left_short(kit):
+    books, run = kit['books'], kit['books']['run']
+    pallet = _kit(books, [(kit['kit'], '2')], name='Kit Pallet')
+    first = run('assembly build', dict(item=kit['kit'], quantity='2', date='2017-03-10'), reason='Kits')
+    run('assembly build', dict(item=pallet, quantity='1', date='2017-03-11'), reason='Pallet')
+    memo = run('assembly update', {'build': first['build_id'], 'memo': 'Morning shift'}, reason='Memo only')
+    assert memo['memo'] == 'Morning shift' and memo['quantity'] == '2'
+    assert run('assembly update', {'build': first['build_id'], 'quantity': '3'}, reason='Three')['quantity'] == '3'
+    assert run('assembly update', {'build': first['build_id'], 'quantity': '4'}, reason='Four')['quantity'] == '4'
+    assert _stock(books, kit['kit']) == ('2', 24600) and _stock(books, pallet) == ('1', 24600)
+    with pytest.raises(BookflowError) as error:
+        run('assembly update', {'build': first['build_id'], 'quantity': '1'}, reason='One')
+    assert error.value.details['reason'] == 'build_left_short'
+
+
+def test_show_after_a_component_recost_adds_up_to_the_assembly_cost(kit):
+    books, run = kit['books'], kit['books']['run']
+    done = run('assembly build', dict(item=kit['kit'], quantity='2', date='2017-03-10'), reason='Build')
+    _buy(books, kit['valve'], '10', '8.50', '2017-03-05')
+    shown = run('assembly show', {'build': done['build_id']})
+    assert shown['assembly_cost']['minor_units'] == 24000
+    assert sum(row['cost']['minor_units'] for row in shown['components']) == 24000
+
+
+def test_a_cheap_component_rounding_to_nothing_still_builds_and_a_worthless_one_is_refused(kit):
+    books, run = kit['books'], kit['books']['run']
+    washer = _part(books, 'Washer', '0.01')
+    run('inventory adjust', dict(item=washer, date='2017-03-01', quantity_change='1000', value_change='4.00',
+                                 adjustment_account=books['cogs']), reason='Box of washers')
+    _members(books, kit['kit'], [(kit['tank'], '1'), (washer, '1')])
+    done = run('assembly build', dict(item=kit['kit'], quantity='1', date='2017-03-10'), reason='One kit')
+    assert done['assembly_cost']['minor_units'] == 10000
+    assert _stock(books, washer) == ('999', 400) and _stock(books, kit['kit']) == ('1', 10000)
+    free = _part(books, 'Free Gasket', '0.01')
+    run('bill post', dict(vendor=books['vendor'], date='2017-03-01',
+                          items=[dict(item=free, quantity='5', unit_cost='0.00')]), reason='Samples')
+    _members(books, kit['kit'], [(kit['tank'], '1'), (free, '1')])
+    with pytest.raises(BookflowError) as error:
+        run('assembly build', dict(item=kit['kit'], quantity='1', date='2017-03-10'), reason='Kit with a sample')
+    assert error.value.details['reason'] == 'component_without_value' and 'inventory adjust' in error.value.message
+
+
+def test_a_build_that_would_close_a_cycle_through_history_is_refused(kit):
+    books, run = kit['books'], kit['books']['run']
+    pallet = _kit(books, [(kit['kit'], '1')], name='Kit Pallet')
+    run('assembly build', dict(item=kit['kit'], quantity='1', date='2017-03-10'), reason='Kit')
+    run('assembly build', dict(item=pallet, quantity='1', date='2017-03-11'), reason='Pallet from the kit')
+    _members(books, pallet, [(kit['tank'], '1')])
+    _members(books, kit['kit'], [(pallet, '1')])
+    with pytest.raises(BookflowError) as error:
+        run('assembly build', dict(item=kit['kit'], quantity='1', date='2017-03-12'), reason='Kit from the pallet')
+    assert error.value.code == 'E_VALIDATION' and error.value.details['reason'] == 'assembly_cycle'
+    _buy(books, kit['valve'], '10', '8.50', '2017-03-05')   # a backdated bill still recosts cleanly
+    assert _stock(books, pallet) == ('1', 12000)
+
+
+def test_register_update_on_a_build_points_at_the_assembly_commands(kit):
+    books, run = kit['books'], kit['books']['run']
+    done = run('assembly build', dict(item=kit['kit'], quantity='1', date='2017-03-10'), reason='Build')
+    asset = _inventory_asset(books)
+    with pytest.raises(BookflowError) as error:
+        run('register update', {'journal': done['transaction_id'], 'expected_version': 1, 'account': asset,
+                                'date': '2017-03-10', 'direction': 'increase', 'amount': '1.00',
+                                'category': books['cogs'], 'selected_line_id': done['transaction_id']},
+            reason='Try the register')
+    assert 'assembly update' in error.value.message

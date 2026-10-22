@@ -84,14 +84,48 @@ def is_build(s, transaction_id):
         t.c.transaction_id == transaction_id).limit(1)).first() is not None
 
 
-def _depths(s):
-    """How deep each built assembly sits: 1 + the deepest component any build of it consumed."""
+def _edges(s, exclude=None):
+    """Assembly -> the stock components its standing (built) builds consumed."""
     t = c.assembly_builds
+    latest = sa.select(t.c.build_id, sa.func.max(t.c.revision_number).label('n')).group_by(t.c.build_id).subquery()
     edges: dict[str, set] = {}
-    for item_id, components in s.company.conn.execute(
-            sa.select(t.c.item_id, t.c.components).where(t.c.transaction_id.is_not(None))):
-        edges.setdefault(item_id, set()).update(
-            row['item_id'] for row in json.loads(components) if row['kind'] == 'stock')
+    for build_id, item_id, components in s.company.conn.execute(
+            sa.select(t.c.build_id, t.c.item_id, t.c.components).join(latest, sa.and_(
+                latest.c.build_id == t.c.build_id, latest.c.n == t.c.revision_number)).where(t.c.status == 'built')):
+        if build_id != exclude:
+            edges.setdefault(item_id, set()).update(
+                row['item_id'] for row in json.loads(components) if row['kind'] == 'stock')
+    return edges
+
+
+def _require_no_cycle(s, item, components, exclude=None):
+    """Refuse a build that would consume an item its own assembly went into.
+
+    Build A from B and, after re-nesting the bills of materials, B from A, and neither one's cost can be
+    settled before the other's: a purchase entered behind either would have no order to recost them in.
+    """
+    edges = _edges(s, exclude)
+    for component in components:
+        if component['kind'] != 'stock':
+            continue
+        seen, stack = set(), [component['item_id']]
+        while stack:
+            current = stack.pop()
+            if current == item['id']:
+                name = inventory.item_name(s, component['item_id'])
+                raise _invalid('item', f'"{name}" was built from "{item["full_name"]}"', message=(
+                    f'"{name}" has been built from "{item["full_name"]}", directly or through other assemblies, so '
+                    f'"{item["full_name"]}" cannot also be built from it: neither cost could be settled before the '
+                    f'other. Remove "{name}" from the bill of materials, or void the builds that made it from '
+                    f'"{item["full_name"]}" first.'), item_id=component['item_id'], reason='assembly_cycle')
+            if current not in seen:
+                seen.add(current)
+                stack.extend(edges.get(current, ()))
+
+
+def _depths(s):
+    """How deep each built assembly sits: 1 + the deepest component any standing build of it consumed."""
+    edges = _edges(s)
     memo: dict[str, int] = {}
 
     def depth(item_id, seen=()):
@@ -155,8 +189,10 @@ def replay_items(s, working, load, refuse):
                                      if row['kind'] == 'receipt' and row['revision_id'] == target['revision_id'])
             receipt = receipts[key]
             if receipt['item_id'] in done:
-                raise BookflowError('E_INTERNAL', message=(
-                    'Assembly builds consume one another in a cycle; the cost of one cannot be settled before the other.'))
+                raise BookflowError('E_VALIDATION', message=(
+                    'Assembly builds consume one another in a cycle, so the cost of one cannot be settled before the '
+                    'other. Void one of the builds that made an assembly from an item it was itself built into, then '
+                    'enter this change again.'), details={'reason': 'assembly_cycle', 'item_id': receipt['item_id']})
             partner = dict(
                 id=new_id(), item_id=receipt['item_id'], kind='recost', quantity_microunits=0,
                 value_minor_units=-correction.delta_minor_units, effective_date=correction.effective_date,
@@ -309,7 +345,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
     planned_reversals = {}
     for row in reversing:
         planned_reversals.setdefault(row['item_id'], []).append(
-            dict(row, quantity_microunits=-int(row['quantity_microunits'])))
+            dict(row, quantity_microunits=-int(row['quantity_microunits']), value_minor_units=-int(row['value_minor_units'])))
     held = reserved(s, exclude=exclude)
     names = {}
     limits = []
@@ -335,21 +371,38 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
     build.on_hand_after = _on_hand(history, date)
     if build.shortfall:
         return build
+    _require_no_cycle(s, item, components, exclude)
     issues = [inventory_effects.Entry(
         key=f'c{index}', item_id=entry['item']['id'], item_name=entry['item']['full_name'], kind='issue',
         quantity_microunits=entry['need'], asset_account_id=entry['component']['account_id'],
         offset_account_id=item['asset_account_id'])
         for index, entry in enumerate(build.rows) if entry['component']['kind'] == 'stock' and entry['need'] > 0]
-    first = inventory_effects.plan(s, entries=issues, reversing=reversing, date=date, currency=currency, field='quantity')
+    # The first pass prices the components. It carries the assembly's receipt too, at a provisional value
+    # (what the build being restated received, else nothing): without it, a later build that consumed this
+    # assembly would read as short while the receipt it relies on is reversed and not yet replaced.
+    provisional = sum(int(row['value_minor_units']) for row in reversing if row['kind'] == 'receipt'
+                      and row['item_id'] == item['id'])
+    placeholder = inventory_effects.Entry(key='assembly', item_id=item['id'], item_name=item['full_name'],
+                                          kind='receipt', quantity_microunits=quantity,
+                                          asset_account_id=item['asset_account_id'],
+                                          offset_account_id=item['asset_account_id'], value_minor_units=max(provisional, 0))
+    first = inventory_effects.plan(s, entries=issues + [placeholder], reversing=reversing, date=date, currency=currency,
+                                   field='quantity')
     total = 0
     for index, entry in enumerate(build.rows):
         if entry['component']['kind'] == 'stock':
             cost = -first.costs.get(f'c{index}', 0)
             if entry['need'] > 0 and cost == 0:
-                raise _invalid('item', 'is on hand at no cost', message=(
-                    f'Component "{entry["item"]["full_name"]}" is on hand at no cost on {date}, and Bookflow posts no '
-                    'zero-amount entry. Give it a value with `inventory adjust --value-change`, then build.'),
-                    item_id=entry['item']['id'])
+                # A small issue of a cheap part can round to nothing at the average; that is a real cost of
+                # zero and the issue moves quantity alone. Only stock worth nothing at all is refused.
+                history = inventory.movements(s, item_id=entry['item']['id']) + planned_reversals.get(entry['item']['id'], [])
+                worth = sum(int(row['value_minor_units']) for row in history if row['effective_date'] <= date)
+                if worth <= 0:
+                    raise _invalid('item', 'has no value on hand', message=(
+                        f'Component "{entry["item"]["full_name"]}" is on hand on {date} but carries no value at all, so '
+                        'there is no cost to move into the assembly. Enter the bill that bought it, or record what the '
+                        'stock is worth with `inventory adjust --value-change`, then build.'),
+                        item_id=entry['item']['id'], reason='component_without_value')
         else:
             cost = round_ratio_half_even(entry['component']['unit_cost_minor_units'] * entry['need'], MICRO)
         entry['cost'] = cost
@@ -484,6 +537,13 @@ def _bind(build, fresh):
             if line['batch_id'] in {b['id'] for b in pending['posting_batches'] if b['kind'] != 'reversal'}}
     for movement in build.change.movements:
         if movement.key is None:
+            continue
+        if movement.key not in build.line_of:
+            # A component issue that cost nothing has no posting line; it hangs off the build's batch and its
+            # first entered line, as a zero-value movement does on any document.
+            batch = next(b for b in pending['posting_batches'] if b['kind'] != 'reversal')
+            inventory_effects.bind(movement, None, transaction_id=header['id'], revision_id=revision['id'],
+                                   document_line_id=entered[1]['id'], batch=batch)
             continue
         position = build.line_of[movement.key]
         inventory_effects.bind(movement, legs[position], transaction_id=header['id'], revision_id=revision['id'],
@@ -715,7 +775,12 @@ def show(s, inp):
         for component in components:
             component_item = item_service.resolve_item(s.company, component['item_id'])
             rows = posted.get((component['item_id'], 'issue'), [])
-            cost = -sum(int(row['value_minor_units']) for row in rows[-1:])
+            issue = rows[-1:]
+            # What the issue cost now: its posted value and every cost correction posted against it since,
+            # the same way the receipt side counts the assembly's.
+            cost = -sum(int(row['value_minor_units']) for row in issue) - sum(
+                int(row['value_minor_units']) for row in inventory.movements(s, item_id=component['item_id'])
+                if row['kind'] == 'recost' and issue and row['corrects_movement_id'] == issue[0]['id'])
             if component['kind'] == 'cost':
                 cost = round_ratio_half_even(component['unit_cost_minor_units'] * _need(component['quantity_microunits'], build.quantity), MICRO)
             build.rows.append(dict(component=component, item=component_item,
