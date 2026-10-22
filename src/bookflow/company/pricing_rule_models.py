@@ -132,11 +132,11 @@ class PreferencesOutput(_Strict):
 class PricePreviewInput(_Strict):
     item: Selector = Field(description='Item ID or name.')
     customer: Selector = Field(description='Customer:job ID or name.')
-    quantity: str = Field('1', max_length=32, description='Quantity in the item base unit.')
+    quantity: str = Field('1', max_length=32, description="Quantity, in the item's default sales unit, as a line takes it.")
     date: _Date | None = Field(None, description='Transaction date; today when omitted.')
-    class_id: Selector | None = Field(None, description='Class of the line or sale.')
-    sales_rep: Selector | None = Field(None, description='Sales rep of the sale; the customer default when omitted.')
-    price_level: Selector | None = Field(None, description='Price level; the customer default when omitted.')
+    class_id: Selector | None = Field(None, description="Class of the sale; the customer's default when omitted (an item's own default class still wins on the line).")
+    sales_rep: Selector | None = Field(None, description="Sales rep of the sale; the job's, else the customer's, when omitted.")
+    price_level: Selector | None = Field(None, description="Price level of the sale; the job's, else the customer's, when omitted.")
 
 
 class Candidate(_Strict):

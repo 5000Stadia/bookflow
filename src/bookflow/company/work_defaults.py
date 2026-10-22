@@ -75,7 +75,7 @@ class _OverridePrice:
 
 
 def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
-                 previous_header=None, refresh=False, kind='estimate', document_tax=False, date=None):
+                 previous_header=None, refresh=False, kind='estimate', document_tax=False, date=None, old_date=None):
     """Resolve one line; the service owns identities, ordering and aggregate totals."""
     if kind not in WORK_KINDS:
         raise _invalid('kind', 'expected one of ' + ', '.join(WORK_KINDS))
@@ -115,7 +115,7 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     resolved, shared_warnings = sales_defaults.resolve_line(
         s, sales_input, header, previous=saved, previous_header=previous_header, refresh=refresh,
         nonposting=True, price_override=override, net_override=net, defer_tax=document_tax,
-        line_kinds=True, stocked=kind in STOCKED_KINDS, date=date,
+        line_kinds=True, stocked=kind in STOCKED_KINDS, date=date, old_date=old_date,
     )
     resolved.pop('adjustment_taxable', None)
     warnings.extend(shared_warnings)

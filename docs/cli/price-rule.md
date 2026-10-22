@@ -809,11 +809,11 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `item` | `--item` | string | yes | no | — | Item ID or name.; minimum length 1; maximum length 1004 |
 | `customer` | `--customer` | string | yes | no | — | Customer:job ID or name.; minimum length 1; maximum length 1004 |
-| `quantity` | `--quantity` | string | no | no | "1" | Quantity in the item base unit.; maximum length 32 |
+| `quantity` | `--quantity` | string | no | no | "1" | Quantity, in the item's default sales unit, as a line takes it.; maximum length 32 |
 | `date` | `--date` | string \| null | no | yes | null | Transaction date; today when omitted. |
-| `class_id` | `--class-id` | string \| null | no | yes | null | Class of the line or sale. |
-| `sales_rep` | `--sales-rep` | string \| null | no | yes | null | Sales rep of the sale; the customer default when omitted. |
-| `price_level` | `--price-level` | string \| null | no | yes | null | Price level; the customer default when omitted. |
+| `class_id` | `--class-id` | string \| null | no | yes | null | Class of the sale; the customer's default when omitted (an item's own default class still wins on the line). |
+| `sales_rep` | `--sales-rep` | string \| null | no | yes | null | Sales rep of the sale; the job's, else the customer's, when omitted. |
+| `price_level` | `--price-level` | string \| null | no | yes | null | Price level of the sale; the job's, else the customer's, when omitted. |
 
 ### Command and context options
 

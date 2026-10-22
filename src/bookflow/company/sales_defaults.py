@@ -30,6 +30,7 @@ from bookflow.company.sales_facts import (
 )
 from bookflow.company.sales_models import Address, SalesLineInput, _invalid, money
 from bookflow.core.errors import BookflowError
+from bookflow.core.money import Money
 from bookflow.core.exact import format_percentage_millionths, parse_quantity_micro_units, parse_percentage_millionths
 
 
@@ -583,7 +584,8 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                  previous_header: SalesProfile | None = None, refresh: bool = False,
                  nonposting: bool = False, price_override: Callable | None = None,
                  net_override: int | None = None, defer_tax: bool = False,
-                 line_kinds: bool = False, stocked: bool = False, date: str | None = None) -> tuple[dict, list[str]]:
+                 line_kinds: bool = False, stocked: bool = False, date: str | None = None,
+                 old_date: str | None = None) -> tuple[dict, list[str]]:
     """Resolve one commercial line using preserved rules for ordinary edits.
 
     ``line_kinds`` admits subtotal, discount and percentage-charge items, whose amounts the
@@ -591,6 +593,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     ``stocked`` admits stock-carrying items on a non-posting document (a quote, a work order or
     a sales order): it records them, captures the accounts its invoice will post to, and moves
     nothing. ``date`` is the transaction date price rules (R110) are matched on; today when absent.
+    ``old_date`` is the saved document's date, so a date change can re-price a defaulted line.
     """
     if not nonposting and (price_override is not None or net_override is not None):
         raise _invalid('unit_price', 'price hooks require non-posting resolution')
@@ -834,12 +837,20 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         level_changed = not _same(db, 'price_level', level_selector, old_level)
         unit_changed = old is not None and old.unit != profile.unit
         leaving_amount = old is not None and old.pricing_basis == 'amount'
-        # R110: a quantity or customer change re-prices a defaulted line once price rules are in use.
+        # R110: what a price rule may test changing re-prices a defaulted line once rules are in use
+        # (a line that captured a rule keeps its adjustment while that rule still matches).
         from bookflow.company import pricing_rules
-        ruled = (old is not None and (previous['quantity_microunits'] != quantity or customer_changed)
-                 and (pricing_rules.in_use(db) or old.pricing_rule is not None))
-        price_needs = leaving_amount or fields.needs('unit_price', item_changed or unit_changed or level_changed
-                                                     or header_price_changed or ruled)
+        rule_reasons = [why for why, moved in (
+            ('quantity', old is not None and previous['quantity_microunits'] != quantity),
+            ('customer', customer_changed),
+            ('class', old is not None and (header_class_changed or old.class_id != profile.class_id)),
+            ('sales rep', previous_header is not None and (header.sales_rep.id if header.sales_rep else None)
+             != (previous_header.sales_rep.id if previous_header.sales_rep else None)),
+            ('date', old is not None and old_date is not None and date is not None and old_date != date),
+        ) if moved] if old is not None and (pricing_rules.in_use(db) or old.pricing_rule is not None) else []
+        other_needs = leaving_amount or fields.needs('unit_price', item_changed or unit_changed or level_changed
+                                                     or header_price_changed)
+        price_needs = other_needs or fields.needs('unit_price', bool(rule_reasons))
         price_explicit = (price_override is not None or 'unit_price' in fields.supplied or
                           (old is not None and not leaving_amount and not fields.defaulted('unit_price') and 'unit_price' not in fields.defaults))
         if (level_changed or item_changed or refresh or 'price_level' in fields.defaults) and info['enable_price_levels'] and level_selector:
@@ -876,7 +887,11 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             fields.origins['unit_price'] = Origin(kind='explicit')
         elif price_needs and not price_explicit:
             # R110 hook: price rules may better the price level's (or item's) price; the rule is captured.
-            base_price = pricing_rules.line_price(s, profile, header, base_qty, date, lambda: _derived_price(profile))
+            old_factor = old.unit.factor_nanounits if old is not None and old.unit else 1_000_000_000
+            base_price = pricing_rules.line_price(
+                s, profile, header, base_qty, date, lambda: _derived_price(profile),
+                old_base_qty=base_quantity(previous['quantity_microunits'], old_factor) if old is not None else None,
+                level_explicit=fields.origins.get('price_level', Origin(kind='default')).kind == 'explicit')
             price = selected_price(base_price, factor)
             fields.origins['unit_price'] = Origin(kind='default', source_id=(
                 profile.pricing_rule.id if profile.pricing_rule else profile.price_rule.id if profile.price_rule else item['id']))
@@ -884,8 +899,12 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                 warnings.append(f'unit_price: nonzero base price {base_price} rounded to zero at factor {factor}')
         else:
             price = previous['unit_price_minor_units']
-        if not info['enable_price_levels'] and price_needs:
+        if not info['enable_price_levels'] and other_needs:
             warnings.append('price_level: price levels disabled; standard/manual price is in use')
+        elif rule_reasons and not other_needs and price != previous['unit_price_minor_units']:
+            why = profile.pricing_rule.summary if profile.pricing_rule else 'no price rule applies now'
+            warnings.append(f"unit_price: {Money(previous['unit_price_minor_units'], currency).amount} became "
+                            f"{Money(price, currency).amount} because the {' and '.join(rule_reasons)} changed; {why}")
 
     profile.origins = fields.origins
     net = (0 if adjustment_role in ADJUSTMENT_ITEM_TYPES else profile.net_amount_minor_units if amount_mode else

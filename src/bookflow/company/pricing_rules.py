@@ -45,7 +45,6 @@ from bookflow.company.pricing_rule_models import (
     BreakOutput, Candidate, Named, PreferencesOutput, PricePreviewOutput, PriceRuleOutput,
     PriceRulePageOutput, PriceRuleWriteOutput,
 )
-from bookflow.company.sales_calculations import adjusted_price
 from bookflow.core import clock
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import (
@@ -112,7 +111,7 @@ def _quantity(text: str, field: str) -> int:
 
 
 def rounding_steps(rounding: str, currency: str) -> tuple[int, int, str]:
-    """(increment, offset, mode) for adjusted_price."""
+    """(increment, offset, mode) for _rounded, as an "up" rule rounds."""
     unit = 10 ** minor_units_of(currency)
     if rounding == 'cent':
         return 1, 0, 'nearest'
@@ -123,15 +122,57 @@ def rounding_steps(rounding: str, currency: str) -> tuple[int, int, str]:
     return unit, unit - unit // (100 if rounding == 'x.99' else 20), 'up'
 
 
-def rule_price(rule: dict, base: int, value: int, currency: str) -> int:
-    """One rule's price per base unit from its basis price, exactly."""
-    increment, offset, mode = rounding_steps(rule['rounding'], currency)
-    sign = -1 if rule['direction'] == 'down' else 1
+def _rounded(moved: int, percent: int, increment: int, offset: int, mode: str) -> int:
+    """sales_calculations.adjusted_price arithmetic, without refusing a result below zero (the caller decides)."""
+    from bookflow.core.exact import round_ratio_half_even
+    numerator = moved * (100_000_000 + percent) - offset * 100_000_000
+    denominator = increment * 100_000_000
+    steps = (round_ratio_half_even(numerator, denominator) if mode == 'nearest' else
+             -(-numerator // denominator) if mode == 'up' else numerator // denominator)
+    return steps * increment + offset
+
+
+def rule_price(rule: dict, base: int | None, value: int, currency: str) -> int | None:
+    """One rule's price per base unit from its basis price, exactly; None when the rule must not apply.
+
+    A rule never makes a line free and never turns a discount into an increase (or a markup into a
+    cut): a cost basis of zero or less is no basis; a result at or below zero, before rounding or
+    after rounding to the cent or dollar, is skipped, never clamped; a down rule's x.99/x.95 rounds
+    down to the next lower ending; an x.99/x.95 ending at or below zero, or any rounding that lands
+    on the wrong side of the base, falls back to the cent.
+    """
+    if base is None or base <= 0 and rule['basis'] == 'cost':
+        return None
+    down = rule['direction'] == 'down'
+    sign = -1 if down else 1
     if rule['adjustment_kind'] == 'percent':
-        percent = max(sign * value, -100_000_000)
-        return adjusted_price(base, percent, increment, offset, mode)
-    moved = max(base + sign * value, 0)
-    return adjusted_price(moved, 0, increment, offset, mode)
+        percent, moved = sign * value, base
+        if percent <= -100_000_000:
+            return None
+    else:
+        percent, moved = 0, base + sign * value
+        if moved <= 0:
+            return None
+    increment, offset, mode = rounding_steps(rule['rounding'], currency)
+    if down and rule['rounding'] in ('x.99', 'x.95'):
+        mode = 'down'
+    rounded = _rounded(moved, percent, increment, offset, mode)
+    if rounded <= 0 and rule['rounding'] in ('cent', 'dollar'):
+        return None  # free is never a rule's price
+    if rounded <= 0 or (rounded > base if down else rounded < base):
+        rounded = _rounded(moved, percent, 1, 0, 'nearest')
+    return rounded if rounded > 0 else None
+
+
+def _tier(rule: dict, quantity: int | None) -> int | None:
+    """Which quantity break (by position) a quantity falls in; None below the first or with no breaks."""
+    if rule['breaks'] is None or quantity is None:
+        return None
+    found = None
+    for index, tier in enumerate(rule['breaks']):
+        if quantity >= tier['min_quantity_microunits']:
+            found = index
+    return found
 
 
 def _break_value(rule: dict, quantity: int) -> int | None:
@@ -470,8 +511,28 @@ def apply_preferences(plan: Plan, ctx, s) -> Applied:
 
 # ---------------------------------------------------------------------------- resolution
 
-_SIGNATURE = sa.text("SELECT count(*), coalesce(max(updated_at), ''), coalesce(sum(version), 0),"
-                     " sum(active) FROM price_rules")
+_SIGNATURE = sa.text("SELECT count(*), coalesce(max(updated_at), ''), coalesce(sum(version), 0), sum(active),"
+                     " (SELECT count(*) || '/' || count(undone_at) FROM list_merges WHERE list_kind = 'item'),"
+                     " (SELECT count(*) || '/' || count(undone_at) FROM party_merges WHERE party_kind = 'customer')"
+                     " FROM price_rules")
+
+
+def _through_merges(db, rules: list[dict]) -> list[dict]:
+    """Rules as they match today: an item or customer merged away (R117) reads as its survivor, so a
+    rule naming it keeps pricing what it was merged into, and stops doing so once the merge is undone."""
+    items = dict(db.conn.execute(sa.text("SELECT merged_id, survivor_id FROM list_merges WHERE list_kind = 'item'"
+                                         " AND undone_at IS NULL")).all())
+    customers = dict(db.conn.execute(sa.text("SELECT merged_id, survivor_id FROM party_merges WHERE party_kind ="
+                                             " 'customer' AND undone_at IS NULL")).all())
+    if not items and not customers:
+        return rules
+    out = []
+    for rule in rules:
+        conditions = dict(rule['conditions'])
+        for key, alias in (('items', items), ('customers', customers)):
+            conditions[key] = sorted({alias.get(i, i) for i in conditions.get(key) or []})
+        out.append(dict(rule, conditions=conditions))
+    return out
 
 
 def active_rules(db) -> list[dict]:
@@ -482,8 +543,8 @@ def active_rules(db) -> list[dict]:
     if cached is not None and cached[0] == signature:
         return cached[1]
     t = c.price_rules
-    rules = [_decode(r) for r in db.conn.execute(
-        sa.select(t).where(t.c.active.is_(True)).order_by(t.c.priority, t.c.name_key, t.c.id)).mappings()]
+    rules = _through_merges(db, [_decode(r) for r in db.conn.execute(
+        sa.select(t).where(t.c.active.is_(True)).order_by(t.c.priority, t.c.name_key, t.c.id)).mappings()])
     try:
         db._bookflow_price_rules = (signature, rules)
     except AttributeError:
@@ -539,26 +600,41 @@ def matches(rule: dict, facts: dict) -> bool:
     return _break_value(rule, facts['quantity']) is not None
 
 
-def choose(rules: list[dict], facts: dict, *, standard: int | None, cost: int | None, level: int | None,
-           level_priced: bool, policy: str, currency: str) -> tuple[int | None, dict | None, list[tuple]]:
-    """(price, winning rule capture or None, candidates). ``level`` is the price without rules."""
-    candidates = []
+def candidates_for(rules: list[dict], facts: dict, *, standard: int | None, cost: int | None,
+                   currency: str) -> list[tuple]:
+    out = []
     for rule in rules:
         if not matches(rule, facts):
             continue
-        base = standard if rule['basis'] == 'sales_price' else cost
-        if base is None:
-            continue
         value = _break_value(rule, facts['quantity'])
-        candidates.append((rule, base, value, rule_price(rule, base, value, currency)))
+        price = rule_price(rule, standard if rule['basis'] == 'sales_price' else cost, value, currency)
+        if price is not None:
+            out.append((rule, standard if rule['basis'] == 'sales_price' else cost, value, price))
+    return out
+
+
+def choose(rules: list[dict], facts: dict, *, standard: int | None, cost: int | None, level: int | None,
+           level_priced: bool, policy: str, currency: str,
+           level_explicit: bool = False) -> tuple[int | None, dict | None, list[tuple]]:
+    """(price, winning rule capture or None, candidates). ``level`` is the price without rules.
+
+    lowest_price: the lowest rule price wins against the price level's price when a level priced the
+    line, and a discount rule also against the item's own price, so no discount ever prices above
+    the standard price; a tie goes to the level or item. priority: the first matching rule wins,
+    except over a price level picked on the line itself, which stands (as a price chosen on the
+    line stands in the anchor)."""
+    candidates = candidates_for(rules, facts, standard=standard, cost=cost, currency=currency)
     if not candidates:
         return level, None, []
     if policy == 'priority':
-        winner = candidates[0]  # rules come in priority order
+        winner = None if (level_explicit and level_priced) else candidates[0]  # rules come in priority order
     else:
         winner = min(candidates, key=lambda x: x[3])  # the first of equal prices is the first by priority
-        if level_priced and level is not None and level <= winner[3]:
-            winner = None  # a tie goes to the price level
+        floors = [level] if level_priced and level is not None else []
+        if winner[0]['direction'] == 'down' and standard is not None:
+            floors.append(standard)
+        if floors and min(floors) <= winner[3]:
+            winner = None
     if winner is None:
         return level, None, candidates
     return winner[3], dict(rule=winner[0], base=winner[1], value=winner[2], price=winner[3]), candidates
@@ -575,42 +651,72 @@ def capture(chosen: dict, currency: str, policy: str):
         conflict_policy=policy, summary=f"price from rule {rule['name']}: {summary(one, currency)}")
 
 
-def line_price(s, profile, header, base_qty: int, date: str | None, level_price: Callable[[], int]) -> int:
-    """The R110 hook: the base-unit price a line defaults to, with the rule it came from on ``profile``.
-
-    ``level_price`` gives the price without rules (the price level's, else the item's). With no
-    active rule this is exactly ``level_price()``.
-    """
-    db = s.company
-    profile.pricing_rule = None
-    rules = active_rules(db)
-    if not rules:
-        return level_price()
-    try:
-        level, failure = level_price(), None
-    except BookflowError as exc:
-        level, failure = None, exc
+def _line_facts(s, db, profile, header, base_qty, date):
     class_ref = profile.class_id or header.class_id
     ids = (profile.item.id, header.customer.id, class_ref.id if class_ref else None,
            header.sales_rep.id if header.sales_rep else None)
     # The lists a line's facts come from cannot change while nothing is written: a 200-line sale
     # resolves each line several times, so they are kept until this connection writes again.
     raw = getattr(db, 'raw', None)
-    key = (getattr(raw, 'total_changes', None), ids)
+    key = getattr(raw, 'total_changes', None)
     cached = getattr(db, '_bookflow_price_facts', None)
-    if cached is None or cached[0] != key[0] or key[0] is None:
-        cached = (key[0], {}, _home(db), conflict_policy(db))
+    if cached is None or cached[0] != key or key is None:
+        cached = (key, {}, _home(db), conflict_policy(db))
         try:
             db._bookflow_price_facts = cached
         except AttributeError:
             pass
     if ids not in cached[1]:
         cached[1][ids] = _facts(db, item_id=ids[0], customer_id=ids[1], class_id=ids[2], sales_rep_id=ids[3])
-    facts = dict(cached[1][ids], quantity=base_qty, date=date or _today(s))
-    currency, policy = cached[2], cached[3]
+    return dict(cached[1][ids], quantity=base_qty, date=date or _today(s)), cached[2], cached[3]
+
+
+def _kept(previous, rules, facts, profile, old_base_qty, currency):
+    """The price a line keeps under the rule it captured, while that rule still matches it: the same
+    rule, still active, its conditions still holding, and the quantity still in the same break. The
+    captured adjustment is re-applied, never today's definition of the rule."""
+    current = next((rule for rule in rules if rule['id'] == previous.id), None)
+    if current is None or not matches(current, facts):
+        return None
+    if current['breaks'] is not None and _tier(current, old_base_qty) != _tier(current, facts['quantity']):
+        return None
+    captured = dict(adjustment_kind=previous.kind, direction=previous.direction, rounding=previous.rounding,
+                    basis=previous.basis)
+    base = profile.standard_price_minor_units if previous.basis == 'sales_price' else profile.cost_minor_units
+    price = rule_price(captured, base, previous.value, currency)
+    if price is None:
+        return None
+    return price, previous.model_copy(update=dict(base_minor_units=base, price_minor_units=price))
+
+
+def line_price(s, profile, header, base_qty: int, date: str | None, level_price: Callable[[], int], *,
+               old_base_qty: int | None = None, level_explicit: bool = False) -> int:
+    """The R110 hook: the base-unit price a line defaults to, with the rule it came from on ``profile``.
+
+    ``level_price`` gives the price without rules (the price level's, else the item's). With no
+    active rule and no captured rule this is exactly ``level_price()``. A line that captured a rule
+    keeps that rule's captured adjustment while the rule still matches (``old_base_qty`` is the
+    quantity it was priced at); otherwise it is priced from today's rules.
+    """
+    db = s.company
+    previous, profile.pricing_rule = profile.pricing_rule, None
+    rules = active_rules(db)
+    if not rules:
+        return level_price()
+    facts, currency, policy = _line_facts(s, db, profile, header, base_qty, date)
+    if previous is not None:
+        kept = _kept(previous, rules, facts, profile, old_base_qty, currency)
+        if kept is not None:
+            profile.pricing_rule = kept[1]
+            return kept[0]
+    try:
+        level, failure = level_price(), None
+    except BookflowError as exc:
+        level, failure = None, exc
     level_priced = bool(profile.price_rule and profile.price_rule.matched)
     price, chosen, _ = choose(rules, facts, standard=profile.standard_price_minor_units, cost=profile.cost_minor_units,
-                              level=level, level_priced=level_priced, policy=policy, currency=currency)
+                              level=level, level_priced=level_priced, policy=policy, currency=currency,
+                              level_explicit=level_explicit)
     if chosen is None:
         if failure is not None:
             raise failure
@@ -620,70 +726,58 @@ def line_price(s, profile, header, base_qty: int, date: str | None, level_price:
 
 
 def preview(s, inp) -> PricePreviewOutput:
-    """What a line for this item, customer, quantity and date would be priced at, and why."""
-    from bookflow.company.sales_calculations import adjusted_price as _adjusted
+    """What a line for this item, customer:job, quantity and date would be priced at, and why.
+
+    It resolves the line exactly as posting an invoice does (the same header and line resolution:
+    the job's sales rep and price level, the item's or customer's default class, units), with sales
+    tax left out because it does not touch the price, and then lists the candidates it chose among."""
+    from bookflow.company import sales_defaults
+    from bookflow.company.sales_calculations import selected_price
+    from bookflow.core import registry
     db = s.company
-    currency = _home(db)
-    item = resolve_selector(db, c.items, get_list_definition('item'), inp.item)
-    customer = resolve_selector(db, c.customers, get_list_definition('customer'), inp.customer)
-    quantity = _quantity(inp.quantity, 'quantity')
     date = inp.date or _today(s)
-    class_id = resolve_selector(db, c.classes, get_list_definition('class'), inp.class_id)['id'] if inp.class_id else None
-    if inp.sales_rep:
-        rep = resolve_selector(db, c.sales_reps, get_list_definition('sales-rep'), inp.sales_rep)['id']
-    else:
-        rep = customer.get('job_sales_rep_id') or customer.get('sales_rep_id')
-    standard, cost = item['price_minor_units'], item['cost_minor_units']
-    level_id = (resolve_selector(db, c.price_levels, get_list_definition('price-level'), inp.price_level)['id']
-                if inp.price_level else customer.get('price_level_id'))
-    level_price, level_row, enabled = None, None, db.conn.execute(sa.select(c.company_info.c.enable_price_levels)).scalar()
-    if level_id and enabled:
-        level_row = db.conn.execute(sa.select(c.price_levels).where(c.price_levels.c.id == level_id)).mappings().first()
-        if level_row and level_row['active']:
-            percent, base = None, standard
-            if level_row['kind'] == 'fixed_percent':
-                percent = level_row['percent_millionths']
-            else:
-                member = db.conn.execute(sa.select(c.price_level_items).where(
-                    c.price_level_items.c.price_level_id == level_id, c.price_level_items.c.item_id == item['id'],
-                    c.price_level_items.c.active.is_(True))).mappings().first()
-                if member and member['price_minor_units'] is not None:
-                    level_price = member['price_minor_units']
-                elif member:
-                    percent = member['percent_millionths']
-                    base = {'standard_price': standard, 'cost': cost}.get(member['adjustment_basis'], standard)
-            if level_price is None and percent is not None and base is not None:
-                level_price = _adjusted(base, percent, level_row['rounding_increment_minor_units'],
-                                        level_row['rounding_offset_minor_units'], level_row['rounding_mode'])
-    facts = _facts(db, item_id=item['id'], customer_id=customer['id'], class_id=class_id, sales_rep_id=rep,
-                   quantity=quantity, date=date)
-    policy = conflict_policy(db)
-    plain = level_price if level_price is not None else standard
-    price, chosen, candidates = choose(active_rules(db), facts, standard=standard, cost=cost, level=plain,
-                                       level_priced=level_price is not None, policy=policy, currency=currency)
-    if price is None:
-        raise _invalid('item', 'the item has no sales price and no rule prices it')
-    source = 'rule' if chosen else 'price_level' if level_price is not None else 'item'
+    raw = dict(customer=inp.customer, date=date, lines=[dict(item=inp.item, quantity=inp.quantity)])
+    for field in ('class_id', 'sales_rep', 'price_level'):
+        if getattr(inp, field):
+            raw[field] = getattr(inp, field)
+    entered = registry.get('invoice post').input_model.model_validate(raw)
+    header, _ = sales_defaults.resolve_header(s, entered, 'invoice')
+    untaxed = header.model_copy(update=dict(preferences=header.preferences.model_copy(update=dict(sales_tax_enabled=False))))
+    resolved, _ = sales_defaults.resolve_line(s, entered.lines[0], untaxed, date=date, defer_tax=True, line_kinds=True)
+    profile, factor = resolved['profile'], resolved['unit_factor_nanounits']
+    if profile.adjustment is not None or resolved['unit_price_minor_units'] is None:
+        raise _invalid('item', 'only a sold item has a price to preview')
+    currency, policy = _home(db), conflict_policy(db)
+    shown = lambda units: Money(selected_price(units, factor), currency).amount  # noqa: E731
+    standard, cost = profile.standard_price_minor_units, profile.cost_minor_units
+    level_priced = bool(profile.price_rule and profile.price_rule.matched)
+    level = None
+    if level_priced:
+        level = sales_defaults._derived_price(profile.model_copy(update=dict(pricing_rule=None)))
+    class_ref = profile.class_id or header.class_id
+    facts = _facts(db, item_id=profile.item.id, customer_id=header.customer.id,
+                   class_id=class_ref.id if class_ref else None,
+                   sales_rep_id=header.sales_rep.id if header.sales_rep else None,
+                   quantity=resolved['base_quantity_microunits'], date=date)
+    chosen_id = profile.pricing_rule.id if profile.pricing_rule else None
+    source = 'rule' if chosen_id else 'price_level' if level_priced else 'item'
     rows = []
     if standard is not None:
-        rows.append(Candidate(source='item', id=item['id'], name=item['full_name'], unit_price=Money(standard, currency).amount,
+        rows.append(Candidate(source='item', id=profile.item.id, name=profile.item.label, unit_price=shown(standard),
                               chosen=source == 'item'))
-    if level_price is not None:
-        rows.append(Candidate(source='price_level', id=level_row['id'], name=level_row['name'],
-                              unit_price=Money(level_price, currency).amount, chosen=source == 'price_level'))
-    for rule, _, _, amount in candidates:
+    if level_priced:
+        rows.append(Candidate(source='price_level', id=profile.price_rule.id, name=profile.price_rule.label,
+                              unit_price=shown(level), chosen=source == 'price_level'))
+    for rule, _, _, amount in candidates_for(active_rules(db), facts, standard=standard, cost=cost, currency=currency):
         rows.append(Candidate(source='rule', id=rule['id'], name=rule['name'], priority=rule['priority'],
-                              unit_price=Money(amount, currency).amount,
-                              chosen=bool(chosen) and chosen['rule']['id'] == rule['id']))
-    if chosen:
-        note = capture(chosen, currency, policy).summary
-    elif source == 'price_level':
-        note = f"price from price level {level_row['name']}"
-    else:
-        note = 'item sales price'
-    return PricePreviewOutput(item=item['full_name'], customer=customer['full_name'], quantity=format_quantity_micro_units(quantity),
-                              date=date, conflict_policy=policy, unit_price=Money(price, currency).amount, currency=currency,
-                              source=source, rule=Named(id=chosen['rule']['id'], label=chosen['rule']['name']) if chosen else None,
+                              unit_price=shown(amount), chosen=rule['id'] == chosen_id))
+    note = (profile.pricing_rule.summary if chosen_id else f'price from price level {profile.price_rule.label}'
+            if level_priced else 'item sales price')
+    return PricePreviewOutput(item=profile.item.label, customer=header.customer.label,
+                              quantity=format_quantity_micro_units(resolved['quantity_microunits']),
+                              date=date, conflict_policy=policy,
+                              unit_price=Money(resolved['unit_price_minor_units'], currency).amount, currency=currency,
+                              source=source, rule=Named(id=chosen_id, label=profile.pricing_rule.label) if chosen_id else None,
                               note=note, candidates=rows)
 
 

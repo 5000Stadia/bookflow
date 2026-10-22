@@ -393,7 +393,8 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                 resolved, line_warnings = sales_defaults.resolve_line(
                     s, sales_input, profile, defer_tax=True, line_kinds=True,
                     previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults,
-                    date=inp.date or (old_revision['date'] if old_revision else None))
+                    date=inp.date or (old_revision['date'] if old_revision else None),
+                    old_date=old_revision['date'] if old_revision else None)
                 if group is not None:
                     resolved['profile'].group = group
                 from bookflow.company import list_merges

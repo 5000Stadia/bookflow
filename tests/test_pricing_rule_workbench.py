@@ -56,7 +56,7 @@ def test_price_rules_page_adds_edits_checks_and_previews(hosted):
     assert refused.status_code == 400 and "breaks" in _text(refused.text)
 
     checked = post(action="check", item="PW Fitting", customer="PW Acme", quantity="50", date="2026-11-02")
-    assert "18.99 USD" in checked and "price from rule PW Acme fittings" in checked  # 18.00 up to .99
+    assert "17.99 USD" in checked and "price from rule PW Acme fittings" in checked  # 18.00, a discount, down to .99
     assert "Use the lowest price" in checked
     post(action="policy", conflict_policy="priority")
     assert run("price-rule preferences", {})["conflict_policy"] == "priority"
