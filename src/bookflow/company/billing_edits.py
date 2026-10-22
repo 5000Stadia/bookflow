@@ -24,6 +24,10 @@ def protect_work(s, header, before, after):
         dependency('billed work agreement cannot be changed while a sale consumes its roots', source_id=header['id'])
     if header['kind'] == 'estimate' and after['status'] != 'accepted':
         dependency('billed estimate acceptance cannot be revoked', source_id=header['id'])
+    if header['kind'] == 'mileage' and after['status'] != 'recorded':
+        # A billed trip (R118): the invoice is standing on its miles.
+        dependency('a billed trip cannot be voided or made non-billable while a sale consumes it; '
+                   'void or edit the invoice first', source_id=header['id'])
     if header['kind'] == 'time_activity' and after['status'] != 'recorded':
         # The same refusal one kind over: a source a sale is standing on cannot be moved into a
         # state it could not be billed from. For recorded time that state is `voided`, and the

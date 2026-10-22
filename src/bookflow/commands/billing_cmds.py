@@ -72,5 +72,5 @@ def register(kind, prefix, verb):
 
 # The kinds come from billing_queries, which is where what can be billed is declared.
 BILLING_COMMANDS = [register(kind, ''.join(word.title() for word in kind.split('_')), verb)
-    for kind in billing_queries.BILLING_KINDS
+    for kind in billing_queries.BILLING_KINDS if kind != 'mileage'  # a trip's are `trip invoice` etc. (mileage_cmds)
     for verb in ('invoice', 'sales-receipt', 'billing')]

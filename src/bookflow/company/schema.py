@@ -1196,3 +1196,5 @@ from bookflow.company.prepayment_schema import define_tables as _define_prepayme
 globals().update(_define_prepayment_tables(metadata, _column, _table))
 from bookflow.company.list_merge_schema import define_tables as _define_list_merge_tables
 globals().update(_define_list_merge_tables(metadata, _column, _table))
+from bookflow.company.mileage_schema import define_tables as _define_mileage_tables
+globals().update(_define_mileage_tables(metadata, _column, _table, _common))
