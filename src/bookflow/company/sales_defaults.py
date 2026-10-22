@@ -583,11 +583,14 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                  previous_header: SalesProfile | None = None, refresh: bool = False,
                  nonposting: bool = False, price_override: Callable | None = None,
                  net_override: int | None = None, defer_tax: bool = False,
-                 line_kinds: bool = False) -> tuple[dict, list[str]]:
+                 line_kinds: bool = False, stocked: bool = False) -> tuple[dict, list[str]]:
     """Resolve one commercial line using preserved rules for ordinary edits.
 
     ``line_kinds`` admits subtotal, discount and percentage-charge items, whose amounts the
     caller then works out over the whole document with ``sales_adjustments.apply``.
+    ``stocked`` admits stock-carrying items on a non-posting document (a quote, a work order or
+    a sales order): it records them, captures the accounts its invoice will post to, and moves
+    nothing.
     """
     if not nonposting and (price_override is not None or net_override is not None):
         raise _invalid('unit_price', 'price hooks require non-posting resolution')
@@ -643,10 +646,11 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         prepayments.guard_line_item(s, item, nonposting=nonposting, item_changed=item_changed or refresh)
     if item_changed or refresh:
         # A stock-carrying item sells out of the inventory ledger, and that ledger is written
-        # by the document that posts, so only a real sale may name one. A quote or a work
-        # order is descriptive history with no posting behind it: promising stock it cannot
-        # issue would be a reservation nothing honours, so the older three families stand.
-        allowed = ('service', 'non_inventory_part', 'other_charge') if nonposting else SELLABLE_ITEM_TYPES
+        # by the document that posts. A quote, a work order or a sales order may still name
+        # one (``stocked``): it moves nothing, and the invoice made from it issues the stock.
+        # Recorded time is hours, so it keeps the older three families.
+        allowed = (('service', 'non_inventory_part', 'other_charge') + (TRACKED_TYPES if stocked else ())
+                   if nonposting else SELLABLE_ITEM_TYPES)
         if line_kinds:
             allowed = allowed + ADJUSTMENT_ITEM_TYPES
         if item['type'] == 'group':

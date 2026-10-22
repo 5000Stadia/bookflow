@@ -13,7 +13,7 @@ Database: `company`.
 | `source_revision_id` | VARCHAR(26) | no | — | — | — | work_revisions.id | Exact consumed source revision. |
 | `destination_document_id` | VARCHAR(26) | no | — | unique | — | work_revisions.document_id | Created destination document. |
 | `destination_revision_id` | VARCHAR(26) | no | — | — | — | work_revisions.id | Initial destination revision. |
-| `relation` | VARCHAR(24) | no | — | — | — | — | copy, proposal_estimate or estimate_work_order. |
+| `relation` | VARCHAR(24) | no | — | — | — | — | copy, proposal_estimate, estimate_work_order or estimate_sales_order. |
 | `conversion_key_hash` | VARCHAR(64) | yes | — | unique | — | — | Permanent company-wide conversion key hash. |
 | `request_hash` | VARCHAR(64) | yes | — | — | — | — | Canonical conversion intent hash. |
 | `source_version` | BIGINT | no | — | — | — | — | Consumed source concurrency version. |

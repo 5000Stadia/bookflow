@@ -88,7 +88,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from bookflow.company import inventory, item_conversions, journals, schema as c
+from bookflow.company import assembly_builds, inventory, item_conversions, journals, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_schema import INPUT_KINDS
@@ -345,11 +345,13 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     owed = []
     own = {movement.values['id'] for movement in change.movements}
     names = {entry.item_id: entry.item_name for entry in entries}
-    for item_id, history in working.items():
-        try:
-            state = replay(history)
-        except StockRefusal as refusal:
-            raise refuse(refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)) from None
+    # Components before the assemblies built from them (R103): a correction of a build's component
+    # issue carries a partner correction of the build's assembly receipt, and the assembly is then
+    # replayed with it. With no builds in the company this is one replay per item, as before.
+    states, partners = assembly_builds.replay_items(
+        s, working, rows, lambda refusal, item_id: refuse(
+            refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)))
+    for item_id, state in states:
         owed.extend((item_id, correction) for correction in state.corrections)
         if state.shortfalls:
             try:
@@ -380,6 +382,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             lines.extend(inventory.pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, currency, target['class_id'], description))
+            partner = partners.get(target['id']) if not true_up else None
             movements.append(Movement(dict(
                 id=new_id(), item_id=item_id, kind=CORRECTION_KIND,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
@@ -390,8 +393,13 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 returns_movement_id=None,
                 filled_by_movement_id=correction.filled_by['id'] if true_up else None,
                 fallback_unit_cost_minor_units=None),
-                line_index=len(movements) * 2 + 1))
+                line_index=len(lines) - 1))
             sequence += 1
+            if partner is not None:
+                # The build's receipt of the assembly takes the other side, on the offset line.
+                partner['sequence'] = sequence
+                movements.append(Movement(partner, line_index=len(lines)))
+                sequence += 1
         change.corrections.append(Correction(
             affected, 'Provisional cost true-up' if true_up else 'Weighted-average cost correction',
             lines, movements))

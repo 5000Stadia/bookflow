@@ -34,7 +34,7 @@ DONE = {"created", "updated", "added", "linked", "renamed", "deactivated", "acti
         "deleted", "removed", "voided", "posted", "paid", "set", "moved", "granted", "revoked"}
 # Command verbs that name the document a conversion makes (estimate invoice, work-order
 # sales-receipt): the event made that document from the one it was run on.
-MADE = ("invoice", "sales-receipt", "work-order", "estimate")
+MADE = ("invoice", "sales-receipt", "work-order", "estimate", "sales-order")
 
 # A bare record id; one inside a document number ("IR-01M3...") is part of that number.
 _ULID = re.compile(r"(?<![\w-])[0-9A-HJKMNP-TV-Z]{26}(?![\w-])")

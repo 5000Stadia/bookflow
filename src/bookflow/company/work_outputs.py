@@ -12,6 +12,35 @@ from bookflow.core.models import WriteOutput
 from bookflow.company.tax_attribution import TaxDetails
 
 
+class OrderLineQuantities(StrictModel):
+    """Where one sales-order or work-order line stands, read from the billing ledger, never stored."""
+    ordered: str = Field(description="The line's quantity in this revision.")
+    invoiced: str = Field(description="What active invoices and sales receipts have billed of it.")
+    cancelled: str = Field(description="What the customer no longer wants, as set on the line.")
+    open: str = Field(description="Ordered less invoiced less cancelled (the anchor's Backordered); 0 while the document is closed, cancelled, voided or inactive.")
+    open_amount: MoneyOutput = Field(description="The exact net of the open quantity.")
+    state: Literal['open', 'partly_invoiced', 'invoiced', 'closed'] = Field(description=(
+        "open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled)."))
+
+
+class LineStock(StrictModel):
+    """A stocked order or work-order line's item, as this document sees it, in the item's base unit."""
+    on_hand: str
+    committed_elsewhere: str = Field(description="What every other open sales order and work order commits.")
+    on_order: str = Field(description="What live purchase orders still have to deliver.")
+    available: str = Field(description="Available to this document: on hand less what others commit (on hand while the company preference is off).")
+
+
+class OrderProgress(StrictModel):
+    """A sales order's progress: derived from its lines, except closed and voided, which a person decided."""
+    progress: Literal['open', 'partly_invoiced', 'invoiced', 'closed', 'voided']
+    is_open: bool = Field(description="Stored status open, active, and some line has open quantity.")
+    open_amount: MoneyOutput = Field(description="The exact net of every line's open quantity.")
+    prepayment_held: MoneyOutput | None = Field(None, description=(
+        "Customer prepayments held for this order: on it, and on the estimate it came from. "
+        "`prepayment show --document` lists the receipts."))
+
+
 class WorkLineOutput(CreatedOutput):
     tax_ordinal: int | None = None
     line_kind: Literal["item", "subtotal", "discount", "charge"] | None = Field(default=None, description=(
@@ -23,7 +52,7 @@ class WorkLineOutput(CreatedOutput):
     @model_serializer(mode='wrap')
     def legacy_ordinal(self,handler):
         result=handler(self)
-        for key in ('tax_ordinal','line_kind','amount'):
+        for key in ('tax_ordinal','line_kind','amount','cancelled_quantity','order','stock'):
             if getattr(self,key) is None:result.pop(key,None)
         return result
 
@@ -37,6 +66,11 @@ class WorkLineOutput(CreatedOutput):
     facts: Annotated[WorkLineFacts | WorkLineFacts2, Field(discriminator="schema_version", description="Version1 keeps independent component arithmetic; version2 contains cells allocated by the complete document calculation.")]
     quantity: str
     completed_quantity: str
+    cancelled_quantity: str | None = Field(default=None, description="Sales orders and work orders: the cancelled part of this line.")
+    order: OrderLineQuantities | None = Field(default=None, description=(
+        "Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities."))
+    stock: LineStock | None = Field(default=None, description=(
+        "Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available."))
     unit_price: MoneyOutput | None
     net: MoneyOutput
     tax: MoneyOutput
@@ -104,7 +138,7 @@ class WorkLinkOutput(CreatedOutput):
     source_version: int
     destination_document_id: str
     destination_revision_id: str
-    relation: Literal['copy', 'proposal_estimate', 'estimate_work_order']
+    relation: Literal['copy', 'proposal_estimate', 'estimate_work_order', 'estimate_sales_order']
     source_kind: str
     source_number: str
     source_status: str
@@ -146,6 +180,14 @@ class WorkSummaryOutput(CommonOut):
     total: MoneyOutput
     expired: bool
     time: TimeSummaryOutput | None = Field(None, description="For a time entry, who worked how long as what; null for every other kind.")
+    order: OrderProgress | None = Field(None, description="For a sales order, its progress and open amount; absent for every other kind.")
+
+    @model_serializer(mode='wrap')
+    def order_only(self, handler):
+        result = handler(self)
+        if self.order is None:
+            result.pop('order', None)
+        return result
 
 
 class WorkOutput(WorkSummaryOutput):

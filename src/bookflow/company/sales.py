@@ -845,6 +845,11 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
                                        revision_id=revision['id'], document_line_id=movement.key, batch=batch)
     inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
     inventory_effects.check(s, stock, pending['posting_lines'])
+    if billing_source is None and operation != 'void' and stock.moves_stock:
+        # An ordinary sale that takes stock open orders and work orders have committed says so.
+        from bookflow.company.commitments import taking_warnings
+        warnings = warnings + [w for w in taking_warnings(s, _stock_entries(pending),
+                               own_transaction=old_header['id'] if old_header else None) if w not in warnings]
     view_profile = pending['sales_profiles'][0] if pending['sales_profiles'] else profile_row(s, revision)
     output = SalesWriteOutput(**summary(header, revision, view_profile), revision=revision_output(s, revision, pending),
         facts_fingerprint=fingerprint, warnings=warnings + [line for line in stock.warnings if line not in warnings],

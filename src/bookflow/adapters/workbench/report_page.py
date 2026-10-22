@@ -48,6 +48,7 @@ HEADLINES = {
     "vendor-balance-summary": ("balance", "Total balance"),
     "vendor-balance-detail": ("balance", "Total balance"),
     "open-purchase-orders": ("open_balance", "Open balance"),
+    "open-sales-orders": ("open_amount", "Open amount"),
     "purchases-by-vendor": ("amount", "Total purchases"),
     "purchases-by-item": ("amount", "Total purchases"),
     "deposit-detail": ("deposited", "Total deposited"),

@@ -340,7 +340,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `idempotent_replay` | boolean | no | no | false | — |
 | `transfer_id` | string \| null | yes | yes | — | Id of the transfer; null on a dry run. |
 | `operation_key` | string | yes | no | — | — |
-| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `status` | literal["posted", "voided", "partly_voided"] | yes | no | — | posted while both documents stand; voided once both are |
 | `date` | string | yes | no | — | — |
 | `from_customer` | string | yes | no | — | — |
 | `to_customer` | string | yes | no | — | — |

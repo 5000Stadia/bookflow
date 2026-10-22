@@ -46,7 +46,7 @@ def define_tables(metadata, column, table, common):
                 check(f"json_valid({name}) AND json_type({name}) = 'object'", name)]
 
     work_documents = T('work_documents', *common(),
-        text('kind', 'Document kind: proposal, estimate, work_order or time_activity.', 16),
+        text('kind', 'Document kind: proposal, estimate, work_order, time_activity or sales_order.', 16),
         text('number', 'Visible number unique within kind.', 64),
         ident('current_revision_id', 'Current immutable revision owned by this document.'),
         text('status', 'Current commercial decision or operational state.', 16),
@@ -54,9 +54,9 @@ def define_tables(metadata, column, table, common):
         ident('estimate_group_id', 'Standalone estimate root or source proposal grouping alternatives.',
               'work_documents.id', nullable=True),
         sa.UniqueConstraint('kind', 'number', name='uq_work_kind_number'),
-        check("kind IN ('proposal','estimate','work_order','time_activity')", 'kind'),
+        check("kind IN ('proposal','estimate','work_order','time_activity','sales_order')", 'kind'),
         check("(kind = 'estimate' AND estimate_group_id IS NOT NULL) OR (kind <> 'estimate' AND estimate_group_id IS NULL)", 'group'),
-        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled')) OR (kind = 'time_activity' AND status IN ('recorded','voided'))", 'status'),
+        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled')) OR (kind = 'time_activity' AND status IN ('recorded','voided')) OR (kind = 'sales_order' AND status IN ('open','closed','voided'))", 'status'),
         check('active IN (0,1)', 'active'), exact('version', positive=True),
         check('length(trim(number)) BETWEEN 1 AND 64', 'number'),
         owner(['id', 'current_revision_id'], ['work_revisions.document_id', 'work_revisions.id'], 'current_revision', True),
@@ -114,6 +114,8 @@ def define_tables(metadata, column, table, common):
         ident('unit_id', 'Captured selected unit.', 'unit_conversions.id', nullable=True),
         integer('quantity_microunits', 'Positive ordered quantity in millionths.'),
         integer('completed_quantity_microunits', 'Completed quantity in millionths.'),
+        C('cancelled_quantity_microunits', sa.BigInteger, 'Cancelled quantity in millionths: nonzero only on sales-order and work-order lines.',
+          nullable=False, server_default='0'),
         integer('unit_factor_nanounits', 'Captured base units per selected unit in billionths.'),
         integer('base_quantity_microunits', 'Rounded base quantity in millionths.'),
         integer('unit_price_minor_units', 'Captured unit price; null in amount mode.', True), *totals(),
@@ -131,6 +133,7 @@ def define_tables(metadata, column, table, common):
         *(exact(n, positive=True) for n in ('position','quantity_microunits','unit_factor_nanounits','base_quantity_microunits')),
         exact('completed_quantity_microunits'),
         check('completed_quantity_microunits <= quantity_microunits', 'completed'),
+        check("typeof(cancelled_quantity_microunits) = 'integer' AND cancelled_quantity_microunits >= 0 AND cancelled_quantity_microunits <= quantity_microunits", 'cancelled'),
         *(exact(n, nullable=True) for n in ('unit_price_minor_units','estimated_unit_cost_minor_units','estimated_cost_minor_units')),
         *total_checks(), check('billable IN (0,1)', 'billable'),
         check('(estimated_unit_cost_minor_units IS NULL) = (estimated_cost_minor_units IS NULL)', 'known_cost'),
@@ -143,7 +146,7 @@ def define_tables(metadata, column, table, common):
         ident('source_revision_id', 'Exact consumed source revision.'),
         ident('destination_document_id', 'Created destination document.'),
         ident('destination_revision_id', 'Initial destination revision.'),
-        text('relation', 'copy, proposal_estimate or estimate_work_order.', 24),
+        text('relation', 'copy, proposal_estimate, estimate_work_order or estimate_sales_order.', 24),
         text('conversion_key_hash', 'Permanent company-wide conversion key hash.', 64, True),
         text('request_hash', 'Canonical conversion intent hash.', 64, True),
         integer('source_version', 'Consumed source concurrency version.'), *created(),
@@ -153,8 +156,8 @@ def define_tables(metadata, column, table, common):
         owner(['destination_document_id', 'destination_revision_id'], ['work_revisions.document_id', 'work_revisions.id'], 'link_destination'),
         exact('source_version', positive=True),
         check('source_document_id <> destination_document_id', 'link_distinct'),
-        check("(relation = 'copy' AND conversion_key_hash IS NULL AND request_hash IS NULL) OR (relation IN ('proposal_estimate','estimate_work_order') AND conversion_key_hash IS NOT NULL AND request_hash IS NOT NULL AND length(conversion_key_hash) = 64 AND length(request_hash) = 64)", 'link_key'),
+        check("(relation = 'copy' AND conversion_key_hash IS NULL AND request_hash IS NULL) OR (relation IN ('proposal_estimate','estimate_work_order','estimate_sales_order') AND conversion_key_hash IS NOT NULL AND request_hash IS NOT NULL AND length(conversion_key_hash) = 64 AND length(request_hash) = 64)", 'link_key'),
         description='Immutable birth ancestry, consumed source facts and permanent conversion replay keys.')
     sa.Index('uq_work_estimate_order', work_links.c.source_document_id, unique=True,
-             sqlite_where=sa.text("relation = 'estimate_work_order'"))
+             sqlite_where=sa.text("relation IN ('estimate_work_order','estimate_sales_order')"))
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}

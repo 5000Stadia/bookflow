@@ -168,9 +168,28 @@ LIST_MERGE_COMMANDS = frozenset(('account merge', 'account unmerge', 'item merge
 # records it, records it again (nothing written), reads both jobs' aging and voids it, on all four surfaces.
 COLLECTIONS_COMMANDS = frozenset(('customer-credit transfer', 'customer-credit transfer-void'))
 
+# R101: the sales order. Its witness quotes, converts (and replays), creates, revises, closes, copies,
+# voids and reads orders back through all four surfaces over identical demo copies.
+SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
+                                  'sales-order query', 'sales-order show', 'sales-order update', 'sales-order void'))
+
+# R119 fixed assets and loans. Their witness sets up an asset, previews and posts depreciation, reads the
+# schedule and list, disposes of it, creates and updates a loan, pays it and reads it through all four surfaces.
+FIXED_ASSET_COMMANDS = frozenset(('fixed-asset depreciate', 'fixed-asset dispose', 'fixed-asset list', 'fixed-asset schedule',
+                                  'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'))
+
+# R103: assembly builds. Its witness builds, edits, marks pending, finalizes, voids, deletes, shows and lists
+# through all four surfaces over identical demo copies.
+ASSEMBLY_BUILD_COMMANDS = frozenset(('assembly build', 'assembly update', 'assembly finalize', 'assembly void',
+                                     'assembly delete', 'assembly show', 'assembly list'))
+
+# R102: committed stock. Its witness reads report open-sales-orders by customer and by item through all four
+# surfaces over identical demo copies.
+COMMITTED_STOCK_COMMANDS = frozenset(('report open-sales-orders',))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | COLLECTIONS_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -699,6 +718,10 @@ def execution_map():
     from tests.test_budget_surfaces import COMMANDS as BUDGET_SURFACE_COMMANDS
     from tests.test_customer_prepayment_surfaces import COMMANDS as PREPAYMENT_SURFACE_COMMANDS
     from tests.test_list_merge_surfaces import COMMANDS as LIST_MERGE_SURFACE_COMMANDS
+    from tests.test_sales_order_surfaces import COMMANDS as SALES_ORDER_SURFACE_COMMANDS
+    from tests.test_fixed_asset_surfaces import COMMANDS as FIXED_ASSET_SURFACE_COMMANDS
+    from tests.test_assembly_build_surfaces import COMMANDS as ASSEMBLY_BUILD_SURFACE_COMMANDS
+    from tests.test_committed_stock_surfaces import COMMANDS as COMMITTED_STOCK_SURFACE_COMMANDS
     from tests.test_credit_transfer_surfaces import COMMANDS as COLLECTIONS_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
@@ -777,6 +800,10 @@ def execution_map():
                    'tests/test_budget_surfaces.py::test_the_same_budget_through_python_cli_http_and_mcp' if cmd.name in BUDGET_SURFACE_COMMANDS else  # all four
                    'tests/test_customer_prepayment_surfaces.py::test_the_same_prepayment_through_python_cli_http_and_mcp' if cmd.name in PREPAYMENT_SURFACE_COMMANDS else  # all four
                    'tests/test_list_merge_surfaces.py::test_the_same_list_merge_through_python_cli_http_and_mcp' if cmd.name in LIST_MERGE_SURFACE_COMMANDS else  # all four
+                   'tests/test_sales_order_surfaces.py::test_the_same_orders_through_python_cli_http_and_mcp' if cmd.name in SALES_ORDER_SURFACE_COMMANDS else  # all four
+                   'tests/test_fixed_asset_surfaces.py::test_the_same_fixed_assets_and_loan_through_python_cli_http_and_mcp' if cmd.name in FIXED_ASSET_SURFACE_COMMANDS else  # all four
+                   'tests/test_assembly_build_surfaces.py::test_the_same_assembly_builds_through_python_cli_http_and_mcp' if cmd.name in ASSEMBLY_BUILD_SURFACE_COMMANDS else  # all four
+                   'tests/test_committed_stock_surfaces.py::test_the_same_open_orders_report_through_python_cli_http_and_mcp' if cmd.name in COMMITTED_STOCK_SURFACE_COMMANDS else  # all four
                    'tests/test_credit_transfer_surfaces.py::test_the_same_credit_transfer_through_python_cli_http_and_mcp' if cmd.name in COLLECTIONS_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else

@@ -1,4 +1,4 @@
-"""Add `customer-credit transfer` and `customer-credit transfer-void` without rewriting any accepted descriptor.
+"""Add `customer-credit transfer` and `customer-credit transfer-void` without rewriting any accepted descriptor (on committed-stock-v1).
 
 Both write at `ledger.post` at `standard`, as `customer-credit apply`, `invoice post` and `credit-memo
 post` do: a transfer is those writes done together, so it asks no more of a caller than they do and
@@ -11,7 +11,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_list_merge_catalog as previous, permission_catalog as c
+from . import permission_committed_stock_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '39a05e7ab7ea240d58f3c78820483942032beae5'

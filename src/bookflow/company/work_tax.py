@@ -26,7 +26,7 @@ def normalized(value):
 
 def economics(value):
     # Old lineages retain their entire legacy basis, including component cents.
-    excluded={'completed_quantity_microunits','billable'}
+    excluded={'completed_quantity_microunits','cancelled_quantity_microunits','billable'}
     if value['schema_version']==2:excluded|={'schema_version','tax_minor_units','gross_minor_units','taxes'}
     result={key:item for key,item in value.items() if key not in excluded}
     if value['schema_version']==2:result['tax_rules']=[cell['rule'] for cell in value['taxes']]

@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block title %}Build assemblies{% endblock %}{% block body %}<section id="assembly-build">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Build assemblies</nav>
+<h1>Build assemblies</h1>
+{% if result %}<div role="status" class="notice" data-assembly-result>
+<p><strong>{% if result.status == 'pending' %}Marked pending: {{ result.quantity }} {{ result.item_name }}, components reserved.{% else %}Built {{ result.quantity }} {{ result.item_name }} at {{ display_money(result.assembly_cost) }} ({{ display_money(result.unit_cost) }} each), journal {{ result.number }}.{% endif %}</strong></p>
+{% for line in result.warnings %}<p class="warning">{{ line }}</p>{% endfor %}
+<p><a href="/c/{{ company_id }}/assembly/builds">All builds</a> · <a href="/c/{{ company_id }}/assembly/builds?status=pending">Pending builds</a></p>
+</div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<form method="post" action="/c/{{ company_id }}/assembly/build">
+<section class="workspace-card" aria-label="Assembly">
+<label>Assembly item <select name="item" data-assembly-item required><option value="">Choose an assembly</option>
+{% for item in assemblies %}<option value="{{ item.id }}" {% if values.item == item.id %}selected{% endif %}>{{ item.full_name }}</option>{% endfor %}</select></label>
+<label>Date <input type="date" name="date" value="{{ values.date }}" required data-assembly-date></label>
+<label>Quantity to build <input name="quantity" inputmode="decimal" size="8" value="{{ values.quantity }}" required data-assembly-quantity></label>
+<button type="submit" name="action" value="preview">Show components</button>
+</section>
+{% if preview %}
+<section class="workspace-card" aria-label="Components" data-assembly-preview>
+<p>{{ preview.item_name }} on hand on {{ preview.date }}{% if not preview.shortfall %} after this build{% endif %}: {{ preview.assembly_quantity_on_hand }}</p>
+<div class="table-wrap"><table class="list-table assembly-components"><thead><tr><th>Component item</th><th>Type</th><th>Qty on hand</th><th>Reserved for pending builds</th><th>Qty needed</th><th>Cost</th></tr></thead><tbody>
+{% for row in preview.components %}<tr data-assembly-component="{{ row.item_id }}"{% if row.kind == 'stock' and (row.quantity_needed | float) > (row.quantity_on_hand | float) %} class="short"{% endif %}>
+<td data-label="Component item">{{ row.item_name }}</td>
+<td data-label="Type">{{ row.item_type.replace('_', ' ') }}</td>
+<td data-label="Qty on hand">{{ row.quantity_on_hand if row.quantity_on_hand is not none else '' }}</td>
+<td data-label="Reserved for pending builds">{{ row.reserved_for_pending_builds if row.reserved_for_pending_builds is not none else '' }}</td>
+<td data-label="Qty needed">{{ row.quantity_needed }}</td>
+<td data-label="Cost">{% if not preview.shortfall %}{{ display_money(row.cost) }}{% endif %}</td>
+</tr>{% endfor %}</tbody></table></div>
+<p data-assembly-max><strong>Maximum number you can build from the quantity on hand: {{ preview.max_buildable }}</strong></p>
+{% if preview.shortfall %}<p class="warning" data-assembly-short>You don't have enough components to build {{ preview.quantity }}. Build {{ preview.max_buildable }} or fewer, or mark this build pending: nothing is posted and the components are reserved until you finalize it.</p>
+{% else %}<p>Assembly cost {{ display_money(preview.assembly_cost) }} ({{ display_money(preview.unit_cost) }} each){% if not preview.posts_to_ledger %}; the components and the assembly share one inventory asset account, so the general ledger does not move{% endif %}.</p>{% endif %}
+</section>
+<section class="workspace-card" aria-label="Build">
+<label>Memo <input name="memo" value="{{ values.memo }}"></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" placeholder="Built today"></label>
+<div class="actions">{% if preview.shortfall %}<button type="submit" name="action" value="pending" data-assembly-pending>Mark as pending</button>{% else %}<button type="submit" name="action" value="build" data-assembly-submit>Build</button>{% endif %}<a href="/c/{{ company_id }}/_group/items">Cancel</a></div>
+</section>
+{% endif %}
+</form>
+</section>{% endblock %}

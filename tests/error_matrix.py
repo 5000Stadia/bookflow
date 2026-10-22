@@ -761,6 +761,7 @@ MATRIX['payment apply'].update({
     'E_DUPLICATE_NUMBER': _UNREACHED_HERE,
 })
 MATRIX['payment unapply'].update({
+    'E_DEPOSIT_DEPENDENCY': 'an unapplied invoice took a discount or write-off, which leaves with it and restates the receipt, and the receipt is banked on a deposit',
     'E_APPLICATION_INACTIVE': 'a named application is absent or already reversed, or the receipt is not posted',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on an invoice named by invoice_expected_version',
     'E_HAS_APPLICATIONS': _UNREACHED_HERE,
@@ -2013,4 +2014,107 @@ MATRIX['customer-credit transfer-void'] = {
     'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+
+# The sales order (R101): a fifth customer-work kind. It refuses for the family's reasons, plus its own:
+# new orders while the company has them off, and a void or a consumed-line change while an invoice
+# consumes the order (or, once prepayments land, while one is held on it).
+_ORDER_WRITE_ERRORS = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='an invoice consumes the order: its customer and invoiced lines are fixed and it cannot be voided; '
+                      'or a customer prepayment is held on it',
+    E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)',
+    E_REASON_REQUIRED='closing, reopening or voiding an order lacks its reason')
+for _verb in ('create', 'update', 'copy', 'void'):
+    MATRIX[f'sales-order {_verb}'] = dict(_ORDER_WRITE_ERRORS)
+MATRIX['sales-order show'] = {'E_RECORD_NOT_FOUND': 'order or selected revision does not exist',
+    'E_QUERY_STALE': 'company audit changed between source-link pages'}
+for _verb in ('query', 'history'):
+    MATRIX[f'sales-order {_verb}'] = {
+        'E_RECORD_NOT_FOUND': 'order or customer filter absent from selected company',
+        'E_QUERY_STALE': 'company audit changed between bounded pages',
+    }
+MATRIX['estimate sales-order'] = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='the estimate is not accepted, is voided, or already has its work order or sales order',
+    E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)')
+# Fixed-asset depreciation and loans (R119).
+_ASSET_TAIL = {
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['fixed-asset setup'] = {
+    'E_VALIDATION': 'not a fixed-asset item, no method the first time, declining_balance without a percent, salvage not below cost, no cost basis, or changing the in-service date or period once periods are posted',
+    'E_RECORD_NOT_FOUND': 'unknown item or account',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'a salvage value with more decimal places than the currency has',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_ASSET_TAIL,
+}
+MATRIX['fixed-asset schedule'] = {'E_VALIDATION': 'not a fixed-asset item', 'E_RECORD_NOT_FOUND': 'unknown item'}
+MATRIX['fixed-asset list'] = {}
+_ASSET_POST = {
+    'E_RECORD_NOT_FOUND': 'unknown item or account',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency has',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_PERIOD_CLOSED': 'an entry date on or before the closing date',
+    **_ASSET_TAIL,
+}
+MATRIX['fixed-asset depreciate'] = dict(_ASSET_POST, E_VALIDATION='an asset named twice, not set up, without a cost basis or without its depreciation accounts')
+MATRIX['fixed-asset dispose'] = dict(_ASSET_POST, E_VALIDATION='already disposed of, depreciation through the date not posted, no cost basis or accounts, or proceeds with no deposit_to')
+_LOAN = {
+    'E_VALIDATION': 'an account of the wrong type, a rate outside 0 through 100, a balloon not below the principal, escrow without an escrow account, or a payment that does not cover the interest',
+    'E_RECORD_NOT_FOUND': 'unknown loan, account or vendor',
+    'E_INACTIVE_REFERENCE': 'an inactive account or vendor',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency has',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_NAME_TAKEN': 'another loan has that name',
+    **_ASSET_TAIL,
+}
+MATRIX['loan create'] = dict(_LOAN)
+MATRIX['loan update'] = dict(_LOAN, E_VERSION_CONFLICT='stale expected_version')
+MATRIX['loan show'] = {'E_VALIDATION': 'a payment that does not cover the interest', 'E_RECORD_NOT_FOUND': 'unknown loan'}
+MATRIX['loan list'] = {'E_VALIDATION': 'a loan whose payment does not cover the interest'}
+MATRIX['loan pay'] = dict(_ASSET_POST, E_VALIDATION='a paid-off loan, extra principal above the balance, extra_only without an amount or date, no payment account, or a number on a card charge',
+                          E_DUPLICATE_NUMBER='the check number is already used on the account')
+# Assembly builds (R103): an assembly built from its components, posted, pending, edited, voided or deleted.
+_BUILD_COMMON = {
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+}
+MATRIX['assembly build'] = {
+    'E_RECORD_NOT_FOUND': 'unknown assembly item',
+    'E_INACTIVE_REFERENCE': 'the assembly item is inactive',
+    'E_VALIDATION': 'not an inventory assembly, no bill of materials, a quantity not above zero, components short of the build without pending, a component on hand at no cost, or a change that leaves a later build short',
+    'E_VALUE_RANGE': 'a quantity or cost outside signed 64-bit storage',
+    'E_PERIOD_CLOSED': 'the build date or a correction date falls in a closed period',
+    **_BUILD_COMMON,
+}
+for _verb, _extra in (('update', 'a deleted or voided build, or components short of the new quantity'),
+                      ('finalize', 'a build that is not pending, or components still short'),
+                      ('void', 'a build that is not built (a pending build is deleted instead)'),
+                      ('delete', 'a build already deleted')):
+    MATRIX['assembly ' + _verb] = {
+        'E_RECORD_NOT_FOUND': 'no build with that id or journal number',
+        'E_INACTIVE_REFERENCE': 'the assembly item is inactive',
+        'E_VALIDATION': _extra,
+        'E_VALUE_RANGE': 'a quantity or cost outside signed 64-bit storage',
+        'E_PERIOD_CLOSED': 'the build date, old or new, or a correction date falls in a closed period',
+        'E_VERSION_CONFLICT': 'stale expected_version',
+        **_BUILD_COMMON,
+    }
+MATRIX['assembly show'] = {'E_RECORD_NOT_FOUND': 'no build with that id or journal number'}
+MATRIX['assembly list'] = {
+    'E_RECORD_NOT_FOUND': 'unknown item filter',
+    'E_VALIDATION': 'bad status or limit',
+}
+
+# Committed stock (R102): the open-sales-orders report.
+MATRIX['report open-sales-orders'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or item filter',
+    'E_QUERY_STALE': 'company audit changed between pages',
 }

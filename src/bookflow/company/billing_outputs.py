@@ -11,7 +11,7 @@ from bookflow.company.tax_forecasts import WorkTaxForecast
 # command and every report that reads billing state must name the same set: a
 # state added here and hand-retyped elsewhere is how two surfaces come to
 # disagree about what "billed" means.
-BillingLineState = Literal['unbilled', 'partially_billed', 'billed', 'nonbillable', 'no_charge']
+BillingLineState = Literal['unbilled', 'partially_billed', 'billed', 'nonbillable', 'no_charge', 'cancelled']
 
 
 class BillingLineOutput(StrictModel):

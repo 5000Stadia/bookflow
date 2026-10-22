@@ -270,7 +270,7 @@ def test_unapply_takes_the_discount_back_and_void_reverses_the_cash(books):
     shown = run('payment show', dict(payment=paid['id']))
     # The anchor's rule: the discount belongs to the payment's application to the invoice, so
     # unapplying it takes the discount back; the receipt's free credit is its cash alone.
-    assert shown['current']['available_minor_units'] == 98000 and shown['current']['discount_minor_units'] == 0
+    assert shown['current']['available_minor_units'] == 98000 and shown['current'].get('discount_minor_units', 0) == 0
     listed = run('payment query', {'has_available_credit': True})['items']
     assert [row['unapplied_minor_units'] for row in listed] == [98000]
     assert settlement(books, sale)['due_minor_units'] == 100000

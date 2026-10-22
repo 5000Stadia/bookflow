@@ -40,7 +40,7 @@ def source_selection(s, inp, kind):
         raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': kind, 'record_id': header['id']})
     owner = query.current_owner(s, header)
     if owner['id'] != header['id']:
-        dependency('bill the work order associated with this estimate', destination_id=owner['id'])
+        dependency('bill the ' + owner['kind'].replace('_', ' ') + ' associated with this estimate', destination_id=owner['id'])
     if kind == 'estimate' and header['status'] != 'accepted':
         dependency('accept the estimate before billing', source_id=header['id'])
     if kind != 'estimate' and header['status'] == 'cancelled':
@@ -388,13 +388,6 @@ def persist(plan, ctx, s, *, command_name):
     data = plan.data
     if not data['changed']:
         return Applied(plan.preview, [], 'no change')
-    if data.get('stock') is not None and data['stock'].moves_stock and 'work_header' in data:
-        # A work order or an estimate cannot carry a stock item, so a conversion of one cannot
-        # move stock; the conversion command writes through here without passing `sales.apply`,
-        # which is where the movements would be written.
-        raise BookflowError('E_INTERNAL', message=(
-            'A work billing conversion cannot move stock; its source could not have carried a '
-            'stock item.'))
     header, old = data['header'], data['before']
     touched = [Touched('transaction', header['id'], 'update' if old else 'create',
         old['version'] if old else None, header['version'], header, old, db='company')]
@@ -443,7 +436,18 @@ def apply(plan, ctx, s):
     # prepare() ends by validating what it prepared, against these same reads.
     with one_reading(s):
         fresh = prepare(s, ctx, plan.data['input'], plan.data['kind'], plan.data['destination'])
-    return persist(fresh, ctx, s, command_name=plan.data['kind'].replace('_', '-') + ' ' + plan.data['destination'].replace('_', '-'))
+    command_name = plan.data['kind'].replace('_', '-') + ' ' + plan.data['destination'].replace('_', '-')
+    applied = persist(fresh, ctx, s, command_name=command_name)
+    # Estimates, work orders and sales orders may carry stocked lines: the sale made from them
+    # issues that stock here, in the same company transaction, exactly as `sales.apply` does.
+    stock = fresh.data.get('stock')
+    if stock is None or not stock.moves_stock or not fresh.data['changed']:
+        return applied
+    from bookflow.company import inventory_effects
+    header = fresh.data['header']
+    return inventory_effects.settle(applied, stock, ctx, s, command_name=command_name,
+        summary=f"stock moved by {header['type'].replace('_', ' ')} {header['number']}",
+        created_at=header['updated_at'])
 
 
 def coordinate_rows_and_touches(plan):

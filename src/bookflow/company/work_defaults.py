@@ -11,6 +11,12 @@ from bookflow.company.work_facts import WorkLineFacts, WorkProfile
 from bookflow.company.work_models import WORK_KINDS
 from bookflow.core.exact import parse_percentage_millionths, parse_quantity_micro_units
 
+# The kinds whose lines are ordered goods and services a customer may cancel part of.
+ORDER_KINDS = ('work_order', 'sales_order')
+# Recorded time is one person's hours, always a service: every other kind may quote, order or
+# do work with a stocked part on it. Nothing here moves stock; only the invoice does.
+STOCKED_KINDS = ('proposal', 'estimate', 'work_order', 'sales_order')
+
 
 def resolve_header(s, inp, kind, previous=None, old_date=None):
     """Capture commercial defaults without financial controls or term due dates."""
@@ -75,6 +81,8 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
         raise _invalid('kind', 'expected one of ' + ', '.join(WORK_KINDS))
     if kind != 'work_order' and 'completed_quantity' in inp.model_fields_set:
         raise _invalid('completed_quantity', 'only work orders support completed quantity')
+    if kind not in ORDER_KINDS and inp.model_fields_set & {'cancelled_quantity', 'close'}:
+        raise _invalid('cancelled_quantity', 'only sales orders and work orders cancel quantity')
     currency = sales_defaults._info(s.company)['home_currency']
     refresh = refresh or inp.refresh_defaults
     warnings = []
@@ -107,7 +115,7 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     resolved, shared_warnings = sales_defaults.resolve_line(
         s, sales_input, header, previous=saved, previous_header=previous_header, refresh=refresh,
         nonposting=True, price_override=override, net_override=net, defer_tax=document_tax,
-        line_kinds=True,
+        line_kinds=True, stocked=kind in STOCKED_KINDS,
     )
     resolved.pop('adjustment_taxable', None)
     warnings.extend(shared_warnings)
@@ -136,9 +144,17 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
         raise _invalid('completed_quantity', 'only work orders support completed quantity')
     if completed > resolved['quantity_microunits']:
         raise _invalid('completed_quantity', 'cannot exceed ordered quantity')
+    cancelled = (parse_quantity_micro_units(inp.cancelled_quantity, field='cancelled_quantity')
+                 if 'cancelled_quantity' in inp.model_fields_set
+                 else previous.cancelled_quantity_microunits if previous else 0)
+    if cancelled > resolved['quantity_microunits']:
+        raise _invalid('cancelled_quantity', 'cannot exceed ordered quantity')
+    from bookflow.company.inventory import TRACKED_TYPES
+    if profile.item_type in TRACKED_TYPES and 'billable' in inp.model_fields_set and not inp.billable:
+        raise _invalid('billable', 'a stocked line is always billable; a part given free is a zero-price line')
     from bookflow.company.work_tax_facts import WorkLineFacts2
     model = WorkLineFacts2 if document_tax else WorkLineFacts
-    return model(**resolved, completed_quantity_microunits=completed,
+    return model(**resolved, completed_quantity_microunits=completed, cancelled_quantity_microunits=cancelled,
         estimated_unit_cost_minor_units=cost,
         estimated_cost_minor_units=extension(resolved['quantity_microunits'], cost) if cost is not None else None,
         estimated_cost_origin=origin, pricing_basis=mode, markup_percent_millionths=markup,

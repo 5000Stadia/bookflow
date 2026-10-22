@@ -12,7 +12,7 @@ from bookflow.adapters.workbench.document_print import document_url
 # a schedule. Recorded time is deliberately not one of them -- a person records who, for whom,
 # when, how long and as what, and the translation into a work document happens behind the
 # command -- so it keeps the small form its own input model describes.
-NOUNS = ('proposal', 'estimate', 'work-order')
+NOUNS = ('proposal', 'estimate', 'work-order', 'sales-order')
 # The nouns whose *records* are customer-work documents. Recorded time is one: same table, same
 # immutable revisions, same billing, so every read projection below covers it and a reader gets
 # the document view, the revision history and the remaining-work panel rather than a field dump.
@@ -26,7 +26,9 @@ KIND_TITLES = {'time_activity': 'Time entry'}
 # own rather than being offered ten statuses its own query would refuse by name.
 QUOTE_AND_WORK_STATUSES = ('draft', 'open', 'accepted', 'declined', 'superseded',
                            'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled')
-LIST_STATUSES = {'time-activity': ('recorded', 'voided')}
+LIST_STATUSES = {'time-activity': ('recorded', 'voided'), 'sales-order': ('open', 'closed', 'voided')}
+# The kinds whose lines carry ordered, invoiced, cancelled and open quantities.
+ORDER_KINDS = ('sales_order', 'work_order')
 
 
 # A list of time reads as a timesheet: whose time, when, for whom, as what, how long, billable.
@@ -110,7 +112,16 @@ def editable_values(record):
             row['unit_price'] = line['unit_price']['amount']
         if record['kind'] == 'work_order':
             row['completed_quantity'] = line['completed_quantity']
+        if record['kind'] in ORDER_KINDS:
+            row['cancelled_quantity'] = line.get('cancelled_quantity') or '0'
+        if record['kind'] == 'sales_order':
+            # Every order line is billable, and the order's input refuses the field outright.
+            row.pop('billable')
         out['lines'].append(row)
+    if record['kind'] == 'sales_order':
+        for key in ('decision_note', 'scope', 'inclusions', 'exclusions', 'timing', 'commercial_terms', 'expires_on',
+                    'priority', 'site_address', 'assignees', 'scheduled_start', 'scheduled_end', 'actual_start', 'actual_end'):
+            out.pop(key, None)
     return out
 
 
@@ -133,16 +144,24 @@ def detail_context(record, company_id, *, preview=False):
     # An estimate is a document a customer receives, so it prints; a work order, a proposal and
     # a recorded stretch of time are internal and have no customer-facing form to hand over --
     # what a customer sees of somebody's hours is the invoice they become.
-    print_url = (document_url(company_id, 'estimate', record['id'])
-                 if record['kind'] == 'estimate' and not preview else None)
+    # A sales order is the customer's order, so it prints too, shaped like the invoice it becomes.
+    print_url = (document_url(company_id, record['kind'].replace('_', '-'), record['id'])
+                 if record['kind'] in ('estimate', 'sales_order') and not preview else None)
     return dict(record=record, revision=r, facts=r['facts'], profile=r['facts']['profile'],
         preview=preview, base=base, related=related, print_url=print_url,
         tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
         title=KIND_TITLES.get(record['kind'], record['kind'].replace('_', ' ').capitalize()))
 
 
+# A sales order is the customer's order for goods: it has no scope of work to agree, so its form
+# leaves the quoting prose out (the command still accepts it, as a note an agent may send).
+ORDER_HIDDEN = ('scope', 'inclusions', 'exclusions', 'timing', 'commercial_terms')
+
+
 def describe(leaves, noun):
     """Business labels and controls over the exact typed contract."""
+    if noun == 'sales-order':
+        leaves[:] = [leaf for leaf in leaves if leaf['path'] not in ORDER_HIDDEN]
     for leaf in leaves:
         path = leaf['path']
         leaf['label'] = path.replace('_', ' ').capitalize()
@@ -154,6 +173,10 @@ def describe(leaves, noun):
             fields = leaf['collection']['item']['fields']
             if noun != 'work-order':
                 fields[:] = [v for v in fields if v['name'] != 'completed_quantity']
+            if noun not in ('work-order', 'sales-order'):
+                fields[:] = [v for v in fields if v['name'] not in ('cancelled_quantity', 'close')]
+            if noun == 'sales-order':
+                fields[:] = [v for v in fields if v['name'] != 'billable']
             for child in fields:
                 if child['name'] == 'unit_price':
                     child['description'] = 'Manual unit price. Leave empty for catalog; choose only one price input.'
@@ -163,6 +186,10 @@ def describe(leaves, noun):
                     child['description'] = 'Cost markup percent, requires known cost. Choose only one price input.'
                 if child['name'] == 'estimated_unit_cost':
                     child['description'] = 'Internal estimate per unit. Clear means unknown, not zero.'
+                if child['name'] == 'cancelled_quantity':
+                    child['description'] = 'What the customer no longer wants, from what is not yet invoiced. 0 reopens the line.'
+                if child['name'] == 'close':
+                    child['label'] = 'Close (cancel what is still open)'
     return leaves
 
 
@@ -209,7 +236,7 @@ def form_groups(leaves):
     groups = {name: [] for name in ('Work and decision', 'Scope', 'Lines and pricing', 'Scheduling', 'Commercial details', 'Saved version')}
     for leaf in leaves:
         path = leaf['path']
-        if path in ('expected_version', 'proposal', 'estimate', 'work_order', 'conversion_key'):
+        if path in ('expected_version', 'proposal', 'estimate', 'work_order', 'sales_order', 'conversion_key'):
             group = 'Saved version'
         elif path in ('scope', 'inclusions', 'exclusions', 'timing', 'commercial_terms', 'memo'):
             group = 'Scope'
@@ -217,7 +244,7 @@ def form_groups(leaves):
             group = 'Lines and pricing'
         elif path in ('priority', 'assignees', 'scheduled_start', 'scheduled_end', 'actual_start', 'actual_end') or path.startswith('site_address'):
             group = 'Scheduling'
-        elif path in ('date', 'number', 'title', 'customer', 'status', 'active', 'decision_note', 'expires_on', 'acknowledge_expired', 'copy_mode'):
+        elif path in ('date', 'number', 'title', 'customer', 'status', 'active', 'decision_note', 'expires_on', 'acknowledge_expired', 'copy_mode', 'ship_date'):
             group = 'Work and decision'
         else:
             group = 'Commercial details'

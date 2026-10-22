@@ -50,8 +50,12 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +18 budgets, budget and comparison reports, memorized reports (R109).
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
+    # +8 the sales order (R101): sales-order create, update, copy, show, query, history, void; estimate sales-order.
+    # +10 the five fixed-asset and five loan commands (R119).
+    # +7 assembly build, update, finalize, void, delete, show and list (R103).
+    # +1 report open-sales-orders (R102).
     # +2 customer-credit transfer, customer-credit transfer-void (R148).
-    assert len(rows) == 566
+    assert len(rows) == 592
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -245,10 +249,24 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3061 -> 3093 (R124), measured: the eight prepayment commands, 32 nodes -- the null branches of their optional
     # fields: receive 9, attach 1, apply 5, refund 7, show 3, query 5, report customer-prepayments 2 (unapply none).
     # apply_prepayment on the invoice conversions is a plain boolean and adds none. No new variant kind; the groups stay 26.
-    # 3093 -> 3101 (R148), measured: payment receive's optional discount_class wherever the receive input is carried,
-    # and customer-credit transfer's optional credit_memo, payment, memo, expected_facts_fingerprint and apply_to
-    # amount -- their null branches. underpayment is a defaulted literal and adds none. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3101
+    # 3093 -> 3221 (R101, the sales order), measured per command on both trees: sales-order create 51 and update 54
+    # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
+    # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
+    # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
+    # 3221 -> 3254 (R119), measured: the ten fixed-asset and loan commands, 33 nodes -- the null branches of their
+    # optional fields (setup's terms and accounts, depreciate's assets and memo, dispose's deposit_to and memo, the
+    # loan's optional accounts, lender, origination, payment and update fields, pay's date, account, number, extra
+    # principal and memo). No new variant kind.
+    # 3254 -> 3265 (R103 assembly builds), measured: 11 null branches -- build's memo; update's expected_version,
+    # quantity, date and memo; finalize's expected_version and date; void's and delete's expected_version; list's
+    # status and item. No new variant kind.
+    # 3265 -> 3269 (R102), measured: report open-sales-orders is new with 4, the null branches of its optional
+    # customer, item, date_from and cursor (date_to is required). No existing command moved. No new variant kind.
+    # 3269 -> 3281 (R148), measured: payment receive's optional discount_class, write_off_account and
+    # write_off_class wherever the receive input is carried, and customer-credit transfer's optional credit_memo,
+    # payment, memo, expected_facts_fingerprint and apply_to amount -- their null branches. underpayment is a
+    # defaulted literal and adds none. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3281
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

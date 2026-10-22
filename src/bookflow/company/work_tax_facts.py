@@ -57,7 +57,7 @@ def economic_basis(line, policy):
     line = WorkLineFacts2.model_validate(line.model_dump(mode='json') if isinstance(line, WorkLineFacts) else line)
     mode = _POLICY.validate_python(policy, strict=True)
     economics = line.model_dump(mode='json', exclude={
-        'schema_version', 'completed_quantity_microunits', 'billable',
+        'schema_version', 'completed_quantity_microunits', 'cancelled_quantity_microunits', 'billable',
         'tax_minor_units', 'gross_minor_units', 'taxes'})
     return dict(basis_version=2, sales_tax_calculation=mode, economics=economics,
                 tax_rules=[cell.rule.model_dump(mode='json') for cell in line.taxes])

@@ -191,7 +191,8 @@ def runtime_custom_field_scope(noun, verb, cmd, definition):
     if noun in Work.DOCUMENTS and 'custom_fields' in cmd.input_model.model_fields:
         if Billing.is_conversion(noun, verb):
             return verb.replace('-', '_')
-        return 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
+        return ('estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order'
+                else 'sales_order' if verb == 'sales-order' else noun.replace('-', '_'))
     if noun in ('invoice', 'sales-receipt', 'bill', 'credit-memo') and verb in ('post', 'update'):
         return noun.replace('-', '_')
     if noun in ('journal', 'register', *Document.MONEY_OUT) and verb in ('post', 'update'):
@@ -740,12 +741,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import backups as Backups
     Backups.mount(app, render=render, run=run, credential=credential, page_error=page_error)
     # Assess Finance Charges: a list with a checkbox and an amount per customer, not a generic form.
+    # Build Assemblies and Pending Builds (R103): the components grid and the maximum buildable, not a generic form.
+    from bookflow.adapters.workbench import assembly_builds as AssemblyBuilds
+    AssemblyBuilds.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                         role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R109: the Set Up Budgets grid, Memorize on any report, and opening a memorized report.
     from bookflow.adapters.workbench import budget_pages as BudgetPages
     BudgetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R119: the fixed asset list and schedules, and loans with their schedule and Pay.
+    from bookflow.adapters.workbench import fixed_asset_pages as FixedAssetPages
+    FixedAssetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -1847,6 +1855,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 value = request.query_params.get('f:' + field, request.query_params.get(field))
                 if value is not None and field in cmd.input_model.model_fields:
                     attempted['f:' + field] = value
+        if noun in ('fixed-asset', 'loan') and cmd.is_write and not attempted:
+            # Opened from an asset's schedule or a loan (R119): the link names which one.
+            for field in ('item', 'loan'):
+                value = request.query_params.get('f:' + field, request.query_params.get(field))
+                if value is not None and field in cmd.input_model.model_fields:
+                    attempted['f:' + field] = value
         if noun in ('reconcile', 'reconcile opening') and not attempted:
             # A reconciliation is three pages, and the draft is what carries a person from one to
             # the next. Seeding it from the link they followed is what makes the chain a chain;
@@ -1963,7 +1977,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # field then stops the browser from ever sending the preview.
             if settlement['applied_minor_units']:
                 attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
-        if noun in Work.DOCUMENTS and verb in ('copy', 'estimate', 'work-order', 'complete', 'invoice', 'sales-receipt'):
+        if noun in Work.DOCUMENTS and verb in ('copy', 'estimate', 'work-order', 'sales-order', 'complete', 'invoice', 'sales-receipt'):
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
         if noun in Work.DOCUMENTS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
             attempted['f:conversion_key'] = secrets.token_urlsafe(32)
@@ -2126,6 +2140,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 workflow_note += (' This creates an alternative estimate in the same group.' if alternative else ' This creates a new independent scope.')
             elif verb in ('estimate', 'work-order'):
                 workflow_note += ' This permanently links the selected source revision to the new draft. Retrying returns the same destination.'
+            elif verb == 'sales-order':
+                workflow_note += (' This makes the open sales order for the accepted estimate, carrying its lines and what was already '
+                                  'invoiced. An estimate has one work order or one sales order, never both. Retrying returns the same order.')
+            if noun == 'sales-order':
+                workflow_note = ('A sales order records what the customer ordered. It posts nothing and moves no stock; the invoice made '
+                                 'from it does. Cancel part of a line with Cancelled quantity, or tick Close to cancel what is still open. '
+                                 'Close the whole order (status closed, with a reason) when nothing more will ship.')
         if Billing.is_conversion(noun, verb):
             described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent')]
             workflow_note = 'Bill remaining work, original-scope percentages, or per-line quantities and net amounts. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'

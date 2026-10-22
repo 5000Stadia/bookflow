@@ -10,7 +10,7 @@
 <th scope="col">{{ stock.headings.description }}</th>
 {% if stock.verb == 'stock-status' %}<th scope="col" class="num">{{ stock.headings.reorder_point_min }}</th>{% endif %}
 <th scope="col" class="num">{{ stock.headings.quantity_on_hand }}</th>
-{% if stock.verb == 'stock-status' %}<th scope="col" class="num">{{ stock.headings.quantity_available }}</th><th scope="col" class="num">{{ stock.headings.quantity_on_order }}</th><th scope="col">{{ stock.headings.below_reorder_point }}</th>{% endif %}
+{% if stock.verb == 'stock-status' %}<th scope="col" class="num">{{ stock.headings.quantity_committed }}</th><th scope="col" class="num">{{ stock.headings.quantity_available }}</th><th scope="col" class="num">{{ stock.headings.quantity_on_order }}</th><th scope="col">{{ stock.headings.next_delivery_date }}</th><th scope="col">{{ stock.headings.below_reorder_point }}</th>{% endif %}
 <th scope="col" class="num">{{ stock.headings.average_cost }}</th>
 <th scope="col" class="num">{{ stock.headings.asset_value }}</th>
 </tr></thead><tbody>
@@ -19,10 +19,10 @@
 <td>{{ row.description or '' }}</td>
 {% if stock.verb == 'stock-status' %}<td class="num">{{ row.reorder_point_min or '' }}</td>{% endif %}
 <td class="num" data-value="quantity_on_hand">{{ row.quantity_on_hand }}</td>
-{% if stock.verb == 'stock-status' %}<td class="num">{{ row.quantity_available }}</td><td class="num">{{ row.quantity_on_order }}</td><td data-value="below_reorder_point">{{ 'Order' if row.below_reorder_point else '' }}</td>{% endif %}
+{% if stock.verb == 'stock-status' %}<td class="num" data-value="quantity_committed">{{ row.quantity_committed }}</td><td class="num" data-value="quantity_available">{{ row.quantity_available }}</td><td class="num">{{ row.quantity_on_order }}</td><td>{{ row.next_delivery_date|longday if row.next_delivery_date else '' }}</td><td data-value="below_reorder_point">{{ 'Order' if row.below_reorder_point else '' }}</td>{% endif %}
 <td class="num" data-value="average_cost">{{ row.average_cost|amount }}</td>
 <td class="num" data-value="asset_value">{{ row.asset_value|amount }}</td>
-</tr>{% else %}<tr><td colspan="9">No inventory item holds stock on this date.</td></tr>{% endfor %}
+</tr>{% else %}<tr><td colspan="11">No inventory item holds stock on this date.</td></tr>{% endfor %}
 </tbody></table></div>
 {# On a phone each item is a card (browsing.css): its name and value on one line, the rest muted. #}
 <ul class="list-cards" aria-label="Items">
@@ -32,6 +32,7 @@
    'Order now' if stock.verb == 'stock-status' and row.below_reorder_point else '',
    stock.headings.quantity_on_hand ~ ' ' ~ row.quantity_on_hand,
    (stock.headings.reorder_point_min ~ ' ' ~ row.reorder_point_min) if stock.verb == 'stock-status' and row.reorder_point_min else '',
+   (stock.headings.quantity_committed ~ ' ' ~ row.quantity_committed) if stock.verb == 'stock-status' and row.quantity_committed != '0' else '',
    (stock.headings.quantity_available ~ ' ' ~ row.quantity_available) if stock.verb == 'stock-status' else '',
    (stock.headings.quantity_on_order ~ ' ' ~ row.quantity_on_order) if stock.verb == 'stock-status' else '',
    stock.headings.average_cost ~ ' ' ~ row.average_cost|money(home=home)], data={'item': row.item_id}) }}{% else %}<li class="list-card list-card-empty">No inventory item holds stock on this date.</li>{% endfor %}
@@ -42,7 +43,7 @@
 {% if stock.verb == 'inventory-valuation' %}
 <p>What each inventory item holds on the as-of date and what it is worth. Quantity and value are the running totals of that item's own stock movements up to that date, dated cost corrections included, so a backdated purchase shows in the value of the day it belongs to. The asset value total below is the Inventory Asset figure on the balance sheet for the same date.</p>
 {% else %}
-<p>What to reorder. An item is flagged once it has fallen to or below its reorder point. Available equals on hand and on order is zero until sales orders, purchase orders and assembly builds exist to commit or expect stock.</p>
+<p>What to reorder. An item is flagged once it has fallen to or below its reorder point. Committed is what open sales orders and work orders still have to ship; available is on hand less committed (on hand when the company preference to deduct them is off), and the reorder flag reads available. On order is what live purchase orders still have to deliver, and next delivery the earliest date one expects.</p>
 {% endif %}
 <p>Select an item to open it.</p>
 {% endset %}

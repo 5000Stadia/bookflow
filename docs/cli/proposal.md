@@ -89,7 +89,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -124,6 +124,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
 | `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
 | `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
+| `order` | object \| null | no | yes | null | For a sales order, its progress and open amount; absent for every other kind. |
+| `order.progress` | literal["open", "partly_invoiced", "invoiced", "closed", "voided"] | yes | no | — | — |
+| `order.is_open` | boolean | yes | no | — | Stored status open, active, and some line has open quantity. |
+| `order.open_amount` | object | yes | no | — | The exact net of every line's open quantity. |
+| `order.open_amount.amount` | string | yes | no | — | — |
+| `order.open_amount.currency` | string | yes | no | — | — |
+| `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -377,6 +388,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.description` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].facts.completed_quantity_microunits` | integer | no | no | 0 | — |
+| `revision.lines[].facts.cancelled_quantity_microunits` | integer | no | no | 0 | — |
 | `revision.lines[].facts.unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.unit_factor_nanounits` | integer | yes | no | — | — |
 | `revision.lines[].facts.base_quantity_microunits` | integer | yes | no | — | — |
@@ -519,6 +531,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
+| `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
+| `revision.lines[].order` | object \| null | no | yes | null | Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The line's quantity in this revision. |
+| `revision.lines[].order.invoiced` | string | yes | no | — | What active invoices and sales receipts have billed of it. |
+| `revision.lines[].order.cancelled` | string | yes | no | — | What the customer no longer wants, as set on the line. |
+| `revision.lines[].order.open` | string | yes | no | — | Ordered less invoiced less cancelled (the anchor's Backordered); 0 while the document is closed, cancelled, voided or inactive. |
+| `revision.lines[].order.open_amount` | object | yes | no | — | The exact net of the open quantity. |
+| `revision.lines[].order.open_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -562,7 +590,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `links[].source_version` | integer | yes | no | — | — |
 | `links[].destination_document_id` | string | yes | no | — | — |
 | `links[].destination_revision_id` | string | yes | no | — | — |
-| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order"] | yes | no | — | — |
+| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order", "estimate_sales_order"] | yes | no | — | — |
 | `links[].source_kind` | string | yes | no | — | — |
 | `links[].source_number` | string | yes | no | — | — |
 | `links[].source_status` | string | yes | no | — | — |
@@ -873,6 +901,8 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].markup_percent` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].completed_quantity` | inside `--lines` JSON array | string | no | no | "0" | — |
+| `lines[].cancelled_quantity` | inside `--lines` JSON array | string | no | no | "0" | Sales orders and work orders: the part of this line the customer no longer wants, taken from what is not yet invoiced. Setting it back to 0 reopens the line. |
+| `lines[].close` | inside `--lines` JSON array | boolean | no | no | false | Sales orders and work orders: cancel whatever is still open on this line (the "Clsd" checkbox). Conflicts with cancelled_quantity. |
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | true | — |
 
 ### Command and context options
@@ -921,7 +951,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -956,6 +986,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
 | `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
 | `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
+| `order` | object \| null | no | yes | null | For a sales order, its progress and open amount; absent for every other kind. |
+| `order.progress` | literal["open", "partly_invoiced", "invoiced", "closed", "voided"] | yes | no | — | — |
+| `order.is_open` | boolean | yes | no | — | Stored status open, active, and some line has open quantity. |
+| `order.open_amount` | object | yes | no | — | The exact net of every line's open quantity. |
+| `order.open_amount.amount` | string | yes | no | — | — |
+| `order.open_amount.currency` | string | yes | no | — | — |
+| `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1209,6 +1250,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.description` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].facts.completed_quantity_microunits` | integer | no | no | 0 | — |
+| `revision.lines[].facts.cancelled_quantity_microunits` | integer | no | no | 0 | — |
 | `revision.lines[].facts.unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.unit_factor_nanounits` | integer | yes | no | — | — |
 | `revision.lines[].facts.base_quantity_microunits` | integer | yes | no | — | — |
@@ -1351,6 +1393,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
+| `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
+| `revision.lines[].order` | object \| null | no | yes | null | Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The line's quantity in this revision. |
+| `revision.lines[].order.invoiced` | string | yes | no | — | What active invoices and sales receipts have billed of it. |
+| `revision.lines[].order.cancelled` | string | yes | no | — | What the customer no longer wants, as set on the line. |
+| `revision.lines[].order.open` | string | yes | no | — | Ordered less invoiced less cancelled (the anchor's Backordered); 0 while the document is closed, cancelled, voided or inactive. |
+| `revision.lines[].order.open_amount` | object | yes | no | — | The exact net of the open quantity. |
+| `revision.lines[].order.open_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -1394,7 +1452,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `links[].source_version` | integer | yes | no | — | — |
 | `links[].destination_document_id` | string | yes | no | — | — |
 | `links[].destination_revision_id` | string | yes | no | — | — |
-| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order"] | yes | no | — | — |
+| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order", "estimate_sales_order"] | yes | no | — | — |
 | `links[].source_kind` | string | yes | no | — | — |
 | `links[].source_number` | string | yes | no | — | — |
 | `links[].source_status` | string | yes | no | — | — |
@@ -1704,7 +1762,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -1739,6 +1797,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
 | `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
 | `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
+| `order` | object \| null | no | yes | null | For a sales order, its progress and open amount; absent for every other kind. |
+| `order.progress` | literal["open", "partly_invoiced", "invoiced", "closed", "voided"] | yes | no | — | — |
+| `order.is_open` | boolean | yes | no | — | Stored status open, active, and some line has open quantity. |
+| `order.open_amount` | object | yes | no | — | The exact net of every line's open quantity. |
+| `order.open_amount.amount` | string | yes | no | — | — |
+| `order.open_amount.currency` | string | yes | no | — | — |
+| `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1992,6 +2061,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.description` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].facts.completed_quantity_microunits` | integer | no | no | 0 | — |
+| `revision.lines[].facts.cancelled_quantity_microunits` | integer | no | no | 0 | — |
 | `revision.lines[].facts.unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.unit_factor_nanounits` | integer | yes | no | — | — |
 | `revision.lines[].facts.base_quantity_microunits` | integer | yes | no | — | — |
@@ -2134,6 +2204,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
+| `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
+| `revision.lines[].order` | object \| null | no | yes | null | Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The line's quantity in this revision. |
+| `revision.lines[].order.invoiced` | string | yes | no | — | What active invoices and sales receipts have billed of it. |
+| `revision.lines[].order.cancelled` | string | yes | no | — | What the customer no longer wants, as set on the line. |
+| `revision.lines[].order.open` | string | yes | no | — | Ordered less invoiced less cancelled (the anchor's Backordered); 0 while the document is closed, cancelled, voided or inactive. |
+| `revision.lines[].order.open_amount` | object | yes | no | — | The exact net of the open quantity. |
+| `revision.lines[].order.open_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -2177,7 +2263,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `links[].source_version` | integer | yes | no | — | — |
 | `links[].destination_document_id` | string | yes | no | — | — |
 | `links[].destination_revision_id` | string | yes | no | — | — |
-| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order"] | yes | no | — | — |
+| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order", "estimate_sales_order"] | yes | no | — | — |
 | `links[].source_kind` | string | yes | no | — | — |
 | `links[].source_number` | string | yes | no | — | — |
 | `links[].source_status` | string | yes | no | — | — |
@@ -2684,7 +2770,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
-| `items[].kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `items[].kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].status` | string | yes | no | — | — |
 | `items[].active` | boolean | yes | no | — | — |
@@ -2719,6 +2805,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
 | `items[].time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
 | `items[].time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
+| `items[].order` | object \| null | no | yes | null | For a sales order, its progress and open amount; absent for every other kind. |
+| `items[].order.progress` | literal["open", "partly_invoiced", "invoiced", "closed", "voided"] | yes | no | — | — |
+| `items[].order.is_open` | boolean | yes | no | — | Stored status open, active, and some line has open quantity. |
+| `items[].order.open_amount` | object | yes | no | — | The exact net of every line's open quantity. |
+| `items[].order.open_amount.amount` | string | yes | no | — | — |
+| `items[].order.open_amount.currency` | string | yes | no | — | — |
+| `items[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `items[].order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `items[].order.prepayment_held.amount` | string | yes | no | — | — |
+| `items[].order.prepayment_held.currency` | string | yes | no | — | — |
+| `items[].order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -2833,7 +2930,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -2868,6 +2965,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
 | `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
 | `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
+| `order` | object \| null | no | yes | null | For a sales order, its progress and open amount; absent for every other kind. |
+| `order.progress` | literal["open", "partly_invoiced", "invoiced", "closed", "voided"] | yes | no | — | — |
+| `order.is_open` | boolean | yes | no | — | Stored status open, active, and some line has open quantity. |
+| `order.open_amount` | object | yes | no | — | The exact net of every line's open quantity. |
+| `order.open_amount.amount` | string | yes | no | — | — |
+| `order.open_amount.currency` | string | yes | no | — | — |
+| `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -3121,6 +3229,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.description` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].facts.completed_quantity_microunits` | integer | no | no | 0 | — |
+| `revision.lines[].facts.cancelled_quantity_microunits` | integer | no | no | 0 | — |
 | `revision.lines[].facts.unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.unit_factor_nanounits` | integer | yes | no | — | — |
 | `revision.lines[].facts.base_quantity_microunits` | integer | yes | no | — | — |
@@ -3263,6 +3372,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
+| `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
+| `revision.lines[].order` | object \| null | no | yes | null | Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The line's quantity in this revision. |
+| `revision.lines[].order.invoiced` | string | yes | no | — | What active invoices and sales receipts have billed of it. |
+| `revision.lines[].order.cancelled` | string | yes | no | — | What the customer no longer wants, as set on the line. |
+| `revision.lines[].order.open` | string | yes | no | — | Ordered less invoiced less cancelled (the anchor's Backordered); 0 while the document is closed, cancelled, voided or inactive. |
+| `revision.lines[].order.open_amount` | object | yes | no | — | The exact net of the open quantity. |
+| `revision.lines[].order.open_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -3306,7 +3431,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `links[].source_version` | integer | yes | no | — | — |
 | `links[].destination_document_id` | string | yes | no | — | — |
 | `links[].destination_revision_id` | string | yes | no | — | — |
-| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order"] | yes | no | — | — |
+| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order", "estimate_sales_order"] | yes | no | — | — |
 | `links[].source_kind` | string | yes | no | — | — |
 | `links[].source_number` | string | yes | no | — | — |
 | `links[].source_status` | string | yes | no | — | — |
@@ -3599,6 +3724,8 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].markup_percent` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].completed_quantity` | inside `--lines` JSON array | string | no | no | "0" | — |
+| `lines[].cancelled_quantity` | inside `--lines` JSON array | string | no | no | "0" | Sales orders and work orders: the part of this line the customer no longer wants, taken from what is not yet invoiced. Setting it back to 0 reopens the line. |
+| `lines[].close` | inside `--lines` JSON array | boolean | no | no | false | Sales orders and work orders: cancel whatever is still open on this line (the "Clsd" checkbox). Conflicts with cancelled_quantity. |
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | true | — |
 | `proposal` | `PROPOSAL` | string | yes | no | — | minimum length 1; maximum length 1004 |
 
@@ -3649,7 +3776,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
-| `kind` | literal["proposal", "estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `kind` | literal["proposal", "estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `status` | string | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
@@ -3684,6 +3811,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `time.item_name` | string | yes | no | — | The service item's name as captured on the entry. |
 | `time.billable` | boolean | yes | no | — | Whether the time can be carried onto an invoice. |
 | `time.note` | string \| null | yes | yes | — | What was done; the invoice line's description. |
+| `order` | object \| null | no | yes | null | For a sales order, its progress and open amount; absent for every other kind. |
+| `order.progress` | literal["open", "partly_invoiced", "invoiced", "closed", "voided"] | yes | no | — | — |
+| `order.is_open` | boolean | yes | no | — | Stored status open, active, and some line has open quantity. |
+| `order.open_amount` | object | yes | no | — | The exact net of every line's open quantity. |
+| `order.open_amount.amount` | string | yes | no | — | — |
+| `order.open_amount.currency` | string | yes | no | — | — |
+| `order.open_amount.minor_units` | integer | yes | no | — | — |
+| `order.prepayment_held` | object \| null | no | yes | null | Customer prepayments held for this order: on it, and on the estimate it came from. `prepayment show --document` lists the receipts. |
+| `order.prepayment_held.amount` | string | yes | no | — | — |
+| `order.prepayment_held.currency` | string | yes | no | — | — |
+| `order.prepayment_held.minor_units` | integer | yes | no | — | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -3937,6 +4075,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.description` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].facts.completed_quantity_microunits` | integer | no | no | 0 | — |
+| `revision.lines[].facts.cancelled_quantity_microunits` | integer | no | no | 0 | — |
 | `revision.lines[].facts.unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].facts.unit_factor_nanounits` | integer | yes | no | — | — |
 | `revision.lines[].facts.base_quantity_microunits` | integer | yes | no | — | — |
@@ -4079,6 +4218,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
+| `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
+| `revision.lines[].order` | object \| null | no | yes | null | Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The line's quantity in this revision. |
+| `revision.lines[].order.invoiced` | string | yes | no | — | What active invoices and sales receipts have billed of it. |
+| `revision.lines[].order.cancelled` | string | yes | no | — | What the customer no longer wants, as set on the line. |
+| `revision.lines[].order.open` | string | yes | no | — | Ordered less invoiced less cancelled (the anchor's Backordered); 0 while the document is closed, cancelled, voided or inactive. |
+| `revision.lines[].order.open_amount` | object | yes | no | — | The exact net of the open quantity. |
+| `revision.lines[].order.open_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
+| `revision.lines[].stock.on_hand` | string | yes | no | — | — |
+| `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
+| `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
+| `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -4122,7 +4277,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `links[].source_version` | integer | yes | no | — | — |
 | `links[].destination_document_id` | string | yes | no | — | — |
 | `links[].destination_revision_id` | string | yes | no | — | — |
-| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order"] | yes | no | — | — |
+| `links[].relation` | literal["copy", "proposal_estimate", "estimate_work_order", "estimate_sales_order"] | yes | no | — | — |
 | `links[].source_kind` | string | yes | no | — | — |
 | `links[].source_number` | string | yes | no | — | — |
 | `links[].source_status` | string | yes | no | — | — |

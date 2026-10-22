@@ -10,6 +10,7 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable ULID of this credit transfer. |
 | `operation_key` | VARCHAR(128) | no | — | unique | — | — | Caller-chosen key; asking again with it returns this transfer instead of moving the credit twice. |
+| `request_hash` | VARCHAR(64) | no | — | — | — | — | Digest of every resolved input; the key asked again with other inputs is refused. |
 | `from_party_id` | VARCHAR(26) | no | — | — | ix_credit_transfers_from | customers.id | Customer or job the credit was moved from. |
 | `to_party_id` | VARCHAR(26) | no | — | — | ix_credit_transfers_to | customers.id | Customer or job the credit was moved to. |
 | `transfer_date` | VARCHAR(10) | no | — | — | ix_credit_transfers_from, ix_credit_transfers_to | — | Date of the transfer, YYYY-MM-DD. |

@@ -584,6 +584,37 @@ months by hand, `budget clear` empties a row or the whole budget. To keep a repo
 often, `memorized-report create` with a `date_range` such as `this_fiscal_quarter`, and
 `memorized-report run` it: the range is worked out again on every run.
 
+## Depreciation and loan payments
+
+A fixed asset is a `fixed_asset` item; its book depreciation terms come from `fixed-asset setup`
+(straight line, or declining balance at 200 or 150 percent switching to straight line, salvage, life
+in months, month or year periods). For "post this month's depreciation", preview with a dry run, then
+post through the month end:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "fixed-asset depreciate", "input": {"through": "2026-11-30"}}
+```
+
+It posts only periods not yet posted (debit depreciation expense, credit accumulated depreciation),
+so running it twice is harmless; `fixed-asset schedule` shows each period posted or pending. A month
+already closed is refused: post it with `entry: combined`, dated in an open period, if the person
+agrees. Selling or scrapping an asset is `fixed-asset dispose` after depreciation through that date.
+
+For "record the truck loan payment", `loan show` names the next payment and its split, and
+`loan pay` writes the check:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "loan pay", "input": {"loan": "Truck loan"}}
+```
+
+Principal goes to the loan's liability account, interest to its interest account and escrow to its
+escrow account, from the schedule. Extra principal (`extra_principal`) keeps the payment and shortens
+the loan. `loan show` reports whether the liability account ties to the schedule's balance; if it does
+not, the money borrowed or a payment was recorded outside `loan pay`: say so rather than adjusting.
+Tax depreciation (MACRS) is not computed here.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:
@@ -594,6 +625,8 @@ Use the same business nouns in conversation and commands:
 | Make an estimate from that proposal | `proposal estimate` with the source version and a permanent conversion key |
 | Record the customer's accepted estimate | `estimate update` with `status="accepted"` and a fresh decision note |
 | Make a work order from that estimate | `estimate work-order` with the accepted source version and a permanent conversion key |
+| Take a customer's order for goods (stocked parts included) | `sales-order create` with customer, date and lines; the title defaults to the customer |
+| Turn the accepted estimate into the customer's order | `estimate sales-order` with the accepted source version and a permanent conversion key |
 | Mark the work complete | `work-order complete` with actual start/end; preview fills remaining completed quantities |
 | Find the customer's work and previous versions | Each noun's `query`, `show` and `history` |
 
@@ -613,6 +646,39 @@ interfaces; read [customer payment workflows](customer-payment-workflows.md) bef
 preparing a remittance or correcting an applied document. Delivery remains staged.
 Never report a document sent when only its record was
 created, or improvise an external send from a create-only request.
+
+## Taking a customer's order
+
+"Take an order for 10 widgets for Acme" is `sales-order create --customer Acme --date ...
+--lines '[{"item":"Widget","quantity":"10"}]'`. An order posts nothing and moves no stock; the
+invoice made from it does. Its show output gives each line `order.ordered`, `invoiced`,
+`cancelled` and `open` (what is still to ship, the backorder), and the order's `order.progress`
+(open, partly_invoiced, invoiced, closed, voided) with its exact open amount.
+
+- The customer no longer wants part of a line: `sales-order update` with that line's
+  `cancelled_quantity`, or `close: true` to cancel whatever is still open on it. Cancelling back
+  to `0` reopens it. Only what is not yet invoiced can be cancelled.
+- Nothing more will ship: `sales-order update --status closed` with a reason; `--status open`
+  with a reason brings back what was open. A wrong order is `sales-order void` with a reason; it
+  is refused while an invoice consumes any line, so void or remove that invoice first.
+- An accepted estimate becomes either the order (`estimate sales-order`) or a work order
+  (`estimate work-order`), never both, and its billing then goes there. Keep the conversion key
+  for retries: the same key returns the same order; a different request under it is refused.
+- Estimates, proposals, work orders and orders may carry stocked parts. A stocked line is billed
+  by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
+- `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
+
+## What is available to sell
+
+`report stock-status` and `item show` give each stocked item its quantity on hand, committed (the
+open quantity on open sales orders and work orders, a complete but uninvoiced work order included),
+available (on hand less committed) and on order, with the next expected delivery. The company
+preference `available_deducts_sales_orders` (on by default) decides whether available deducts
+committed. An order or work-order preview gives each stocked line its on hand, committed elsewhere,
+on order and available to it, and warns when it ends short; an ordinary invoice or sales receipt
+that takes committed stock warns and names the documents. Neither refuses. `report
+open-sales-orders` (`--by customer` or `--by item`, `--short-only`) lists what customers have
+ordered and not yet received.
 
 ## Bill work in installments
 
@@ -774,6 +840,27 @@ part. It is one-way and a person's act: an agent is refused with `E_PERMISSION`,
 owner which item and why, and suggest `--dry-run` to see the accounts it will carry. Nothing
 posted changes; stock starts at 0 on the conversion date and is counted with `inventory adjust`.
 After a conversion, no stock line for that item may be dated before the conversion date.
+
+## We built 5 water heater kits today
+
+A finished item made from parts is an inventory assembly; record the work with `assembly build`.
+Preview it first: the dry run lists each component with what one kit needs, what is on hand that
+day and what pending builds hold, and `max_buildable`, the most the parts allow.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "assembly build", "reason": "Owner: we built 5 water heater kits today",
+ "input": {"item": "Water Heater Kit", "quantity": "5", "date": "2026-07-14"}}
+```
+
+The parts leave stock at their average cost and the kits arrive at the sum; a service or other
+non-stock part on the bill of materials adds its purchase cost. A component that is itself an
+assembly is taken from stock, never built for you: build it first. More than the parts allow is
+refused with the shortages and `max_buildable`; if the owner wants the build held until parts
+arrive, send `"pending": true` (nothing posts, the parts are reserved) and later `assembly finalize
+BUILD`. `assembly list --status pending` is the pending builds report. Correct a build with
+`assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
+use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
 
 ## Stock sent back to a vendor
 

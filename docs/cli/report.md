@@ -3951,6 +3951,177 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report open-sales-orders`
+
+What customers have ordered and not yet received: one row per open line of every open, active sales order (by customer, the default, or by item), with its date, number, customer PO, ship date, item, ordered, invoiced, cancelled and backordered quantities and the exact open amount. By item, a stocked item's row adds what is on hand, available (on hand less what open sales orders and work orders commit) and on order. Filters: customer, item, order date_from and date_to, and short_only for lines whose stocked item has more committed than on hand. Closed, voided and inactive orders are left out. Orders are read as they stand now. Totals cover every row; rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.open-sales-orders` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report open-sales-orders", "input": {"by": "item", "date_to": "2026-10-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `by` | `--by` | literal["customer", "item"] | no | no | "customer" | customer (the default) groups rows by customer, item by item. |
+| `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job: ID or full name. |
+| `item` | `--item` | string \| null | no | yes | null | Only this item: ID or full name. |
+| `date_from` | `--date-from` | string \| null | no | yes | null | Earliest order date, YYYY-MM-DD. |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.; minimum length 10; maximum length 10 |
+| `short_only` | `--short-only` | boolean | no | no | false | Only lines for stocked items with more committed than on hand (available below zero). |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.open-sales-orders`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `by` | literal["customer", "item"] | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.open_amount` | object | yes | no | — | — |
+| `totals.open_amount.amount` | string | yes | no | — | — |
+| `totals.open_amount.currency` | string | yes | no | — | — |
+| `totals.open_amount.minor_units` | integer | yes | no | — | — |
+| `totals.lines` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].sales_order_id` | string | yes | no | — | — |
+| `rows[].number` | string | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].customer_id` | string | yes | no | — | — |
+| `rows[].customer_name` | string | yes | no | — | — |
+| `rows[].customer_purchase_order` | string \| null | yes | yes | — | — |
+| `rows[].ship_date` | string \| null | yes | yes | — | — |
+| `rows[].line_id` | string | yes | no | — | — |
+| `rows[].item_id` | string | yes | no | — | — |
+| `rows[].item_name` | string | yes | no | — | — |
+| `rows[].ordered` | string | yes | no | — | — |
+| `rows[].invoiced` | string | yes | no | — | — |
+| `rows[].cancelled` | string | yes | no | — | — |
+| `rows[].backordered` | string | yes | no | — | — |
+| `rows[].open_amount` | object | yes | no | — | — |
+| `rows[].open_amount.amount` | string | yes | no | — | — |
+| `rows[].open_amount.currency` | string | yes | no | — | — |
+| `rows[].open_amount.minor_units` | integer | yes | no | — | — |
+| `rows[].stocked` | boolean | yes | no | — | — |
+| `rows[].quantity_on_hand` | string \| null | no | yes | null | By item, stocked items: on hand now. |
+| `rows[].quantity_available` | string \| null | no | yes | null | By item, stocked items: on hand less committed. |
+| `rows[].quantity_on_order` | string \| null | no | yes | null | By item, stocked items: still to arrive on live purchase orders. |
+
+Example JSON output:
+
+```json
+{
+  "by": "customer",
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "lines": 1,
+    "open_amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report prior-balances`
 
 Account balances that changed after they were reviewed, as the anchor's Troubleshoot Prior Account Balances shows them. A finished reconciliation reviews its account's balance at its statement date, and the closing date reviews every account's balance at the closing date. For each review dated on or before as_of whose balance has since moved, one balance row gives the balance as of the review date as it stood when reviewed, as it is now, and the change; under it, one entry row per transaction responsible, with its share of the change -- a back-dated entry, or a void or correction of one already there. Balances are in each account's normal sign. Nothing is stored: the reviewed balance is the ledger's immutable lines dated on or before the review date and written before the review. Totals count the reviews, the moved balances and the entries; rows are paged.
@@ -6361,7 +6532,7 @@ Example JSON output:
 
 ## `report stock-status`
 
-What to reorder, as of as_of: each inventory item with what is on hand, what is available, its reorder points and whether it has fallen to or below the lower one, beside its average cost, asset value and preferred vendor. Quantity available equals quantity on hand and quantity on order is zero until sales orders, purchase orders and assembly builds exist to commit or expect stock; both columns are here so the reading does not change when they do. Asset value totals the same figure report inventory-valuation totals and the balance sheet carries for that date. Totals and the below-reorder count cover every item; rows are paged.
+What to reorder, as of as_of: each inventory item with what is on hand, what is available, its reorder points and whether it has fallen to or below the lower one, beside its average cost, asset value and preferred vendor. Quantity committed is the open quantity of the item on open sales orders and work orders dated by as_of (measured as it stands now); quantity available is on hand less committed while the company's available_deducts_sales_orders preference is on, on hand while it is off, and the reorder flag compares available, not on hand, with the reorder point. Quantity on order and the next delivery date come from live purchase orders; on order is beside the flag, not in it. Quantity for assemblies is 0 until assembly builds exist. Asset value totals the same figure report inventory-valuation totals and the balance sheet carries for that date. Totals and the below-reorder count cover every item; rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -6455,8 +6626,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].asset_value.amount` | string | yes | no | — | — |
 | `rows[].asset_value.currency` | string | yes | no | — | — |
 | `rows[].asset_value.minor_units` | integer | yes | no | — | — |
-| `rows[].quantity_available` | string | yes | no | — | — |
+| `rows[].quantity_committed` | string | yes | no | — | Open quantity of this item on open sales orders and work orders dated by as_of, in its base unit. |
+| `rows[].quantity_for_assemblies` | string | yes | no | — | Reserved for pending assembly builds; 0 until assembly builds exist. |
+| `rows[].quantity_available` | string | yes | no | — | On hand less committed (and less reserved for builds under its own preference); on hand while the company's available_deducts_sales_orders preference is off. |
 | `rows[].quantity_on_order` | string | yes | no | — | — |
+| `rows[].next_delivery_date` | string \| null | yes | yes | — | Earliest expected date of a live purchase order with this item still to arrive. |
 | `rows[].reorder_point_min` | string \| null | yes | yes | — | — |
 | `rows[].reorder_point_max` | string \| null | yes | yes | — | — |
 | `rows[].below_reorder_point` | boolean | yes | no | — | — |
@@ -7164,7 +7338,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].account_id` | string \| null | no | yes | null | — |
 | `rows[].account_label` | string \| null | no | yes | null | — |
 | `rows[].description` | string \| null | no | yes | null | — |
-| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge"] \| null | no | yes | null | — |
+| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge", "cancelled"] \| null | no | yes | null | — |
 | `rows[].quantity` | string \| null | no | yes | null | — |
 | `rows[].billed_quantity` | string \| null | no | yes | null | — |
 | `rows[].remaining_quantity` | string \| null | no | yes | null | — |
