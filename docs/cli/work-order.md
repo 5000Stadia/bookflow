@@ -884,6 +884,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -1694,6 +1705,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -2568,6 +2590,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -4333,6 +4366,413 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
+
+## `work-order purchase-order`
+
+Order what this work order is short from a vendor: one ordinary purchase order (as purchase-order post writes) and a coverage link from each of its lines to the work order line it covers, in one step. With no lines the quantities are each stocked line's shortfall: open quantity less what links already cover, after on-hand stock and unlinked incoming purchase orders serve every other open document first, so no incoming unit is counted twice and running it again before anything changes orders nothing (it refuses: nothing is short). Lines default to those whose preferred vendor is the vendor; the result lists short lines left for other vendors. The rate is the vendor's purchase cost for the item, else the item's cost. Explicit lines may order any positive quantity (spares). What a link covers falls as the purchase order is amended down, received, closed or voided, so the shortfall comes back by exactly that.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | ledger.post (what purchase-order post requires) and customer-work standard role |
+| Capability | ledger.post |
+| Additional resources | customer-work: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/work-order.purchase-order` |
+| External binary body | none |
+
+### CLI
+
+`bookflow work-order purchase-order DEMO-SO-WO-1 --date 2026-10-22 --vendor "Central Supply" --lines '[{"item": "Brass Shutoff Valve", "quantity": "3"}]' --company "Demo Plumbing Co" --reason "Spares for the job" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "work-order purchase-order", "input": {"work_order": "DEMO-SO-WO-1", "date": "2026-10-22", "vendor": "Central Supply", "lines": [{"item": "Brass Shutoff Valve", "quantity": "3"}]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date` | `--date` | string | yes | no | — | Date of the purchase order.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `vendor` | `--vendor` | string \| null | no | yes | null | The vendor to order from. Omit it when every short line's preferred vendor is the same one; with several, the refusal lists each vendor with its lines. |
+| `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | The order or work-order line to cover. |
+| `lines[].item` | inside `--lines` JSON array | string \| null | no | yes | null | Or the item one stocked line of the document carries. |
+| `lines[].quantity` | inside `--lines` JSON array | string | yes | no | — | Base quantity to order: any positive amount (spares included).; minimum length 1; maximum length 40 |
+| `expected_date` | `--expected-date` | string \| null | no | yes | null | When the vendor is expected to deliver. |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `work_order` | `WORK_ORDER` | string | yes | no | — | minimum length 1; maximum length 1004 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/work-order.purchase-order`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `purchase_order` | object | yes | no | — | — |
+| `purchase_order.dry_run` | boolean | no | no | false | — |
+| `purchase_order.warnings` | array[string] | no | no | [] | — |
+| `purchase_order.id` | string | yes | no | — | — |
+| `purchase_order.version` | integer | yes | no | — | — |
+| `purchase_order.created_at` | string | yes | no | — | — |
+| `purchase_order.created_by` | string | yes | no | — | — |
+| `purchase_order.created_via` | string | yes | no | — | — |
+| `purchase_order.updated_at` | string | yes | no | — | — |
+| `purchase_order.updated_by` | string | yes | no | — | — |
+| `purchase_order.updated_via` | string | yes | no | — | — |
+| `purchase_order.receiving` | array[object] | no | no | [] | — |
+| `purchase_order.receiving[].order_line_id` | string | yes | no | — | — |
+| `purchase_order.receiving[].item_id` | string | yes | no | — | — |
+| `purchase_order.receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `purchase_order.receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `purchase_order.receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `purchase_order.number` | string | yes | no | — | — |
+| `purchase_order.current_revision_id` | string | yes | no | — | — |
+| `purchase_order.status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
+| `purchase_order.voided_at` | string \| null | yes | yes | — | — |
+| `purchase_order.voided_by` | string \| null | yes | yes | — | — |
+| `purchase_order.void_reason` | string \| null | yes | yes | — | — |
+| `purchase_order.date` | string | yes | no | — | — |
+| `purchase_order.vendor_id` | string | yes | no | — | — |
+| `purchase_order.vendor_name` | string | yes | no | — | — |
+| `purchase_order.expected_date` | string \| null | yes | yes | — | — |
+| `purchase_order.reference` | string \| null | yes | yes | — | — |
+| `purchase_order.memo` | string \| null | yes | yes | — | — |
+| `purchase_order.total` | object | yes | no | — | — |
+| `purchase_order.total.amount` | string | yes | no | — | — |
+| `purchase_order.total.currency` | string | yes | no | — | — |
+| `purchase_order.total.minor_units` | integer | yes | no | — | — |
+| `purchase_order.total_minor_units` | integer | yes | no | — | — |
+| `purchase_order.currency` | string | yes | no | — | — |
+| `purchase_order.consumed` | boolean | yes | no | — | — |
+| `purchase_order.bill_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision` | object | yes | no | — | — |
+| `purchase_order.revision.id` | string | yes | no | — | — |
+| `purchase_order.revision.created_at` | string | yes | no | — | — |
+| `purchase_order.revision.created_by` | string | yes | no | — | — |
+| `purchase_order.revision.created_via` | string | yes | no | — | — |
+| `purchase_order.revision.document_id` | string | yes | no | — | — |
+| `purchase_order.revision.revision_number` | integer | yes | no | — | — |
+| `purchase_order.revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.date` | string | yes | no | — | — |
+| `purchase_order.revision.number` | string | yes | no | — | — |
+| `purchase_order.revision.status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
+| `purchase_order.revision.vendor_id` | string | yes | no | — | — |
+| `purchase_order.revision.expected_date` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.ship_to` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.terms_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.reference` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.memo` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.class_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.total` | object | yes | no | — | — |
+| `purchase_order.revision.total.amount` | string | yes | no | — | — |
+| `purchase_order.revision.total.currency` | string | yes | no | — | — |
+| `purchase_order.revision.total.minor_units` | integer | yes | no | — | — |
+| `purchase_order.revision.total_minor_units` | integer | yes | no | — | — |
+| `purchase_order.revision.currency` | string | yes | no | — | — |
+| `purchase_order.revision.audit_event_id` | string | yes | no | — | — |
+| `purchase_order.revision.line_count` | integer | yes | no | — | — |
+| `purchase_order.revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
+| `purchase_order.revision.profile` | object | yes | no | — | — |
+| `purchase_order.revision.profile.vendor` | object | yes | no | — | — |
+| `purchase_order.revision.profile.vendor.id` | string | yes | no | — | — |
+| `purchase_order.revision.profile.vendor.label` | string | yes | no | — | — |
+| `purchase_order.revision.profile.vendor.version` | integer | yes | no | — | — |
+| `purchase_order.revision.profile.vendor.company_name` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.vendor.email` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.vendor.phone` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.vendor.account_number` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.expected_date` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.ship_to` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.terms` | object \| null | no | yes | null | — |
+| `purchase_order.revision.profile.terms.id` | string | yes | no | — | — |
+| `purchase_order.revision.profile.terms.label` | string | yes | no | — | — |
+| `purchase_order.revision.profile.terms.version` | integer | yes | no | — | — |
+| `purchase_order.revision.profile.terms.kind` | literal["standard", "date_driven"] | yes | no | — | — |
+| `purchase_order.revision.profile.terms.due_days` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.profile.terms.discount_days` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.profile.terms.due_day_of_month` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.profile.terms.due_next_month_if_within_days` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.profile.terms.discount_day_of_month` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.profile.terms.discount_percent_millionths` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.profile.reference` | string \| null | no | yes | null | — |
+| `purchase_order.revision.profile.class_id` | object \| null | no | yes | null | — |
+| `purchase_order.revision.profile.class_id.id` | string | yes | no | — | — |
+| `purchase_order.revision.profile.class_id.label` | string | yes | no | — | — |
+| `purchase_order.revision.profile.class_id.version` | integer | yes | no | — | — |
+| `purchase_order.revision.profile.total_minor_units` | integer | yes | no | — | — |
+| `purchase_order.revision.profile.currency` | string | yes | no | — | — |
+| `purchase_order.revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `purchase_order.revision.lines` | array[object] | yes | no | — | — |
+| `purchase_order.revision.lines[].id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].created_at` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].created_by` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].created_via` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].document_id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].revision_id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].position` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].item_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].account_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].description` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].quantity_microunits` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].rate` | object \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].rate.amount` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].rate.currency` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].amount` | object | yes | no | — | — |
+| `purchase_order.revision.lines[].amount.amount` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].amount.currency` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].amount_minor_units` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].currency` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].customer_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].billable` | boolean | yes | no | — | — |
+| `purchase_order.revision.lines[].class_id` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].line_snapshot` | object | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item` | object \| null | no | yes | null | — |
+| `purchase_order.revision.lines[].line_snapshot.item.id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.label` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.type` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.purchase_description` | string \| null | no | yes | null | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account` | object | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account.id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account.name` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account.full_name` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account.number` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account.type` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.item.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.account` | object \| null | no | yes | null | — |
+| `purchase_order.revision.lines[].line_snapshot.account.id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.account.name` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].line_snapshot.account.type` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `purchase_order.revision.lines[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `purchase_order.revision.lines[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `purchase_order.revision.lines[].line_snapshot.billable` | boolean | no | no | false | — |
+| `purchase_order.revision.lines[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `purchase_order.conversion` | object \| null | no | yes | null | — |
+| `purchase_order.conversion.id` | string | yes | no | — | — |
+| `purchase_order.conversion.created_at` | string | yes | no | — | — |
+| `purchase_order.conversion.created_by` | string | yes | no | — | — |
+| `purchase_order.conversion.created_via` | string | yes | no | — | — |
+| `purchase_order.conversion.source_document_id` | string | yes | no | — | — |
+| `purchase_order.conversion.source_revision_id` | string | yes | no | — | — |
+| `purchase_order.conversion.source_version` | integer | yes | no | — | — |
+| `purchase_order.conversion.destination_transaction_id` | string | yes | no | — | — |
+| `purchase_order.conversion.destination_revision_id` | string | yes | no | — | — |
+| `purchase_order.conversion.destination_type` | literal["bill"] | yes | no | — | — |
+| `purchase_order.conversion.audit_event_id` | string | yes | no | — | — |
+| `purchase_order.covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `purchase_order.covers[].work_document_id` | string | yes | no | — | — |
+| `purchase_order.covers[].work_kind` | string \| null | yes | yes | — | — |
+| `purchase_order.covers[].work_number` | string \| null | yes | yes | — | — |
+| `purchase_order.covers[].work_line_id` | string | yes | no | — | — |
+| `purchase_order.covers[].purchase_order_id` | string | yes | no | — | — |
+| `purchase_order.covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `purchase_order.covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `purchase_order.covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `purchase_order.covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `purchase_order.covers[].expected_date` | string \| null | yes | yes | — | — |
+| `purchase_order.changed` | boolean | no | no | true | — |
+| `purchase_order.changed_fields` | array[string] | no | no | [] | — |
+| `links` | array[object] | yes | no | — | — |
+| `links[].work_document_id` | string | yes | no | — | — |
+| `links[].work_kind` | string \| null | yes | yes | — | — |
+| `links[].work_number` | string \| null | yes | yes | — | — |
+| `links[].work_line_id` | string | yes | no | — | — |
+| `links[].purchase_order_id` | string | yes | no | — | — |
+| `links[].purchase_order_line_id` | string | yes | no | — | — |
+| `links[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `links[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `links[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `links[].expected_date` | string \| null | yes | yes | — | — |
+| `left_for_other_vendors` | array[object] | no | no | [] | Short lines whose preferred vendor is another one: run the command again naming that vendor. |
+| `left_for_other_vendors[].line_id` | string | yes | no | — | — |
+| `left_for_other_vendors[].item` | string | yes | no | — | — |
+| `left_for_other_vendors[].short` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "dry_run": false,
+  "left_for_other_vendors": [],
+  "links": [],
+  "purchase_order": {
+    "bill_id": null,
+    "changed": true,
+    "changed_fields": [],
+    "consumed": false,
+    "conversion": null,
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "currency": "USD",
+    "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "date": "2026-01-01",
+    "dry_run": false,
+    "expected_date": null,
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "memo": null,
+    "number": "value",
+    "receiving": [],
+    "reference": null,
+    "revision": {
+      "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "class_id": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "value",
+      "created_via": "cli",
+      "currency": "USD",
+      "custom_fields_snapshot": {},
+      "date": "2026-01-01",
+      "document_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "expected_date": null,
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "line_count": 1,
+      "lines": [],
+      "memo": null,
+      "number": "value",
+      "profile": {
+        "class_id": null,
+        "currency": "USD",
+        "expected_date": null,
+        "origins": {},
+        "reference": null,
+        "ship_to": null,
+        "terms": null,
+        "total_minor_units": 1,
+        "vendor": {
+          "account_number": null,
+          "company_name": null,
+          "email": null,
+          "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "label": "value",
+          "phone": null,
+          "version": 1
+        }
+      },
+      "reference": null,
+      "revision_number": 1,
+      "ship_to": null,
+      "status": "open",
+      "supersedes_revision_id": null,
+      "terms_id": null,
+      "total": {
+        "amount": "value",
+        "currency": "USD",
+        "minor_units": 1
+      },
+      "total_minor_units": 1,
+      "vendor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    },
+    "status": "open",
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "total_minor_units": 1,
+    "updated_at": "2026-01-01T00:00:00Z",
+    "updated_by": "value",
+    "updated_via": "cli",
+    "vendor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "vendor_name": "value",
+    "version": 1,
+    "void_reason": null,
+    "voided_at": null,
+    "voided_by": null,
+    "warnings": []
+  },
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
 
 ## `work-order query`
@@ -6326,6 +6766,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -7183,6 +7634,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |

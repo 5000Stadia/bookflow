@@ -69,6 +69,7 @@ ACCEPTED = {
     'assembly-build-v1': (587, 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2'),
     'committed-stock-v1': (588, 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5'),
     'order-invoicing-v1': (590, '549926f27b35d9566aba7627cd3af873c04b1cb19bf794fb0293f44009a22d85'),
+    'shortfall-po-v1': (592, '1e3ddca16fce5f8e6d6cb955e372f462cedb76491947d5a3eab52a11e98ece9d'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -138,6 +139,7 @@ CHAIN_ADDITIONS = {
     'assembly-build-v1': {'assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete', 'assembly show', 'assembly list'},
     'committed-stock-v1': {'report open-sales-orders'},
     'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
+    'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
 }
 
 _ANCESTOR_EDIT = """

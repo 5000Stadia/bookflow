@@ -2092,3 +2092,18 @@ MATRIX['sales-order billing'] = {
     'E_RECORD_NOT_FOUND': 'order absent from selected company',
     'E_QUERY_STALE': 'company audit changed between linked destination pages',
 }
+
+# Shortfall coverage (R101 increment 5).
+for _noun in ('sales-order', 'work-order'):
+    MATRIX[f'{_noun} purchase-order'] = {
+        'E_RECORD_NOT_FOUND': 'document, vendor or item absent from selected company',
+        'E_VALIDATION': 'nothing is short for this vendor (a retry orders nothing), short lines come from several vendors and none is named, explicit lines without a vendor, or an item with no purchase cost',
+        'E_WORK_DEPENDENCY': 'the document is closed, cancelled, voided or inactive and commits nothing',
+        'E_INACTIVE_REFERENCE': 'the vendor or an item is inactive',
+        'E_VALUE_RANGE': 'a quantity or amount beyond supported bounds',
+        'E_AMOUNT_PRECISION': 'a rate with more precision than the currency has',
+        'E_DUPLICATE_NUMBER': 'the purchase order number is already used',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive does not exist',
+        'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
+    }

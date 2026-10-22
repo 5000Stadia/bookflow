@@ -31,6 +31,20 @@ class LineStock(StrictModel):
     available: str = Field(description="Available to this document: on hand less what others commit (on hand while the company preference is off).")
 
 
+class CoverageOutput(StrictModel):
+    """A purchase-order line ordered to cover an order or work-order line, and what it still covers."""
+    work_document_id: str
+    work_kind: str | None
+    work_number: str | None
+    work_line_id: str
+    purchase_order_id: str
+    purchase_order_line_id: str
+    purchase_order_number: str | None
+    linked: str = Field(description="Base quantity the purchase-order line was ordered to cover.")
+    to_arrive: str = Field(description="What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided.")
+    expected_date: str | None
+
+
 class OrderProgress(StrictModel):
     """A sales order's progress: derived from its lines, except closed and voided, which a person decided."""
     progress: Literal['open', 'partly_invoiced', 'invoiced', 'closed', 'voided']
@@ -52,7 +66,7 @@ class WorkLineOutput(CreatedOutput):
     @model_serializer(mode='wrap')
     def legacy_ordinal(self,handler):
         result=handler(self)
-        for key in ('tax_ordinal','line_kind','amount','cancelled_quantity','order','stock'):
+        for key in ('tax_ordinal','line_kind','amount','cancelled_quantity','order','stock','coverage'):
             if getattr(self,key) is None:result.pop(key,None)
         return result
 
@@ -71,6 +85,8 @@ class WorkLineOutput(CreatedOutput):
         "Sales orders and work orders, current revision: ordered, invoiced, cancelled and open quantities."))
     stock: LineStock | None = Field(default=None, description=(
         "Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available."))
+    coverage: list[CoverageOutput] | None = Field(default=None, description=(
+        "Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive."))
     unit_price: MoneyOutput | None
     net: MoneyOutput
     tax: MoneyOutput

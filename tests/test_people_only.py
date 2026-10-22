@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_order_invoicing_catalog as tip_layer
+from bookflow.hub import permission_shortfall_po_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -33,7 +33,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # fixed-asset-v1 adds no people-only act.
     # assembly-build-v1 adds none: building assemblies is bookkeeping.
     # committed-stock-v1 adds none (a report).
-    # order-invoicing-v1 adds none.
+    # order-invoicing-v1 adds none, nor does shortfall-po-v1.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

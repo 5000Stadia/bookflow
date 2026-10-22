@@ -160,4 +160,18 @@ def define_tables(metadata, column, table, common):
         description='Immutable birth ancestry, consumed source facts and permanent conversion replay keys.')
     sa.Index('uq_work_estimate_order', work_links.c.source_document_id, unique=True,
              sqlite_where=sa.text("relation IN ('estimate_work_order','estimate_sales_order')"))
+    # Shortfall coverage (sales-orders design §5): which purchase-order line was ordered to cover
+    # which sales-order or work-order line. Immutable; how much it still covers is derived.
+    purchase_coverage_links = T('purchase_coverage_links',
+        ident('id', 'Immutable coverage link ULID.', primary_key=True),
+        ident('work_document_id', 'Sales order or work order whose shortfall this covers.', 'work_documents.id'),
+        ident('work_line_id', 'Stable line identity of that document.', 'work_line_identities.id'),
+        ident('purchase_order_id', 'Purchase order written to cover it.', 'purchase_orders.id'),
+        ident('purchase_order_line_id', 'Stable identity of the purchase-order line.'),
+        integer('quantity_microunits', 'Base quantity the line was ordered to cover, in millionths.'),
+        ident('audit_event_id', 'Audit event that wrote the link.', 'audit_events.id'), *created(),
+        sa.UniqueConstraint('purchase_order_line_id', name='uq_purchase_coverage_po_line'),
+        check("typeof(quantity_microunits) = 'integer' AND quantity_microunits > 0", 'coverage_quantity'),
+        description='Immutable links from a purchase-order line to the order or work-order line it covers.')
+    sa.Index('ix_purchase_coverage_document', purchase_coverage_links.c.work_document_id)
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}

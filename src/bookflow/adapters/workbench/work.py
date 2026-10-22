@@ -244,7 +244,7 @@ def form_groups(leaves):
             group = 'Lines and pricing'
         elif path in ('priority', 'assignees', 'scheduled_start', 'scheduled_end', 'actual_start', 'actual_end') or path.startswith('site_address'):
             group = 'Scheduling'
-        elif path in ('date', 'number', 'title', 'customer', 'status', 'active', 'decision_note', 'expires_on', 'acknowledge_expired', 'copy_mode', 'ship_date'):
+        elif path in ('date', 'number', 'title', 'customer', 'status', 'active', 'decision_note', 'expires_on', 'acknowledge_expired', 'copy_mode', 'ship_date', 'vendor', 'expected_date'):
             group = 'Work and decision'
         else:
             group = 'Commercial details'

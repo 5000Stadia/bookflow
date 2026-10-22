@@ -641,6 +641,18 @@ by default; pass `release_to_order cancel` to cancel it on the order instead. Th
 which. A credit memo never changes the order. `invoice post`, `sales-receipt post` and
 `payment receive` warn when the customer has an open order and give the command to use instead.
 
+## Ordering what an order is short
+
+`sales-order purchase-order <number> --date <d>` (or `work-order purchase-order`) writes one
+purchase order for what the document is short: its open stocked quantity not on hand, not already
+on order for it and not needed first by other open documents. Lines default to those whose
+preferred vendor is the vendor; with several vendors it refuses and lists each vendor with its
+lines, so run it once per vendor with `--vendor`. Running it again before anything changes orders
+nothing. Explicit `lines` (item or line_id, quantity) order any amount, spares included. Each
+document line shows the purchase-order lines ordered for it and what is still to arrive; each
+purchase order shows what it covers. Amending a purchase order down, receiving it or voiding it
+brings the shortfall back by exactly that.
+
 ## What is available to sell
 
 `report stock-status` and `item show` give each stocked item its quantity on hand, committed (the
