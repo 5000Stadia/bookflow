@@ -39,7 +39,12 @@ def _binding(s):
 
 
 def _refund_guard(s, verb, prepared):
-    """A correction may not leave a refund deposit owing less than the credits applied to it."""
+    """A correction may not leave a refund deposit owing less than the credits applied to it,
+    nor dated after them; a void must be able to release them (preview and save alike)."""
+    if verb == 'void':
+        from bookflow.company import vendor_refunds
+        vendor_refunds.check_release(s, _identity(prepared))
+        return
     if verb != 'update':
         return
     import json
@@ -47,7 +52,12 @@ def _refund_guard(s, verb, prepared):
     from bookflow.company.deposit_models import Effect
     data = json.loads(prepared.data_json)
     financial = Effect.model_validate_json(payment_queries.canonical(data['financial']))
-    vendor_refunds.guard_update(s, data['identity'], financial.intent.additional)
+    vendor_refunds.guard_update(s, data['identity'], financial.intent.additional, financial.intent.date)
+
+
+def _identity(prepared):
+    import json
+    return json.loads(prepared.data_json)['identity']
 
 
 def _financial(verb, model):

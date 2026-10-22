@@ -247,3 +247,63 @@ def test_the_co0073_guard_is_the_schema_modules():
     current = [s for s in guard_statements() if s.split()[2] == m.REPLACED[0]]
     assert current == [m.GUARD]
     assert "type = 'bill'" in m.OLD_GUARD and 'deposit' not in m.OLD_GUARD
+
+
+def _deposit_update(books, deposit_id, date, amount, guard=None, fingerprint=None, **context):
+    current = books['run']('deposit show', {'deposit': deposit_id})
+    extra = {'dependency_guard': guard, 'expected_facts_fingerprint': fingerprint} if guard else {}
+    return books['run']('deposit update', dict(extra,
+        deposit=deposit_id, expected_version=current['current']['version'], operation_key='move-' + date,
+        document=dict(mode='inline', deposit_to=books['bank'], date=date, number=current['current']['number'],
+                      memo=None, cash_back=None, custom_fields={}, expected_custom_field_kinds={}, sources=[],
+                      additional=[dict(received_from=dict(kind='vendor', id=books['acme']),
+                                       from_account=books['payable'], amount=amount)])),
+        reason='move the refund', **context)
+
+
+def test_a_refund_deposit_cannot_move_after_the_credit_it_settled(books):
+    # Review R149-1: moved to 05-28 and then closed at 05-25, the deposit could no longer be voided.
+    out = _refund(books)
+    for dry_run in (True, False):
+        with pytest.raises(BookflowError) as moved:
+            _deposit_update(books, out['deposit_id'], '2026-05-28', '120.00', dry_run=dry_run)
+        assert moved.value.code == 'E_DEPOSIT_DEPENDENCY'
+        assert moved.value.details['applied_on'] == '2026-05-20'
+        assert 'vendor-credit unapply' in moved.value.details['next']
+    assert _free(books) == 0
+    # The same date is still a correction the books can take, previewed and then saved.
+    preview = _deposit_update(books, out['deposit_id'], '2026-05-20', '120.00', dry_run=True)
+    _deposit_update(books, out['deposit_id'], '2026-05-20', '120.00', guard=preview['dependency_guard'],
+                    fingerprint=preview['facts_fingerprint'])
+    assert _free(books) == 0 and _balances(books)[books['bank']] == 12000
+
+
+def test_unapply_with_nothing_named_leaves_a_refund_standing(books):
+    # Review R149-2: the bank still holds the refund, so only naming the deposit detaches it.
+    bill = books['run']('bill post', dict(vendor=books['acme'], date='2026-05-12', due_date='2026-06-12',
+        expenses=[{'account': books['supplies'], 'amount': '30.00'}]), reason='May supplies')
+    out = _refund(books, amount='90.00')
+    books['run']('vendor-credit apply', dict(credit=books['credit'], date='2026-05-20',
+                                             bills=[dict(bill=bill['id'])]), reason='rest on the bill')
+    assert _free(books) == 0
+    books['run']('vendor-credit unapply', dict(credit=books['credit']), reason='undo the bill')
+    shown = books['run']('vendor-credit show', {'credit': books['credit']})
+    assert [row['obligation_transaction_id'] for row in shown['applications'] if row['active']] == [out['deposit_id']]
+    assert _free(books) == 3000
+    again = books['run']('vendor-credit unapply', dict(credit=books['credit']), reason='nothing left')
+    assert not again['changed'] and _free(books) == 3000
+    books['run']('vendor-credit unapply', dict(credit=books['credit'], deposits=[out['deposit_id']]),
+                 reason='undo the refund')
+    assert _free(books) == 12000
+
+
+@pytest.mark.parametrize('account', ['payable', 'supplies'])
+def test_a_refund_names_why_its_deposit_account_is_wrong(books, account):
+    # Review R149-3: not a bare "Invalid input".
+    with pytest.raises(BookflowError) as refused:
+        books['run']('vendor-credit refund', dict(credit=books['credit'], deposit_to=books[account],
+                                                  date='2026-05-20'), reason='wrong account')
+    assert refused.value.code == 'E_VALIDATION'
+    assert refused.value.details['fields'][0]['field'] == 'deposit_to'
+    assert 'must be a bank account' in refused.value.details['fields'][0]['problem']
+    assert _free(books) == 12000

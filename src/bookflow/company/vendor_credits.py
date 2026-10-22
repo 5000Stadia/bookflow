@@ -1157,6 +1157,12 @@ def prepare_unapply(s, ctx, inp):
                     'next': 'This credit has nothing still applied to that deposit.'})
             wanted |= named
         active = [row for row in active if row['obligation_transaction_id'] in wanted]
+    else:
+        # Named nothing: the bills only. A refund deposit's settlement stands until it is named,
+        # because detaching it would leave the credit free while the bank still holds the refund.
+        from bookflow.company import vendor_refunds
+        refunds = vendor_refunds.obligation_types(s, {row['obligation_transaction_id'] for row in active})
+        active = [row for row in active if row['obligation_transaction_id'] not in refunds]
     if not active:
         return Plan(_output(s, header, revision, model=VendorCreditWriteOutput, changed=False),
                     dict(input=None, operation='unapply', changed=False))

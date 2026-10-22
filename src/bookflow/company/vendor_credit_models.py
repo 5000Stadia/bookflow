@@ -255,7 +255,8 @@ class VendorCreditApplyInput(_Input):
 class VendorCreditUnapplyInput(_Input):
     credit: _Selector
     expected_version: _Version | None = None
-    # Omitted means every application still standing on this credit. Naming bills detaches only
+    # Omitted means every bill still settled by this credit (never a refund deposit; name those
+    # in `deposits`). Naming bills detaches only
     # those, so one wrong row on a three-bill credit is one correction, not three.
     bills: list[_Selector] | None = Field(default=None, min_length=1, max_length=200)
     # Refund deposits the credit answers, named the same way; naming only bills leaves these.

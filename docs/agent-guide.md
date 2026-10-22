@@ -660,7 +660,8 @@ and settles the credit against it, so the vendor's balance, the A/P aging, the d
 the bank reconciliation all agree. Do not deposit the check to an expense or income account: that
 leaves the credit standing as money the vendor still owes. No credit entered yet? Post the
 `vendor-credit` first (the return itself), then refund it. To undo, void the deposit; the credit
-reopens. A refund already deposited with a line from Accounts Payable naming the vendor is settled
+reopens. `vendor-credit unapply` with nothing named leaves a refund standing; name it in
+`--deposits` only when the refund itself was wrong and the deposit stays. A refund already deposited with a line from Accounts Payable naming the vendor is settled
 with `vendor-credit apply <credit> --deposits '[{"deposit":"<deposit>"}]'`.
 
 ## Deleting duplicate documents

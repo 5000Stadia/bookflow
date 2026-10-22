@@ -193,13 +193,27 @@ def applied_by_key(s, deposit_id):
     return totals
 
 
-def guard_update(s, deposit_id, additional):
-    """Refuse a correction that leaves a refund deposit owing less than the credits applied to it."""
+def guard_update(s, deposit_id, additional, date=None):
+    """Refuse a correction that leaves a refund deposit owing less than the credits applied to it.
+
+    Nor may it move the deposit after a credit already applied to it: an application can never
+    precede what it settles, and one left dated before its deposit could no longer be released
+    once its own period closed, though the deposit's period is open.
+    """
     if not deposit_id:
         return
-    applied = applied_by_key(s, deposit_id)
-    if not applied:
+    standing = _standing(s, deposit_id)
+    if not standing:
         return
+    earliest = min(row['effective_date'] for row in standing)
+    if date is not None and date > earliest:
+        raise BookflowError('E_DEPOSIT_DEPENDENCY', message=(
+            f'A vendor credit was applied to this refund deposit on {earliest}; the deposit cannot '
+            f'be moved to {date}, after that settlement. Run vendor-credit unapply with deposits '
+            'naming this deposit first, correct the date, then apply the credit again.'),
+            details={'field': 'document.date', 'deposit_id': deposit_id, 'applied_on': earliest,
+                     'next': 'vendor-credit unapply <credit> --deposits <deposit>'})
+    applied = applied_by_key(s, deposit_id)
     owed = {}
     for row in additional:
         if row.account.type == 'accounts_payable' and row.dimensions.party_kind == 'vendor':
@@ -214,6 +228,13 @@ def guard_update(s, deposit_id, additional):
                 'with deposits naming this deposit first, then correct it.'),
                 details={'deposit_id': deposit_id, 'applied_minor_units': standing,
                          'next': 'vendor-credit unapply <credit> --deposits <deposit>'})
+
+
+def check_release(s, deposit_id):
+    """What ``release`` will need, asked before a void or deletion writes: each date it reopens is open."""
+    standing = _standing(s, deposit_id)
+    if standing:
+        journals.open_dates(s, sorted({row['effective_date'] for row in standing}))
 
 
 def release(s, ctx, deposit_id, command_name):
@@ -284,6 +305,13 @@ def _refund_facts(s, ctx, inp):
                     'the vendor owes is not a refund of this credit: record the rest as ordinary '
                     'deposit income.' if free else
                     'This credit has nothing free to refund; vendor-credit unapply frees what it holds.'})
+    from bookflow.company import sales_defaults
+    bank = sales_defaults._row(s.company, 'account', inp.deposit_to, active=False)
+    if bank['type'] != 'bank' or bank['system_role'] is not None:
+        raise _invalid('deposit_to', f'must be a bank account; "{bank["full_name"]}" is '
+                                     + ('Undeposited Funds' if bank['system_role'] == 'undeposited_funds'
+                                        else 'a ' + bank['type'].replace('_', ' ') + ' account')
+                                     + '. Name the bank account the refund check was deposited into.')
     if inp.date < revision['date']:
         raise _invalid('date', f'a refund dated {inp.date} cannot come before credit '
                                f'{header["number"]}, which is dated {revision["date"]}')

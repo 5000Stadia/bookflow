@@ -2368,7 +2368,7 @@ Example JSON output:
 
 ## `vendor-credit unapply`
 
-Take a vendor credit back off the bills it settled, without moving any money. The bills go back to open for what was applied and no account changes, which leaves the credit standing as an unapplied debit against the vendor. Name `bills` to detach only those; leave it out to detach everything still applied. Name `deposits` to detach refund deposits the same way; naming only `bills` leaves them standing. Each detachment is dated at the settlement date it takes back, so an application dated on or before the closing date cannot be undone here.
+Take a vendor credit back off the bills it settled, without moving any money. The bills go back to open for what was applied and no account changes, which leaves the credit standing as an unapplied debit against the vendor. Name `bills` to detach only those; leave it out to detach every bill still applied. A refund deposit (a vendor’s refund check this credit settled) is detached only when named in `deposits`; leaving everything out, or naming only `bills`, leaves it standing, because the bank still holds that refund. Void the deposit to undo a refund. Each detachment is dated at the settlement date it takes back, so an application dated on or before the closing date cannot be undone here.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
