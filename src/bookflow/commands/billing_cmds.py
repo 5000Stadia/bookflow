@@ -5,6 +5,11 @@ from bookflow.company.billing_outputs import BillingOutput
 from bookflow.company.sales_outputs import SalesWriteOutput
 
 
+def prepayments_kinds():
+    from bookflow.company.prepayments import HOLDING_KINDS
+    return HOLDING_KINDS
+
+
 def register(kind, prefix, verb):
     destination = verb.replace('-', '_')
     read = verb == 'billing'
@@ -13,6 +18,8 @@ def register(kind, prefix, verb):
         from bookflow.company.billing_allocations import one_reading
         with one_reading(s):
             plan = Plan(billing_queries.billing(s, ctx, inp, kind)) if read else billing.prepare(s, ctx, inp, kind, destination)
+        if verb == 'invoice' and kind not in prepayments_kinds():
+            return plan
         if verb == 'invoice' and plan.data.get('changed', True) and not plan.preview.idempotent_replay:
             from bookflow.company import prepayments
             prepayments.conversion_preview(s, plan.preview, kind, getattr(inp, kind), inp.apply_prepayment)
@@ -38,7 +45,7 @@ def register(kind, prefix, verb):
     cmd.resource_requirements = (('customer-work', 'member' if read else 'standard'),)
     if not read:
         cmd.ledger = True
-        if verb == 'invoice':
+        if verb == 'invoice' and kind in prepayments_kinds():
             def apply(plan, ctx, s):
                 from bookflow.company import prepayments
                 applied = billing.apply(plan, ctx, s)
@@ -46,11 +53,20 @@ def register(kind, prefix, verb):
                 if applied.output is not None and getattr(applied.output, 'changed', True):
                     applied.output = prepayments.conversion_draw(s, ctx, applied.output, kind, getattr(inp, kind),
                                                                  inp.apply_prepayment)
+                elif applied.output is not None:
+                    applied.output = prepayments.conversion_replay(s, applied.output)
                 return applied
             cmd.applier(apply)
         else:
             cmd.applier(billing.apply)
-        cmd.replay = lambda inp, ctx, s, hit: billing.replay_conversion(s, ctx, inp, kind, destination, hit)
+        if verb == 'invoice' and kind in prepayments_kinds():
+            def replay(inp, ctx, s, hit):
+                from bookflow.company import prepayments
+                result = billing.replay_conversion(s, ctx, inp, kind, destination, hit)
+                return prepayments.conversion_replay_dict(s, result)
+            cmd.replay = replay
+        else:
+            cmd.replay = lambda inp, ctx, s, hit: billing.replay_conversion(s, ctx, inp, kind, destination, hit)
     return cmd
 
 

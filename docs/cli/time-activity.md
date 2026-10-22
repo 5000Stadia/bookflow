@@ -1366,7 +1366,6 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `apply_prepayment` | `--apply-prepayment` | boolean | no | no | true | Use the customer prepayment held on this work (and, for a work order, on its estimate) toward the new invoice: the lesser of what is held and the invoice total, oldest receipt first, drawn by a credit memo applied in the same step. false leaves it held. The preview reports prepayment_applied and balance_due. |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `terms` | `--terms` | string \| null | no | yes | null | — |
 | `due_date` | `--due-date` | string \| null | no | yes | null | — |

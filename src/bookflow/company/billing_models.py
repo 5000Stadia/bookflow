@@ -60,6 +60,9 @@ class ConversionInput(StrictModel):
         for name in ('selections', 'percent', 'apply_prepayment'):
             if name not in self.model_fields_set:
                 values.pop(name, None)
+        # true is the default, so naming it is the same request as leaving it out.
+        if values.get('apply_prepayment') is True:
+            values.pop('apply_prepayment')
         return values
 
     @property
@@ -119,7 +122,7 @@ class WorkOrderSalesReceiptInput(ReceiptConversionInput):
     work_order: CanonicalId
 
 
-class TimeActivityInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
+class TimeActivityInvoiceInput(ConversionInput, InvoiceFields):
     time_activity: CanonicalId
 
 

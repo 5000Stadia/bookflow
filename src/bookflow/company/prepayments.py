@@ -136,6 +136,22 @@ def find_item(db, account=None):
     return dict(row) if row is not None else None
 
 
+LOCKED_ITEM_FIELDS = ('type', 'income_account_id', 'sales_tax_code_id', 'sales_enabled', 'expense_account_id',
+                      'purchase_enabled', 'charge_percent', 'parent_id')
+
+
+def guard_item_update(db, current, changes):
+    """The Customer Prepayment item keeps its type, account and non-taxable code, as system accounts do."""
+    account = find_account(db)
+    if account is None or current.get('income_account_id') != account['id']:
+        return
+    changed = sorted(field for field in LOCKED_ITEM_FIELDS if field in changes and changes[field] != current.get(field))
+    if changed:
+        raise _invalid(changed[0], f'"{current["full_name"]}" is the customer prepayment ledger\'s own item; its type, '
+                       'accounts, tax code and sales setting are fixed (a deposit is never taxed and never income). '
+                       'Its name and description may change.')
+
+
 def item_id(db):
     item = find_item(db)
     return item['id'] if item else None
@@ -226,6 +242,24 @@ def document_customer(s, header):
     return work.facts(work.revision(s, header)).profile.customer.id
 
 
+def family(s, customer_id):
+    """A customer or job with its parent and its own jobs: whose deposits may serve each other's work."""
+    cu = c.customers
+    parent = s.company.conn.execute(sa.select(cu.c.parent_id).where(cu.c.id == customer_id)).scalar()
+    children = s.company.conn.execute(sa.select(cu.c.id).where(cu.c.parent_id == customer_id)).scalars().all()
+    return frozenset({customer_id, *children} | ({parent} if parent else set()))
+
+
+def descendants(s, customer_id):
+    cu = c.customers
+    found, frontier = {customer_id}, [customer_id]
+    while frontier:
+        frontier = s.company.conn.execute(sa.select(cu.c.id).where(cu.c.parent_id.in_(frontier))).scalars().all()
+        frontier = [i for i in frontier if i not in found]
+        found.update(frontier)
+    return found
+
+
 def _ref(header):
     return DocumentRef(id=header['id'], kind=header['kind'], number=header['number'], status=header['status'])
 
@@ -297,11 +331,17 @@ def draw_rows(s, *, receipt_ids=None, credit_memo_ids=None, invoice_ids=None, re
 
 
 def receipt_rows(s, *, receipt_ids=None, customer_id=None, document_ids=None, customer_level=False, as_of=None,
-                 include_voided=False):
+                 include_voided=False, customer_ids=None):
     """Prepayment receipts with what each holds, oldest first (by date, then as written)."""
     link = _current_links()
     t, r = c.transactions, c.transaction_revisions
-    query = (sa.select(link, t.c.number, t.c.status, r.c.date, r.c.total_minor_units.label('amount'),
+    slp = c.sales_line_profiles
+    account = find_account(s.company)
+    net = (sa.select(sa.func.coalesce(sa.func.sum(slp.c.net_minor_units), 0)).join(
+        c.items, c.items.c.id == slp.c.item_id).where(
+        slp.c.revision_id == r.c.id, c.items.c.income_account_id == (account['id'] if account else None))
+        .scalar_subquery())
+    query = (sa.select(link, t.c.number, t.c.status, r.c.date, net.label('amount'),
                        c.customers.c.full_name.label('customer_name'))
              .join(t, t.c.id == link.c.receipt_id)
              .join(r, r.c.id == t.c.current_revision_id)
@@ -312,6 +352,8 @@ def receipt_rows(s, *, receipt_ids=None, customer_id=None, document_ids=None, cu
         query = query.where(link.c.receipt_id.in_(sorted(set(receipt_ids))))
     if customer_id is not None:
         query = query.where(link.c.customer_id == customer_id)
+    if customer_ids is not None:
+        query = query.where(link.c.customer_id.in_(sorted(customer_ids)))
     if document_ids is not None:
         query = query.where(link.c.work_document_id.in_(sorted(set(document_ids))))
     if customer_level:
@@ -336,6 +378,25 @@ def is_prepayment_receipt(s, receipt_id):
 def is_draw(s, credit_memo_id):
     return s.company.conn.execute(sa.select(c.prepayment_draws.c.id).where(
         c.prepayment_draws.c.credit_memo_id == credit_memo_id).limit(1)).first() is not None
+
+
+def held_on_customer(db, customer_id):
+    """What is held for a customer or job, from a bare company database (merge and deactivate ask)."""
+    from types import SimpleNamespace
+    if find_account(db) is None:
+        return 0
+    return held_for_customer(SimpleNamespace(company=db), customer_id)
+
+
+def holding_refusal(db, customer_id, name, verb):
+    """The `next` and amount for a customer that cannot be merged or deactivated while it holds money."""
+    held = held_on_customer(db, customer_id)
+    if not held:
+        return None
+    currency = db.conn.execute(sa.select(c.company_info.c.home_currency)).scalar()
+    return held, (f'{name} has {_plain(held, currency)} held in customer prepayments; it cannot be {verb} while it '
+                  'holds their money. Pay it back with `prepayment refund --customer ...`, or use it on an invoice '
+                  'with `prepayment apply` first.')
 
 
 def held_for_customer(s, customer_id):
@@ -388,7 +449,16 @@ def guard_line_item(s, item, *, nonposting, item_changed):
 
 
 def guard_sale(s, document_type, old_header, old_revision, resolved):
-    """A prepayment receipt stays one Customer Prepayment line, for its customer, covering its draws."""
+    """A prepayment receipt stays one untaxed Customer Prepayment line, for its customer, covering its draws."""
+    if document_type == 'sales_receipt':
+        prepayment_item = item_id(s.company)
+        if prepayment_item and any(line['profile'].item.id == prepayment_item for line in resolved['lines']):
+            taxable = [line for line in resolved['lines'] if line['profile'].item.id == prepayment_item
+                       and line['profile'].tax_code is not None and line['profile'].tax_code.taxable]
+            if resolved['tax'] or taxable:
+                raise _invalid('tax_code' if taxable else 'sales_tax_item', 'a customer prepayment is never taxed: it is '
+                               'held money, not a sale. Leave the line non-taxable and name no sales tax; tax is charged '
+                               'on the invoice that uses the deposit')
     if document_type != 'sales_receipt' or old_header is None or writing():
         return
     if not is_prepayment_receipt(s, old_header['id']):
@@ -469,11 +539,31 @@ def invoice_void_hint(s, blocking):
             'to its receipts with `prepayment unapply`, release any other payment with payment unapply, then void.')
 
 
-def guard_work_status(s, old, value):
-    """A document holding money is not voided, cancelled or superseded until the money moves."""
-    if old is None or value['status'] == old['status'] or value['status'] not in ('voided', 'cancelled', 'superseded'):
+def _customer_of(value):
+    try:
+        return value['facts']['profile']['customer']['id']
+    except (KeyError, TypeError):
+        return None
+
+
+def guard_work_status(s, old, value, before=None):
+    """A document holding money is not voided, cancelled, superseded or moved to another customer until the money moves."""
+    if old is None:
+        return
+    moved = before is not None and _customer_of(before) and _customer_of(value) and _customer_of(before) != _customer_of(value)
+    ending = value['status'] != old['status'] and value['status'] in ('voided', 'cancelled', 'superseded')
+    if not (moved or ending):
         return
     rows = [row for row in receipt_rows(s, document_ids=[old['id']]) if row['held'] > 0]
+    if rows and moved and not ending:
+        currency = _currency(s)
+        raise BookflowError('E_HAS_APPLICATIONS', details={
+            'work_document_id': old['id'], 'receipt_ids': [row['receipt_id'] for row in rows], 'field': 'customer',
+            'held_minor_units': sum(row['held'] for row in rows), 'action': 'move_prepayment_first',
+            'next': f'{_plain(sum(row["held"] for row in rows), currency)} of customer prepayments from '
+                    f'{rows[0]["customer_name"]} is held on this {old["kind"].replace("_", " ")}; it cannot change customer '
+                    'while it holds their money. Pay it back with `prepayment refund` or move it with `prepayment attach`, '
+                    'then change the customer.'})
     if rows:
         currency = _currency(s)
         held = sum(row['held'] for row in rows)
@@ -510,6 +600,20 @@ def customer_note(s, customer_id, context):
                 'first with `prepayment apply --invoice <number>`, then receive only what is still owed.')
     return (f'{name} has {_plain(held, currency)} held in customer prepayments. A sales receipt is a sale; to take '
             f'another {SYNONYMS} use `prepayment receive`, and to use held money on a sale invoice it and `prepayment apply`.')
+
+
+def statement_notes(s, customer_id, as_of):
+    """The statement's note below the balance: deposits held on the statement date."""
+    if find_account(s.company) is None:
+        return []
+    currency = _currency(s)
+    rows = [row for row in receipt_rows(s, customer_id=customer_id, as_of=as_of) if row['held'] > 0]
+    held = {}
+    for row in rows:
+        held.setdefault(row['customer_name'], 0)
+        held[row['customer_name']] += row['held']
+    return [f'{name}: {_plain(amount, currency)} paid in advance (customer prepayment) is held and will be used on '
+            'a later invoice or refunded; it is not part of the balance above.' for name, amount in sorted(held.items())]
 
 
 def add_note(s, output, customer_selector, context):
@@ -660,7 +764,7 @@ def prepare_attach(s, ctx, inp):
     if inp.document is not None:
         header = resolve_document(s, inp.document)
         _holdable(s, header)
-        if document_customer(s, header) != row['customer_id']:
+        if document_customer(s, header) not in family(s, row['customer_id']):
             raise _invalid('document', f'{header["kind"].replace("_", " ")} {header["number"]} is for another customer or '
                            f'job; this receipt\'s money is held for {row["customer_name"]}')
     if (header['id'] if header else None) == row['work_document_id']:
@@ -716,13 +820,18 @@ def _source_rows(s, inp, *, customer_id, default_document=None):
     return receipt_rows(s, customer_id=customer_id, customer_level=True), None, 'customer'
 
 
+def _allowed(customer_id):
+    return customer_id if isinstance(customer_id, frozenset) else frozenset({customer_id})
+
+
 def _allocate(rows, amount, date, customer_id):
-    """Oldest receipt first; a receipt dated after the draw, or another customer's, is not drawn."""
+    """Oldest receipt first; a receipt dated after the draw, or another family's, is not drawn."""
     taken, left = [], amount
+    allowed = _allowed(customer_id)
     for row in rows:
         if left == 0:
             break
-        if row['held'] <= 0 or row['date'] > date or row['customer_id'] != customer_id:
+        if row['held'] <= 0 or row['date'] > date or row['customer_id'] not in allowed:
             continue
         take = min(row['held'], left)
         taken.append((row, take))
@@ -731,7 +840,8 @@ def _allocate(rows, amount, date, customer_id):
 
 
 def _available(rows, date, customer_id):
-    return sum(row['held'] for row in rows if row['date'] <= date and row['customer_id'] == customer_id)
+    allowed = _allowed(customer_id)
+    return sum(row['held'] for row in rows if row['date'] <= date and row['customer_id'] in allowed)
 
 
 def _credit_input(s, customer_id, date, taken, currency, ar_account, memo):
@@ -826,20 +936,25 @@ def prepare_apply(s, ctx, inp):
     facts = _invoice_facts(s, inp.invoice)
     invoice, profile = facts['header'], facts['profile']
     customer_id = profile['customer_id']
+    allowed = family(s, customer_id)
     rows, header, kind = _source_rows(s, inp, customer_id=customer_id,
                                       default_document=_invoice_source_document(s, invoice['id']))
     if kind == 'document':
-        if document_customer(s, header) != customer_id:
+        if document_customer(s, header) not in allowed:
             raise _invalid('document', 'that document is for another customer or job than the invoice')
-    others = {row['customer_id'] for row in rows} - {customer_id}
+    others = {row['customer_id'] for row in rows} - allowed
     if kind == 'receipts' and others:
         raise _invalid('receipts', 'a receipt held for another customer or job cannot pay this invoice')
-    receipts_latest = max([row['date'] for row in rows if row['held'] > 0] or [facts['revision']['date']])
-    date = inp.date or max(facts['revision']['date'], receipts_latest)
+    amount = _amount(inp.amount, currency, 'amount') if inp.amount is not None else None
+    date = inp.date
+    if date is None:
+        # The later of the invoice date and the receipts this draw actually takes, oldest first.
+        want = amount if amount is not None else min(_available(rows, '9999-12-31', allowed), facts['due'])
+        probe = _allocate(rows, want, '9999-12-31', allowed) if want else []
+        date = max([facts['revision']['date']] + [row['date'] for row, _ in probe])
     if date < facts['revision']['date']:
         raise _invalid('date', 'a draw is dated on or after the invoice it pays')
-    amount = _amount(inp.amount, currency, 'amount') if inp.amount is not None else None
-    taken, total = plan_draw_for_invoice(s, invoice=invoice, customer_id=customer_id, due=facts['due'], date=date,
+    taken, total = plan_draw_for_invoice(s, invoice=invoice, customer_id=allowed, due=facts['due'], date=date,
                                          rows=rows, amount=amount)
     if total == 0:
         raise _invalid('amount', 'nothing is held there on or before ' + date if facts['due'] else
@@ -847,7 +962,7 @@ def prepare_apply(s, ctx, inp):
     from bookflow.company import journals
     journals.open_dates(s, [date])
     customer = defaults._row(s.company, 'customer', customer_id, active=False)
-    held_after = sum(row['held'] for row in rows if row['customer_id'] == customer_id) - total
+    held_after = sum(row['held'] for row in rows if row['customer_id'] in allowed) - total
     output = PrepaymentWriteOutput(
         action='apply', customer_id=customer_id, customer=customer['full_name'], document=_ref(header) if header else None,
         invoice=DocumentNumber(id=invoice['id'], number=invoice['number'], type='invoice',
@@ -868,7 +983,7 @@ def apply_apply(plan, ctx, s):
     invoice = facts['header']
     rows, _, _ = _source_rows(s, inp, customer_id=preview.customer_id,
                               default_document=_invoice_source_document(s, invoice['id']))
-    taken = _allocate(rows, preview.amount.minor_units, preview.draws[0].date, preview.customer_id)
+    taken = _allocate(rows, preview.amount.minor_units, preview.draws[0].date, family(s, preview.customer_id))
     memo, _, touched = _write_draws(s, ctx, customer_id=preview.customer_id, date=preview.draws[0].date, taken=taken,
                                     currency=preview.amount.currency, ar_account=facts['profile']['control_account_id'],
                                     invoice=invoice, command='prepayment apply')
@@ -907,7 +1022,7 @@ def conversion_preview(s, sale_preview, kind, source_selector, apply_prepayment)
         source = work.resolve(s, source_selector, kind)
         customer_id = document_customer(s, source)
         rows = receipt_rows(s, document_ids=_pool_documents(s, source))
-        applied = min(_available(rows, sale_preview.revision.date, customer_id), total)
+        applied = min(_available(rows, sale_preview.revision.date, family(s, customer_id)), total)
     sale_preview.prepayment_applied = _sale_money(applied, currency)
     sale_preview.balance_due = _sale_money(total - applied, currency)
     if applied:
@@ -925,7 +1040,7 @@ def conversion_draw(s, ctx, output, kind, source_selector, apply_prepayment=True
     facts = _invoice_facts(s, output.id)
     customer_id = facts['profile']['customer_id']
     rows = receipt_rows(s, document_ids=_pool_documents(s, source))
-    taken, total = plan_draw_for_invoice(s, invoice=facts['header'], customer_id=customer_id, due=facts['due'],
+    taken, total = plan_draw_for_invoice(s, invoice=facts['header'], customer_id=family(s, customer_id), due=facts['due'],
                                          date=facts['revision']['date'], rows=rows) if apply_prepayment else ([], 0)
     if total:
         _write_draws(s, ctx, customer_id=customer_id, date=facts['revision']['date'], taken=taken, currency=currency,
@@ -933,6 +1048,17 @@ def conversion_draw(s, ctx, output, kind, source_selector, apply_prepayment=True
     from bookflow.company import payment_queries
     due = payment_queries.invoice_facts(s, output.id)['due']
     return output.model_copy(update=dict(prepayment_applied=_sale_money(total, currency), balance_due=_sale_money(due, currency)))
+
+
+def conversion_replay_dict(s, result):
+    """A replayed conversion's stored result, with what its invoice took from prepayments."""
+    if find_account(s.company) is None or not result.get('id'):
+        return result
+    from bookflow.company import payment_queries
+    currency = _currency(s)
+    applied = sum(row['amount'] for row in draw_rows(s, invoice_ids=[result['id']]))
+    due = payment_queries.invoice_facts(s, result['id'])['due']
+    return dict(result, prepayment_applied=Money(applied, currency).to_dict(), balance_due=Money(due, currency).to_dict())
 
 
 def conversion_replay(s, output):
@@ -1136,7 +1262,8 @@ def show(s, inp):
         customer_id = document_customer(s, header)
     else:
         customer_id = defaults._row(s.company, 'customer', inp.customer, active=False)['id']
-        rows = receipt_rows(s, customer_id=customer_id, include_voided=True)
+        # A customer's jobs' deposits are shown with it, each labelled with its job.
+        rows = receipt_rows(s, customer_ids=descendants(s, customer_id), include_voided=True)
         draws = draw_rows(s, receipt_ids=[row['receipt_id'] for row in rows], include_voided=True)
     customer = defaults._row(s.company, 'customer', customer_id, active=False) if customer_id else None
     documents = _documents(s, [row['work_document_id'] for row in rows] + [row['work_document_id'] for row in draws])

@@ -249,6 +249,9 @@ _CUSTOMER_FIELDS: dict[str, tuple[object, object]] = {
     "current_balance": (MoneyOutput, Field(description="Exact customer/job net AR ledger balance.")),
     "open_balance": (MoneyOutput, Field(description="Net AR ledger balance, including credits; not invoice aging.")),
     "family_balance": (MoneyOutput, Field(description="Net AR for this customer and all descendants exactly once.")),
+    "prepayment_held": (MoneyOutput | None, Field(default=None, description=(
+        "Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, "
+        "left out of the balances above. `prepayment show --customer` lists them."))),
 }
 
 _VENDOR_FIELDS: dict[str, tuple[object, object]] = {

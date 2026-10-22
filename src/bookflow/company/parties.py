@@ -1589,6 +1589,16 @@ def plan_party_active_change(
         if active
         else list_service.plan_deactivation(db, table, requested, cascade=cascade)
     )
+    if not active and noun == "customer":
+        from bookflow.company.prepayments import holding_refusal
+        for row in rows:
+            holding = holding_refusal(db, str(row["id"]), row.get("full_name") or str(row["id"]), "made inactive")
+            if holding is not None:
+                raise BookflowError(
+                    "E_RECORD_IN_USE",
+                    details={"record_id": row["id"], "dependents": [{"record_type": "prepayment_receipt", "count": 1}],
+                             "prepayment_held_minor_units": holding[0], "next": holding[1]},
+                )
     if not active and noun in {"customer", "vendor"}:
         for row in rows:
             link = _active_link(db, noun, str(row["id"]))
@@ -2317,6 +2327,11 @@ def _employee_completeness(
     return not missing, missing
 
 
+def _prepayment_held(db, customer_id):
+    from bookflow.company.prepayments import held_on_customer
+    return held_on_customer(db, customer_id)
+
+
 def project_party_record(
     db: Database,
     noun: str,
@@ -2414,6 +2429,7 @@ def project_party_record(
             "current_balance": net,
             "open_balance": net,
             "family_balance": Money(family_balance(db, str(values["id"])), _home_currency(db)).to_dict(),
+            "prepayment_held": Money(_prepayment_held(db, str(values["id"])), _home_currency(db)).to_dict(),
             "customer_or_job": "job" if values["parent_id"] is not None else "customer",
         }
         address, address_source = _effective_customer_address(values, ancestors)

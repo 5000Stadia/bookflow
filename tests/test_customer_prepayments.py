@@ -365,3 +365,101 @@ def test_the_receipt_is_banked_by_deposit_post(books):
     tb = balances(books)
     assert tb.get('Undeposited Funds', 0) == 0 and tb['Customer Prepayments'] == -15000
     assert held(books) == 15000
+
+
+# ------------------------------------------------------------------ review fixes
+
+
+def test_a_prepayment_receipt_is_never_taxed_and_its_item_is_locked(books):
+    run = books['run']
+    run('company update', dict(sales_tax_enabled=True))
+    roles = {a['system_role']: a['id'] for a in run('account list')['items'] if a.get('system_role')}
+    agency = run('vendor create', dict(name='Tax agency', is_tax_agency=True))['id']
+    tax = run('item create', dict(name='Seven percent', type='sales_tax_item', tax_percent='7',
+                                  tax_agency_vendor_id=agency, liability_account_id=roles['sales_tax_payable']))['id']
+    got = receive(books, '100.00', '2026-03-02', customer=books['ortega'])
+    shown = run('sales-receipt show', dict(sales_receipt=got['receipt']['id']))
+    line = shown['revision']['lines'][0]
+    taxable = next((row['id'] for row in run('sales-tax-code list')['items'] if row['taxable']), None)
+    error = refused(lambda: run('sales-receipt update', dict(sales_receipt=got['receipt']['id'],
+        expected_version=shown['version'], sales_tax_item=tax,
+        lines=[dict(line_id=line['line_id'], item=line['item_id'], tax_code=taxable)])))
+    assert error.code == 'E_VALIDATION' and 'never taxed' in str(error.details)
+    assert held(books) == 10000 and balances(books)['Customer Prepayments'] == -10000
+    item = run('item show', dict(item=line['item_id']))
+    for field, value in (('sales_tax_code_id', taxable), ('income_account_id', books['income'])):
+        error = refused(lambda: run('item update', dict(item=item['id'], expected_version=item['version'], **{field: value})))
+        assert error.code == 'E_VALIDATION' and 'fixed' in str(error.details), field
+    renamed = run('item update', dict(item=item['id'], expected_version=item['version'], description='Deposit held'))
+    assert renamed['description'] == 'Deposit held'
+    receive(books, '10.00', '2026-03-03', customer=books['ortega'])
+    items = [row for row in run('item query', dict(limit=200))['items'] if 'Prepayment' in row['full_name']]
+    assert len(items) == 1
+
+
+def test_a_customer_holding_money_is_not_merged_or_deactivated(books):
+    run = books['run']
+    receive(books, '60.00', '2026-03-02', customer=books['ortega'])
+    shown = run('customer show', dict(customer=books['ortega']))
+    assert shown['prepayment_held']['minor_units'] == 6000 and shown['current_balance']['minor_units'] == 0
+    error = refused(lambda: run('customer deactivate', dict(customer=books['ortega'], expected_version=shown['version']),
+                                reason='Gone'))
+    assert error.code == 'E_RECORD_IN_USE' and 'prepayment refund' in error.details['next']
+    error = refused(lambda: run('customer merge', dict(merged=books['ortega'], into=books['other']), dry_run=True,
+                                reason='Duplicate'))
+    assert error.code == 'E_MERGE_REFUSED' and error.details['prepayment_held']['minor_units'] == 6000
+    note = run('report statement', dict(customer=books['ortega'], date_from='2026-03-01', date_to='2026-03-31'))
+    assert note['notes'] and '60.00' in note['notes'][0]
+
+
+def test_the_default_draw_date_follows_the_receipts_it_takes(books):
+    run = books['run']
+    receive(books, '100.00', '2026-03-04', customer=books['ortega'])
+    receive(books, '100.00', '2026-04-20', customer=books['ortega'])
+    invoice = run('invoice post', dict(customer=books['ortega'], date='2026-03-28', lines=[dict(item=books['labor'], quantity='1')]))
+    used = run('prepayment apply', dict(invoice=invoice['number']))
+    assert [(row['date'], row['receipt_number'], row['amount']['minor_units']) for row in used['draws']] == [
+        ('2026-03-28', used['draws'][0]['receipt_number'], 10000)]
+    assert held(books, '2026-03-28') == 0 and held(books) == 10000
+
+
+def test_a_document_holding_money_keeps_its_customer(books):
+    run = books['run']
+    wo = run('work-order create', dict(date='2026-03-02', title='Deck', customer=books['ortega'],
+                                       lines=[dict(item=books['labor'], quantity='1')]), reason='Start')
+    receive(books, '50.00', '2026-03-04', document=f'work-order {wo["number"]}')
+    current = run('work-order show', dict(work_order=wo['id']))
+    error = refused(lambda: run('work-order update', dict(work_order=wo['id'], expected_version=current['version'],
+                                                          customer=books['other']), reason='Wrong customer'))
+    assert error.code == 'E_HAS_APPLICATIONS' and error.details['field'] == 'customer'
+
+
+def test_a_parents_deposit_serves_its_jobs_work(books):
+    run = books['run']
+    job = run('customer create', dict(name='Kitchen', parent_id=books['ortega']))['id']
+    got = receive(books, '80.00', '2026-03-01', customer=books['ortega'])
+    made = run('work-order create', dict(date='2026-03-02', title='Job work', customer=job,
+                                         lines=[dict(item=books['labor'], quantity='1')]), reason='Start')
+    run('prepayment attach', dict(receipt=got['receipt']['number'], document=f'work-order {made["number"]}'))
+    shown = run('prepayment show', dict(customer=books['ortega']))
+    assert shown['held']['minor_units'] == 8000 and shown['receipts'][0]['document']['number'] == made['number']
+    inv = bill(books, made, 'job-1', '2026-03-05')
+    assert inv['prepayment_applied']['minor_units'] == 8000 and owed(books, inv['id']) == 2000
+    assert held(books) == 0 and balances(books).get('Customer Prepayments', 0) == 0
+
+
+def test_conversion_replay_and_the_default_flag(books):
+    run = books['run']
+    wo = work_order(books, estimate(books))
+    receive(books, '50.00', '2026-03-04', document=f'work-order {wo["number"]}')
+    current = run('work-order show', dict(work_order=wo['id']))
+    body = dict(work_order=wo['id'], expected_version=current['version'], conversion_key='rep-1', date='2026-03-10')
+    first = run('work-order invoice', body, reason='Bill', idempotency_key='k-1')
+    again = run('work-order invoice', body, reason='Bill', idempotency_key='k-1')
+    named = run('work-order invoice', dict(body, apply_prepayment=True), reason='Bill')
+    assert first['id'] == again['id'] == named['id']
+    assert again['prepayment_applied']['minor_units'] == 5000 == named['prepayment_applied']['minor_units']
+    assert again['balance_due']['minor_units'] == 35000
+    activity = run('time-activity query', dict(limit=1))['items']
+    model = __import__('bookflow.company.billing_models', fromlist=['x']).TimeActivityInvoiceInput
+    assert 'apply_prepayment' not in model.model_fields and activity is not None

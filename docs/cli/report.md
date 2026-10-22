@@ -5511,6 +5511,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].balance.amount` | string | yes | no | — | — |
 | `rows[].balance.currency` | string | yes | no | — | — |
 | `rows[].balance.minor_units` | integer | yes | no | — | — |
+| `notes` | array[string] | no | no | [] | Below the balance: customer prepayments (deposits) held for the customer on date_to, which the balance leaves out because they are not owed. |
 
 Example JSON output:
 

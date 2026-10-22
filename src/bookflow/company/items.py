@@ -1227,6 +1227,9 @@ def plan_item_update(
     """``converting`` is `item convert`'s one-way change to an inventory part, which the
     ordinary type change refuses; item_conversions.py checks what it needs first."""
     current = _row(db, record_id)
+    if not converting:
+        from bookflow.company import prepayments
+        prepayments.guard_item_update(db, current, changes)
     existing_members = _members(db, record_id)
     existing_vendors = _vendors(db, record_id)
     existing_custom = tuple(custom_fields.read_owner_values(db, record_type=ITEM_RECORD_TYPE, record_id=record_id))
