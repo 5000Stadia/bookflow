@@ -65,7 +65,9 @@ fixed_asset_setup = command(
                  ' salvage value, in-service date (default the purchase date), useful life in months, and month or year'
                  ' periods. Optionally sets the accumulated depreciation, depreciation expense and gain/loss accounts on'
                  ' the item. The cost basis is the item book basis, else its original cost. Returns the schedule.'
-                 ' Tax bases and MACRS are not computed.'),
+                 ' Periods start with the in-service month. Rounding: each period takes its share of what remains'
+                 ' above salvage, rounded half to even to the cent, and the last period takes exactly the rest, so the'
+                 ' schedule sums to cost less salvage. Tax bases, MACRS and units of production are not computed.'),
     input_model=FixedAssetSetupInput, output_model=FixedAssetSetupOutput, writes={'company'}, required_role='standard',
     capability='item', accepts_idempotency_key=True, positional=['item'],
     version_source=('fixed-asset schedule', 'item', 'version'),
@@ -118,7 +120,9 @@ loan_create = command(
     'loan create', scope='company',
     description=('Add a loan, as the anchor Loan Manager does: liability account, interest account, amount borrowed,'
                  ' annual rate, number of payments, frequency, first due date, optional lender, payment account, balloon'
-                 ' and escrow. The regular payment is the level payment unless given. Creating a loan posts nothing:'
+                 ' and escrow. The regular payment is the level payment unless given. Each payment\'s interest is the'
+                 ' balance times the periodic rate (annual rate / payments per year), rounded half to even; the last'
+                 ' payment pays exactly the balance left, absorbing the rounding. Creating a loan posts nothing:'
                  ' record the money borrowed into the liability account with a deposit or journal entry.'),
     input_model=LoanCreateInput, output_model=LoanWriteOutput, writes={'company'}, required_role='standard',
     capability='account', accepts_idempotency_key=True, error_codes=_LOAN_ERRORS + ['E_NAME_TAKEN'])(plan_loan_create)

@@ -1264,3 +1264,25 @@ EXAMPLES["prepayment show"] = Example(
 EXAMPLES["prepayment query"] = Example('bookflow prepayment query --held-only' + _C, {"held_only": True})
 EXAMPLES["report customer-prepayments"] = Example(
     'bookflow report customer-prepayments --as-of 2026-12-31' + _C, {"as_of": "2026-12-31"})
+# R119: fixed-asset depreciation and loans.
+EXAMPLES.update({
+    "fixed-asset setup": Example(
+        'bookflow fixed-asset setup "Service truck" --method declining_balance --declining-percent 200 --salvage 2000.00 --life-months 60 --period year --reason "Book depreciation"' + _C,
+        {"item": "Service truck", "method": "declining_balance", "declining_percent": 200, "salvage": "2000.00", "life_months": 60, "period": "year"}),
+    "fixed-asset schedule": Example('bookflow fixed-asset schedule "Service truck"' + _C, {"item": "Service truck"}),
+    "fixed-asset list": Example('bookflow fixed-asset list' + _C, {}),
+    "fixed-asset depreciate": Example(
+        'bookflow fixed-asset depreciate --through 2026-11-30 --reason "Month-end depreciation"' + _C, {"through": "2026-11-30"}),
+    "fixed-asset dispose": Example(
+        'bookflow fixed-asset dispose "Service truck" --date 2026-12-01 --proceeds 30000.00 --deposit-to Checking --reason "Sold the truck"' + _C,
+        {"item": "Service truck", "date": "2026-12-01", "proceeds": "30000.00", "deposit_to": "Checking"}),
+    "loan create": Example(
+        'bookflow loan create --name "Truck loan" --liability-account "Truck Loan" --interest-account "Interest Expense" --principal 25000.00 --annual-rate 6.5 --term-payments 60 --first-payment-date 2026-02-01 --payment-account Checking --reason "New truck loan"' + _C,
+        {"name": "Truck loan", "liability_account": "Truck Loan", "interest_account": "Interest Expense", "principal": "25000.00",
+         "annual_rate": "6.5", "term_payments": 60, "first_payment_date": "2026-02-01", "payment_account": "Checking"}),
+    "loan update": Example('bookflow loan update "Truck loan" --annual-rate 5.9 --reason "Rate adjusted"' + _C,
+                           {"loan": "Truck loan", "annual_rate": "5.9"}),
+    "loan show": Example('bookflow loan show "Truck loan"' + _C, {"loan": "Truck loan"}),
+    "loan list": Example('bookflow loan list' + _C, {}),
+    "loan pay": Example('bookflow loan pay "Truck loan" --reason "December payment"' + _C, {"loan": "Truck loan"}),
+})

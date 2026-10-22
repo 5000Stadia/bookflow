@@ -746,6 +746,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R109: the Set Up Budgets grid, Memorize on any report, and opening a memorized report.
     from bookflow.adapters.workbench import budget_pages as BudgetPages
     BudgetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R119: the fixed asset list and schedules, and loans with their schedule and Pay.
+    from bookflow.adapters.workbench import fixed_asset_pages as FixedAssetPages
+    FixedAssetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -1844,6 +1847,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # Opened from a customer's or a document's prepayment panel (R124): the link names
             # who or what the money is for, the receipt or draw, or the invoice to pay.
             for field in ('customer', 'document', 'receipt', 'draw', 'invoice'):
+                value = request.query_params.get('f:' + field, request.query_params.get(field))
+                if value is not None and field in cmd.input_model.model_fields:
+                    attempted['f:' + field] = value
+        if noun in ('fixed-asset', 'loan') and cmd.is_write and not attempted:
+            # Opened from an asset's schedule or a loan (R119): the link names which one.
+            for field in ('item', 'loan'):
                 value = request.query_params.get('f:' + field, request.query_params.get(field))
                 if value is not None and field in cmd.input_model.model_fields:
                     attempted['f:' + field] = value

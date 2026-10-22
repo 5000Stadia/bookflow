@@ -540,6 +540,37 @@ months by hand, `budget clear` empties a row or the whole budget. To keep a repo
 often, `memorized-report create` with a `date_range` such as `this_fiscal_quarter`, and
 `memorized-report run` it: the range is worked out again on every run.
 
+## Depreciation and loan payments
+
+A fixed asset is a `fixed_asset` item; its book depreciation terms come from `fixed-asset setup`
+(straight line, or declining balance at 200 or 150 percent switching to straight line, salvage, life
+in months, month or year periods). For "post this month's depreciation", preview with a dry run, then
+post through the month end:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "fixed-asset depreciate", "input": {"through": "2026-11-30"}}
+```
+
+It posts only periods not yet posted (debit depreciation expense, credit accumulated depreciation),
+so running it twice is harmless; `fixed-asset schedule` shows each period posted or pending. A month
+already closed is refused: post it with `entry: combined`, dated in an open period, if the person
+agrees. Selling or scrapping an asset is `fixed-asset dispose` after depreciation through that date.
+
+For "record the truck loan payment", `loan show` names the next payment and its split, and
+`loan pay` writes the check:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "loan pay", "input": {"loan": "Truck loan"}}
+```
+
+Principal goes to the loan's liability account, interest to its interest account and escrow to its
+escrow account, from the schedule. Extra principal (`extra_principal`) keeps the payment and shortens
+the loan. `loan show` reports whether the liability account ties to the schedule's balance; if it does
+not, the money borrowed or a payment was recorded outside `loan pay`: say so rather than adjusting.
+Tax depreciation (MACRS) is not computed here.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:

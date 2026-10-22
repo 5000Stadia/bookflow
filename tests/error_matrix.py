@@ -1977,3 +1977,47 @@ MATRIX['report customer-prepayments'] = {
     'E_RECORD_NOT_FOUND': 'unknown customer',
     'E_INTERNAL': 'the Customer Prepayments account differs from what the receipts hold (an unattributed posting)',
 }
+
+# Fixed-asset depreciation and loans (R119).
+_ASSET_TAIL = {
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['fixed-asset setup'] = {
+    'E_VALIDATION': 'not a fixed-asset item, no method the first time, declining_balance without a percent, salvage not below cost, no cost basis, or changing the in-service date or period once periods are posted',
+    'E_RECORD_NOT_FOUND': 'unknown item or account',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'a salvage value with more decimal places than the currency has',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_ASSET_TAIL,
+}
+MATRIX['fixed-asset schedule'] = {'E_VALIDATION': 'not a fixed-asset item', 'E_RECORD_NOT_FOUND': 'unknown item'}
+MATRIX['fixed-asset list'] = {}
+_ASSET_POST = {
+    'E_RECORD_NOT_FOUND': 'unknown item or account',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency has',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_PERIOD_CLOSED': 'an entry date on or before the closing date',
+    **_ASSET_TAIL,
+}
+MATRIX['fixed-asset depreciate'] = dict(_ASSET_POST, E_VALIDATION='an asset named twice, not set up, without a cost basis or without its depreciation accounts')
+MATRIX['fixed-asset dispose'] = dict(_ASSET_POST, E_VALIDATION='already disposed of, depreciation through the date not posted, no cost basis or accounts, or proceeds with no deposit_to')
+_LOAN = {
+    'E_VALIDATION': 'an account of the wrong type, a rate outside 0 through 100, a balloon not below the principal, escrow without an escrow account, or a payment that does not cover the interest',
+    'E_RECORD_NOT_FOUND': 'unknown loan, account or vendor',
+    'E_INACTIVE_REFERENCE': 'an inactive account or vendor',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency has',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_NAME_TAKEN': 'another loan has that name',
+    **_ASSET_TAIL,
+}
+MATRIX['loan create'] = dict(_LOAN)
+MATRIX['loan update'] = dict(_LOAN, E_VERSION_CONFLICT='stale expected_version')
+MATRIX['loan show'] = {'E_VALIDATION': 'a payment that does not cover the interest', 'E_RECORD_NOT_FOUND': 'unknown loan'}
+MATRIX['loan list'] = {'E_VALIDATION': 'a loan whose payment does not cover the interest'}
+MATRIX['loan pay'] = dict(_ASSET_POST, E_VALIDATION='a paid-off loan, extra principal above the balance, extra_only without an amount or date, no payment account, or a number on a card charge',
+                          E_DUPLICATE_NUMBER='the check number is already used on the account')
