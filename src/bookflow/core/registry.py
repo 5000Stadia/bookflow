@@ -355,6 +355,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.item_cmds": ["item"],
     "bookflow.commands.undo_cmds": ["undo"],
     "bookflow.commands.review_cmds": ["review"],
+    "bookflow.commands.transaction_find_cmds": ["transaction"],
     "bookflow.commands.query_cmds": [
         "account", "customer", "vendor", "employee", "other-name", "item", "item-category",
         "class", "term", "payment-method", "sales-tax-code", "customer-type", "vendor-type",
@@ -440,6 +441,7 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "card-charge": {"record_type": "transaction", "identifier": "card_charge", "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Credit card charge", "plural_label": "Credit card charges"},
     "transfer": {"record_type": "transaction", "identifier": "transfer", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Transfer", "plural_label": "Transfers"},
     "report": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
+    "transaction": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "cutover": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "sales-tax": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "sales-tax payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Sales tax payment", "plural_label": "Sales tax payments"},

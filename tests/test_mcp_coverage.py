@@ -43,7 +43,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 payment bounce (R176).
     # +1 vendor 1099-opening (R179).
     # +1 attachment text (R170 blind July: a statement's summary box read over MCP).
-    assert len(rows) == 530
+    # +1 transaction find (R138).
+    assert len(rows) == 531
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -219,7 +220,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2967 -> 2969 (fix batch 5), measured per command: cutover plan 6 -> 8, the null branches of its new optional
     # limit and cursor (a long plan read in pages; it now takes CutoverPlanInput). cutover apply stays at 6, journal
     # post at 10 (a journal line's account gains a description, not a node). No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==2969
+    # 2969 -> 2981 (R138 transaction find), measured: the new command adds 12, the null branches of its twelve
+    # optional filters (types, name, name_type, number, amount, amount_from, amount_to, date_from, date_to, memo,
+    # account, cursor). No new variant kind; the groups stay 26.
+    assert sum(len(group["paths"]) for group in mapped)==2981
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

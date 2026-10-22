@@ -1176,3 +1176,7 @@ EXAMPLES["vendor 1099-opening"] = Example(
     {"vendor": "Delgado, Ray", "year": 2026, "as_of": "2026-06-30", "amount": "7550.00"})
 # R170 blind July: a small text attachment read as text -- a statement's summary box, kept as an attachment.
 EXAMPLES["attachment text"] = Example(f'bookflow attachment text {ID} --company "Demo Plumbing Co" --json', {"attachment": ID})
+# R138: find any transaction -- "the $184.00 check to Regional Parts".
+EXAMPLES["transaction find"] = Example(
+    'bookflow transaction find --types \'["check"]\' --name Regional --amount 184.00 --company "Demo Plumbing Co" --json',
+    {"types": ["check"], "name": "Regional", "amount": "184.00"})

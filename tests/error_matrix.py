@@ -1813,6 +1813,13 @@ MATRIX['vendor 1099-opening'] = {
 }
 
 # A small text attachment read as text (R170 blind July): the summary box of a statement, kept as an attachment.
+MATRIX['transaction find'] = {
+    'E_VALIDATION': 'bad date, amount, type or cursor; a name on two lists without name_type',
+    'E_RECORD_NOT_FOUND': 'no name or account matches',
+    'E_QUERY_STALE': 'the books changed between pages',
+    'E_VALUE_RANGE': 'a stored amount outside the exact range',
+}
+
 MATRIX['attachment text'] = {
     'E_RECORD_NOT_FOUND': 'attachment absent',
     'E_VALIDATION': 'not a text file by its media type or name, or a body holding binary data',
