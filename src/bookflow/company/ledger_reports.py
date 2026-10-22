@@ -55,6 +55,9 @@ REPORT_VERSION = "3"
 FINANCIAL_REPORTS = frozenset({
     "profit-and-loss", "balance-sheet", "cash-flows", "income-tax-summary",
     "profit-and-loss-by-job", "profit-and-loss-by-class",
+    # R109: the budget reports and the period comparisons. Rows are accounts; a budget edit is
+    # audited, so the audit sequence this family carries stales a continuation across one.
+    "budget-overview", "budget-vs-actual", "profit-and-loss-comparison", "balance-sheet-comparison",
 })
 # Receivables rows are customers or jobs, labelled and ordered by hierarchy name.
 # Settlement and billing history post nothing, so these also carry the audit sequence.

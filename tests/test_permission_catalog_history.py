@@ -60,6 +60,7 @@ ACCEPTED = {
     'transaction-find-v1': (529, '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1'),
     'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
     'finance-charge-v1': (531, '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe'),
+    'budget-v1': (549, '495ea77722b432aeecae57a30512a4e955bf5a33cffdf3511ab56682bcc8843e'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -113,6 +114,11 @@ CHAIN_ADDITIONS = {
     'transaction-find-v1': {'transaction find'},
     'item-convert-v1': {'item convert'},
     'finance-charge-v1': {'finance-charge assess'},
+    'budget-v1': {'budget clear', 'budget create', 'budget delete', 'budget fill', 'budget list', 'budget rename',
+                  'budget set', 'budget show', 'memorized-report create', 'memorized-report delete',
+                  'memorized-report list', 'memorized-report run', 'memorized-report show', 'memorized-report update',
+                  'report balance-sheet-comparison', 'report budget-overview', 'report budget-vs-actual',
+                  'report profit-and-loss-comparison'},
 }
 
 _ANCESTOR_EDIT = """
