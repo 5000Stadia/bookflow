@@ -158,7 +158,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
 - [~] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
-- [~] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
+- [x] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [ ] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
