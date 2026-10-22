@@ -154,13 +154,15 @@ review cb5fcd7 (gate g96052d).
 ## M4 — After V1.5: concepts to develop
 
 - [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows) On hold: needs the anchor desktop software and its SDK on a Windows machine, and a sample company file; none is on this machine.
-- [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones
+- [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones On hold: Kabe 2026-10-22 "Not now" (large downloads, no GPU).
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
+- [ ] R180 Quick on real-sized books: built-in performance logging and tracking (timings per command, recorded and reported) to optimise against; measure everyday commands on a company with years of history, and bring posting, deposits and reconciliation of 1,000+ rows down to seconds (Kabe 2026-10-22: "Add and build. We should have a smart performance logging and tracking we can optimize the system against").
 - [~] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
 - [x] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
+- [ ] R181 Pick, pack and ship: picking lists, packing slips and shipments recorded apart from invoicing, so a warehouse can ship before it bills (Kabe 2026-10-22: after R104).
 - [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
@@ -171,7 +173,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches.
 - [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout.
 - [ ] R115 CRM: leads, a sales pipeline, follow-ups and customer communication history beyond contact records.
-- [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module.
+- [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module. Scope (Kabe 2026-10-22): paychecks with tax rates the owner enters; no e-filing.
 - [x] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
 - [x] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
 - [x] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
@@ -179,8 +181,8 @@ review cb5fcd7 (gate g96052d).
 - [ ] R122 Approvals: purchase and bill approval steps before posting.
 - [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
 - [x] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
-- [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review.
-- [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
+- [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review. On hold: Kabe 2026-10-22 "Not now".
+- [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically. On hold: Kabe 2026-10-22 "Not now" (outside account and real money).
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
 - [ ] R130 Windows: a supported Windows build with an authenticated local hand-off. On hold: no Windows machine here to build and test on.
