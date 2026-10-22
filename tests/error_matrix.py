@@ -1207,8 +1207,8 @@ MATRIX["vendor-credit apply"] = {
     "E_PERIOD_CLOSED": "settlement date on or before the closing date",
     "E_VERSION_CONFLICT": "stale expected_version on the credit or on a selected bill",
     "E_APPLICATION_CAPACITY": "more than the credit has free or more than the bill has open, including a concurrent write that took either first",
-    "E_APPLICATION_INCOMPATIBLE": "a bill owed to another vendor, from another payable account, or in another currency",
-    "E_APPLICATION_INACTIVE": "a voided credit, a voided bill, or a bill with no payable",
+    "E_APPLICATION_INCOMPATIBLE": "a bill owed to another vendor, from another payable account, or in another currency; a deposit with no Accounts Payable line naming the credit's vendor",
+    "E_APPLICATION_INACTIVE": "a voided credit, a voided bill or refund deposit, or a bill with no payable",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
@@ -1841,6 +1841,114 @@ MATRIX['item convert'] = {
     'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
     'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
     'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+}
+# Finance charges (R120): assessed by the company policy, each written as a statement charge.
+MATRIX['finance-charge assess'] = {
+    'E_VALIDATION': 'finance charges are off (no account, or neither rate nor minimum), a named customer has nothing overdue, a changed amount is not above 0.00, or a customer is named twice',
+    'E_RECORD_NOT_FOUND': 'unknown customer',
+    'E_INACTIVE_REFERENCE': 'a selected customer or job is inactive',
+    'E_AMOUNT_PRECISION': 'a changed amount has more decimal places than the currency allows',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_PERIOD_CLOSED': 'the assessment date is on or before the closing date',
+    'E_PREVIEW_STALE': 'the books or the policy changed since the preview whose fingerprint was given',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+# A vendor's refund check for an open credit (R149): a deposit and the credit applied to it, in one write.
+MATRIX['vendor-credit refund'] = {
+    'E_RECORD_NOT_FOUND': 'unknown credit, deposit-to account or payment method',
+    'E_INACTIVE_REFERENCE': 'the deposit-to account or payment method is inactive',
+    'E_VALIDATION': 'a refund dated before the credit, an amount of zero or less, or a deposit-to account that is not a bank',
+    'E_VALUE_RANGE': 'a resulting version exceeds signed 64-bit range',
+    'E_AMOUNT_PRECISION': 'an amount with more precision than the currency has',
+    'E_PERIOD_CLOSED': 'refund date on or before the closing date',
+    'E_DUPLICATE_NUMBER': 'the supplied deposit number is already used',
+    'E_VERSION_CONFLICT': 'stale expected_version on the credit',
+    'E_APPLICATION_CAPACITY': 'more than the credit still has free, or nothing free at all',
+    'E_APPLICATION_INACTIVE': 'a voided credit',
+    'E_APPLICATION_INCOMPATIBLE': 'the deposit line does not match the credit vendor and payable account',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+# Budgets, budget and comparison reports, memorized reports (R109).
+_BUDGET_CELL = {
+    'E_VALIDATION': 'an account of the wrong kind, a month outside the budget, a customer or class missing on a dimensional budget or given on another, more amounts than months remain',
+    'E_RECORD_NOT_FOUND': 'unknown budget, account, customer or class',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency allows',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+_WRITE_TAIL = {k: _BUDGET_CELL[k] for k in ('E_IDEMPOTENCY_MISMATCH', 'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}
+MATRIX['budget set'] = dict(_BUDGET_CELL)
+MATRIX['budget fill'] = dict(_BUDGET_CELL)
+MATRIX['budget clear'] = {k: _BUDGET_CELL[k] for k in ('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VERSION_CONFLICT')} | _WRITE_TAIL
+MATRIX['budget create'] = {'E_VALIDATION': 'a balance sheet budget kept per customer or class', 'E_NAME_TAKEN': 'a budget already has the name',
+                           'E_VALUE_RANGE': 'an actual amount beyond signed 64-bit range', 'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing for from_actuals'} | _WRITE_TAIL
+MATRIX['budget rename'] = {'E_RECORD_NOT_FOUND': 'unknown budget', 'E_NAME_TAKEN': 'another budget has the name',
+                           'E_VERSION_CONFLICT': 'stale expected_version', 'E_VALIDATION': 'a blank name'} | _WRITE_TAIL
+MATRIX['budget delete'] = {'E_RECORD_NOT_FOUND': 'unknown budget', 'E_VERSION_CONFLICT': 'stale expected_version'} | _WRITE_TAIL
+MATRIX['budget show'] = {'E_VALIDATION': 'a customer or class on a budget not kept that way', 'E_RECORD_NOT_FOUND': 'unknown budget, customer or class',
+                         'E_VALUE_RANGE': 'a row total beyond signed 64-bit range'}
+MATRIX['budget list'] = {}
+MATRIX['report budget-overview'] = {'E_QUERY_STALE': 'budget or books changed between pages', 'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+                                    'E_VALIDATION': 'a customer or class on a budget not kept that way', 'E_RECORD_NOT_FOUND': 'unknown budget, customer or class'}
+MATRIX['report budget-vs-actual'] = MATRIX['report budget-overview'] | {'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing'}
+MATRIX['report profit-and-loss-comparison'] = {'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing', 'E_QUERY_STALE': 'books changed between pages',
+                                               'E_VALUE_RANGE': 'an amount beyond signed 64-bit range'}
+MATRIX['report balance-sheet-comparison'] = dict(MATRIX['report profit-and-loss-comparison'])
+MATRIX['memorized-report create'] = {'E_VALIDATION': 'not a report, or options the report refuses', 'E_NAME_TAKEN': 'a memorized report already has the name',
+                                     'E_RECORD_NOT_FOUND': 'a name in the options matches nothing'} | _WRITE_TAIL
+MATRIX['memorized-report update'] = MATRIX['memorized-report create'] | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['memorized-report delete'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report', 'E_VERSION_CONFLICT': 'stale expected_version'} | _WRITE_TAIL
+MATRIX['memorized-report show'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report'}
+MATRIX['memorized-report list'] = {}
+MATRIX['memorized-report run'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report', 'E_VALIDATION': 'kept options the report now refuses',
+                                  'E_QUERY_STALE': 'books changed between pages', 'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+                                  'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing'}
+
+# Customer prepayments (R124): deposits held on a liability until the work bills.
+_PREPAYMENT_WRITE = {
+    'E_RECORD_NOT_FOUND': 'unknown customer, document, receipt, invoice, account or payment method',
+    'E_VALIDATION': 'no or two targets, an unaccepted, voided or cancelled document, another customer\'s document, nothing held, not a prepayment receipt or draw',
+    'E_PERIOD_CLOSED': 'the date, or a draw\'s application date when undoing it, is on or before the closing date',
+    'E_INACTIVE_REFERENCE': 'an inactive customer, account, item or payment method',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the home currency has',
+    'E_VALUE_RANGE': 'an amount outside the exact range',
+    'E_DUPLICATE_NUMBER': 'the receipt number is already used',
+    'E_APPLIED_EXCEEDS_TOTAL': 'more than is held, or more than the invoice owes',
+    'E_APPLICATION_INACTIVE': 'a voided receipt, invoice or draw',
+    'E_VERSION_CONFLICT': 'a document changed between reading and writing',
+    'E_PREVIEW_STALE': 'a document the step wrote changed under it',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['prepayment receive'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment attach'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment apply'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment unapply'] = dict(_PREPAYMENT_WRITE, E_REASON_REQUIRED='an unapply always takes a reason',
+                                    E_HAS_APPLICATIONS='the draw\'s credit memo still has an application it cannot release')
+MATRIX['prepayment refund'] = dict(_PREPAYMENT_WRITE, E_APPLICATION_INCOMPATIBLE='the refund cannot pay out that credit',
+                                   E_CREDIT_UNAVAILABLE='the drawing credit memo is no longer worth the amount')
+MATRIX['prepayment show'] = {
+    'E_RECORD_NOT_FOUND': 'unknown receipt, document or customer',
+    'E_VALIDATION': 'not exactly one of receipt, document, customer; a sales receipt that is not a prepayment',
+}
+MATRIX['prepayment query'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or document',
+    'E_VALIDATION': 'bad date or cursor',
+}
+MATRIX['report customer-prepayments'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer',
+    'E_INTERNAL': 'the Customer Prepayments account differs from what the receipts hold (an unattributed posting)',
 }
 
 # The sales order (R101): a fifth customer-work kind. It refuses for the family's reasons, plus its own:

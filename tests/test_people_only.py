@@ -21,11 +21,14 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     registry.load_all()
     tip = runtime.current_catalog()
     # The tip has since moved on (sales-tax-adjustment-v1, restore-v1, party-merge-v1, bounced-check-v1, cutover-rest-v1,
-    # attachment-text-v1, transaction-find-v1), which carry these admin actions and add their own people-only acts: restoring a deleted journal entry
+    # attachment-text-v1, transaction-find-v1, item-convert-v1,
+    # finance-charge-v1, vendor-refund-v1), which carry these admin actions and add their own people-only acts: restoring a deleted journal entry
     # or invoice, merging and unmerging customers and vendors. Neither `payment bounce`, cutover-rest-v1's `vendor 1099-opening`
     # nor attachment-text-v1's `attachment text` nor transaction-find-v1's `transaction find` (reads) is one. item-convert-v1 adds
-    # `item convert`, a person's act because it cannot be undone. sales-order-v1 adds none: an agent with the
-    # standard role takes, revises and voids orders as a person does.
+    # `item convert`, a person's act because it cannot be undone; finance-charge-v1's `finance-charge assess` is not one,
+    # nor is vendor-refund-v1's `vendor-credit refund`, nor any of budget-v1's budget,
+    # report and memorized-report commands; customer-prepayment-v1 adds no people-only act.
+    # sales-order-v1 adds none either: an agent with the standard role takes, revises and voids orders as a person does.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

@@ -40,17 +40,23 @@ def company_form_groups(leaves):
         automatically_apply_payments='Suggest matching invoice, then oldest invoices for new payments',
         automatically_calculate_payments='Calculate selected invoice payments when no amount was entered',
         use_undeposited_funds_for_payments='Default new payments to Undeposited Funds',
-        negative_number_style='Show negative amounts as')
+        negative_number_style='Show negative amounts as',
+        finance_charge_annual_rate='Annual interest rate (%)', finance_charge_minimum='Minimum finance charge',
+        finance_charge_grace_days='Grace period (days)', finance_charge_account_id='Finance charge account',
+        finance_charge_on_overdue_charges='Assess finance charges on overdue finance charges',
+        finance_charge_from='Calculate charges from', finance_charge_mark_to_print='Mark finance charge invoices to be printed')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     display_preferences = {'negative_number_style'}
+    finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
+        'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}
     for leaf in leaves:
         if leaf['path'] in labels:
             leaf['label'] = labels[leaf['path']]
     groups = [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
         for title, fields in [('Customer work preferences', preferences), ('Customer payment preferences', payment_preferences),
-            ('Reports and lists', display_preferences),
-            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences)]]
-    return [group for group in groups if group['leaves'] or group['title'] != 'Reports and lists']
+            ('Finance charges', finance_preferences), ('Reports and lists', display_preferences),
+            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences - finance_preferences)]]
+    return [group for group in groups if group['leaves'] or group['title'] not in ('Reports and lists', 'Finance charges')]
 
 
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:

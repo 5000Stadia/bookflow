@@ -139,6 +139,27 @@ TRANSACTION_FIND_COMMANDS = frozenset(('transaction find',))
 # converts, is refused converting again and reads the item back through all four surfaces over identical demo copies.
 ITEM_CONVERT_COMMANDS = frozenset(('item convert',))
 
+# R120: finance charges assessed by the company policy. Its witness sets the policy, previews, assesses and
+# assesses again through all four surfaces over identical demo copies.
+FINANCE_CHARGE_COMMANDS = frozenset(('finance-charge assess',))
+
+# R149: a vendor's refund check for an open credit. Its witness enters a credit and records a partial refund
+# through all four surfaces over identical demo copies.
+VENDOR_REFUND_COMMANDS = frozenset(('vendor-credit refund',))
+
+# R109: budgets, the budget and comparison reports, and memorized reports. Its witness builds a budget, fills,
+# sets, reads it in every report, memorizes a report and runs it through all four surfaces over identical demo copies.
+BUDGET_COMMANDS = frozenset(('budget clear', 'budget create', 'budget delete', 'budget fill', 'budget list', 'budget rename',
+                             'budget set', 'budget show', 'memorized-report create', 'memorized-report delete',
+                             'memorized-report list', 'memorized-report run', 'memorized-report show', 'memorized-report update',
+                             'report balance-sheet-comparison', 'report budget-overview', 'report budget-vs-actual',
+                             'report profit-and-loss-comparison'))
+
+# R124: customer prepayments. Its witness receives, attaches, lists, applies, unapplies, refunds, shows and
+# reports one deposit through all four surfaces over identical demo copies.
+PREPAYMENT_COMMANDS = frozenset(('prepayment receive', 'prepayment attach', 'prepayment apply', 'prepayment unapply',
+                                 'prepayment refund', 'prepayment show', 'prepayment query', 'report customer-prepayments'))
+
 # R101: the sales order. Its witness quotes, converts (and replays), creates, revises, closes, copies,
 # voids and reads orders back through all four surfaces over identical demo copies.
 SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
@@ -146,7 +167,7 @@ SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 's
 
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -670,6 +691,10 @@ def execution_map():
     from tests.test_attachment_text import COMMANDS as ATTACHMENT_TEXT_SURFACE_COMMANDS
     from tests.test_transaction_find import COMMANDS as TRANSACTION_FIND_SURFACE_COMMANDS
     from tests.test_item_convert_surfaces import COMMANDS as ITEM_CONVERT_SURFACE_COMMANDS
+    from tests.test_finance_charge_surfaces import COMMANDS as FINANCE_CHARGE_SURFACE_COMMANDS
+    from tests.test_vendor_refund_surfaces import COMMANDS as VENDOR_REFUND_SURFACE_COMMANDS
+    from tests.test_budget_surfaces import COMMANDS as BUDGET_SURFACE_COMMANDS
+    from tests.test_customer_prepayment_surfaces import COMMANDS as PREPAYMENT_SURFACE_COMMANDS
     from tests.test_sales_order_surfaces import COMMANDS as SALES_ORDER_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
@@ -743,6 +768,10 @@ def execution_map():
                    'tests/test_attachment_text.py::test_the_same_text_attachment_through_python_cli_http_and_mcp' if cmd.name in ATTACHMENT_TEXT_SURFACE_COMMANDS else  # all four
                    'tests/test_transaction_find.py::test_the_same_find_through_python_cli_http_and_mcp' if cmd.name in TRANSACTION_FIND_SURFACE_COMMANDS else  # all four
                    'tests/test_item_convert_surfaces.py::test_the_same_conversion_through_python_cli_http_and_mcp' if cmd.name in ITEM_CONVERT_SURFACE_COMMANDS else  # all four
+                   'tests/test_finance_charge_surfaces.py::test_the_same_finance_charges_through_python_cli_http_and_mcp' if cmd.name in FINANCE_CHARGE_SURFACE_COMMANDS else  # all four
+                   'tests/test_vendor_refund_surfaces.py::test_the_same_vendor_refund_through_python_cli_http_and_mcp' if cmd.name in VENDOR_REFUND_SURFACE_COMMANDS else  # all four
+                   'tests/test_budget_surfaces.py::test_the_same_budget_through_python_cli_http_and_mcp' if cmd.name in BUDGET_SURFACE_COMMANDS else  # all four
+                   'tests/test_customer_prepayment_surfaces.py::test_the_same_prepayment_through_python_cli_http_and_mcp' if cmd.name in PREPAYMENT_SURFACE_COMMANDS else  # all four
                    'tests/test_sales_order_surfaces.py::test_the_same_orders_through_python_cli_http_and_mcp' if cmd.name in SALES_ORDER_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else

@@ -282,13 +282,19 @@ def _document(s, ctx, payments, data, document, currency, operation):
                 'a discount does not name its own line, edge and attribution')
 
 
-def _settled_bill(s, application, key, currency):
-    """What an application names on the payable side, whichever write made it."""
+def _settled_bill(s, application, key, currency, minted=()):
+    """What an application names on the payable side, whichever write made it.
+
+    A bill, or -- for a vendor credit only -- a refund deposit's A/P line (vendor_refunds),
+    whose key the same write may be minting.
+    """
     bill = effects.rows(s, c.transactions, c.transactions.c.id == application['obligation_transaction_id'])
-    require(len(bill) == 1 and bill[0]['type'] == 'bill' and bill[0]['status'] == 'posted',
+    payable = ('bill', 'deposit') if key['source_type'] == 'vendor_credit' else ('bill',)
+    require(len(bill) == 1 and bill[0]['type'] in payable and bill[0]['status'] == 'posted',
             'an application names something that is not an open bill')
     obligation = effects.rows(s, c.ap_obligation_keys,
                               c.ap_obligation_keys.c.id == application['obligation_key_id'])
+    obligation = obligation or [row for row in minted if row['id'] == application['obligation_key_id']]
     require(len(obligation) == 1 and obligation[0]['transaction_id'] == bill[0]['id']
             and obligation[0]['vendor_id'] == key['vendor_id']
             and obligation[0]['ap_account_id'] == key['ap_account_id']
@@ -351,7 +357,7 @@ def _settlement(s, data, operation):
                      source_transaction_id=data['documents'][0]['header']['id'])
 
 
-def settlement_fence(s, pending, *, operation=None, source_transaction_id=None):
+def settlement_fence(s, pending, *, operation=None, source_transaction_id=None, minted=()):
     """No payable ends up settled past its gross, and no inverse takes back what is not there.
 
     Read fresh, against storage, plus what this write adds: the arithmetic that decides whether
@@ -361,17 +367,19 @@ def settlement_fence(s, pending, *, operation=None, source_transaction_id=None):
     """
     if not pending:
         return
+    from bookflow.company import vendor_refunds
+
     obligations = sorted({row['obligation_key_id'] for row in pending})
     settled = ap_settlement.applied_totals(s, obligations)
     for row in pending:
         sign = 1 if row['kind'] == 'apply' else -1
         settled[row['obligation_key_id']] = settled[row['obligation_key_id']] + sign * row['amount_minor_units']
     for identifier in obligations:
-        key = effects.rows(s, c.ap_obligation_keys, c.ap_obligation_keys.c.id == identifier)[0]
+        key = (effects.rows(s, c.ap_obligation_keys, c.ap_obligation_keys.c.id == identifier)
+               or [row for row in minted if row['id'] == identifier])[0]
         header = effects.rows(s, c.transactions, c.transactions.c.id == key['transaction_id'])[0]
-        revision = effects.rows(s, c.transaction_revisions,
-                                c.transaction_revisions.c.id == header['current_revision_id'])[0]
-        gross = revision['total_minor_units']
+        # A bill owes its total; a refund deposit owes its A/P line for this vendor.
+        gross = vendor_refunds.obligation_gross(s, key, header)
         total = settled[identifier]
         require(total >= 0, 'a bill is settled by less than nothing')
         if total > gross:

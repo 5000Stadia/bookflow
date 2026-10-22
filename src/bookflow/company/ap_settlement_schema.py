@@ -170,6 +170,10 @@ _INVERSE_FIELDS = ('source_transaction_id', 'source_key_id', 'source_component_i
                    'currency', 'effective_date')
 
 
+DEPOSIT_PAYABLE = ("(type = 'bill' OR (type = 'deposit' AND EXISTS (SELECT 1 FROM ap_source_keys k "
+                   "WHERE k.id = NEW.source_key_id AND k.source_type = 'vendor_credit')))")
+
+
 def guard_statements():
     """Storage fences for settlement history: immutable rows, right types, exact inverses."""
     for table in IMMUTABLE:
@@ -178,11 +182,12 @@ def guard_statements():
                    "BEGIN SELECT RAISE(ABORT, 'immutable settlement history'); END")
     # A source key says which kind of money it is, so its own row is what the document type is
     # checked against: a vendor credit can never mint a source calling itself a bill payment.
-    # The edge admits either kind, and the payable side is a bill and nothing else.
+    # The edge admits either kind. The payable side is a bill, or -- for a vendor credit only --
+    # a deposit whose line drew a vendor's refund check from Accounts Payable (co0073).
     for table, field, predicate in (
             ('ap_source_keys', 'transaction_id', 'type = NEW.source_type'),
             ('ap_applications', 'source_transaction_id', "type IN ('bill_payment', 'vendor_credit')"),
-            ('ap_applications', 'obligation_transaction_id', "type = 'bill'")):
+            ('ap_applications', 'obligation_transaction_id', DEPOSIT_PAYABLE)):
         yield (f'CREATE TRIGGER {table}_{field}_type BEFORE INSERT ON {table}\n'
                f'WHEN NOT EXISTS (SELECT 1 FROM transactions WHERE id = NEW.{field} '
                f'AND {predicate})\n'

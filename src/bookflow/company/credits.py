@@ -794,6 +794,8 @@ def prepare_void(s, ctx, inp, *, posting=True):
     """
     source = facts(s, inp.credit_memo, write=True, posting=posting)
     old_header, revision = source['header'], source['revision']
+    from bookflow.company.prepayments import guard_draw_change
+    guard_draw_change(s, old_header['id'], 'voided')
     if inp.expected_version is not None:
         journals.version_meta(s, old_header, inp.expected_version)
     if not ctx.reason or not ctx.reason.strip():

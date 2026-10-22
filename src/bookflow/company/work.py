@@ -122,7 +122,9 @@ def _current_lines(s, rev, pending=None):
 def _order_progress(s, header, rev, pending=None):
     from bookflow.company import sales_orders
     lines, identities = _current_lines(s, rev, pending)
-    return sales_orders.progress(s, header, rev, lines, identities)
+    sources = [row['source_document_id'] for row in (pending or {}).get('work_links', [])
+               if row['destination_document_id'] == header['id'] and row['relation'] == 'estimate_sales_order']
+    return sales_orders.progress(s, header, rev, lines, identities, sources)
 
 
 def _time_summary(s, f, rev, pending=None):
@@ -850,7 +852,15 @@ def prepare(s, ctx, inp, kind, operation):
     work_tax.prepare(s,header['id'],value)
     if operation != 'void':
         _lifecycle(kind, before, value, inp, ctx)
+    if kind == 'sales_order' and old and value['status'] == 'closed' and before['status'] != 'closed':
+        # Closing is not refused for held money, as the anchor does not refuse it; it is said.
+        from bookflow.company.sales_orders import held_prepayment
+        if held_prepayment(s, old):
+            warnings.append('customer prepayments are still held on this order; apply them to an invoice or '
+                            'pay them back with `prepayment refund`')
     _dependencies(s, old, before, value)
+    from bookflow.company.prepayments import guard_work_status
+    guard_work_status(s, old, value, before)
     _accepted_group(s, header, value['status'])
     fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings, header['id'])
     changes = _changes(work_tax.normalized(before), work_tax.normalized(value)) if before else list(value)

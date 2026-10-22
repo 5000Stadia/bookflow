@@ -28,6 +28,9 @@ class OrderProgress(StrictModel):
     progress: Literal['open', 'partly_invoiced', 'invoiced', 'closed', 'voided']
     is_open: bool = Field(description="Stored status open, active, and some line has open quantity.")
     open_amount: MoneyOutput = Field(description="The exact net of every line's open quantity.")
+    prepayment_held: MoneyOutput | None = Field(None, description=(
+        "Customer prepayments held for this order: on it, and on the estimate it came from. "
+        "`prepayment show --document` lists the receipts."))
 
 
 class WorkLineOutput(CreatedOutput):

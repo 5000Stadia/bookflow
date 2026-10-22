@@ -447,6 +447,32 @@ elsewhere. Leave out the `bank_fee_*` or `customer_fee_*` fields when there is n
 (`customer-refund void`); there is no un-bounce command. A receipt that was never deposited did not
 bounce: unapply and void it.
 
+## A customer pays a deposit
+
+A deposit, down payment or retainer is a customer prepayment: money paid before the work bills,
+held on the Customer Prepayments liability (set up on first use) and never income. Take it with
+`prepayment receive`, naming the accepted estimate or work order it is for (or the customer when
+it is for no document yet). Do not post it with `sales-receipt post` or `payment receive`: those
+make it a sale or a receivable credit, and both commands say so when the customer holds money.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "prepayment receive",
+ "input": {"document": "work-order 1002", "amount": "200.00", "payment_method": "Check", "reference": "4471"}}
+```
+
+The receipt goes to Undeposited Funds and is banked with `deposit post` like any receipt. When the
+work bills, `estimate invoice` or `work-order invoice` uses what is held by itself (oldest receipt
+first; `apply_prepayment: false` leaves it held) and reports `prepayment_applied` and
+`balance_due`. For any other invoice, `prepayment apply --invoice N` with the document, customer
+or receipts to draw from. `prepayment show --customer` lists what is held and every draw. To
+undo a draw, `prepayment unapply <credit memo>` (a reason is required; a draw inside a closed
+period cannot be undone). To pay money back, `prepayment refund`. To keep part as a fee, invoice
+the fee and `prepayment apply` to it, then refund the rest: held money becomes income only through
+an invoice. A document holding money cannot be voided or cancelled until the money is used,
+refunded or moved with `prepayment attach`. `report customer-prepayments` ties to the account on
+any date.
+
 ## Writing off a bad debt
 
 A customer who will never pay is written off with a receipt for nothing, as the anchor does: the
@@ -465,6 +491,54 @@ on `report entries-to-review`, so say why in it.
 `discount_account` is required (an expense account such as Bad Debt; a discount account such as Sales
 Discounts for a charge that is waived, not a bad debt); `applications` stays empty. To reverse it, `payment
 unapply` then `payment void` the receipt.
+
+## Assess this month's finance charges
+
+Late charges follow the company's policy (`company update --finance-charge-annual-rate 18
+--finance-charge-minimum 2.00 --finance-charge-account-id "Finance Charge Income"`, plus grace days,
+from due date or invoice date, and charging on overdue charges); an agent does not set the policy.
+Apply payments and credits first: a customer with `has_unapplied_credits` is charged on the full
+overdue balance. Preview with `dry_run`, read the rows, then assess with the preview's fingerprint,
+usually dated the last day of the month, before printing statements.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "finance-charge assess", "reason": "Month-end finance charges, owner's standing policy",
+ "input": {"date": "2026-07-31", "expected_facts_fingerprint": "<facts_fingerprint from the dry run>"}}
+```
+
+Leaving out `customers` assesses every proposed row; to leave a customer out or change an amount, list
+the ones to charge (`"customers": [{"customer": "Acme"}, {"customer": "Birch", "amount": "1.50"}]`).
+Each charge is a statement charge dated that day; assessing the same date again charges nobody twice.
+To take one back, `statement-charge void` it.
+
+## How are we doing against budget?
+
+A budget is a named plan for one fiscal year: an amount per account per month, entered positive for
+income and expense alike, and it never posts. For "how are we doing against budget this quarter?",
+find the budget (`budget list --fiscal-year 2026`) and read budget vs actual for the quarter's dates on
+the company's basis; each period has Actual, Budget, $ Over Budget and % of Budget, then a Total group,
+and `totals.net_income` answers the headline question.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "report budget-vs-actual",
+ "input": {"budget": "Plan 2026", "date_from": "2026-07-01", "date_to": "2026-09-30", "columns": "month"}}
+```
+
+Actual is `report profit-and-loss` for the same dates, account for account; a month only partly in the
+dates has its budget prorated by days. Report the accounts furthest over or under in money, not just
+percent: % of Budget is blank where nothing was budgeted. A customer or class budget compares only the
+customers or classes it budgets (name one with `customer` or `class_id`). For "compared with last year",
+use `report profit-and-loss-comparison --compare previous_year` (or `previous_period`), and
+`report balance-sheet-comparison` for balances.
+
+Building a budget is a person's plan, so an agent enters amounts only when asked: `budget create
+--from-actuals` copies last year month by month, `budget fill` sets a row from a starting amount with a
+monthly change (`change` or `change_percent`, compounding) or copies a month across, `budget set` sets
+months by hand, `budget clear` empties a row or the whole budget. To keep a report someone runs
+often, `memorized-report create` with a `date_range` such as `this_fiscal_quarter`, and
+`memorized-report run` it: the range is worked out again on every run.
 
 ## Customer-work vocabulary
 
@@ -702,6 +776,22 @@ what it is worth (the refusal prints that figure). `vendor-credit update` with `
 that grid, and one left out keeps its captured rows and the stock they moved; `vendor-credit
 void` puts the stock back at the value it left at. A return dated before later sales recosts
 those sales with their own dated entries, as a backdated bill does.
+
+## A vendor sends a refund check
+
+"Acme sent us a $120 refund check for our return" means a vendor credit is open and the vendor
+paid it in cash instead. Find the credit (`vendor-credit query --vendor Acme`, its
+`settlement_current.unapplied` is what is free), then one `vendor-credit refund <credit>
+--deposit-to <bank> --date <date> --amount 120.00` with `--payment-method Check --check-number`
+when you have them. Leave `amount` out to refund everything free; a smaller amount leaves the rest
+of the credit open. It banks one deposit (debit the bank, credit Accounts Payable for the vendor)
+and settles the credit against it, so the vendor's balance, the A/P aging, the deposit detail and
+the bank reconciliation all agree. Do not deposit the check to an expense or income account: that
+leaves the credit standing as money the vendor still owes. No credit entered yet? Post the
+`vendor-credit` first (the return itself), then refund it. To undo, void the deposit; the credit
+reopens. `vendor-credit unapply` with nothing named leaves a refund standing; name it in
+`--deposits` only when the refund itself was wrong and the deposit stays. A refund already deposited with a line from Accounts Payable naming the vendor is settled
+with `vendor-credit apply <credit> --deposits '[{"deposit":"<deposit>"}]'`.
 
 ## Deleting duplicate documents
 

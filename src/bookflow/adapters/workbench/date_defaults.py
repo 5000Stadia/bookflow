@@ -24,7 +24,7 @@ PERIOD_REPORTS = (
     'income-tax-summary', 'profit-and-loss-by-class', 'profit-and-loss-by-job',
     'sales-by-customer', 'sales-by-item', 'sales-by-rep', 'expenses-by-vendor',
     'statement', 'purchases-by-vendor', 'purchases-by-item', 'deposit-detail',
-    'transaction-list-by-date',
+    'transaction-list-by-date', 'profit-and-loss-comparison',
 )
 AS_OF_REPORTS = (
     'ap-aging', 'ar-aging', 'collections', 'inventory-valuation', 'missing-checks',
@@ -36,6 +36,7 @@ REPORTS = {
     **{'report ' + name: ('date_from', 'date_to') for name in PERIOD_REPORTS},
     **{'report ' + name: ('as_of',) for name in AS_OF_REPORTS},
     'report balance-sheet': ('date_to',),
+    'report balance-sheet-comparison': ('date_to',),
     'report trial-balance': ('date_to',),
     'report open-purchase-orders': ('date_to',),
     # Read over a period, as the anchor's Sales Tax Liability report is; as_of stays a

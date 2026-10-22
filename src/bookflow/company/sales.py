@@ -568,9 +568,12 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
             old_total=old_revision['total_minor_units'] if old_revision else 0)
         if warning:
             warnings.append(warning)
-    return dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
+    result = dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
         lines=lines, custom_plan=custom_plan, warnings=warnings, semantic=semantic, fingerprint=fingerprint,
         subtotal=subtotal, tax=tax, total=total, currency=info['home_currency'], tax_attribution=attribution, tax_keys=tax_keys)
+    from bookflow.company import prepayments
+    prepayments.guard_sale(s, document_type, old_header, old_revision, result)
+    return result
 
 
 def remap_billed(old_lines, lines):
@@ -711,9 +714,10 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
             # they belong to, the way sales_deletions names the credit memos holding an
             # invoice. The paying documents are the other end of every edge disclosed.
             authorize(s, sorted({old_header['id'], *(row['paying_transaction_id'] for row in blocking)}))
+            from bookflow.company.prepayments import invoice_void_hint
             raise BookflowError('E_HAS_APPLICATIONS', details={document_type + '_id': old_header['id'],
                 'application_ids': [row['id'] for row in blocking], 'action': 'unapply_first',
-                'next': 'Release these applications with payment unapply, then void.'})
+                'next': invoice_void_hint(s, blocking) or 'Release these applications with payment unapply, then void.'})
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
     if operation == 'void':
         if not ctx.reason or not ctx.reason.strip():
@@ -722,6 +726,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
             raise _invalid('reason', 'must be at most 140 characters')
     if operation == 'update' and old_header['status'] == 'voided':
         raise _invalid(document_type, 'a voided sale cannot be updated')
+    if operation == 'void' and document_type == 'sales_receipt' and old_header['status'] == 'posted':
+        from bookflow.company.prepayments import guard_receipt_void
+        guard_receipt_void(s, old_header)
     if operation == 'void' and old_header['status'] == 'voided':
         return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
             revision=revision_output(s, old_revision), changed=False, warnings=warnings),

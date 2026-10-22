@@ -60,6 +60,8 @@ def retained_lines(s, saved, pending):
 def prepare_update(s, ctx, inp):
     source = credits.facts(s, inp.credit_memo, write=True)
     header, revision = source['header'], source['revision']
+    from bookflow.company.prepayments import guard_draw_change
+    guard_draw_change(s, header['id'], 'corrected')
     if inp.expected_version is not None:
         journals.version_meta(s, header, inp.expected_version)
     if header['status'] != 'posted':

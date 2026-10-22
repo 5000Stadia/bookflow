@@ -158,7 +158,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
 
     # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 only added tables; putting the old CHECK back
     # and dropping the index, triggers and tables is the exact co0062 file. co0067 widened two CHECKs and one trigger
-    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068, co0069, co0071 and co0072 only added a table each, and co0070 widened two empty ones and added another. co0077 widened three CHECKs, four guards and an index and added three columns and a trigger; its own REPLACEMENTS and TRIGGERS, run backwards, and dropping what it added, undo it. The demo holds a sales tax
+    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068, co0069, co0071 and co0072 only added a table each, co0074 a table and seven company_info columns, co0073 (after co0074 in the chain) widened one guard, co0078 three tables, co0076 two, and co0070 widened two empty ones and added another. co0077 widened three CHECKs, five guards and an index and added three columns and a trigger; its own REPLACEMENTS and TRIGGERS, run backwards, and dropping what it added, undo it. The demo holds a sales tax
     # adjustment (DEMO-STADJ-1), which no co0062 file can, so the older archive is made from a company without one.
     client.organization.new(name="Older Books Organization")
     company = client.company.new(legal_name="Older Books", home_currency="USD", timezone="UTC",
@@ -172,6 +172,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0063 = importlib.import_module("bookflow.storage.company_migrations.versions.0063_card_credits")
     co0067 = importlib.import_module("bookflow.storage.company_migrations.versions.0067_sales_tax_adjustments")
     co0070 = importlib.import_module("bookflow.storage.company_migrations.versions.0070_vendor_credit_items")
+    co0073 = importlib.import_module("bookflow.storage.company_migrations.versions.0073_vendor_refund_deposits")
     co0077 = importlib.import_module("bookflow.storage.company_migrations.versions.0077_sales_orders")
 
     def older(conn):
@@ -201,6 +202,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("DROP TABLE party_merges")  # co0068's, with its triggers
         conn.execute("DROP TABLE vendor_1099_openings")  # co0071's
         conn.execute("DROP TABLE item_conversions")  # co0072's
+        conn.execute("DROP TABLE prepayment_draws")  # co0076's, with its triggers
+        conn.execute("DROP TABLE prepayment_links")  # co0076's, with its triggers
         # co0070 added a table and widened two empty ones (a CHECK and a column each): its own text, run backwards.
         conn.execute("PRAGMA writable_schema=ON")
         for table, pairs in co0070.REWIND.items():
@@ -209,6 +212,16 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("PRAGMA writable_schema=OFF")
         conn.execute("DROP TABLE vendor_credit_item_lines")
         conn.execute("DROP TABLE payment_bounces")  # co0069's, with its triggers
+        for table in ("budget_amounts", "budgets", "memorized_reports"):
+            conn.execute(f"DROP TABLE {table}")  # co0078's three tables
+        conn.execute("DROP TABLE finance_charges")  # co0074's, with its triggers
+        conn.execute("DROP INDEX ix_company_info_finance_charge_account_id")
+        for column in ("finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_grace_days",
+                       "finance_charge_account_id", "finance_charge_on_overdue_charges", "finance_charge_from",
+                       "finance_charge_mark_to_print"):
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0074's seven preferences
+        conn.execute("DROP TRIGGER " + co0073.REPLACED[0])  # co0073 widened one guard; put co0026's back
+        conn.execute(co0073.OLD_GUARD)
         conn.execute("UPDATE alembic_version SET version_num = 'co0062'")
 
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))

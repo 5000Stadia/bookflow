@@ -341,7 +341,9 @@ PANELS: tuple[Panel, ...] = (
                      "report cash-flows", "report income-tax-summary",
                      "report general-ledger", "report transaction-detail",
                      "report missing-checks", "report reconciliation-discrepancy",
-                     "report entries-to-review", "report prior-balances"),
+                     "report entries-to-review", "report prior-balances",
+                     "report budget-overview", "report budget-vs-actual",
+                     "report profit-and-loss-comparison", "report balance-sheet-comparison"),
                     "/_group/reports",
                 ),
             ),
@@ -473,6 +475,8 @@ SECTIONS: tuple[Section, ...] = (
         tasks=(
             Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
             Action("Record a bounced check", WRITE, ("payment bounce",), "/payment/bounce"),
+            Action("Assess finance charges", WRITE, ("finance-charge assess",), "/finance-charge/assess"),
+            Action("Receive a customer deposit", WRITE, ("prepayment receive",), "/prepayment/receive"),
             Action("Invoice a billing group", WRITE, ("batch-invoice post",), "/batch-invoice/post"),
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             _report("Customer statement", "statement"),
@@ -480,6 +484,7 @@ SECTIONS: tuple[Section, ...] = (
             _report("Open invoices", "open-invoices"),
             _report("Customer balance summary", "customer-balance-summary"),
             _report("Customer balance detail", "customer-balance-detail"),
+            _report("Customer prepayments", "customer-prepayments"),
         ),
     ),
     Section(
@@ -586,11 +591,14 @@ SECTIONS: tuple[Section, ...] = (
             _new("Journal entry", "journal post", "/journal/post"),
             _new("Account", "account create", "/account/create"),
             _new("Memorized transaction", "memorized create", "/memorized/create"),
+            _new("Budget", "budget create", "/budget/create"),
         ),
         lists=(
             _list("Journal entries", "journal query", "/journal"),
             _list("Memorized transactions", "memorized list", "/memorized"),
             _list("Memorized groups", "memorized-group list", "/memorized-group"),
+            _list("Budgets", "budget list", "/budget"),
+            _list("Memorized reports", "memorized-report list", "/memorized-report"),
             _list("Exchange rates", "rate query", "/rate"),
         ),
         tasks=(
@@ -600,6 +608,8 @@ SECTIONS: tuple[Section, ...] = (
             _report("Transaction list by date", "transaction-list-by-date"),
             _report("Profit and loss", "profit-and-loss"),
             _report("Balance sheet", "balance-sheet"),
+            _report("Budget vs. actual", "budget-vs-actual"),
+            _report("Profit and loss comparison", "profit-and-loss-comparison"),
         ),
     ),
     Section(

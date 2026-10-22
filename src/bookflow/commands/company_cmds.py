@@ -223,8 +223,15 @@ class CompanyUpdateInput(BaseModel):
     customer_discount_account_id: str | None = Field(None, description="Account debited for early-payment discounts given on receipts; null means an active account named Discounts Given; with none a discount is refused until one is named")
     vendor_discount_account_id: str | None = Field(None, description="Account credited for early-payment discounts taken on bill payments; null means an active account named Discounts Taken; with none a discount is refused until one is named")
     negative_number_style: Literal["minus", "parentheses"] | None = Field(None, description="How reports, lists and forms show a negative amount: minus (-40.00) or parentheses ((40.00)). Display only; JSON, exports and inputs keep the minus sign.")
+    finance_charge_annual_rate: str | None = Field(None, description="Finance charges: annual interest rate in percent charged on overdue customer balances, prorated by the day (18 for 18%; up to 6 decimals, 0 to 100). Finance charges are off until a rate or a minimum and the finance charge account are set; null turns the rate off.")
+    finance_charge_minimum: str | None = Field(None, description="Finance charges: the least charge assessed on any overdue customer, in the home currency (e.g. 2.00); null for none.")
+    finance_charge_grace_days: int | None = Field(None, strict=True, ge=0, le=3650, description="Finance charges: days a balance may be past due before it is charged; counted days still start at the due date (or invoice date).")
+    finance_charge_account_id: str | None = Field(None, description="Finance charges: the income account they are credited to, usually an Other Income account named Finance Charge Income; null turns finance charges off.")
+    finance_charge_on_overdue_charges: bool | None = Field(None, description="Finance charges: also charge on finance charges that are themselves overdue (off by default; some laws restrict it).")
+    finance_charge_from: Literal["due_date", "invoice_date"] | None = Field(None, description="Finance charges: count days overdue from the due_date (the lenient default) or from the invoice_date.")
+    finance_charge_mark_to_print: bool | None = Field(None, description="Finance charges: mark assessed charges to be printed; leave off when the charges are sent on statements.")
 
-    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", mode="before")
+    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", mode="before")
     @classmethod
     def _blank(cls, v):
         return _empty_to_none(v)
@@ -241,6 +248,7 @@ NOT_NULLABLE = {
     "use_classes", "prompt_for_class", "enable_price_levels", "units_of_measure_mode",
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
+    "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
 }
 
 
@@ -295,6 +303,10 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
         if field in changed and new.get(field) is not None:
             from bookflow.company.early_discounts import validate_preference
             new[field] = validate_preference(s.company, field, new[field])
+
+    if changed & {"finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id"}:
+        from bookflow.company.finance_charges import validate_preferences
+        validate_preferences(s.company, new, changed)
 
     for field, table in (("default_sales_tax_item_id", cschema.items), ("default_ship_method_id", cschema.ship_methods)):
         if field not in changed or new.get(field) is None:

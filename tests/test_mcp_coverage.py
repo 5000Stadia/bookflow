@@ -45,8 +45,12 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 attachment text (R170 blind July: a statement's summary box read over MCP).
     # +1 transaction find (R138).
     # +1 item convert (R154).
+    # +1 finance-charge assess (R120).
+    # +1 vendor-credit refund (R149: a vendor's refund check for an open credit).
+    # +18 budgets, budget and comparison reports, memorized reports (R109).
+    # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +8 the sales order (R101): sales-order create, update, copy, show, query, history, void; estimate sales-order.
-    assert len(rows) == 540
+    assert len(rows) == 568
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -228,11 +232,23 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2981 -> 2989 (R154), measured: item convert, a new command, 8 nodes -- the null branches of its optional
     # date, cogs_account, asset_account, income_account, description, purchase_description, price and cost.
     # No new variant kind; the groups stay 26.
-    # 2989 -> 3117 (R101, the sales order), measured per command on both trees: sales-order create 51 and update 54
+    # 2989 -> 3002 (R120 finance charges): company update gains seven optional finance charge preferences (their
+    # null branches, 7), and finance-charge assess's optional date, customers, amount, mark_to_print, memo and
+    # expected_facts_fingerprint (6). No new variant kind.
+    # 3002 -> 3013 (R149): vendor-credit refund is new with 7 (its optional expected_version, amount, number, memo,
+    # check_number and payment_method); vendor-credit apply and unapply gain 4 between them (the refund-deposit
+    # rows' optional amount and expected_version, and unapply's optional deposits). No new variant kind.
+    # 3013 -> 3061 (R109), measured: eighteen new commands' optional inputs (budget, report and memorized-report
+    # filters, dates, customer/class selectors, expected_version and the like) -- their null branches.
+    # No new variant kind.
+    # 3061 -> 3093 (R124), measured: the eight prepayment commands, 32 nodes -- the null branches of their optional
+    # fields: receive 9, attach 1, apply 5, refund 7, show 3, query 5, report customer-prepayments 2 (unapply none).
+    # apply_prepayment on the invoice conversions is a plain boolean and adds none. No new variant kind; the groups stay 26.
+    # 3093 -> 3221 (R101, the sales order), measured per command on both trees: sales-order create 51 and update 54
     # (the work family's optional header and line fields, as estimate create and update have), query 12, estimate
     # sales-order 4, copy 3, show 2, history 1 and void 1 -- 128. No existing command moved: a line's new
     # cancelled_quantity and close are not nullable. No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==3117
+    assert sum(len(group["paths"]) for group in mapped)==3221
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

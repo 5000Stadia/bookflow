@@ -65,7 +65,9 @@ def validate_intent(intent):
         require(row.units != 0 and row.dimensions.party_id is not None)
         account = row.account
         require(account.active and account.currency == intent.currency and account.id != bank.id)
-        require(account.type in allowed and account.system_role is None)
+        from bookflow.company.deposit_resolution import vendor_refund_line
+        require((account.type in allowed and account.system_role is None)
+                or vendor_refund_line(account, row.dimensions.party_kind))
     if intent.cash_back:
         account = intent.cash_back.account
         require(account.active and account.currency == intent.currency and account.id != bank.id)

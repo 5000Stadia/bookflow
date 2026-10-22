@@ -59,7 +59,11 @@ ACCEPTED = {
     'attachment-text-v1': (528, 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284'),
     'transaction-find-v1': (529, '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1'),
     'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
-    'sales-order-v1': (538, 'e194fdc99b2c4cfc523facfdc0b2ac3e32d2146f2155daa29ff7fd3a6613f2e4'),
+    'finance-charge-v1': (531, '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe'),
+    'vendor-refund-v1': (532, 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f'),
+    'budget-v1': (550, 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9'),
+    'customer-prepayment-v1': (558, 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49'),
+    'sales-order-v1': (566, 'e3b1e8208a4cc093b0d95371a71f5ce1868e47e0a06c823ec2aa3d0f9964a306'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -112,6 +116,15 @@ CHAIN_ADDITIONS = {
     'attachment-text-v1': {'attachment text'},
     'transaction-find-v1': {'transaction find'},
     'item-convert-v1': {'item convert'},
+    'finance-charge-v1': {'finance-charge assess'},
+    'vendor-refund-v1': {'vendor-credit refund'},
+    'budget-v1': {'budget clear', 'budget create', 'budget delete', 'budget fill', 'budget list', 'budget rename',
+                  'budget set', 'budget show', 'memorized-report create', 'memorized-report delete',
+                  'memorized-report list', 'memorized-report run', 'memorized-report show', 'memorized-report update',
+                  'report balance-sheet-comparison', 'report budget-overview', 'report budget-vs-actual',
+                  'report profit-and-loss-comparison'},
+    'customer-prepayment-v1': {'prepayment receive', 'prepayment attach', 'prepayment apply', 'prepayment unapply',
+                               'prepayment refund', 'prepayment show', 'prepayment query', 'report customer-prepayments'},
     'sales-order-v1': {'estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
                        'sales-order query', 'sales-order show', 'sales-order update', 'sales-order void'},
 }

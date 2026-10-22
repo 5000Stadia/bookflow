@@ -84,7 +84,7 @@ def line_quantities(s, header, rev, lines, identities, currency):
     return out
 
 
-def progress(s, header, rev, lines, identities):
+def progress(s, header, rev, lines, identities, sources=()):
     """A sales order's progress: closed and voided are decisions, the rest is read from its lines."""
     from bookflow.company.work_outputs import OrderProgress
     currency = rev['currency']
@@ -100,8 +100,10 @@ def progress(s, header, rev, lines, identities):
         word = 'partly_invoiced'
     else:
         word = 'open'
+    held = held_prepayment(s, header, sources)
     return OrderProgress(progress=word, is_open=header['status'] == 'open' and bool(header['active']) and any_open,
-                         open_amount=Money(total, currency).to_dict())
+                         open_amount=Money(total, currency).to_dict(),
+                         prepayment_held=Money(held, currency).to_dict() if held else None)
 
 
 def apply_cancellations(s, kind, entered, out, old_rev, policy):
@@ -189,17 +191,22 @@ def protect(s, header, before, after):
                        'cancel what is left or add a line', source_line_id=key)
 
 
-def held_prepayment(s, document_id):
-    """Whether a customer prepayment is held on this document. The hook increment 1 fills.
+def held_prepayment(s, header, sources=()):
+    """What customer prepayments hold for this order, in minor units: on the order itself and on the
+    estimate it came from, which is the order's money once the estimate converts.
 
-    Customer prepayments (`prepayment_links`, `prepayment_draws`) arrive in their own increment;
-    their tables name any work document, so when they are present a sales order is one more
-    target with no change here but this body.
+    Invoicing from an order (increment 4) draws it: `sales-order invoice` joins BILLING_KINDS and the
+    billing conversion's `apply_prepayment` calls `prepayments.conversion_preview` / `conversion_draw`
+    with kind `sales_order`, which `prepayments.HOLDING_KINDS` and `_pool_documents` already admit.
     """
-    if not hasattr(c, 'prepayment_links'):
-        return False
-    from bookflow.company import prepayments  # pragma: no cover - present once increment 1 lands
-    return prepayments.held_on_document(s, document_id)
+    from bookflow.company import prepayments
+    if prepayments.find_account(s.company) is None:
+        return 0
+    if not sources:
+        return prepayments.held_for_document(s, header)
+    # A conversion still being written: its estimate link is pending, so name the source here.
+    ids = list(dict.fromkeys(prepayments._pool_documents(s, header) + list(sources)))
+    return sum(row['held'] for row in prepayments.receipt_rows(s, document_ids=ids))
 
 
 def void_guard(s, header):
@@ -209,6 +216,9 @@ def void_guard(s, header):
         raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'],
             problem='an invoice consumes this order; void or remove that invoice first',
             source_line_ids=sorted(taken.values())))
-    if held_prepayment(s, header['id']):
-        raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'],
-            problem='a customer prepayment is held on this order; apply or refund it first'))
+    held = held_prepayment(s, header)
+    if held:
+        from bookflow.core.money import Money
+        raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'], held=Money(held, s.company_info_row['home_currency']).to_dict(),
+            problem='a customer prepayment is held on this order; apply it to an invoice or pay it back with '
+                    '`prepayment refund` first'))

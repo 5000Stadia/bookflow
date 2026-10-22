@@ -575,6 +575,11 @@ CHARGE_BALANCE_SHEET_TYPES = frozenset({
 })
 
 
+#: The customer prepayment ledger's account role (R124). Only its own item, made with the
+#: account by the first `prepayment receive`, may credit that account.
+PREPAYMENT_ROLE = "customer_prepayments"
+
+
 def sold_account_types(item_type: str) -> frozenset[str]:
     """The account types a sold line of ``item_type`` may credit."""
     return SOLD_INCOME_TYPES | CHARGE_BALANCE_SHEET_TYPES if item_type == "other_charge" else SOLD_INCOME_TYPES
@@ -586,6 +591,10 @@ def sold_account_problem(item_type: str, account: dict[str, Any]) -> str | None:
     if account["type"] not in allowed:
         return f"must reference an account of type {', '.join(sorted(allowed))}"
     if account["type"] not in SOLD_INCOME_TYPES and account.get("system_role"):
+        if account.get("system_role") == PREPAYMENT_ROLE and item_type == "other_charge":
+            # The Customer Prepayment item is that ledger's own; `_owner_values` lets no other
+            # item name the account.
+            return None
         return "must not be a balance-sheet account another ledger owns"
     return None
 
@@ -798,6 +807,13 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
         if identifier is not None:
             account = _validate_account(db, str(identifier), field, active=active_all or field in reference_changes,
                                         item_type=parsed.type)
+            if (field == "income_account_id" and account.get("system_role") == PREPAYMENT_ROLE
+                    and (creating or field in reference_changes)):
+                from bookflow.company import prepayments
+                if not prepayments.setting_up():
+                    raise _validation(field, f'"{account["full_name"]}" is the customer prepayment ledger\'s account, '
+                                      'and only its own Customer Prepayment item credits it; take a deposit with '
+                                      '`prepayment receive`')
             if field == "asset_account_id" and parsed.type in {"inventory_part", "inventory_assembly"} and account.get("system_role") != "inventory_asset":
                 raise _validation(field, "inventory items require the inventory-asset system account")
             if field == "asset_account_id" and parsed.type == "fixed_asset" and account["type"] != "fixed_asset":
@@ -1211,6 +1227,9 @@ def plan_item_update(
     """``converting`` is `item convert`'s one-way change to an inventory part, which the
     ordinary type change refuses; item_conversions.py checks what it needs first."""
     current = _row(db, record_id)
+    if not converting:
+        from bookflow.company import prepayments
+        prepayments.guard_item_update(db, current, changes)
     existing_members = _members(db, record_id)
     existing_vendors = _vendors(db, record_id)
     existing_custom = tuple(custom_fields.read_owner_values(db, record_type=ITEM_RECORD_TYPE, record_id=record_id))

@@ -18,7 +18,9 @@ DESCRIPTIONS = {
     'post': ('Bank selected undeposited customer payments and sales receipts into one bank account as one '
              'deposit, with any other money entered beside them and an optional cash-back line; credits '
              'Undeposited Funds for each receipt and debits the bank for the net total. Discover the '
-             'receipts, their ids and their expected versions with `deposit sources`.' + UNSURE_ACCOUNT),
+             'receipts, their ids and their expected versions with `deposit sources`. A customer\'s deposit '
+             '(down payment, retainer) on work not yet billed is not a deposit here: take it with `prepayment '
+             'receive`, then bank that receipt with this command.' + UNSURE_ACCOUNT),
     'update': ('Correct a posted deposit by complete replacement: the old batch is reversed at its own date, '
                'a new revision and its claims are recorded at the new date, and receipts left out of the '
                'replacement return to Undeposited Funds.'),
@@ -38,12 +40,35 @@ def _binding(s):
     return getattr(s, 'credential', None)
 
 
+def _refund_guard(s, verb, prepared):
+    """A correction may not leave a refund deposit owing less than the credits applied to it,
+    nor dated after them; a void must be able to release them (preview and save alike)."""
+    if verb == 'void':
+        from bookflow.company import vendor_refunds
+        vendor_refunds.check_release(s, _identity(prepared))
+        return
+    if verb != 'update':
+        return
+    import json
+    from bookflow.company import payment_queries, vendor_refunds
+    from bookflow.company.deposit_models import Effect
+    data = json.loads(prepared.data_json)
+    financial = Effect.model_validate_json(payment_queries.canonical(data['financial']))
+    vendor_refunds.guard_update(s, data['identity'], financial.intent.additional, financial.intent.date)
+
+
+def _identity(prepared):
+    import json
+    return json.loads(prepared.data_json)['identity']
+
+
 def _financial(verb, model):
     def planner(inp, ctx, s):
         prepared = lifecycle.prepare(s, ctx, inp, verb, binding=_binding(s))
         if isinstance(prepared, LifecycleOutput):
             # An exact permanent replay: the original effect, never a second write.
             return Plan(outputs.write_output(prepared), data={'recovered': True})
+        _refund_guard(s, verb, prepared)
         return Plan(outputs.write_output(persistence.preview(s, ctx, prepared), dry_run=s.dry_run),
                     data={'prepared': prepared})
 
@@ -52,7 +77,12 @@ def _financial(verb, model):
             return Applied(plan.preview, [], 'recovered deposit operation')
         # The aggregate re-resolves, revalidates and audits itself inside this
         # transaction; dispatch must not write a second event over its own.
+        _refund_guard(s, verb, plan.data['prepared'])
         output = persistence.execute(s, ctx, plan.data['prepared'])
+        if verb == 'void' and output.changed:
+            # Voiding a vendor's refund check reopens the credit it settled (vendor_refunds).
+            from bookflow.company import vendor_refunds
+            vendor_refunds.release(s, ctx, output.current.id, 'deposit void')
         return Applied(outputs.write_output(output), [], 'deposit ' + verb, audited=True)
 
     cmd = command('deposit ' + verb, scope='company', description=DESCRIPTIONS[verb],
@@ -104,7 +134,15 @@ def _delete():
     cmd.resource_requirements = (('ledger.read', 'member'),)
     cmd.ledger = True
     cmd.permanent_recovery = recover
-    cmd.applier(deletion.apply)
+    def apply(plan, ctx, s):
+        applied = deletion.apply(plan, ctx, s)
+        if not plan.data.get('recovered'):
+            # A deleted refund check reopens the vendor credit it settled, as a voided one does.
+            from bookflow.company import vendor_refunds
+            vendor_refunds.release(s, ctx, plan.data['old']['id'], 'deposit delete')
+        return applied
+
+    cmd.applier(apply)
     return cmd
 
 
