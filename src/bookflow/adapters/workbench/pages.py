@@ -1505,6 +1505,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                                        or out.get("charge_percent") is not None):
             # Only a non-inventory part or a fixed other charge converts to an inventory part (R154).
             verbs = [command for command in verbs if command.verb != "convert"]
+        if command_noun in ("account", "item", "customer", "vendor"):
+            # A merged-away entry is inactive and can only be unmerged; an active one only merged (R117).
+            verbs = [command for command in verbs
+                     if not ((command.verb == "unmerge" and out.get("active"))
+                             or (command.verb == "merge" and not out.get("active")))]
         if command_noun == "agent" and not out.get("active"):
             # A deactivated agent can only be brought back; everything else would refuse.
             verbs = [command for command in verbs if command.verb == "activate"]

@@ -191,6 +191,34 @@ def test_budget_vs_actual_by_hand_on_both_bases(books):
     assert overview['totals']['income']['budget']['amount'] == '18000.00'
 
 
+def test_a_merged_away_account_reads_under_its_survivor_in_budget_reports(books):
+    # R117 x R109: merging two expense accounts, one budgeted, puts budget and actual on one survivor row.
+    run, client, company = books['run'], books['client'], books['company']
+    _plan(books)
+    other = client.account.create(company=company, name='Rent Expense', type='expense')['id']
+    run('journal post', dict(date='2026-01-10', lines=[dict(account=other, side='debit', amount='100.00'),
+                                                       dict(account=books['bank'], side='credit', amount='100.00')]))
+    run('budget set', dict(budget='Plan 2026', account='Rent Expense', start_month='2026-01', amounts=['50.00']))
+    rent_year = next(row for row in run('budget show', dict(budget='Plan 2026'))['rows']
+                     if row['account_id'] == books['rent'])['total']['minor_units']
+    run('account merge', dict(merged='Office Rent', into='Rent Expense'))
+    for basis in ('accrual', 'cash'):
+        report = run('report budget-vs-actual', dict(budget='Plan 2026', date_from='2026-01-01', date_to='2026-01-31',
+                                                     columns='total', basis=basis))
+        assert books['rent'] not in {row['account_id'] for row in report['rows']}
+        assert _amounts(_row(report, other)['cells'])[:2] == ['1300.00', '1050.00']
+    overview = run('report budget-overview', dict(budget='Plan 2026', columns='total'))
+    assert books['rent'] not in {row['account_id'] for row in overview['rows']}
+    # Office Rent's twelve budgeted months plus Rent Expense's 50.00 in January.
+    assert _row(overview, other)['cells'][0]['minor_units'] == rent_year + 50_00
+    # Undoing the merge gives each account its own budget row again.
+    run('account unmerge', dict(merged='Office Rent'))
+    report = run('report budget-vs-actual', dict(budget='Plan 2026', date_from='2026-01-01', date_to='2026-01-31',
+                                                 columns='total', basis='accrual'))
+    assert _amounts(_row(report, books['rent'])['cells'])[:2] == ['1200.00', '1000.00']
+    assert _amounts(_row(report, other)['cells'])[:2] == ['100.00', '50.00']
+
+
 def test_create_from_actuals_equals_last_years_profit_and_loss(books):
     run = books['run']
     made = run('budget create', dict(name='From 2025', fiscal_year=2026, from_actuals=True, basis='accrual'))

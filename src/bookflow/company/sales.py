@@ -11,6 +11,7 @@ from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom, list_service
 from bookflow.company import sales_calculations as calc
 from bookflow.company import tax_attribution as tax_facts
+from bookflow.company import list_merges
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
@@ -518,6 +519,10 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
             previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True, line_kinds=True)
         if group is not None:
             resolved['profile'].group = group
+        # A kept line naming an account or item merged since saves with the survivor (R117).
+        resolved['profile'] = list_merges.survive(s.company, resolved['profile'])
+        if resolved.get('item_id') is not None:
+            resolved['item_id'] = resolved['profile'].item.id
         resolved['line_id'] = key
         lines.append(resolved)
         warnings.extend(w for w in line_warnings if w not in warnings)

@@ -32,6 +32,9 @@ from pydantic import Field
 from bookflow.company import financial_statements as statements
 from bookflow.company import ledger_reports as ledger
 from bookflow.core.errors import BookflowError
+from bookflow.company.party_merges import survivor_sql
+# What a posting line's account reads as: its survivor when it was merged into another (R117).
+_ACCOUNT = survivor_sql("account", "l.account_id")
 
 # What each report splits on, in one place: the posting-line expression that names
 # the column, the list the column is labelled from, and what an absent value is called.
@@ -101,14 +104,14 @@ def _cells_query(dimension):
     """One row per account and dimension value, over the requested period only."""
     return f"""
 WITH cells AS (
- SELECT l.account_id AS account_id, {dimension['expression']} AS dimension, a.type AS account_type,
+ SELECT {_ACCOUNT} AS account_id, {dimension['expression']} AS dimension, a.type AS account_type,
    bookflow_sum_int(l.debit_minor_units - l.credit_minor_units) AS net
  FROM posting_lines l
  JOIN posting_batches b ON b.id = l.batch_id
- JOIN accounts a ON a.id = l.account_id
+ JOIN accounts a ON a.id = {_ACCOUNT}
  WHERE b.effective_date >= :date_from AND b.effective_date <= :date_to
    AND {statements.PL_ACCOUNT_TYPES_SQL}
- GROUP BY l.account_id, {dimension['expression']}, a.type
+ GROUP BY 1, 2, a.type
 )"""
 
 

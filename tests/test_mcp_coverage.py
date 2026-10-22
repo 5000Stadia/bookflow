@@ -49,7 +49,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 vendor-credit refund (R149: a vendor's refund check for an open credit).
     # +18 budgets, budget and comparison reports, memorized reports (R109).
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
-    assert len(rows) == 560
+    # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
+    assert len(rows) == 564
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven

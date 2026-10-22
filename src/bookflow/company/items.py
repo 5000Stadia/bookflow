@@ -1227,6 +1227,7 @@ def plan_item_update(
     """``converting`` is `item convert`'s one-way change to an inventory part, which the
     ordinary type change refuses; item_conversions.py checks what it needs first."""
     current = _row(db, record_id)
+    from bookflow.company.list_merges import refuse_while_merged; refuse_while_merged(db, "item", record_id, "edit")  # R117
     if not converting:
         from bookflow.company import prepayments
         prepayments.guard_item_update(db, current, changes)
@@ -1386,6 +1387,8 @@ def plan_item_active_change(
     at: str | None = None,
 ) -> ItemActivePlan:
     current = _row(db, record_id)
+    if active:
+        from bookflow.company.list_merges import refuse_while_merged; refuse_while_merged(db, "item", record_id, "make active")  # R117
     _validate_stored(db, current, activating=active)
     if bool(current["active"]) is active:
         if active:

@@ -28,6 +28,10 @@ from bookflow.company.ledger_reports import (
     MoneyOutKind, MoneyOutput, StrictModel, TransactionType, iso_date, money,
 )
 from bookflow.core.errors import BookflowError
+from bookflow.company.party_merges import survivor_sql
+
+# A merged account's lines read as its survivor's (R117).
+_ACCOUNT = survivor_sql("account", "l.account_id")
 
 ENTRIES = "entries-to-review"
 PRIOR = "prior-balances"
@@ -271,14 +275,14 @@ def prior_rows(s, as_of):
     checkpoints = _checkpoints(s, as_of)
     for point in checkpoints:
         moved = [dict(r) for r in s.company.conn.execute(sa.text("""
-            SELECT l.account_id, a.full_name, a.type, b.transaction_id,
+            SELECT a.id AS account_id, a.full_name, a.type, b.transaction_id,
                    sum(l.debit_minor_units-l.credit_minor_units) AS delta, max(be.at) AS entered_at,
                    max(be.seq) AS seq
             FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
-            JOIN audit_events be ON be.id=b.audit_event_id JOIN accounts a ON a.id=l.account_id
+            JOIN audit_events be ON be.id=b.audit_event_id JOIN accounts a ON a.id=""" + _ACCOUNT + """
             WHERE b.effective_date<=:day AND be.seq>:seq AND (:account IS NULL OR l.account_id=:account)
-            GROUP BY l.account_id, b.transaction_id HAVING delta<>0
-            ORDER BY a.full_name, l.account_id, seq"""),
+            GROUP BY a.id, b.transaction_id HAVING delta<>0
+            ORDER BY a.full_name, a.id, seq"""),
             dict(day=point['day'], seq=point['seq'], account=point['account_id'])).mappings()]
         by_account = {}
         for row in moved:
@@ -292,7 +296,7 @@ def prior_rows(s, as_of):
                 continue
             now = s.company.conn.execute(sa.text("""
                 SELECT coalesce(sum(l.debit_minor_units-l.credit_minor_units),0) FROM posting_lines l
-                JOIN posting_batches b ON b.id=l.batch_id WHERE l.account_id=:a AND b.effective_date<=:day"""),
+                JOIN posting_batches b ON b.id=l.batch_id WHERE """ + _ACCOUNT + """=:a AND b.effective_date<=:day"""),
                 dict(a=account_id, day=point['day'])).scalar()
             changed += 1
             common = dict(review=point['review'], review_id=point['id'], review_date=point['day'],

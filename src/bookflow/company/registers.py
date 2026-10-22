@@ -29,7 +29,7 @@ def _home(s):
 
 
 def _selected(s, selector, currency):
-    account = journals.active(accounts.resolve_account(s.company, selector), 'account')
+    account = journals.active(accounts.resolve_account(s.company, selector, follow_merge=True), 'account')
     if account['type'] not in REGISTER_TYPES:
         raise journals.invalid('account', 'register requires a balance-sheet posting account')
     if account.get('currency') not in (None, currency):

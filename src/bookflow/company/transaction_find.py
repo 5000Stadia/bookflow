@@ -38,6 +38,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from bookflow.company.party_merges import survivor_sql
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
 from bookflow.company.ledger_schema import TRANSACTION_TYPES
@@ -183,7 +184,9 @@ SELECT * FROM (
  LEFT JOIN item_receipts ir ON ir.transaction_id=t.id
  LEFT JOIN check_instruments ci ON ci.transaction_id=t.id
  WHERE 1=1 {_TOMBSTONES}
-   AND (:account IS NULL OR t.id IN (SELECT transaction_id FROM posting_lines WHERE account_id=:account))
+   AND (:account IS NULL OR t.id IN (SELECT transaction_id FROM posting_lines WHERE account_id IN (
+        SELECT :account UNION ALL SELECT merged_id FROM list_merges
+        WHERE list_kind='account' AND survivor_id=:account AND undone_at IS NULL)))
    AND (:named=0 OR {_party_sql('r.name_type', 'r.name_id')}
         OR t.id IN (SELECT transaction_id FROM posting_lines WHERE {_party_sql('name_type', 'name_id')}))
    AND (:number IS NULL OR lower(r.number)=:number OR lower(ci.check_number)=:number)
@@ -366,7 +369,9 @@ def find(inp: TransactionFindInput, s, *, principal_id=None) -> TransactionFindO
         account_id = None
         if inp.account:
             from bookflow.company.accounts import resolve_account
-            account_id = resolve_account(s.company, inp.account)['id']
+            from bookflow.company.list_merges import survivor_id
+            # A merged account's name finds what it posted, under its survivor (R117).
+            account_id = survivor_id(s.company, 'account', resolve_account(s.company, inp.account)['id'])
         exact = _minor(inp.amount, 'amount', currency)
         params = dict(
             types=json.dumps(searched), account=account_id, named=1 if parties else 0,
@@ -405,9 +410,10 @@ def _detail(raw, rows, currency) -> list[FoundTransaction]:
     lines: dict[str, list[dict]] = {}
     if revisions:
         for line in _rows(raw.execute("""
-            SELECT b.revision_id AS rev, l.line_no, l.account_id, a.type AS account_type, a.full_name, a.name, a.number,
+            SELECT b.revision_id AS rev, l.line_no, a.id AS account_id, a.type AS account_type, a.full_name, a.name, a.number,
                    l.name_type, l.name_id
-            FROM posting_batches b JOIN posting_lines l ON l.batch_id=b.id JOIN accounts a ON a.id=l.account_id
+            FROM posting_batches b JOIN posting_lines l ON l.batch_id=b.id
+            JOIN accounts a ON a.id=""" + survivor_sql('account', 'l.account_id') + """
             WHERE b.revision_id IN (SELECT value FROM json_each(:revs)) AND b.kind IN ('original','replacement')
             ORDER BY b.revision_id, l.line_no""", {'revs': json.dumps(revisions)})):
             lines.setdefault(line['rev'], []).append(line)

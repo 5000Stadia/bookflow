@@ -239,9 +239,15 @@ def _account_facts(row):
                    normal_balance=accounts.NORMAL_BALANCE[row['type']])
 
 
+def _survivor_account(s, profile):
+    """A kept line whose account or item has since been merged into another saves with the survivor (R117)."""
+    from bookflow.company import list_merges
+    return list_merges.survive(s.company, profile)
+
+
 def _account_row(s, selector, field):
     try:
-        row = accounts.resolve_account(s.company, selector)
+        row = accounts.resolve_account(s.company, selector, follow_merge=True)
     except BookflowError as exc:
         if exc.code in ('E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE'):
             exc.details.setdefault('record_type', 'account')
@@ -283,6 +289,9 @@ def _ap_account(s, selector, currency, previous, *, noun='bill'):
 
 def _list_row(s, noun, table, selector, field, kind):
     row = list_service.resolve_selector(s.company, table, get_list_definition(noun), selector)
+    if not row['active'] and kind in ('item', 'account'):
+        from bookflow.company import list_merges
+        row = list_merges.resolve_saved(s.company, kind, dict(row))  # merged: saves as its survivor (R117)
     if not row['active']:
         raise BookflowError('E_INACTIVE_REFERENCE',
                             details={'record_type': kind, 'record_id': row['id'], 'field': field})
@@ -987,7 +996,7 @@ def commercial(s, inp, old_header, old_revision, *, document_id, received=None):
         if old_revision and supplied is None:
             grids[family] = [dict(line_id=line['line_id'], family=family, memo=line['memo'],
                                   amount_minor_units=line['amount_minor_units'],
-                                  profile=LINE_FACTS[family].model_validate_json(line['line_snapshot']))
+                                  profile=_survivor_account(s, LINE_FACTS[family].model_validate_json(line['line_snapshot'])))
                              for line in kept]
             seen.update(line['line_id'] for line in kept)
             continue

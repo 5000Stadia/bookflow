@@ -1168,6 +1168,17 @@ EXAMPLES.update({
                             {"merged": "Central Supply Co", "into": "Central Supply"}),
     "vendor unmerge": Example('bookflow vendor unmerge "Central Supply Co" --reason "Two suppliers after all"'
                               ' --company "Demo Plumbing Co" --json', {"merged": "Central Supply Co"}),
+    # R117, second part: accounts and items, the same alias with their editable references re-pointed.
+    "account merge": Example('bookflow account merge "Office Supply" "Office Supplies" --reason "Same account entered twice"'
+                             ' --company "Demo Plumbing Co" --json',
+                             {"merged": "Office Supply", "into": "Office Supplies"}),
+    "account unmerge": Example('bookflow account unmerge "Office Supply" --reason "Two accounts after all"'
+                               ' --company "Demo Plumbing Co" --json', {"merged": "Office Supply"}),
+    "item merge": Example('bookflow item merge "Drain Clean" "Drain Cleaning" --reason "Same service entered twice"'
+                          ' --company "Demo Plumbing Co" --json',
+                          {"merged": "Drain Clean", "into": "Drain Cleaning"}),
+    "item unmerge": Example('bookflow item unmerge "Drain Clean" --reason "Two services after all"'
+                            ' --company "Demo Plumbing Co" --json', {"merged": "Drain Clean"}),
 })
 # R179: what a 1099 vendor was paid before the books began here, from the old books' 1099 Summary.
 EXAMPLES["vendor 1099-opening"] = Example(

@@ -102,6 +102,8 @@ PHRASES = {
     'billing': 'Bill this {subject}',
     'settlement': 'Settlement of this {subject}',
     'children': 'Rows within this {subject}',
+    'merge': 'Merge this {subject} into another',
+    'unmerge': "Undo this {subject}'s merge",
 }
 
 # A handful of verbs mean something different under one noun than they mean everywhere else.
