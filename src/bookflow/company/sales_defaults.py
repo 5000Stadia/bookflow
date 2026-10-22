@@ -574,14 +574,14 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                  previous_header: SalesProfile | None = None, refresh: bool = False,
                  nonposting: bool = False, price_override: Callable | None = None,
                  net_override: int | None = None, defer_tax: bool = False,
-                 line_kinds: bool = False, stocked: bool = False) -> tuple[dict, list[str]]:
+                 line_kinds: bool = False, stocked: bool = False, date: str | None = None) -> tuple[dict, list[str]]:
     """Resolve one commercial line using preserved rules for ordinary edits.
 
     ``line_kinds`` admits subtotal, discount and percentage-charge items, whose amounts the
     caller then works out over the whole document with ``sales_adjustments.apply``.
     ``stocked`` admits stock-carrying items on a non-posting document (a quote, a work order or
     a sales order): it records them, captures the accounts its invoice will post to, and moves
-    nothing.
+    nothing. ``date`` is the transaction date price rules (R110) are matched on; today when absent.
     """
     if not nonposting and (price_override is not None or net_override is not None):
         raise _invalid('unit_price', 'price hooks require non-posting resolution')
@@ -771,7 +771,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         profile.schema_version = 1
         profile.pricing_basis = 'unit'
         profile.net_amount_minor_units = profile.price_rule = profile.price_basis_minor_units = None
-        profile.standard_price_minor_units = profile.cost_minor_units = None
+        profile.standard_price_minor_units = profile.cost_minor_units = profile.pricing_rule = None
         for field in ('unit_price', 'price_level', 'price_basis_amount', 'net_amount'):
             fields.origins.pop(field, None)
     elif retained_billed:
@@ -798,7 +798,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             old.net_amount_minor_units if retained_billed else 0 if adjustment_role == 'charge' else
             money(inp.net_amount, currency, 'net_amount').minor_units
             if 'net_amount' in fields.supplied else old.net_amount_minor_units)
-        profile.price_rule = None
+        profile.price_rule = profile.pricing_rule = None
         profile.price_basis_minor_units = None
         for field in ('unit_price', 'price_level', 'price_basis_amount'):
             fields.origins.pop(field, None)
@@ -825,7 +825,12 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         level_changed = not _same(db, 'price_level', level_selector, old_level)
         unit_changed = old is not None and old.unit != profile.unit
         leaving_amount = old is not None and old.pricing_basis == 'amount'
-        price_needs = leaving_amount or fields.needs('unit_price', item_changed or unit_changed or level_changed or header_price_changed)
+        # R110: a quantity or customer change re-prices a defaulted line once price rules are in use.
+        from bookflow.company import pricing_rules
+        ruled = (old is not None and (previous['quantity_microunits'] != quantity or customer_changed)
+                 and (pricing_rules.in_use(db) or old.pricing_rule is not None))
+        price_needs = leaving_amount or fields.needs('unit_price', item_changed or unit_changed or level_changed
+                                                     or header_price_changed or ruled)
         price_explicit = (price_override is not None or 'unit_price' in fields.supplied or
                           (old is not None and not leaving_amount and not fields.defaulted('unit_price') and 'unit_price' not in fields.defaults))
         if (level_changed or item_changed or refresh or 'price_level' in fields.defaults) and info['enable_price_levels'] and level_selector:
@@ -854,14 +859,18 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             profile.price_basis_minor_units = old.price_basis_minor_units
         if price_override is not None:
             profile.origins = fields.origins
+            profile.pricing_rule = None
             price = price_override(profile, factor)
         elif 'unit_price' in fields.supplied:
+            profile.pricing_rule = None
             price = money(inp.unit_price, currency).minor_units
             fields.origins['unit_price'] = Origin(kind='explicit')
         elif price_needs and not price_explicit:
-            base_price = _derived_price(profile)
+            # R110 hook: price rules may better the price level's (or item's) price; the rule is captured.
+            base_price = pricing_rules.line_price(s, profile, header, base_qty, date, lambda: _derived_price(profile))
             price = selected_price(base_price, factor)
-            fields.origins['unit_price'] = Origin(kind='default', source_id=profile.price_rule.id if profile.price_rule else item['id'])
+            fields.origins['unit_price'] = Origin(kind='default', source_id=(
+                profile.pricing_rule.id if profile.pricing_rule else profile.price_rule.id if profile.price_rule else item['id']))
             if base_price and not price:
                 warnings.append(f'unit_price: nonzero base price {base_price} rounded to zero at factor {factor}')
         else:

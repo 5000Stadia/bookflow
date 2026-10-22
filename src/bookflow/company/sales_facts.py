@@ -93,6 +93,22 @@ class PriceRule(Reference):
     matched: bool = True
 
 
+class AppliedPriceRule(Reference):
+    """The price rule a line took its price from (R110), captured whole: editing the rule later never
+    changes the line. Prices are per base unit in minor units; ``value`` is the percent in millionths
+    or the amount in minor units the rule applied (its quantity break's, when it has breaks)."""
+    priority: int = Field(ge=1)
+    kind: Literal["percent", "amount"]
+    direction: Literal["down", "up"]
+    basis: Literal["sales_price", "cost"]
+    rounding: Literal["cent", "x.99", "x.95", "dollar"]
+    value: int = Field(ge=0, le=INT64_MAX)
+    base_minor_units: int = Field(ge=0, le=INT64_MAX)
+    price_minor_units: int = Field(ge=0, le=INT64_MAX)
+    conflict_policy: Literal["lowest_price", "priority"]
+    summary: str = Field(max_length=2000)
+
+
 class Preferences(StrictModel):
     sales_tax_enabled: bool
     sales_tax_liability_basis: Literal["invoice_date", "payment_receipt"]
@@ -280,6 +296,8 @@ class SalesLineProfile(StrictModel):
     class_id: Reference | None = None
     tax_code: TaxCode | None = None
     price_rule: PriceRule | None = None
+    # The price rule (R110) the line's price came from; absent when none did.
+    pricing_rule: AppliedPriceRule | None = None
     standard_price_minor_units: int | None = None
     cost_minor_units: int | None = None
     price_basis_minor_units: int | None = None
@@ -331,7 +349,8 @@ class SalesLineProfile(StrictModel):
     @model_serializer(mode="wrap")
     def legacy_unit_facts(self, handler):
         values = handler(self)
-        for key in ('adjustment', 'group'):
+        # A line no price rule (R110) priced keeps the representation it had before rules existed.
+        for key in ('adjustment', 'group', 'pricing_rule'):
             if getattr(self, key) is None:
                 values.pop(key, None)
         if self.pricing_basis != 'allocated':

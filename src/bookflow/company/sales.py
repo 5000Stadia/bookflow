@@ -516,7 +516,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         if key:
             seen.add(key)
         resolved, line_warnings = sales_defaults.resolve_line(s, line, profile, previous=prior.get(key),
-            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True, line_kinds=True)
+            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True, line_kinds=True, date=date)
         if group is not None:
             resolved['profile'].group = group
         # A kept line naming an account or item merged since saves with the survivor (R117).

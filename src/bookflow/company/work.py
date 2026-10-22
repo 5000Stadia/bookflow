@@ -590,7 +590,8 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
             seen.add(key)
         resolved, line_warnings = work_defaults.resolve_line(s, line, profile,
             previous=line_facts(prior[key]) if key else None, previous_header=old_profile,
-            refresh=inp.refresh_defaults, kind=kind, document_tax=True)
+            refresh=inp.refresh_defaults, kind=kind, document_tax=True,
+            date=getattr(inp, 'date', None) or (old_rev['date'] if old_rev else None))
         if group is not None:
             resolved.profile.group = group
         resolved_lines.append((key, resolved))
