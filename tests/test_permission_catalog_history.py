@@ -64,6 +64,7 @@ ACCEPTED = {
     'budget-v1': (550, 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9'),
     'customer-prepayment-v1': (558, 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49'),
     'list-merge-v1': (562, 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0'),
+    'fixed-asset-v1': (572, 'c948821e78df9633da9f20d244971e41d5ba1fda4c663375b46c2e65483416bc'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -126,6 +127,8 @@ CHAIN_ADDITIONS = {
     'customer-prepayment-v1': {'prepayment receive', 'prepayment attach', 'prepayment apply', 'prepayment unapply',
                                'prepayment refund', 'prepayment show', 'prepayment query', 'report customer-prepayments'},
     'list-merge-v1': {'account merge', 'account unmerge', 'item merge', 'item unmerge'},
+    'fixed-asset-v1': {'fixed-asset depreciate', 'fixed-asset dispose', 'fixed-asset list', 'fixed-asset schedule',
+                       'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'},
 }
 
 _ANCESTOR_EDIT = """

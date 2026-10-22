@@ -138,6 +138,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BUDGET_POLICY_VERSION: 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9',
     c.CUSTOMER_PREPAYMENT_POLICY_VERSION: 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49',
     c.LIST_MERGE_POLICY_VERSION: 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0',
+    c.FIXED_ASSET_POLICY_VERSION: 'c948821e78df9633da9f20d244971e41d5ba1fda4c663375b46c2e65483416bc',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -251,6 +252,7 @@ def known_catalog(version):
     from . import permission_budget_catalog
     from . import permission_customer_prepayment_catalog
     from . import permission_list_merge_catalog
+    from . import permission_fixed_asset_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -290,6 +292,7 @@ def known_catalog(version):
         c.BUDGET_POLICY_VERSION: permission_budget_catalog,
         c.CUSTOMER_PREPAYMENT_POLICY_VERSION: permission_customer_prepayment_catalog,
         c.LIST_MERGE_POLICY_VERSION: permission_list_merge_catalog,
+        c.FIXED_ASSET_POLICY_VERSION: permission_fixed_asset_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -300,7 +303,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.LIST_MERGE_POLICY_VERSION)
+    return known_catalog(c.FIXED_ASSET_POLICY_VERSION)
 
 
 def catalog_for_root(tx):
