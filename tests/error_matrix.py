@@ -1873,3 +1873,42 @@ MATRIX['vendor-credit refund'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+# Budgets, budget and comparison reports, memorized reports (R109).
+_BUDGET_CELL = {
+    'E_VALIDATION': 'an account of the wrong kind, a month outside the budget, a customer or class missing on a dimensional budget or given on another, more amounts than months remain',
+    'E_RECORD_NOT_FOUND': 'unknown budget, account, customer or class',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency allows',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+_WRITE_TAIL = {k: _BUDGET_CELL[k] for k in ('E_IDEMPOTENCY_MISMATCH', 'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}
+MATRIX['budget set'] = dict(_BUDGET_CELL)
+MATRIX['budget fill'] = dict(_BUDGET_CELL)
+MATRIX['budget clear'] = {k: _BUDGET_CELL[k] for k in ('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VERSION_CONFLICT')} | _WRITE_TAIL
+MATRIX['budget create'] = {'E_VALIDATION': 'a balance sheet budget kept per customer or class', 'E_NAME_TAKEN': 'a budget already has the name',
+                           'E_VALUE_RANGE': 'an actual amount beyond signed 64-bit range', 'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing for from_actuals'} | _WRITE_TAIL
+MATRIX['budget rename'] = {'E_RECORD_NOT_FOUND': 'unknown budget', 'E_NAME_TAKEN': 'another budget has the name',
+                           'E_VERSION_CONFLICT': 'stale expected_version', 'E_VALIDATION': 'a blank name'} | _WRITE_TAIL
+MATRIX['budget delete'] = {'E_RECORD_NOT_FOUND': 'unknown budget', 'E_VERSION_CONFLICT': 'stale expected_version'} | _WRITE_TAIL
+MATRIX['budget show'] = {'E_VALIDATION': 'a customer or class on a budget not kept that way', 'E_RECORD_NOT_FOUND': 'unknown budget, customer or class',
+                         'E_VALUE_RANGE': 'a row total beyond signed 64-bit range'}
+MATRIX['budget list'] = {}
+MATRIX['report budget-overview'] = {'E_QUERY_STALE': 'budget or books changed between pages', 'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+                                    'E_VALIDATION': 'a customer or class on a budget not kept that way', 'E_RECORD_NOT_FOUND': 'unknown budget, customer or class'}
+MATRIX['report budget-vs-actual'] = MATRIX['report budget-overview'] | {'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing'}
+MATRIX['report profit-and-loss-comparison'] = {'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing', 'E_QUERY_STALE': 'books changed between pages',
+                                               'E_VALUE_RANGE': 'an amount beyond signed 64-bit range'}
+MATRIX['report balance-sheet-comparison'] = dict(MATRIX['report profit-and-loss-comparison'])
+MATRIX['memorized-report create'] = {'E_VALIDATION': 'not a report, or options the report refuses', 'E_NAME_TAKEN': 'a memorized report already has the name',
+                                     'E_RECORD_NOT_FOUND': 'a name in the options matches nothing'} | _WRITE_TAIL
+MATRIX['memorized-report update'] = MATRIX['memorized-report create'] | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['memorized-report delete'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report', 'E_VERSION_CONFLICT': 'stale expected_version'} | _WRITE_TAIL
+MATRIX['memorized-report show'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report'}
+MATRIX['memorized-report list'] = {}
+MATRIX['memorized-report run'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report', 'E_VALIDATION': 'kept options the report now refuses',
+                                  'E_QUERY_STALE': 'books changed between pages', 'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+                                  'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing'}

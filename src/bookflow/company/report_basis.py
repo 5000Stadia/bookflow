@@ -7,6 +7,7 @@ FINANCIAL_VIEWS = frozenset({
     'profit-and-loss', 'balance-sheet', 'profit-and-loss-by-job',
     'profit-and-loss-by-class', 'income-tax-summary', 'cash-flows',
     'sales-by-customer', 'sales-by-item', 'sales-by-rep', 'expenses-by-vendor',
+    'budget-vs-actual', 'profit-and-loss-comparison', 'balance-sheet-comparison',
 })
 
 

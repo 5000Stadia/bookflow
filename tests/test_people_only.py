@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_vendor_refund_catalog as tip_layer
+from bookflow.hub import permission_budget_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -26,7 +26,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # or invoice, merging and unmerging customers and vendors. Neither `payment bounce`, cutover-rest-v1's `vendor 1099-opening`
     # nor attachment-text-v1's `attachment text` nor transaction-find-v1's `transaction find` (reads) is one. item-convert-v1 adds
     # `item convert`, a person's act because it cannot be undone; finance-charge-v1's `finance-charge assess` is not one,
-    # nor is vendor-refund-v1's `vendor-credit refund`.
+    # nor is vendor-refund-v1's `vendor-credit refund`, nor any of budget-v1's budget,
+    # report and memorized-report commands.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
