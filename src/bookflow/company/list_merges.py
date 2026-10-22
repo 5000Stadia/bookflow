@@ -86,8 +86,13 @@ def resolve_saved(db, kind: str, row: dict[str, Any]) -> dict[str, Any]:
 
 def _live_map(db, kind: str) -> dict[str, dict[str, Any]]:
     table = _TABLES[kind]
-    rows = db.raw.execute(f"SELECT m.merged_id, a.* FROM list_merges m JOIN {table} a ON a.id=m.survivor_id "
-                          "WHERE m.list_kind=? AND m.undone_at IS NULL", (kind,))
+    try:
+        rows = db.raw.execute(f"SELECT m.merged_id, a.* FROM list_merges m JOIN {table} a ON a.id=m.survivor_id "
+                              "WHERE m.list_kind=? AND m.undone_at IS NULL", (kind,))
+    except Exception as exc:  # a partial schema built by hand for a narrow check has no merges
+        if "no such table" in str(exc):
+            return {}
+        raise
     names = [d[0] for d in rows.description]
     return {r[0]: dict(zip(names[1:], r[1:])) for r in rows.fetchall()}
 

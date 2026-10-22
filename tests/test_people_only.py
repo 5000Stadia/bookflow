@@ -26,7 +26,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # nor attachment-text-v1's `attachment text` (a read) is one: an agent may do all three.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
-        'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge'}
+        'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
+        'account merge', 'account unmerge', 'item merge', 'item unmerge'}
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.
     writes = {d.name for d in tip.CATALOG.commands if d.capability in ("user", "membership", "token")

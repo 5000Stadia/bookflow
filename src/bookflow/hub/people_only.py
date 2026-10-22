@@ -16,12 +16,14 @@ CLOSING_DATE_ACTION = 'admin:company:closing-date'
 ROLES_RULE = 'user roles and permissions are set by a person'
 CLOSING_DATE_RULE = 'the closing date is set by a person'
 # Commands outside the rules above that are still a person's act, with the sentence that names the act:
-# restoring a deleted document (restore-v1) and merging parties (party-merge-v1).
+# restoring a deleted document (restore-v1) and merging parties (party-merge-v1), accounts and items (list-merge-v1).
 ACT_SUBJECTS = {
     'journal restore': 'Restoring a deleted document',
     'invoice restore': 'Restoring a deleted document',
     'customer merge': 'Merging customers', 'customer unmerge': 'Undoing a customer merge',
     'vendor merge': 'Merging vendors', 'vendor unmerge': 'Undoing a vendor merge',
+    'account merge': 'Merging accounts', 'account unmerge': 'Undoing an account merge',
+    'item merge': 'Merging items', 'item unmerge': 'Undoing an item merge',
 }
 
 
