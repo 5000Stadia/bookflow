@@ -399,7 +399,7 @@ def _bill_numbers(s, identifiers, pending=None):
     return found
 
 
-def application_outputs(rows, currency, numbers, discounts=None):
+def application_outputs(rows, currency, numbers, discounts=None, types=None):
     """``discounts`` maps an apply's id to its discount row; an unapply inherits its original's."""
     discounts = discounts or {}
 
@@ -410,6 +410,7 @@ def application_outputs(rows, currency, numbers, discounts=None):
     return [BillApplicationOutput(
         **{k: v for k, v in row.items() if k != 'active'},
         bill_number=numbers.get(row['obligation_transaction_id'], ''),
+        obligation_type=(types or {}).get(row['obligation_transaction_id'], 'bill'),
         amount=Money(row['amount_minor_units'], currency).to_dict(),
         discount_minor_units=part(row),
         discount=Money(part(row), currency).to_dict() if part(row) else None,

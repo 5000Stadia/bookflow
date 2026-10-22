@@ -208,8 +208,22 @@ class BillSelectionInput(_Input):
 Selections = Annotated[list[BillSelectionInput], Field(min_length=1, max_length=200)]
 
 
+class DepositSelectionInput(_Input):
+    """One deposit line drawn from Accounts Payable for this vendor -- a refund check -- to settle.
+
+    A vendor's refund check is banked as a deposit whose line comes from Accounts Payable with
+    the vendor's name on it, and that line is what the credit answers, exactly as it answers a
+    bill. ``amount`` defaults to everything still open on that deposit line or everything the
+    credit still has free, whichever is less.
+    """
+
+    deposit: _Selector
+    amount: str | MoneyInput | None = None
+    expected_version: _Version | None = None
+
+
 class VendorCreditApplyInput(_Input):
-    """Attach what a credit still has free to open bills of the same vendor.
+    """Attach what a credit still has free to open bills -- or refund deposits -- of the same vendor.
 
     Nothing is posted: the payable moved when the credit posted, so this only decides which
     bills it answers. ``date`` is the settlement's own accounting date and defaults to the
@@ -219,29 +233,61 @@ class VendorCreditApplyInput(_Input):
 
     credit: _Selector
     expected_version: _Version | None = None
-    bills: Selections
+    bills: list[BillSelectionInput] = Field(default_factory=list, max_length=200)
+    deposits: list[DepositSelectionInput] = Field(default_factory=list, max_length=200)
     date: _Date | None = None
 
     @model_validator(mode='after')
     def one_row_per_bill(self) -> Self:
+        if not self.bills and not self.deposits:
+            raise ValueError('name at least one bill or refund deposit to apply the credit to')
+        if len(self.bills) + len(self.deposits) > 200:
+            raise ValueError('apply to at most 200 bills and deposits at once')
         selectors = [row.bill for row in self.bills]
         if len(set(selectors)) != len(selectors):
             raise ValueError('name each bill once; give one amount per bill')
+        deposits = [row.deposit for row in self.deposits]
+        if len(set(deposits)) != len(deposits):
+            raise ValueError('name each deposit once; give one amount per deposit')
         return self
 
 
 class VendorCreditUnapplyInput(_Input):
     credit: _Selector
     expected_version: _Version | None = None
-    # Omitted means every application still standing on this credit. Naming bills detaches only
+    # Omitted means every bill still settled by this credit (never a refund deposit; name those
+    # in `deposits`). Naming bills detaches only
     # those, so one wrong row on a three-bill credit is one correction, not three.
     bills: list[_Selector] | None = Field(default=None, min_length=1, max_length=200)
+    # Refund deposits the credit answers, named the same way; naming only bills leaves these.
+    deposits: list[_Selector] | None = Field(default=None, min_length=1, max_length=200)
 
     @model_validator(mode='after')
     def one_row_per_bill(self) -> Self:
         if self.bills is not None and len(set(self.bills)) != len(self.bills):
             raise ValueError('name each bill once')
+        if self.deposits is not None and len(set(self.deposits)) != len(self.deposits):
+            raise ValueError('name each deposit once')
         return self
+
+
+class VendorCreditRefundInput(_Input):
+    """A vendor's refund check for an open credit: bank it and settle the credit, in one write.
+
+    The deposit's one line is drawn from the credit's own Accounts Payable account with the
+    vendor's name on it, so the payable rises by exactly what the credit lowered it by and the
+    credit answers that line, the way it answers a bill.
+    """
+
+    credit: _Selector
+    expected_version: _Version | None = None
+    deposit_to: _Selector
+    date: _Date
+    amount: str | MoneyInput | None = None
+    number: _Number | None = None
+    memo: Text | None = None
+    check_number: Annotated[str, Field(min_length=1, max_length=128)] | None = None
+    payment_method: _Selector | None = None
 
 
 class VendorCreditExpenseOutput(CreatedOutput):
@@ -434,3 +480,23 @@ class VendorCreditPageOutput(_Input):
     has_more: bool
     next_cursor: str | None
     audit_watermark: int
+
+
+class VendorCreditRefundOutput(WriteOutput):
+    """What a refund wrote: the deposit that banked it and the credit it settled."""
+
+    changed: bool = True
+    credit_id: str
+    credit_number: str
+    credit_version: int
+    vendor_id: str
+    vendor_name: str
+    deposit_id: str
+    deposit_number: str | None = None
+    deposit_to_id: str
+    date: str
+    amount: MoneyOutput
+    amount_minor_units: int
+    credit_free_before: MoneyOutput
+    credit_free_after: MoneyOutput
+    credit_free_after_minor_units: int

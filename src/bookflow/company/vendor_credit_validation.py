@@ -505,6 +505,12 @@ def _settling(s, data, header, pending, currency, operation):
     require(header['status'] == 'posted', 'settling existing capacity cannot void the credit')
     applications = pending['ap_applications']
     require(bool(applications), 'a settlement write that settles nothing')
+    # A refund deposit's payable is minted by the first credit applied to it (vendor_refunds).
+    minted = pending.get('ap_obligation_keys', [])
+    if minted:
+        from bookflow.company import vendor_refunds
+        require(operation == 'apply', 'only an application mints a payable')
+        vendor_refunds.check_minted(s, minted, data['event'])
     require(all(row['source_transaction_id'] == header['id'] for row in applications),
             'cross-document settlement')
     key = ap_settlement.source_key_row(s, header['id'])
@@ -527,7 +533,7 @@ def _settling(s, data, header, pending, currency, operation):
         else:
             require(application['kind'] == 'unapply' and application['reverses_application_id'],
                     'an unapply that takes nothing back')
-        settlement._settled_bill(s, application, key, currency)
+        settlement._settled_bill(s, application, key, currency, minted)
     settlement.settlement_fence(s, applications, operation=operation,
-                               source_transaction_id=header['id'])
+                               source_transaction_id=header['id'], minted=minted)
     settlement.source_capacity_fence(s, applications, noun='credit')

@@ -134,6 +134,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.TRANSACTION_FIND_POLICY_VERSION: '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1',
     c.ITEM_CONVERT_POLICY_VERSION: '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4',
     c.FINANCE_CHARGE_POLICY_VERSION: '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe',
+    c.VENDOR_REFUND_POLICY_VERSION: 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -243,6 +244,7 @@ def known_catalog(version):
     from . import permission_transaction_find_catalog
     from . import permission_item_convert_catalog
     from . import permission_finance_charge_catalog
+    from . import permission_vendor_refund_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -278,6 +280,7 @@ def known_catalog(version):
         c.TRANSACTION_FIND_POLICY_VERSION: permission_transaction_find_catalog,
         c.ITEM_CONVERT_POLICY_VERSION: permission_item_convert_catalog,
         c.FINANCE_CHARGE_POLICY_VERSION: permission_finance_charge_catalog,
+        c.VENDOR_REFUND_POLICY_VERSION: permission_vendor_refund_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -288,7 +291,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.FINANCE_CHARGE_POLICY_VERSION)
+    return known_catalog(c.VENDOR_REFUND_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

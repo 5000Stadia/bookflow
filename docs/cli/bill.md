@@ -610,6 +610,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payments[].applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `payments[].applications[].obligation_key_id` | string | yes | no | — | — |
 | `payments[].applications[].bill_number` | string | yes | no | — | — |
+| `payments[].applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `payments[].applications[].amount` | object | yes | no | — | — |
 | `payments[].applications[].amount.amount` | string | yes | no | — | — |
 | `payments[].applications[].amount.currency` | string | yes | no | — | — |

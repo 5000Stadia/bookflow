@@ -1188,3 +1188,10 @@ EXAMPLES["item convert"] = Example(
 EXAMPLES["finance-charge assess"] = Example(
     'bookflow finance-charge assess --date 2026-07-31 --reason "Month-end finance charges" --company "Demo Plumbing Co" --json',
     {"date": "2026-07-31"})
+# R149: a vendor's refund check for an open vendor credit, banked and settled in one step.
+EXAMPLES["vendor-credit refund"] = Example(
+    f'bookflow vendor-credit refund {ID} --deposit-to Checking --date 2026-05-20 --amount 120.00'
+    ' --payment-method Check --check-number 8812 --company "Demo Plumbing Co"'
+    ' --reason "Acme sent a refund check for our return" --json',
+    {"credit": ID, "deposit_to": "Checking", "date": "2026-05-20", "amount": "120.00",
+     "payment_method": "Check", "check_number": "8812"})

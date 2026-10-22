@@ -1798,6 +1798,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             }
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
+        if noun == 'vendor-credit' and verb == 'refund' and originals:
+            # A refund check is a new deposit: the credit's own number, memo and grids are not its fields.
+            originals = {'credit': originals['credit'], 'expected_version': originals['expected_version']}
         if noun == 'deposit' and verb in ('update', 'void') and record_id not in (None, 'self'):
             try:
                 shown = run(request, 'deposit show', {'deposit': record_id}, company_id)
