@@ -145,6 +145,9 @@ class Reference:
     owner_id: str
     label: str  # what a person reads in the preview
     conflict: str | None = None  # why S's own row is kept and this one ended
+    before: str | None = None  # what the column holds now; the merged entry unless given
+    after: str | None = None  # what a repoint writes; the survivor unless given
+    explicit: bool = False  # before and after are given, not the merged entry and survivor
 
 
 def _owner_name(db, owner_kind: str, owner_id: str) -> str:
@@ -235,6 +238,14 @@ def _item_references(db, merged: str, survivor: str) -> list[Reference]:
                                   f"the survivor already has a preferred vendor ranked {rank}; its own is kept"))
         else:
             refs.append(Reference("item_vendor_profiles", row_id, "item_id", "repoint", "item", merged, label))
+            if rank == 1:
+                # The item's own preferred vendor is its first-ranked profile: it moves with it.
+                refs.append(Reference("items", merged, "preferred_vendor_id", "repoint", "item", merged,
+                                      "preferred vendor of the merged item", before=vendor_id, after=None, explicit=True))
+                if db.raw.execute("SELECT preferred_vendor_id FROM items WHERE id=?", (survivor,)).fetchone()[0] is None:
+                    refs.append(Reference("items", survivor, "preferred_vendor_id", "repoint", "item", survivor,
+                                          f"preferred vendor: {_owner_name(db, 'vendor', vendor_id)}",
+                                          before=None, after=vendor_id, explicit=True))
     return refs
 
 
@@ -257,26 +268,32 @@ def _account_documents(db, account_id: str) -> dict[str, dict[str, int]]:
     return {str(kind): {"documents": int(docs), "postings": int(lines)} for kind, docs, lines in rows}
 
 
-# Item lines a document holds, current revisions only, as (transaction id, item id).
-_ITEM_LINES = """
- SELECT p.transaction_id AS tx, l.item_id AS item FROM sales_line_profiles l
-   JOIN sales_profiles p ON p.revision_id=l.revision_id JOIN transactions t ON t.current_revision_id=p.revision_id
- UNION ALL SELECT p.transaction_id, l.item_id FROM credit_line_profiles l
-   JOIN credit_profiles p ON p.revision_id=l.revision_id JOIN transactions t ON t.current_revision_id=p.revision_id
- UNION ALL SELECT r.transaction_id, l.item_id FROM purchase_item_lines l
-   JOIN transaction_revisions r ON r.id=l.revision_id JOIN transactions t ON t.current_revision_id=r.id
- UNION ALL SELECT r.transaction_id, l.item_id FROM vendor_credit_item_lines l
-   JOIN transaction_revisions r ON r.id=l.revision_id JOIN transactions t ON t.current_revision_id=r.id
-"""
+# Item lines a document holds, current revisions only: every entered-line table keyed by its
+# document line that carries an item.
+_ITEM_LINE_TABLES = ("sales_line_profiles", "credit_line_profiles", "purchase_item_lines",
+                     "vendor_credit_item_lines", "money_out_item_lines")
 
 
 def _item_documents(db, item_id: str) -> dict[str, dict[str, int]]:
-    try:
-        rows = db.raw.execute(f"""SELECT t.type, count(DISTINCT x.tx), count(*) FROM ({_ITEM_LINES}) x
-            JOIN transactions t ON t.id=x.tx WHERE x.item=? GROUP BY t.type ORDER BY t.type""", (item_id,)).fetchall()
-    except Exception:  # pragma: no cover - a line table this build does not have
-        rows = []
-    return {str(kind): {"documents": int(docs), "postings": int(lines)} for kind, docs, lines in rows}
+    present = {r[0] for r in db.raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    lines = " UNION ALL ".join(f"SELECT document_line_id, item_id FROM {t}" for t in _ITEM_LINE_TABLES if t in present)
+    rows = db.raw.execute(f"""SELECT t.type, count(DISTINCT t.id), count(*) FROM ({lines}) x
+        JOIN document_lines d ON d.id=x.document_line_id JOIN transactions t ON t.current_revision_id=d.revision_id
+        WHERE x.item_id=? GROUP BY t.type ORDER BY t.type""", (item_id,)).fetchall()
+    counts = {str(kind): {"documents": int(docs), "postings": int(n)} for kind, docs, n in rows}
+    # Unposted documents (estimates, sales and purchase orders) are counted beside them.
+    for kind, sql in (("purchase_order", "SELECT count(DISTINCT o.id), count(*) FROM purchase_order_lines l "
+                                         "JOIN purchase_orders o ON o.current_revision_id=l.revision_id WHERE l.item_id=?"),):
+        if "purchase_order_lines" in present:
+            try:
+                docs, n = db.raw.execute(sql, (item_id,)).fetchone()
+            except Exception as exc:  # a shape this build does not have
+                if "no such column" not in str(exc):
+                    raise
+                docs = n = 0
+            if docs:
+                counts[kind] = {"documents": int(docs), "postings": int(n)}
+    return dict(sorted(counts.items()))
 
 
 def _home(db) -> str:
@@ -475,7 +492,7 @@ def apply_merge(s, ctx, plan: MergePlan, command: str) -> tuple[str, list[Touche
     at, event, merge_id = clock.now_iso(), new_id(), new_id()
     survivor = plan.survivor["id"]
     steps = [(r.table, r.record_id, r.column if r.action == "repoint" else "active",
-              survivor if r.action == "repoint" else 0) for r in plan.references]
+              (r.after if r.explicit else survivor) if r.action == "repoint" else 0) for r in plan.references]
     touched = _write(s, ctx, kind=kind, entry_id=plan.merged["id"], entry_active=False, steps=steps,
                      owners=[(r.owner_kind, r.owner_id) for r in plan.references], action="merge", at=at)
     row = dict(id=merge_id, list_kind=kind, merged_id=plan.merged["id"], survivor_id=survivor,
@@ -488,8 +505,9 @@ def apply_merge(s, ctx, plan: MergePlan, command: str) -> tuple[str, list[Touche
     for position, r in enumerate(plan.references, start=1):
         db.conn.execute(schema.list_merge_references.insert().values(
             id=new_id(), merge_id=merge_id, position=position, table_name=r.table, record_id=r.record_id,
-            column_name=r.column, action=r.action, before_value=plan.merged["id"],
-            after_value=survivor if r.action == "repoint" else None, owner_kind=r.owner_kind, owner_id=r.owner_id))
+            column_name=r.column, action=r.action, before_value=r.before if r.explicit else plan.merged["id"],
+            after_value=(r.after if r.explicit else survivor) if r.action == "repoint" else None,
+            owner_kind=r.owner_kind, owner_id=r.owner_id))
     return merge_id, touched
 
 

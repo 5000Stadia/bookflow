@@ -521,6 +521,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
             resolved['profile'].group = group
         # A kept line naming an account or item merged since saves with the survivor (R117).
         resolved['profile'] = list_merges.survive(s.company, resolved['profile'])
+        if resolved.get('item_id') is not None:
+            resolved['item_id'] = resolved['profile'].item.id
         resolved['line_id'] = key
         lines.append(resolved)
         warnings.extend(w for w in line_warnings if w not in warnings)

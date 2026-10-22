@@ -90,13 +90,19 @@ def _build(client, kind):
     t.ids["vendor"] = vendor["id"]
     codes = t.run("sales-tax-code list")["items"]
     tax_code = next(c["id"] for c in codes if not c.get("taxable"))
-    t.run("item create", dict(name=ITEM_S, type="service", price="150.00", income_account_id=_id(t, t.use(INCOME_S, INCOME_M)),
-                              description="Clear a drain", sales_tax_code_id=tax_code,
-                              purchase_description="Drain clearing", cost="80.00",
-                              expense_account_id=_id(t, t.use(ACCOUNT_S, ACCOUNT_M)), sales_enabled=True,
-                              purchase_enabled=True))
-    t.run("item create", dict(name=ITEM_M, type="service", price="150.00", income_account_id=_id(t, INCOME_S),
-                              description="Clear a drain", sales_tax_code_id=tax_code))
+    item = t.use(ITEM_S, ITEM_M)
+    for name in (ITEM_S, ITEM_M):
+        profiles = [dict(vendor_id=t.ids["vendor"], preferred_rank=1, purchase_cost="75.00")] if name == item else []
+        t.run("item create", dict(name=name, type="service", price="150.00", income_account_id=_id(t, t.use(INCOME_S, INCOME_M)),
+                                  description="Clear a drain", sales_tax_code_id=tax_code,
+                                  purchase_description="Drain clearing", cost="80.00",
+                                  expense_account_id=_id(t, t.use(ACCOUNT_S, ACCOUNT_M)), sales_enabled=True,
+                                  purchase_enabled=True, vendor_profiles=profiles))
+    item_id = t.run("item show", dict(item=item))["id"]
+    t.run("item create", dict(name="Drain Kit", type="group", description="Drain kit", print_members=True,
+                              members=[dict(component_item_id=item_id, quantity="1")]))
+    t.run("price-level create", dict(name="Wholesale", kind="per_item", items=[
+        dict(item_id=item_id, price="120.00", adjustment_basis="standard_price")]))
     supplies = t.use(ACCOUNT_S, ACCOUNT_M)
     t.ids["bill"] = t.run("bill post", dict(vendor="Acme Supply", date="2026-03-02", memo="March parts",
                                             expenses=[dict(account=supplies, amount="100.00")]))["id"]
@@ -113,7 +119,11 @@ def _build(client, kind):
         account=BANK, pay_to=dict(name_type="vendor", name_id="Acme Supply"), amount="15.00",
         expenses=[dict(account=supplies, amount="15.00")])))
     t.ids["invoice"] = t.run("invoice post", dict(customer="Pat Customer", date="2026-03-10",
-                                                  lines=[dict(item=ITEM_S, quantity="1", unit_price="200.00")]))["id"]
+                                                  lines=[dict(item=item, quantity="1", unit_price="200.00")]))["id"]
+    t.ids["bill3"] = t.run("bill post", dict(vendor="Acme Supply", date="2026-03-11", memo="Drain parts",
+                                             items=[dict(item=item, quantity="2", unit_cost="75.00")]))["id"]
+    t.run("memorized create", dict(name="Monthly drain", command="invoice post", payload=dict(
+        customer="Pat Customer", lines=[dict(item=item, quantity="1", unit_price="150.00")])))
     return t
 
 
@@ -145,6 +155,9 @@ def _after(t):
     t.run("invoice post", dict(customer="Pat Customer", date="2026-04-05",
                                lines=[dict(item=ITEM_S, quantity="2", unit_price="150.00")]))
     t.run("memorized enter", dict(memorized="Monthly supplies", date="2026-04-06"))
+    t.run("memorized enter", dict(memorized="Monthly drain", date="2026-04-07"))
+    bill3 = t.run("bill show", dict(bill=t.ids["bill3"]))
+    t.run("bill update", dict(bill=t.ids["bill3"], expected_version=bill3["version"], memo="Drain parts, corrected"))
 
 
 def _report_inputs(command, filters):
@@ -219,9 +232,9 @@ def test_merged_and_direct_twins_read_the_same(client):
 
     preview = merged.run("account merge", dict(merged=ACCOUNT_M, into=ACCOUNT_S), dry_run=True)
     assert preview["merge_id"] is None and preview["changed"]
-    assert preview["merged_balance"]["minor_units"] == 22500 and preview["survivor_balance"]["minor_units"] == 0
-    assert preview["survivor_balance_after"]["minor_units"] == 22500
-    assert {(d["type"], d["count"]) for d in preview["documents"]} == {("bill", 2), ("journal_entry", 2)}
+    assert preview["merged_balance"]["minor_units"] == 37500 and preview["survivor_balance"]["minor_units"] == 0
+    assert preview["survivor_balance_after"]["minor_units"] == 37500
+    assert {(d["type"], d["count"]) for d in preview["documents"]} == {("bill", 3), ("journal_entry", 2)}
     assert {(r["owner_type"], r["field"], r["action"]) for r in preview["references"]} == {
         ("item", "expense_account_id", "repoint"), ("vendor", "account_id", "repoint")}
     done = merged.run("account merge", dict(merged=ACCOUNT_M, into=ACCOUNT_S))
@@ -237,7 +250,7 @@ def test_merged_and_direct_twins_read_the_same(client):
 
     # Undo with nothing saved since reproduces the pre-merge reads, references included; then merge again.
     undone = merged.run("account unmerge", dict(merged=ACCOUNT_M))
-    assert undone["changed"] and undone["reactivated"] and undone["restored"] == 2
+    assert undone["changed"] and undone["reactivated"] and undone["restored"] == 3
     differ = _diff(_strip_versions(_read_all(merged, _labels(BOTH))), _strip_versions(before))
     assert not differ, "\n".join(differ[:30])
     merged.run("account merge", dict(merged=ACCOUNT_M, into=ACCOUNT_S))
@@ -245,6 +258,18 @@ def test_merged_and_direct_twins_read_the_same(client):
     assert income["merged_balance"]["minor_units"] == 20000
     assert {(r["owner_type"], r["field"]) for r in income["references"]} == {("item", "income_account_id")}
     direct.run("account deactivate", dict(account=INCOME_M))
+
+    preview = merged.run("item merge", dict(merged=ITEM_M, into=ITEM_S), dry_run=True)
+    assert {(d["type"], d["count"]) for d in preview["documents"]} == {("invoice", 1), ("bill", 1)}
+    assert {(r["owner_type"], r["table"], r["action"]) for r in preview["references"]} == {
+        ("item", "item_members", "repoint"), ("price_level", "price_level_items", "repoint"),
+        ("item", "item_vendor_profiles", "repoint"), ("item", "items", "repoint")}
+    done = merged.run("item merge", dict(merged=ITEM_M, into=ITEM_S))
+    assert done["changed"]
+    undone = merged.run("item unmerge", dict(merged=ITEM_M))
+    assert undone["restored"] == 5
+    merged.run("item merge", dict(merged=ITEM_M, into=ITEM_S))
+    direct.run("item deactivate", dict(item=ITEM_M))
 
     _compare(merged, direct)
     _after(merged)

@@ -113,3 +113,60 @@ def test_an_agent_is_refused(books, tmp_path):
         assert error.value.code == "E_PERMISSION" and error.value.details.get("required_role") == "human", name
     assert as_user(root, "merge-person").run("account merge", {"merged": "Truck Fuel", "into": "Truck Fuel Costs"},
                                              company=COMPANY, reason=REASON)["changed"]
+
+
+def _item(client, name, kind="service", **extra):
+    tax = next(c["id"] for c in _run(client, "sales-tax-code list", {})["items"] if not c.get("taxable"))
+    income = _run(client, "account show", dict(account="Side Income"))["id"]
+    body = dict(name=name, type=kind, description=name, sales_tax_code_id=tax, price="10.00", income_account_id=income)
+    if kind == "inventory_part":
+        body.update(purchase_description=name, cost="4.00",
+                    cogs_account_id=_run(client, "account show", dict(account="Cost of Goods Sold"))["id"],
+                    asset_account_id=_run(client, "account show", dict(account="Inventory Asset"))["id"])
+    body.update(extra)
+    return _run(client, "item create", body)["id"]
+
+
+def test_item_refusals(books):
+    a, b = _item(books, "Snake Rental"), _item(books, "Snake Hire")
+    _item(books, "Snake Part", kind="non_inventory_part")
+    _refused(books, "Snake Rental", "Snake Part", "different types", kind="item")
+    _item(books, "Sub Snake", parent_id=a)
+    _refused(books, "Snake Rental", "Snake Hire", "sub-items", kind="item")
+    _run(books, "item create", dict(name="Snake Kit", type="group", description="Kit", print_members=True,
+                                    members=[dict(component_item_id=b, quantity="1")]))
+    _run(books, "item create", dict(name="Snake Kit Two", type="group", description="Kit", print_members=True,
+                                    members=[dict(component_item_id=b, quantity="1")]))
+    _refused(books, "Snake Kit", "Snake Kit Two", "groups are never merged", kind="item")
+    # Two stocked parts: one bought, so its average cost has a history.
+    _item(books, "Valve", kind="inventory_part")
+    _item(books, "Valve B", kind="inventory_part")
+    _run(books, "vendor create", dict(name="Valve Vendor"))
+    _run(books, "bill post", dict(vendor="Valve Vendor", date="2026-02-03", items=[dict(item="Valve B", quantity="2", unit_cost="4.00")]))
+    _refused(books, "Valve", "Valve B", "stock movements", kind="item")
+    # A group listing both with different quantities cannot keep one row for both.
+    c = _item(books, "Snake Cable")
+    _run(books, "item create", dict(name="Cable Kit", type="group", description="Kit", print_members=True,
+                                    members=[dict(component_item_id=b, quantity="1"), dict(component_item_id=c, quantity="2")]))
+    _refused(books, "Snake Cable", "Snake Hire", "different quantities", kind="item")
+
+
+def test_item_merge_repoints_and_undo_puts_back(books):
+    keep, dup = _item(books, "Jetting"), _item(books, "Jetting Dup")
+    _run(books, "item create", dict(name="Jet Kit", type="group", description="Kit", print_members=True,
+                                    members=[dict(component_item_id=dup, quantity="3")]))
+    preview = _run(books, "item merge", dict(merged="Jetting Dup", into="Jetting"), dry_run=True)
+    assert [(r["table"], r["action"]) for r in preview["references"]] == [("item_members", "repoint")]
+    assert preview["merged_balance"] is None
+    _run(books, "item merge", dict(merged="Jetting Dup", into="Jetting"))
+    kit = _run(books, "item show", dict(item="Jet Kit"))
+    assert [m["component_item_id"] for m in kit["members"]] == [keep]
+    assert "Jetting Dup" not in {i["full_name"] for i in _run(books, "item list", {})["items"]}
+    # A new sale naming the merged item sells the survivor.
+    _run(books, "customer create", dict(name="Jet Customer"))
+    sale = _run(books, "invoice post", dict(customer="Jet Customer", date="2026-02-04",
+                                            lines=[dict(item="Jetting Dup", quantity="1")]))
+    assert _run(books, "invoice show", dict(invoice=sale["id"]))["revision"]["lines"][0]["item_id"] == keep
+    assert _run(books, "item unmerge", dict(merged="Jetting Dup"))["restored"] == 1
+    kit = _run(books, "item show", dict(item="Jet Kit"))
+    assert [m["component_item_id"] for m in kit["members"]] == [dup]

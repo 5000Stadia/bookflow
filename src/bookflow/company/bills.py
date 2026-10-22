@@ -289,6 +289,9 @@ def _ap_account(s, selector, currency, previous, *, noun='bill'):
 
 def _list_row(s, noun, table, selector, field, kind):
     row = list_service.resolve_selector(s.company, table, get_list_definition(noun), selector)
+    if not row['active'] and kind in ('item', 'account'):
+        from bookflow.company import list_merges
+        row = list_merges.resolve_saved(s.company, kind, dict(row))  # merged: saves as its survivor (R117)
     if not row['active']:
         raise BookflowError('E_INACTIVE_REFERENCE',
                             details={'record_type': kind, 'record_id': row['id'], 'field': field})
