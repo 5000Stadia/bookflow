@@ -178,7 +178,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
 - [ ] R122 Approvals: purchase and bill approval steps before posting.
 - [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
-- [~] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
+- [x] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
 - [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review.
 - [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
