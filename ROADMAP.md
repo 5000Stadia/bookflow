@@ -166,7 +166,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
 - [ ] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
-- [ ] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
+- [~] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
 - [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends.
 - [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches.
 - [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout.
