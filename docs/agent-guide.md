@@ -4,7 +4,7 @@ This is the shortest end-to-end path from a fresh demo to a versioned, audited H
 
 The bootstrap bearer belongs to the human who issued it. The current command registry has no public commands for creating agent identities or assigning principals, so do not describe this token as an independent agent identity.
 
-Some changes are a person's, whatever role an agent holds: the company's closing date (set, moved or cleared through `company update`) and anything that changes who can do what (memberships with their grants and denials, roles, agent assignment and authorization, token issue, users added, activated or deactivated, passwords, permission activation, backup schedules, `demo reset`). An agent asking for one gets `E_PERMISSION` with `details.reason` `people_only` and the rule it met; ask your principal to make the change. Reads, every other company setting and ordinary posting are unchanged. A directive you record yourself is your own note, made for your principal (`person_given` is false): citing it does not replace a reason. Only a directive a person recorded is their standing instruction.
+Some changes are a person's, whatever role an agent holds: the company's closing date (set, moved or cleared through `company update`) and anything that changes who can do what (memberships with their grants and denials, roles, agent assignment and authorization, token issue, users added, activated or deactivated, passwords, permission activation, backup schedules, `demo reset`), and merging or unmerging duplicate customers, vendors, accounts or items (`customer merge`, `vendor merge`, `account merge`, `item merge` and their `unmerge`). An agent asking for one gets `E_PERMISSION` with `details.reason` `people_only` and the rule it met; ask your principal to make the change. When you find two entries that look like duplicates (two expense accounts for the same thing, an item entered twice), say so and name both; do not post to work around it. A merge leaves everything posted as it is and reads the duplicate as the other; a person previews it with `--dry-run` and can undo it. Reads, every other company setting and ordinary posting are unchanged. A directive you record yourself is your own note, made for your principal (`person_given` is false): citing it does not replace a reason. Only a directive a person recorded is their standing instruction.
 
 Browser and programmatic clients operate on the same records. After another writer
 corrects an invoice, read `invoice show` again and use its current `version` for the
@@ -447,6 +447,32 @@ elsewhere. Leave out the `bank_fee_*` or `customer_fee_*` fields when there is n
 (`customer-refund void`); there is no un-bounce command. A receipt that was never deposited did not
 bounce: unapply and void it.
 
+## A customer pays a deposit
+
+A deposit, down payment or retainer is a customer prepayment: money paid before the work bills,
+held on the Customer Prepayments liability (set up on first use) and never income. Take it with
+`prepayment receive`, naming the accepted estimate or work order it is for (or the customer when
+it is for no document yet). Do not post it with `sales-receipt post` or `payment receive`: those
+make it a sale or a receivable credit, and both commands say so when the customer holds money.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "prepayment receive",
+ "input": {"document": "work-order 1002", "amount": "200.00", "payment_method": "Check", "reference": "4471"}}
+```
+
+The receipt goes to Undeposited Funds and is banked with `deposit post` like any receipt. When the
+work bills, `estimate invoice` or `work-order invoice` uses what is held by itself (oldest receipt
+first; `apply_prepayment: false` leaves it held) and reports `prepayment_applied` and
+`balance_due`. For any other invoice, `prepayment apply --invoice N` with the document, customer
+or receipts to draw from. `prepayment show --customer` lists what is held and every draw. To
+undo a draw, `prepayment unapply <credit memo>` (a reason is required; a draw inside a closed
+period cannot be undone). To pay money back, `prepayment refund`. To keep part as a fee, invoice
+the fee and `prepayment apply` to it, then refund the rest: held money becomes income only through
+an invoice. A document holding money cannot be voided or cancelled until the money is used,
+refunded or moved with `prepayment attach`. `report customer-prepayments` ties to the account on
+any date.
+
 ## Writing off a bad debt
 
 A customer who will never pay is written off with a receipt for nothing, as the anchor does: the
@@ -486,6 +512,34 @@ the ones to charge (`"customers": [{"customer": "Acme"}, {"customer": "Birch", "
 Each charge is a statement charge dated that day; assessing the same date again charges nobody twice.
 To take one back, `statement-charge void` it.
 
+## How are we doing against budget?
+
+A budget is a named plan for one fiscal year: an amount per account per month, entered positive for
+income and expense alike, and it never posts. For "how are we doing against budget this quarter?",
+find the budget (`budget list --fiscal-year 2026`) and read budget vs actual for the quarter's dates on
+the company's basis; each period has Actual, Budget, $ Over Budget and % of Budget, then a Total group,
+and `totals.net_income` answers the headline question.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "report budget-vs-actual",
+ "input": {"budget": "Plan 2026", "date_from": "2026-07-01", "date_to": "2026-09-30", "columns": "month"}}
+```
+
+Actual is `report profit-and-loss` for the same dates, account for account; a month only partly in the
+dates has its budget prorated by days. Report the accounts furthest over or under in money, not just
+percent: % of Budget is blank where nothing was budgeted. A customer or class budget compares only the
+customers or classes it budgets (name one with `customer` or `class_id`). For "compared with last year",
+use `report profit-and-loss-comparison --compare previous_year` (or `previous_period`), and
+`report balance-sheet-comparison` for balances.
+
+Building a budget is a person's plan, so an agent enters amounts only when asked: `budget create
+--from-actuals` copies last year month by month, `budget fill` sets a row from a starting amount with a
+monthly change (`change` or `change_percent`, compounding) or copies a month across, `budget set` sets
+months by hand, `budget clear` empties a row or the whole budget. To keep a report someone runs
+often, `memorized-report create` with a `date_range` such as `this_fiscal_quarter`, and
+`memorized-report run` it: the range is worked out again on every run.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:
@@ -496,6 +550,8 @@ Use the same business nouns in conversation and commands:
 | Make an estimate from that proposal | `proposal estimate` with the source version and a permanent conversion key |
 | Record the customer's accepted estimate | `estimate update` with `status="accepted"` and a fresh decision note |
 | Make a work order from that estimate | `estimate work-order` with the accepted source version and a permanent conversion key |
+| Take a customer's order for goods (stocked parts included) | `sales-order create` with customer, date and lines; the title defaults to the customer |
+| Turn the accepted estimate into the customer's order | `estimate sales-order` with the accepted source version and a permanent conversion key |
 | Mark the work complete | `work-order complete` with actual start/end; preview fills remaining completed quantities |
 | Find the customer's work and previous versions | Each noun's `query`, `show` and `history` |
 
@@ -515,6 +571,27 @@ interfaces; read [customer payment workflows](customer-payment-workflows.md) bef
 preparing a remittance or correcting an applied document. Delivery remains staged.
 Never report a document sent when only its record was
 created, or improvise an external send from a create-only request.
+
+## Taking a customer's order
+
+"Take an order for 10 widgets for Acme" is `sales-order create --customer Acme --date ...
+--lines '[{"item":"Widget","quantity":"10"}]'`. An order posts nothing and moves no stock; the
+invoice made from it does. Its show output gives each line `order.ordered`, `invoiced`,
+`cancelled` and `open` (what is still to ship, the backorder), and the order's `order.progress`
+(open, partly_invoiced, invoiced, closed, voided) with its exact open amount.
+
+- The customer no longer wants part of a line: `sales-order update` with that line's
+  `cancelled_quantity`, or `close: true` to cancel whatever is still open on it. Cancelling back
+  to `0` reopens it. Only what is not yet invoiced can be cancelled.
+- Nothing more will ship: `sales-order update --status closed` with a reason; `--status open`
+  with a reason brings back what was open. A wrong order is `sales-order void` with a reason; it
+  is refused while an invoice consumes any line, so void or remove that invoice first.
+- An accepted estimate becomes either the order (`estimate sales-order`) or a work order
+  (`estimate work-order`), never both, and its billing then goes there. Keep the conversion key
+  for retries: the same key returns the same order; a different request under it is refused.
+- Estimates, proposals, work orders and orders may carry stocked parts. A stocked line is billed
+  by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
+- `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
 
 ## Bill work in installments
 

@@ -716,7 +716,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             v = _read_collection(
                 leaf["annotation"], (path,), form, coerce=True
             )
-            if getattr(cmd, 'name', '').split(' ', 1)[0] in ('invoice', 'sales-receipt', 'proposal', 'estimate', 'work-order') and path == 'lines':
+            if getattr(cmd, 'name', '').split(' ', 1)[0] in ('invoice', 'sales-receipt', 'proposal', 'estimate', 'work-order', 'sales-order') and path == 'lines':
                 indexes = list(dict.fromkeys(key.split(':')[2] for key in form
                     if key.startswith('c:lines:') and len(key.split(':')) >= 4))
                 for index, row in zip(indexes, v):

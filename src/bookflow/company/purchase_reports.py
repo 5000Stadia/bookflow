@@ -207,7 +207,7 @@ WITH receipts AS (
  WHERE name_type='vendor' AND batch_id IN (SELECT batch_id FROM effects)
  GROUP BY batch_id
 ), keyed AS (
- SELECT e.item_id, e.quantity, e.amount,
+ SELECT """ + survivor_sql("item", "e.item_id") + """ AS item_id, e.quantity, e.amount,
         """ + survivor_sql("vendor", "CASE WHEN e.name_type='vendor' THEN e.name_id WHEN v.named=1 THEN v.vendor_id END") + """ AS party
  FROM effects e LEFT JOIN effect_vendor v ON v.batch_id=e.batch_id
 )

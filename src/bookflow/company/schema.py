@@ -202,6 +202,8 @@ company_info = _table(
     _column("order_printable_checks", sa.Boolean, "Company default for ordering printable checks.", nullable=False, default=False),
     _column("estimates_enabled", sa.Boolean, "Enable new estimates; existing estimate workflows remain available.", nullable=False, server_default="1"),
     _column("progress_billing_enabled", sa.Boolean, "Enable partial quantity, amount, percentage and exact rebill selections.", nullable=False, server_default="1"),
+    _column("sales_orders_enabled", sa.Boolean, "Enable new sales orders; existing orders stay readable and invoiceable.", nullable=False, server_default="1"),
+    _column("available_deducts_sales_orders", sa.Boolean, "Quantity available deducts what open sales orders and work orders have committed.", nullable=False, server_default="1"),
     _column("close_estimates_after_billing", sa.Boolean, "Make estimates inactive after final positive net billing, effective only with progress billing disabled.", nullable=False, server_default="0"),
     _column("automatically_apply_payments", sa.Boolean, "Suggest exact-match then oldest invoice allocations for new cash.", nullable=False, server_default="0"),
     _column("automatically_calculate_payments", sa.Boolean, "Derive amounts for selected invoices while preserving explicitly entered cash.", nullable=False, server_default="0"),
@@ -1188,5 +1190,11 @@ from bookflow.company.item_conversion_schema import define_tables as _define_ite
 globals().update(_define_item_conversion_tables(metadata, _column, _table))
 from bookflow.company.finance_charge_schema import define_tables as _define_finance_charge_tables
 globals().update(_define_finance_charge_tables(metadata, _column, _table))
+from bookflow.company.budget_schema import define_tables as _define_budget_tables
+globals().update(_define_budget_tables(metadata, _column, _table, _common))
+from bookflow.company.prepayment_schema import define_tables as _define_prepayment_tables
+globals().update(_define_prepayment_tables(metadata, _column, _table))
+from bookflow.company.list_merge_schema import define_tables as _define_list_merge_tables
+globals().update(_define_list_merge_tables(metadata, _column, _table))
 from bookflow.company.assembly_build_schema import define_tables as _define_assembly_build_tables
 globals().update(_define_assembly_build_tables(metadata, _column, _table))

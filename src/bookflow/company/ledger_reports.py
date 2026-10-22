@@ -24,6 +24,7 @@ from bookflow.core.session import now_iso
 from bookflow.company.ledger_schema import TRANSACTION_TYPES
 from bookflow.company.money_out_schema import KINDS as MONEY_OUT_KINDS
 from bookflow.company.query import permission_fingerprint
+from bookflow.company.party_merges import survivor_sql
 
 I64_MIN, I64_MAX = -(2**63), 2**63 - 1
 # Read off the schema rather than retyped: a report that closes this set by hand stops
@@ -55,6 +56,9 @@ REPORT_VERSION = "3"
 FINANCIAL_REPORTS = frozenset({
     "profit-and-loss", "balance-sheet", "cash-flows", "income-tax-summary",
     "profit-and-loss-by-job", "profit-and-loss-by-class",
+    # R109: the budget reports and the period comparisons. Rows are accounts; a budget edit is
+    # audited, so the audit sequence this family carries stales a continuation across one.
+    "budget-overview", "budget-vs-actual", "profit-and-loss-comparison", "balance-sheet-comparison",
 })
 # Receivables rows are customers or jobs, labelled and ordered by hierarchy name.
 # Settlement and billing history post nothing, so these also carry the audit sequence.
@@ -363,9 +367,9 @@ def net_balances(db, as_of: str | None = None) -> dict[str, int]:
     register_ledger_functions(db)
     raw = getattr(db, "raw", db)
     return {row[0]: int(row[1]) for row in raw.execute("""
-        SELECT l.account_id, bookflow_sum_int(l.debit_minor_units-l.credit_minor_units)
+        SELECT """ + LINE_ACCOUNT + """ AS account_id, bookflow_sum_int(l.debit_minor_units-l.credit_minor_units)
         FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
-        WHERE (:as_of IS NULL OR b.effective_date<=:as_of) GROUP BY l.account_id
+        WHERE (:as_of IS NULL OR b.effective_date<=:as_of) GROUP BY 1
     """, {"as_of": as_of})}
 
 
@@ -472,7 +476,7 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, fil
     # backdated additions whose accounting date precedes the previous page.
     effect = raw.execute("""SELECT count(*), max(l.id), max(b.id)
         FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
-        WHERE b.effective_date<=:date_to AND (:account IS NULL OR l.account_id=:account)
+        WHERE b.effective_date<=:date_to AND """ + ONE_ACCOUNT + """
         """, {"date_to": inp.date_to, "account": scope}).fetchone()
     labels = hashlib.sha256()
     # `financial` is the statements whose rows are accounts and whose row labels
@@ -634,10 +638,26 @@ def _continuation(state, offset, count, more, db):
 
 # One account, named by :account, or every account. The general ledger, the trial balance
 # and both financial statements read the ledger through this scope.
-ONE_ACCOUNT = "(:account IS NULL OR l.account_id=:account)"
+# An account merged into another (R117) reads as its survivor everywhere a line's account is
+# grouped or selected: LINE_ACCOUNT is what ``l.account_id`` reads as, and :account names a
+# survivor (the filters resolve a merged account's name to it).
+LINE_ACCOUNT = survivor_sql("account", "l.account_id")
+ONE_ACCOUNT = ("(:account IS NULL OR l.account_id IN (SELECT :account UNION ALL SELECT merged_id FROM list_merges "
+               "WHERE list_kind='account' AND survivor_id=:account AND undone_at IS NULL))")
 # A set of accounts, named by :accounts as a JSON array of stable IDs, or every account.
 # Transaction detail reads the ledger through this one.
-ACCOUNT_SET = "(:accounts IS NULL OR l.account_id IN (SELECT value FROM json_each(:accounts)))"
+ACCOUNT_SET = "(:accounts IS NULL OR " + LINE_ACCOUNT + " IN (SELECT value FROM json_each(:accounts)))"
+# Every posting line column, its account read through the alias.
+_LINE_COLUMNS = None
+
+
+def _line_columns():
+    global _LINE_COLUMNS
+    if _LINE_COLUMNS is None:
+        from bookflow.company import schema
+        _LINE_COLUMNS = ", ".join(f"{LINE_ACCOUNT} AS account_id" if c.name == "account_id" else f"l.{c.name}"
+                                  for c in schema.posting_lines.c)
+    return _LINE_COLUMNS
 
 
 # Never use SQL arithmetic on aggregate decimal text: SQLite would coerce it to
@@ -651,7 +671,7 @@ def _effects(scope=ONE_ACCOUNT):
     """
     return """
 WITH effects AS (
- SELECT l.*, b.effective_date, b.kind AS batch_kind, b.revision_id,
+ SELECT """ + _line_columns() + """, b.effective_date, b.kind AS batch_kind, b.revision_id,
         b.reverses_batch_id, b.replaces_batch_id, b.created_at AS recorded_at
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
  WHERE b.effective_date<=:date_to AND """ + scope + """
@@ -745,10 +765,10 @@ WITH wanted AS (SELECT value AS id FROM json_each(:lines)),
  leg AS (SELECT l.id, l.batch_id FROM posting_lines l JOIN wanted w ON w.id=l.id),
  sized AS (SELECT b.batch_id, count(*) AS legs FROM posting_lines b
            WHERE b.batch_id IN (SELECT batch_id FROM leg) GROUP BY b.batch_id)
-SELECT k.id, s.legs, o.account_id, a.full_name, a.name, a.number
+SELECT k.id, s.legs, a.id, a.full_name, a.name, a.number
 FROM leg k JOIN sized s ON s.batch_id=k.batch_id
 LEFT JOIN posting_lines o ON s.legs=2 AND o.batch_id=k.batch_id AND o.id<>k.id
-LEFT JOIN accounts a ON a.id=o.account_id
+LEFT JOIN accounts a ON a.id=""" + survivor_sql("account", "o.account_id") + """
 """
 
 
@@ -762,7 +782,8 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
             account_id = _decode_cursor(inp.cursor, s.company).account_id
         elif inp.account is not None:
             from bookflow.company.accounts import resolve_account
-            account_id = resolve_account(s.company, inp.account)["id"]
+            from bookflow.company.list_merges import survivor_id
+            account_id = survivor_id(s.company, "account", resolve_account(s.company, inp.account)["id"])
         state, offset = _state(s, inp, "general-ledger", principal_id, account_id)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"date_from": inp.date_from, "date_to": inp.date_to, "account": account_id}
@@ -835,7 +856,9 @@ def transaction_detail(inp: TransactionDetailInput, s, *, principal_id=None) -> 
             account_ids = (_decode_cursor(inp.cursor, s.company).filter_ids or {}).get("accounts")
         elif inp.accounts is not None:
             from bookflow.company.accounts import resolve_account
-            account_ids = sorted({resolve_account(s.company, selector)["id"] for selector in inp.accounts})
+            from bookflow.company.list_merges import survivor_id
+            account_ids = sorted({survivor_id(s.company, "account", resolve_account(s.company, selector)["id"])
+                                  for selector in inp.accounts})
         state, offset = _state(s, inp, "transaction-detail", principal_id, None,
                                account_scoped=False,
                                filter_ids={"accounts": account_ids} if account_ids else None)

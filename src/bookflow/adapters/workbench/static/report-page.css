@@ -5,7 +5,9 @@
 .workbench .report-bar{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:-.4rem 0 18px;max-width:none}
 .workbench .report-bar .report-filters{flex:1 1 100%;min-width:0;margin:0;padding:0;border:0;background:none;box-shadow:none}
 .workbench .report-bar .report-actions{position:absolute;top:0;right:0;display:flex;gap:8px;margin:0}
-.workbench .report-bar .report-actions~.report-filters>summary{padding-right:128px}
+.workbench .report-bar .report-actions~.report-filters>summary{padding-right:236px}
+/* R109: three actions (Print, CSV, Memorize) sit above the filter line on a phone instead of over it. */
+@media (max-width:600px){.workbench .report-bar .report-actions{position:static;justify-content:flex-end;margin:0 0 8px}.workbench .report-bar .report-actions~.report-filters>summary{padding-right:0}}
 .workbench .report-bar .report-presets{flex:1 0 100%}
 .workbench .report-actions .button{display:inline-flex;align-items:center;min-height:32px;padding:4px 12px;font-size:13px;text-decoration:none}
 .workbench .report-filters>summary{cursor:pointer;list-style:none;display:flex;min-height:32px;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;font-size:15px;font-weight:600;color:var(--ink)}

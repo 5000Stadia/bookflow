@@ -38,6 +38,8 @@ SYSTEM_ROLE_TYPES = {
     "exchange_gain_loss": "other_income",
     # Made on first use by a person's reconciliation adjustment, never by a chart template.
     "reconciliation_discrepancies": "expense",
+    # Made on first use by the first customer prepayment (R124); the prepayment ledger owns it.
+    "customer_prepayments": "other_current_liability",
 }
 _NUMBER = re.compile(r"^[0-9]{1,7}$")
 

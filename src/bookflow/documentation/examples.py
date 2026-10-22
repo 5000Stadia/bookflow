@@ -1168,6 +1168,17 @@ EXAMPLES.update({
                             {"merged": "Central Supply Co", "into": "Central Supply"}),
     "vendor unmerge": Example('bookflow vendor unmerge "Central Supply Co" --reason "Two suppliers after all"'
                               ' --company "Demo Plumbing Co" --json', {"merged": "Central Supply Co"}),
+    # R117, second part: accounts and items, the same alias with their editable references re-pointed.
+    "account merge": Example('bookflow account merge "Office Supply" "Office Supplies" --reason "Same account entered twice"'
+                             ' --company "Demo Plumbing Co" --json',
+                             {"merged": "Office Supply", "into": "Office Supplies"}),
+    "account unmerge": Example('bookflow account unmerge "Office Supply" --reason "Two accounts after all"'
+                               ' --company "Demo Plumbing Co" --json', {"merged": "Office Supply"}),
+    "item merge": Example('bookflow item merge "Drain Clean" "Drain Cleaning" --reason "Same service entered twice"'
+                          ' --company "Demo Plumbing Co" --json',
+                          {"merged": "Drain Clean", "into": "Drain Cleaning"}),
+    "item unmerge": Example('bookflow item unmerge "Drain Clean" --reason "Two services after all"'
+                            ' --company "Demo Plumbing Co" --json', {"merged": "Drain Clean"}),
 })
 # R179: what a 1099 vendor was paid before the books began here, from the old books' 1099 Summary.
 EXAMPLES["vendor 1099-opening"] = Example(
@@ -1195,6 +1206,89 @@ EXAMPLES["vendor-credit refund"] = Example(
     ' --reason "Acme sent a refund check for our return" --json',
     {"credit": ID, "deposit_to": "Checking", "date": "2026-05-20", "amount": "120.00",
      "payment_method": "Check", "check_number": "8812"})
+# R109: budgets, the budget and comparison reports, and memorized reports.
+_CO = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    "budget create": Example('bookflow budget create --name "Plan 2026" --fiscal-year 2026 --from-actuals' + _CO + ' --reason "Next year\'s budget" --json',
+                             {"name": "Plan 2026", "fiscal_year": 2026, "from_actuals": True}),
+    "budget set": Example('bookflow budget set "Plan 2026" --account "Service Income" --start-month 2026-03 --amounts \'["1750.00","1800.00"]\'' + _CO + ' --reason "Spring estimate" --json',
+                          {"budget": "Plan 2026", "account": "Service Income", "start_month": "2026-03", "amounts": ["1750.00", "1800.00"]}),
+    "budget fill": Example('bookflow budget fill "Plan 2026" --account Rent --amount 1000.00 --change-percent 1' + _CO + ' --reason "Rent rises 1% a month" --json',
+                           {"budget": "Plan 2026", "account": "Rent", "amount": "1000.00", "change_percent": "1"}),
+    "budget clear": Example('bookflow budget clear "Plan 2026" --account Rent' + _CO + ' --reason "Start rent over" --json',
+                            {"budget": "Plan 2026", "account": "Rent"}),
+    "budget rename": Example('bookflow budget rename "Plan 2026" --name "Plan 2026 (board)"' + _CO + ' --reason "Approved" --json',
+                             {"budget": "Plan 2026", "name": "Plan 2026 (board)"}),
+    "budget delete": Example('bookflow budget delete "Plan 2026 draft" --expected-version 3' + _CO + ' --reason "Superseded" --json',
+                             {"budget": "Plan 2026 draft", "expected_version": 3}),
+    "budget show": Example('bookflow budget show "Plan 2026"' + _CO + ' --json', {"budget": "Plan 2026"}),
+    "budget list": Example('bookflow budget list --fiscal-year 2026' + _CO + ' --json', {"fiscal_year": 2026}),
+    "report budget-overview": Example('bookflow report budget-overview --budget "Plan 2026" --columns quarter' + _CO + ' --json',
+                                      {"budget": "Plan 2026", "columns": "quarter"}),
+    "report budget-vs-actual": Example('bookflow report budget-vs-actual --budget "Plan 2026" --date-from 2026-07-01 --date-to 2026-09-30' + _CO + ' --json',
+                                       {"budget": "Plan 2026", "date_from": "2026-07-01", "date_to": "2026-09-30"}),
+    "report profit-and-loss-comparison": Example('bookflow report profit-and-loss-comparison --date-from 2026-01-01 --date-to 2026-06-30 --compare previous_year' + _CO + ' --json',
+                                                 {"date_from": "2026-01-01", "date_to": "2026-06-30", "compare": "previous_year"}),
+    "report balance-sheet-comparison": Example('bookflow report balance-sheet-comparison --date-to 2026-12-31' + _CO + ' --json',
+                                               {"date_to": "2026-12-31"}),
+    "memorized-report create": Example('bookflow memorized-report create --name "Budget this quarter" --report budget-vs-actual --filters \'{"budget": "Plan 2026"}\' --date-range this_fiscal_quarter --group Company' + _CO + ' --reason "Monthly review" --json',
+                                       {"name": "Budget this quarter", "report": "budget-vs-actual", "filters": {"budget": "Plan 2026"}, "date_range": "this_fiscal_quarter", "group": "Company"}),
+    "memorized-report update": Example('bookflow memorized-report update "Budget this quarter" --group Accountant' + _CO + ' --reason "Refile" --json',
+                                       {"memorized_report": "Budget this quarter", "group": "Accountant"}),
+    "memorized-report delete": Example('bookflow memorized-report delete "Budget this quarter"' + _CO + ' --reason "No longer used" --json',
+                                       {"memorized_report": "Budget this quarter"}),
+    "memorized-report show": Example('bookflow memorized-report show "Budget this quarter"' + _CO + ' --json', {"memorized_report": "Budget this quarter"}),
+    "memorized-report list": Example('bookflow memorized-report list --group Company' + _CO + ' --json', {"group": "Company"}),
+    "memorized-report run": Example('bookflow memorized-report run "Budget this quarter"' + _CO + ' --json', {"memorized_report": "Budget this quarter"}),
+})
+# R124: customer prepayments -- a deposit held until the work bills.
+_C = ' --company "Demo Plumbing Co" --json'
+EXAMPLES["prepayment receive"] = Example(
+    'bookflow prepayment receive --document "estimate DEMO-WORK-EST-1B" --amount 200.00 --payment-method Check'
+    ' --reference 4471' + _C, {"document": "estimate DEMO-WORK-EST-1B", "amount": "200.00", "payment_method": "Check",
+                               "reference": "4471"})
+EXAMPLES["prepayment attach"] = Example(
+    'bookflow prepayment attach 57 --document "work-order DEMO-WORK-WO-2"' + _C,
+    {"receipt": "57", "document": "work-order DEMO-WORK-WO-2"})
+EXAMPLES["prepayment apply"] = Example(
+    'bookflow prepayment apply --invoice DEMO-SALE-INV-ACTIVE --document "estimate DEMO-WORK-EST-1B" --amount 150.00' + _C,
+    {"invoice": "DEMO-SALE-INV-ACTIVE", "document": "estimate DEMO-WORK-EST-1B", "amount": "150.00"})
+EXAMPLES["prepayment unapply"] = Example(
+    'bookflow prepayment unapply 1044 --reason "Applied to the wrong invoice"' + _C, {"draw": "1044"})
+EXAMPLES["prepayment refund"] = Example(
+    'bookflow prepayment refund --document "estimate DEMO-WORK-EST-1B" --bank-account Checking --payment-method Check'
+    ' --check-number 2210' + _C, {"document": "estimate DEMO-WORK-EST-1B", "bank_account": "Checking",
+                                   "payment_method": "Check", "check_number": "2210"})
+EXAMPLES["prepayment show"] = Example(
+    'bookflow prepayment show --customer "Commercial Example Customer"' + _C, {"customer": "Commercial Example Customer"})
+EXAMPLES["prepayment query"] = Example('bookflow prepayment query --held-only' + _C, {"held_only": True})
+EXAMPLES["report customer-prepayments"] = Example(
+    'bookflow report customer-prepayments --as-of 2026-12-31' + _C, {"as_of": "2026-12-31"})
+# R101: the sales order. "Take an order for 10 valves for Riverside; 4 of the visit's parts are not wanted."
+_ORDER = {'customer': 'Riverside Apartments', 'date': '2026-10-22',
+          'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '10'}, {'item': 'Mainline Clearing', 'quantity': '1'}]}
+EXAMPLES['sales-order create'] = Example(
+    'bookflow sales-order create --customer "Riverside Apartments" --date 2026-10-22 --lines '
+    + _shlex.quote(_json.dumps(_ORDER['lines'])) + ' --company "Demo Plumbing Co" --reason "Riverside ordered 10 valves" --json', _ORDER)
+EXAMPLES['sales-order show'] = Example(f'bookflow sales-order show {ID} --company "Demo Plumbing Co" --json', {'sales_order': ID})
+EXAMPLES['sales-order update'] = Example(
+    f'bookflow sales-order update {ID} --expected-version 1 --status closed --company "Demo Plumbing Co"'
+    ' --reason "Nothing more will ship" --json', {'sales_order': ID, 'expected_version': 1, 'status': 'closed'})
+EXAMPLES['sales-order copy'] = Example(
+    f'bookflow sales-order copy {ID} --expected-version 1 --date 2026-11-01 --company "Demo Plumbing Co" --reason "Same order again" --json',
+    {'sales_order': ID, 'expected_version': 1, 'date': '2026-11-01'})
+EXAMPLES['sales-order void'] = Example(
+    f'bookflow sales-order void {ID} --expected-version 2 --company "Demo Plumbing Co" --reason "Order withdrawn" --json',
+    {'sales_order': ID, 'expected_version': 2})
+EXAMPLES['sales-order query'] = Example(
+    'bookflow sales-order query --customer "Riverside Apartments" --status open --limit 25 --company "Demo Plumbing Co" --json',
+    {'customer': 'Riverside Apartments', 'status': 'open', 'limit': 25})
+EXAMPLES['sales-order history'] = Example(f'bookflow sales-order history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+                                          {'sales_order': ID, 'limit': 25})
+EXAMPLES['estimate sales-order'] = Example(
+    f'bookflow estimate sales-order {ID} --expected-version 2 --conversion-key "riverside-order-2026-10" --date 2026-10-22'
+    ' --ship-date 2026-10-29 --company "Demo Plumbing Co" --reason "Make the order from the accepted estimate" --json',
+    {'estimate': ID, 'expected_version': 2, 'conversion_key': 'riverside-order-2026-10', 'date': '2026-10-22', 'ship_date': '2026-10-29'})
 # R103: build finished assemblies from their components; run with --dry-run first to see max_buildable.
 EXAMPLES["assembly build"] = Example(
     'bookflow assembly build --item "Two-Valve Kit" --quantity 2 --date 2026-07-31 --reason "Built two kits today"'

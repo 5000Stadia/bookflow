@@ -275,6 +275,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `family_balance.amount` | string | yes | no | — | — |
 | `family_balance.currency` | string | yes | no | — | — |
 | `family_balance.minor_units` | integer | yes | no | — | — |
+| `prepayment_held` | object \| null | no | yes | null | Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, left out of the balances above. `prepayment show --customer` lists them. |
+| `prepayment_held.amount` | string | yes | no | — | — |
+| `prepayment_held.currency` | string | yes | no | — | — |
+| `prepayment_held.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed` | boolean | yes | no | — | — |
@@ -372,6 +376,7 @@ Example JSON output:
   "preferred_payment_method_source_id": null,
   "preferred_ship_method_id": null,
   "preferred_ship_method_source_id": null,
+  "prepayment_held": null,
   "price_level_id": null,
   "price_level_source_id": null,
   "primary_contact": null,
@@ -786,6 +791,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `family_balance.amount` | string | yes | no | — | — |
 | `family_balance.currency` | string | yes | no | — | — |
 | `family_balance.minor_units` | integer | yes | no | — | — |
+| `prepayment_held` | object \| null | no | yes | null | Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, left out of the balances above. `prepayment show --customer` lists them. |
+| `prepayment_held.amount` | string | yes | no | — | — |
+| `prepayment_held.currency` | string | yes | no | — | — |
+| `prepayment_held.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 
@@ -879,6 +888,7 @@ Example JSON output:
   "preferred_payment_method_source_id": null,
   "preferred_ship_method_id": null,
   "preferred_ship_method_source_id": null,
+  "prepayment_held": null,
   "price_level_id": null,
   "price_level_source_id": null,
   "primary_contact": null,
@@ -1219,6 +1229,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `family_balance.amount` | string | yes | no | — | — |
 | `family_balance.currency` | string | yes | no | — | — |
 | `family_balance.minor_units` | integer | yes | no | — | — |
+| `prepayment_held` | object \| null | no | yes | null | Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, left out of the balances above. `prepayment show --customer` lists them. |
+| `prepayment_held.amount` | string | yes | no | — | — |
+| `prepayment_held.currency` | string | yes | no | — | — |
+| `prepayment_held.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed` | boolean | yes | no | — | — |
@@ -1316,6 +1330,7 @@ Example JSON output:
   "preferred_payment_method_source_id": null,
   "preferred_ship_method_id": null,
   "preferred_ship_method_source_id": null,
+  "prepayment_held": null,
   "price_level_id": null,
   "price_level_source_id": null,
   "primary_contact": null,
@@ -1783,6 +1798,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].family_balance.amount` | string | yes | no | — | — |
 | `items[].family_balance.currency` | string | yes | no | — | — |
 | `items[].family_balance.minor_units` | integer | yes | no | — | — |
+| `items[].prepayment_held` | object \| null | no | yes | null | Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, left out of the balances above. `prepayment show --customer` lists them. |
+| `items[].prepayment_held.amount` | string | yes | no | — | — |
+| `items[].prepayment_held.currency` | string | yes | no | — | — |
+| `items[].prepayment_held.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 
 Example JSON output:
@@ -2396,6 +2415,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `family_balance.amount` | string | yes | no | — | — |
 | `family_balance.currency` | string | yes | no | — | — |
 | `family_balance.minor_units` | integer | yes | no | — | — |
+| `prepayment_held` | object \| null | no | yes | null | Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, left out of the balances above. `prepayment show --customer` lists them. |
+| `prepayment_held.amount` | string | yes | no | — | — |
+| `prepayment_held.currency` | string | yes | no | — | — |
+| `prepayment_held.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -2486,6 +2509,7 @@ Example JSON output:
   "preferred_payment_method_source_id": null,
   "preferred_ship_method_id": null,
   "preferred_ship_method_source_id": null,
+  "prepayment_held": null,
   "price_level_id": null,
   "price_level_source_id": null,
   "primary_contact": null,
@@ -3147,6 +3171,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `family_balance.amount` | string | yes | no | — | — |
 | `family_balance.currency` | string | yes | no | — | — |
 | `family_balance.minor_units` | integer | yes | no | — | — |
+| `prepayment_held` | object \| null | no | yes | null | Customer prepayments (deposits) held for this customer or job and not yet used or paid back: a liability, left out of the balances above. `prepayment show --customer` lists them. |
+| `prepayment_held.amount` | string | yes | no | — | — |
+| `prepayment_held.currency` | string | yes | no | — | — |
+| `prepayment_held.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed_fields` | array[string] | no | no | [] | — |
@@ -3246,6 +3274,7 @@ Example JSON output:
   "preferred_payment_method_source_id": null,
   "preferred_ship_method_id": null,
   "preferred_ship_method_source_id": null,
+  "prepayment_held": null,
   "price_level_id": null,
   "price_level_source_id": null,
   "primary_contact": null,

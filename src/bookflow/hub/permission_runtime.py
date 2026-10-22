@@ -135,7 +135,11 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.ITEM_CONVERT_POLICY_VERSION: '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4',
     c.FINANCE_CHARGE_POLICY_VERSION: '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe',
     c.VENDOR_REFUND_POLICY_VERSION: 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f',
-    c.ASSEMBLY_BUILD_POLICY_VERSION: '85a84e1289d89862d1bdb81a7ed7c70fb6f4c620360ee5f2d5be47876e73f1c1',
+    c.BUDGET_POLICY_VERSION: 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9',
+    c.CUSTOMER_PREPAYMENT_POLICY_VERSION: 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49',
+    c.LIST_MERGE_POLICY_VERSION: 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0',
+    c.SALES_ORDER_POLICY_VERSION: '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89',
+    c.ASSEMBLY_BUILD_POLICY_VERSION: '9867de63eff7de723fadb1bf063ddb742ae0c2da0dafe2e57dbfbc259271de07',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -246,6 +250,10 @@ def known_catalog(version):
     from . import permission_item_convert_catalog
     from . import permission_finance_charge_catalog
     from . import permission_vendor_refund_catalog
+    from . import permission_budget_catalog
+    from . import permission_customer_prepayment_catalog
+    from . import permission_list_merge_catalog
+    from . import permission_sales_order_catalog
     from . import permission_assembly_build_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -283,6 +291,10 @@ def known_catalog(version):
         c.ITEM_CONVERT_POLICY_VERSION: permission_item_convert_catalog,
         c.FINANCE_CHARGE_POLICY_VERSION: permission_finance_charge_catalog,
         c.VENDOR_REFUND_POLICY_VERSION: permission_vendor_refund_catalog,
+        c.BUDGET_POLICY_VERSION: permission_budget_catalog,
+        c.CUSTOMER_PREPAYMENT_POLICY_VERSION: permission_customer_prepayment_catalog,
+        c.LIST_MERGE_POLICY_VERSION: permission_list_merge_catalog,
+        c.SALES_ORDER_POLICY_VERSION: permission_sales_order_catalog,
         c.ASSEMBLY_BUILD_POLICY_VERSION: permission_assembly_build_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

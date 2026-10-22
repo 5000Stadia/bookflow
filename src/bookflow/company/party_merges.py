@@ -33,18 +33,40 @@ KINDS = ("customer", "vendor")
 _TABLES = {"customer": "customers", "vendor": "vendors"}
 
 
+# Accounts and items share the alias through their own table, ``list_merges`` (co0075; see
+# ``list_merges.py``), so every reader asks this one module what an id reads as, whatever its kind.
+LIST_KINDS = ("account", "item")
+
+
+def _source(kind: str) -> tuple[str, str]:
+    if kind in KINDS:
+        return "party_merges", "party_kind"
+    assert kind in LIST_KINDS, kind
+    return "list_merges", "list_kind"
+
+
 def survivor_sql(kind: str, expr: str) -> str:
     """SQL for the entry ``expr`` reads as: its survivor while a merge stands, else itself."""
-    assert kind in KINDS
-    return (f"coalesce((SELECT party_merge_.survivor_id FROM party_merges party_merge_ "
-            f"WHERE party_merge_.party_kind='{kind}' AND party_merge_.merged_id={expr} "
-            f"AND party_merge_.undone_at IS NULL), {expr})")
+    table, column = _source(kind)
+    return (f"coalesce((SELECT merge_.survivor_id FROM {table} merge_ "
+            f"WHERE merge_.{column}='{kind}' AND merge_.merged_id={expr} "
+            f"AND merge_.undone_at IS NULL), {expr})")
 
 
 def merged_sql(kind: str) -> str:
     """SQL selecting the ids merged away while their merge stands."""
-    assert kind in KINDS
-    return f"SELECT merged_id FROM party_merges WHERE party_kind='{kind}' AND undone_at IS NULL"
+    table, column = _source(kind)
+    return f"SELECT merged_id FROM {table} WHERE {column}='{kind}' AND undone_at IS NULL"
+
+
+def members_sql(kind: str, expr: str) -> str:
+    """SQL selecting every id that reads as ``expr``: itself unless it is merged away, and each
+    entry merged into it. For an index-friendly ``x IN (...)`` where a reader sums one entry."""
+    table, column = _source(kind)
+    return (f"SELECT {expr} WHERE NOT EXISTS (SELECT 1 FROM {table} WHERE {column}='{kind}' "
+            f"AND merged_id={expr} AND undone_at IS NULL) "
+            f"UNION ALL SELECT merged_id FROM {table} WHERE {column}='{kind}' AND survivor_id={expr} "
+            f"AND undone_at IS NULL")
 
 
 def family_cte(name: str = "family", seed: str = "?") -> str:
@@ -218,6 +240,13 @@ def plan_merge(db, kind: str, merged_selector: str, survivor_selector: str) -> M
             raise _refuse("a customer cannot be merged into one of its own jobs", **ids)
         if db.raw.execute("SELECT 1 FROM customers WHERE parent_id=? LIMIT 1", (merged["id"],)).fetchone():
             raise _refuse("this customer has jobs of its own; move or merge its jobs first", **ids)
+    if kind == "customer":
+        from bookflow.company.prepayments import holding_refusal
+        holding = holding_refusal(db, merged["id"], merged.get("full_name") or merged["id"], "merged away")
+        if holding is not None:
+            from bookflow.core.money import Money
+            raise _refuse("this customer holds customer prepayment money; refund it or use it on an invoice first",
+                          prepayment_held=Money(holding[0], _home(db)).to_dict(), next=holding[1], **ids)
     if kind == "vendor" and _balance(db, kind, merged["id"]) != 0:
         # A bill payment never crosses vendors, so the merged vendor's open bills could not be
         # paid from the survivor; settle them first.

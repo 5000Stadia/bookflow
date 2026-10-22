@@ -63,6 +63,10 @@ REPORTS = {
     'deposit-detail': 'Deposit detail',
     'transaction-list-by-date': 'Transaction list by date',
     'vendor-1099-summary': '1099 summary',
+    'budget-overview': 'Budget overview',
+    'budget-vs-actual': 'Budget vs. actual',
+    'profit-and-loss-comparison': 'Profit and loss comparison',
+    'balance-sheet-comparison': 'Balance sheet previous year comparison',
 }
 
 # Pages whose title is neither the noun's own name nor a phrase the verb map knows. The
@@ -98,6 +102,8 @@ PHRASES = {
     'billing': 'Bill this {subject}',
     'settlement': 'Settlement of this {subject}',
     'children': 'Rows within this {subject}',
+    'merge': 'Merge this {subject} into another',
+    'unmerge': "Undo this {subject}'s merge",
 }
 
 # A handful of verbs mean something different under one noun than they mean everywhere else.

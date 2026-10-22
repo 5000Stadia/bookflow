@@ -340,9 +340,9 @@ ITEM_COMMANDS = register_lifecycle(
     selector_field="item",
     error_codes={
         "create": ("E_VALIDATION", "E_VALUE_RANGE", "E_AMOUNT_PRECISION", "E_FEATURE_DISABLED", "E_HIERARCHY_CYCLE"),
-        "update": ("E_VALIDATION", "E_VALUE_RANGE", "E_AMOUNT_PRECISION", "E_FEATURE_DISABLED", "E_TYPE_CHANGE", "E_HIERARCHY_CYCLE"),
+        "update": ("E_VALIDATION", "E_VALUE_RANGE", "E_AMOUNT_PRECISION", "E_FEATURE_DISABLED", "E_TYPE_CHANGE", "E_HIERARCHY_CYCLE", "E_RECORD_IN_USE"),
         "list": ("E_VALIDATION", "E_RECORD_NOT_FOUND"),
-        "activate": ("E_VALIDATION", "E_FEATURE_DISABLED", "E_HIERARCHY_CYCLE"),
+        "activate": ("E_VALIDATION", "E_FEATURE_DISABLED", "E_HIERARCHY_CYCLE", "E_RECORD_IN_USE"),
         "deactivate": ("E_VALIDATION", "E_RECORD_IN_USE"),
     },
 )

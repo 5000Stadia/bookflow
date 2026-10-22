@@ -87,8 +87,14 @@ def seed(run):
                                       "customer": customer,
                                       "lines": [{"item": parts, "quantity": "1"}]})
 
+    # An order the customer placed: ten elbows and a visit, two elbows cancelled. It prints what
+    # is ordered and what is still to ship, read from `sales-order show`.
+    order = run("sales-order create", {"number": "SO-500", "date": "2026-06-12", "customer": customer,
+        "customer_purchase_order": "HM-77", "ship_date": "2026-06-19",
+        "lines": [{"item": parts, "quantity": "10", "cancelled_quantity": "2"}, {"item": labour, "quantity": "1"}]})
+
     return dict(credit=credit, run=run, customer=customer, invoice=invoice, receipt=receipt,
-                estimate=estimate, labour=labour, income=income)
+                estimate=estimate, labour=labour, income=income, order=order)
 
 
 @pytest.fixture
@@ -206,7 +212,7 @@ def test_every_printable_kind_is_reachable_and_none_is_declared_twice(books, hos
     assert set(KINDS) == set(BUILDERS), "KINDS and the builders have drifted apart"
     reader = browser(hosted)
     records = {"invoice": books["invoice"], "sales-receipt": books["receipt"],
-               "estimate": books["estimate"], "credit-memo": books["credit"]}
+               "estimate": books["estimate"], "credit-memo": books["credit"], "sales-order": books["order"]}
     expected = set(KINDS) - IDENTIFIED_OTHERWISE
     assert set(records) == expected, (
         "a printable kind has no record here, so this witness would skip it: "
@@ -217,6 +223,20 @@ def test_every_printable_kind_is_reachable_and_none_is_declared_twice(books, hos
         assert printed.status_code == 200, (kind, printed.status_code, printed.text[:200])
         assert printed.headers["content-type"].startswith("application/pdf"), kind
         assert text_of(printed).strip(), (kind, "answered an empty document")
+
+
+def test_a_sales_order_prints_what_was_ordered_and_what_is_still_to_ship(books, hosted):  # noqa: F811
+    reader = browser(hosted)
+    page = reader.get(f"/c/{hosted.company_id}/sales-order/{books['order']['id']}", headers=WB)
+    assert page.status_code == 200
+    href = affordance(page.text)
+    assert href == f"/c/{hosted.company_id}/sales-order/{books['order']['id']}/print"
+    body = text_of(reader.get(href, headers=WB, follow_redirects=False))
+    assert "SALES ORDER" in body and "SO-500" in body and "Harbour Mills" in body
+    assert "ORDERED" in body and "INVOICED" in body and "BACKORDERED" in body
+    assert "HM-77" in body and "2026-06-19" in body
+    # Ten elbows at 15.00 and a visit at 120.00; eight elbows and the visit still to ship.
+    assert "150.00" in body and "270.00" in body and "Still to invoice" in body and "240.00" in body
 
 
 def test_a_customer_statement_prints_the_account_it_shows(books, hosted):  # noqa: F811

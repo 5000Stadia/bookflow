@@ -653,6 +653,576 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report balance-sheet-comparison`
+
+Uses the company cash/accrual report preference unless basis is supplied. The balance sheet on date_to beside the balance sheet a year earlier (the last day of the same month when date_to ends a month), with $ Change and % Change, as the anchor's Balance Sheet Prev Year Comparison. Each column is report balance-sheet for its own date, retained earnings and this year's net income included. Rows are paged; the statement lines cover every account.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.balance-sheet-comparison` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report balance-sheet-comparison --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report balance-sheet-comparison", "input": {"date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_to` | `--date-to` | string | yes | no | — | As-of date, YYYY-MM-DD; compared with the same date a year earlier.; minimum length 10; maximum length 10 |
+| `dollar_change` | `--dollar-change` | boolean | no | no | true | Show the $ Change column. |
+| `percent_change` | `--percent-change` | boolean | no | no | true | Show the % Change column. |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
+| `include_zero` | `--include-zero` | boolean | no | no | false | Include every active balance sheet account, even with a zero balance on both dates. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.balance-sheet-comparison`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `columns` | array[object] | yes | no | — | — |
+| `columns[].label` | string | yes | no | — | Heading of this column: its period and its measure. |
+| `columns[].period` | string | yes | no | — | Period this column belongs to, as a heading reads it. |
+| `columns[].measure` | string | yes | no | — | — |
+| `columns[].date_from` | string \| null | yes | yes | — | — |
+| `columns[].date_to` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].account_type` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].section` | string | yes | no | — | — |
+| `rows[].cells` | array[object] | yes | no | — | — |
+| `rows[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `rows[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `rows[].cells[].currency` | string \| null | yes | yes | — | — |
+| `rows[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `summary` | array[object] | yes | no | — | Statement lines -- totals of each section, gross profit, net income -- in the same columns as the rows, over every account. |
+| `summary[].key` | string | yes | no | — | — |
+| `summary[].label` | string | yes | no | — | — |
+| `summary[].cells` | array[object] | yes | no | — | — |
+| `summary[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `summary[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `summary[].cells[].currency` | string \| null | yes | yes | — | — |
+| `summary[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `totals` | object[string, object[string, object]] | yes | no | — | The last column group (the Total) of each summary line, by measure. |
+| `compare` | literal["previous_year"] | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "columns": [],
+  "compare": "previous_year",
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "summary": [],
+  "totals": {}
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report budget-overview`
+
+A budget on its own, as the anchor's Budget Overview shows it: one row per budgeted account with its amount per month, per fiscal quarter, or for the year, then a Total, and the statement lines -- section totals, gross profit, net income -- that the entry grid does not show. On a customer or class budget the amounts of every customer or class are added together unless one is named. Rows are paged; the statement lines cover every account.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.budget-overview` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report budget-overview --budget "Plan 2026" --columns quarter --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report budget-overview", "input": {"budget": "Plan 2026", "columns": "quarter"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `budget` | `--budget` | string | yes | no | — | Budget id, or its exact name (ignoring case).; minimum length 1; maximum length 1004 |
+| `customer` | `--customer` | string \| null | no | yes | null | On a customer budget: only this customer or job. Omitted, every customer budgeted, added together. |
+| `class_id` | `--class-id` | string \| null | no | yes | null | On a class budget: only this class. Omitted, every class budgeted, added together. |
+| `columns` | `--columns` | literal["month", "quarter", "total"] | no | no | "month" | One column group per month, per fiscal quarter, or one for the whole range; month and quarter end with a Total group. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.budget-overview`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `columns` | array[object] | yes | no | — | — |
+| `columns[].label` | string | yes | no | — | Heading of this column: its period and its measure. |
+| `columns[].period` | string | yes | no | — | Period this column belongs to, as a heading reads it. |
+| `columns[].measure` | string | yes | no | — | — |
+| `columns[].date_from` | string \| null | yes | yes | — | — |
+| `columns[].date_to` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].account_type` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].section` | string | yes | no | — | — |
+| `rows[].cells` | array[object] | yes | no | — | — |
+| `rows[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `rows[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `rows[].cells[].currency` | string \| null | yes | yes | — | — |
+| `rows[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `summary` | array[object] | yes | no | — | Statement lines -- totals of each section, gross profit, net income -- in the same columns as the rows, over every account. |
+| `summary[].key` | string | yes | no | — | — |
+| `summary[].label` | string | yes | no | — | — |
+| `summary[].cells` | array[object] | yes | no | — | — |
+| `summary[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `summary[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `summary[].cells[].currency` | string \| null | yes | yes | — | — |
+| `summary[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `totals` | object[string, object[string, object]] | yes | no | — | The last column group (the Total) of each summary line, by measure. |
+| `budget` | object | yes | no | — | — |
+| `budget.id` | string | yes | no | — | — |
+| `budget.version` | integer | yes | no | — | — |
+| `budget.name` | string | yes | no | — | — |
+| `budget.fiscal_year` | integer | yes | no | — | — |
+| `budget.first_month` | string | yes | no | — | — |
+| `budget.months` | array[string] | yes | no | — | The twelve months of the budget, YYYY-MM, in order. |
+| `budget.kind` | literal["profit_and_loss", "balance_sheet"] | yes | no | — | — |
+| `budget.dimension` | literal["none", "customer", "class"] | yes | no | — | — |
+| `budget.currency` | string | yes | no | — | — |
+| `budget.cell_count` | integer | yes | no | — | Months with an amount, across every account, customer and class. |
+| `budget.created_at` | string | yes | no | — | — |
+| `budget.created_by` | string | yes | no | — | — |
+| `budget.created_via` | string | yes | no | — | — |
+| `budget.updated_at` | string | yes | no | — | — |
+| `budget.updated_by` | string | yes | no | — | — |
+| `budget.updated_via` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "budget": {
+    "cell_count": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "currency": "USD",
+    "dimension": "none",
+    "first_month": "value",
+    "fiscal_year": 1,
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "kind": "profit_and_loss",
+    "months": [],
+    "name": "value",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "updated_by": "value",
+    "updated_via": "cli",
+    "version": 1
+  },
+  "columns": [],
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "summary": [],
+  "totals": {}
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report budget-vs-actual`
+
+Uses the company cash/accrual report preference unless basis is supplied. Budget against actual for inclusive dates (default the budget year): for each month, fiscal quarter or the whole range, four columns -- Actual, Budget, $ Over Budget (actual less budget) and % of Budget (actual over budget, one decimal) -- and the same four for the Total. Actual is report profit-and-loss for the same dates and basis, account for account (the ending balance, on a balance sheet budget). A budget month only partly inside the dates is prorated by days, rounded to the cent half to even. On a customer or class budget the actual figures are those posted to the customers or classes budgeted, or to the one named. Rows are paged; the statement lines cover every account.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.budget-vs-actual` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report budget-vs-actual --budget "Plan 2026" --date-from 2026-07-01 --date-to 2026-09-30 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report budget-vs-actual", "input": {"budget": "Plan 2026", "date_from": "2026-07-01", "date_to": "2026-09-30"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `budget` | `--budget` | string | yes | no | — | Budget id, or its exact name (ignoring case).; minimum length 1; maximum length 1004 |
+| `customer` | `--customer` | string \| null | no | yes | null | On a customer budget: only this customer or job. Omitted, every customer budgeted, added together. |
+| `class_id` | `--class-id` | string \| null | no | yes | null | On a class budget: only this class. Omitted, every class budgeted, added together. |
+| `columns` | `--columns` | literal["month", "quarter", "total"] | no | no | "month" | One column group per month, per fiscal quarter, or one for the whole range; month and quarter end with a Total group. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `date_from` | `--date-from` | string \| null | no | yes | null | Inclusive first date; omitted, the first day of the budget year. |
+| `date_to` | `--date-to` | string \| null | no | yes | null | Inclusive last date; omitted, the last day of the budget year. |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
+| `include_zero` | `--include-zero` | boolean | no | no | false | Include every active account the budget kind covers, even with nothing budgeted or posted. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.budget-vs-actual`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `columns` | array[object] | yes | no | — | — |
+| `columns[].label` | string | yes | no | — | Heading of this column: its period and its measure. |
+| `columns[].period` | string | yes | no | — | Period this column belongs to, as a heading reads it. |
+| `columns[].measure` | string | yes | no | — | — |
+| `columns[].date_from` | string \| null | yes | yes | — | — |
+| `columns[].date_to` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].account_type` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].section` | string | yes | no | — | — |
+| `rows[].cells` | array[object] | yes | no | — | — |
+| `rows[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `rows[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `rows[].cells[].currency` | string \| null | yes | yes | — | — |
+| `rows[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `summary` | array[object] | yes | no | — | Statement lines -- totals of each section, gross profit, net income -- in the same columns as the rows, over every account. |
+| `summary[].key` | string | yes | no | — | — |
+| `summary[].label` | string | yes | no | — | — |
+| `summary[].cells` | array[object] | yes | no | — | — |
+| `summary[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `summary[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `summary[].cells[].currency` | string \| null | yes | yes | — | — |
+| `summary[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `totals` | object[string, object[string, object]] | yes | no | — | The last column group (the Total) of each summary line, by measure. |
+| `budget` | object | yes | no | — | — |
+| `budget.id` | string | yes | no | — | — |
+| `budget.version` | integer | yes | no | — | — |
+| `budget.name` | string | yes | no | — | — |
+| `budget.fiscal_year` | integer | yes | no | — | — |
+| `budget.first_month` | string | yes | no | — | — |
+| `budget.months` | array[string] | yes | no | — | The twelve months of the budget, YYYY-MM, in order. |
+| `budget.kind` | literal["profit_and_loss", "balance_sheet"] | yes | no | — | — |
+| `budget.dimension` | literal["none", "customer", "class"] | yes | no | — | — |
+| `budget.currency` | string | yes | no | — | — |
+| `budget.cell_count` | integer | yes | no | — | Months with an amount, across every account, customer and class. |
+| `budget.created_at` | string | yes | no | — | — |
+| `budget.created_by` | string | yes | no | — | — |
+| `budget.created_via` | string | yes | no | — | — |
+| `budget.updated_at` | string | yes | no | — | — |
+| `budget.updated_by` | string | yes | no | — | — |
+| `budget.updated_via` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "budget": {
+    "cell_count": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "currency": "USD",
+    "dimension": "none",
+    "first_month": "value",
+    "fiscal_year": 1,
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "kind": "profit_and_loss",
+    "months": [],
+    "name": "value",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "updated_by": "value",
+    "updated_via": "cli",
+    "version": 1
+  },
+  "columns": [],
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "summary": [],
+  "totals": {}
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report cash-flows`
 
 Uses the company cash/accrual report preference unless basis is supplied. Indirect selected-basis statement of cash flows for inclusive accounting dates: net income for the period, then the period change in every other balance-sheet account, classified into operating, investing and financing. An increase in an asset is a use of cash and shows negative; an increase in a liability or in equity is a source and shows positive. Operating carries receivables, payables, inventory and the other current assets and current liabilities, including credit cards; investing carries fixed and other assets; financing carries long-term liabilities and equity, so owner draws and contributions appear there. Net income for the same two dates is the figure report profit-and-loss reports, and net income plus the three subtotals plus opening cash is closing cash, which is the sum of the bank accounts report balance-sheet shows for the same date_to; totals.difference publishes that reconciliation and is zero for books that balance. Classification is the section the account declares in cash_flow_section, falling back to the one its type gives, so a depreciation add-back reaches the statement through the change in the fixed-asset account it was credited to and lands in operating when that account declares operating and in investing when it declares nothing. Closing cash is the same figure either way. Own-account rows are paged; totals cover every account.
@@ -1474,6 +2044,157 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report customer-prepayments`
+
+Customer prepayments held on as_of, by customer, document and receipt: each receipt and each draw to that date with the customer's running held balance. The total is the Customer Prepayments account on the balance sheet for the same date; the report refuses rather than print a figure the account contradicts. Customer balances, aging and statements stay receivable reports and leave held money out.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.customer-prepayments` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report customer-prepayments --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report customer-prepayments", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string \| null | no | yes | null | Report date. Defaults to today. |
+| `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job. |
+| `include_drawn` | `--include-drawn` | boolean | no | no | false | Also list receipts fully drawn by the date. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.customer-prepayments`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `as_of` | string | yes | no | — | — |
+| `account_id` | string \| null | yes | yes | — | — |
+| `account` | string \| null | yes | yes | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].customer_id` | string | yes | no | — | — |
+| `rows[].customer` | string | yes | no | — | — |
+| `rows[].document` | object \| null | yes | yes | — | — |
+| `rows[].document.id` | string | yes | no | — | — |
+| `rows[].document.kind` | string | yes | no | — | — |
+| `rows[].document.number` | string | yes | no | — | — |
+| `rows[].document.status` | string | yes | no | — | — |
+| `rows[].receipt_id` | string | yes | no | — | — |
+| `rows[].receipt_number` | string | yes | no | — | — |
+| `rows[].kind` | literal["receipt", "draw"] | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].number` | string | yes | no | — | The receipt's number, or the drawing credit memo's. |
+| `rows[].applied_to` | string \| null | yes | yes | — | For a draw: "invoice N" or "refund N". |
+| `rows[].amount` | object | yes | no | — | Positive for a receipt, negative for a draw. |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].held` | object | yes | no | — | Running amount held for the customer after this row. |
+| `rows[].held.minor_units` | integer | yes | no | — | — |
+| `rows[].held.currency` | string | yes | no | — | — |
+| `rows[].held.amount` | string | yes | no | — | — |
+| `customers` | array[object] | yes | no | — | — |
+| `customers[].customer_id` | string | yes | no | — | — |
+| `customers[].customer` | string | yes | no | — | — |
+| `customers[].held` | object | yes | no | — | — |
+| `customers[].held.minor_units` | integer | yes | no | — | — |
+| `customers[].held.currency` | string | yes | no | — | — |
+| `customers[].held.amount` | string | yes | no | — | — |
+| `total_held` | object | yes | no | — | — |
+| `total_held.minor_units` | integer | yes | no | — | — |
+| `total_held.currency` | string | yes | no | — | — |
+| `total_held.amount` | string | yes | no | — | — |
+| `account_balance` | object | yes | no | — | The Customer Prepayments account on the general ledger at the date; always equal to total_held. |
+| `account_balance.minor_units` | integer | yes | no | — | — |
+| `account_balance.currency` | string | yes | no | — | — |
+| `account_balance.amount` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account": null,
+  "account_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "account_id": null,
+  "as_of": "value",
+  "customers": [],
+  "rows": [],
+  "total_held": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
 
 ## `report deposit-detail`
 
@@ -4151,6 +4872,175 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report profit-and-loss-comparison`
+
+Uses the company cash/accrual report preference unless basis is supplied. The profit and loss for inclusive dates beside the same dates a year earlier (compare=previous_year) or the period of the same length just before (compare=previous_period: whole months by whole months, otherwise day for day), with $ Change and % Change columns (change over the size of the earlier figure, one decimal; blank where it is zero). Each column is report profit-and-loss for its own dates. Rows are paged; the statement lines cover every account.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.profit-and-loss-comparison` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report profit-and-loss-comparison --date-from 2026-01-01 --date-to 2026-06-30 --compare previous_year --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report profit-and-loss-comparison", "input": {"date_from": "2026-01-01", "date_to": "2026-06-30", "compare": "previous_year"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `compare` | `--compare` | literal["previous_year", "previous_period"] | no | no | "previous_year" | previous_year: the same dates a year earlier. previous_period: the period of the same length just before (whole months by whole months, otherwise day for day). |
+| `dollar_change` | `--dollar-change` | boolean | no | no | true | Show the $ Change column. |
+| `percent_change` | `--percent-change` | boolean | no | no | true | Show the % Change column. |
+| `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
+| `include_zero` | `--include-zero` | boolean | no | no | false | Include every active income and expense account, even with nothing posted in either period. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.profit-and-loss-comparison`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `columns` | array[object] | yes | no | — | — |
+| `columns[].label` | string | yes | no | — | Heading of this column: its period and its measure. |
+| `columns[].period` | string | yes | no | — | Period this column belongs to, as a heading reads it. |
+| `columns[].measure` | string | yes | no | — | — |
+| `columns[].date_from` | string \| null | yes | yes | — | — |
+| `columns[].date_to` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].account_type` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].section` | string | yes | no | — | — |
+| `rows[].cells` | array[object] | yes | no | — | — |
+| `rows[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `rows[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `rows[].cells[].currency` | string \| null | yes | yes | — | — |
+| `rows[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `summary` | array[object] | yes | no | — | Statement lines -- totals of each section, gross profit, net income -- in the same columns as the rows, over every account. |
+| `summary[].key` | string | yes | no | — | — |
+| `summary[].label` | string | yes | no | — | — |
+| `summary[].cells` | array[object] | yes | no | — | — |
+| `summary[].cells[].measure` | literal["actual", "budget", "over_budget", "percent_of_budget", "current", "previous", "change", "percent_change"] | yes | no | — | — |
+| `summary[].cells[].amount` | string \| null | yes | yes | — | The figure as text: money in the home currency, or a percent with one decimal place; null where a percent has nothing to divide by. |
+| `summary[].cells[].currency` | string \| null | yes | yes | — | — |
+| `summary[].cells[].minor_units` | integer \| null | yes | yes | — | Money in minor units; null on a percent cell. |
+| `totals` | object[string, object[string, object]] | yes | no | — | The last column group (the Total) of each summary line, by measure. |
+| `compare` | literal["previous_year", "previous_period"] | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "columns": [],
+  "compare": "previous_year",
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "summary": [],
+  "totals": {}
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_CASH_BASIS_EVIDENCE` | Cash reporting cannot reconcile the retained settlement evidence. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report purchases-by-item`
 
 The same item purchases grouped by item: each item's quantity bought in its base unit, the cost it posted, the average cost that quantity came to, and its share of the period as a percentage. A stock item's quantity and cost are its purchase movements on the inventory ledger, so a purchase-price correction changes its cost and not its quantity, and a void takes both back off; any other item's are the quantity on the purchase line and the cost its posting line was attributed. Average cost is cost divided by quantity rounded half to even at the cent for reading, and is omitted where no quantity was bought. Totals are the report purchases-by-vendor total for the same dates; rows worth nothing are omitted and rows are paged.
@@ -5360,6 +6250,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].balance.amount` | string | yes | no | — | — |
 | `rows[].balance.currency` | string | yes | no | — | — |
 | `rows[].balance.minor_units` | integer | yes | no | — | — |
+| `notes` | array[string] | no | no | [] | Below the balance: customer prepayments (deposits) held for the customer on date_to, which the balance leaves out because they are not owed. |
 
 Example JSON output:
 
@@ -6273,7 +7164,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].account_id` | string \| null | no | yes | null | — |
 | `rows[].account_label` | string \| null | no | yes | null | — |
 | `rows[].description` | string \| null | no | yes | null | — |
-| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge"] \| null | no | yes | null | — |
+| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge", "cancelled"] \| null | no | yes | null | — |
 | `rows[].quantity` | string \| null | no | yes | null | — |
 | `rows[].billed_quantity` | string \| null | no | yes | null | — |
 | `rows[].remaining_quantity` | string \| null | no | yes | null | — |

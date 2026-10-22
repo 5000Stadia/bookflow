@@ -61,7 +61,11 @@ ACCEPTED = {
     'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
     'finance-charge-v1': (531, '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe'),
     'vendor-refund-v1': (532, 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f'),
-    'assembly-build-v1': (539, '85a84e1289d89862d1bdb81a7ed7c70fb6f4c620360ee5f2d5be47876e73f1c1'),
+    'budget-v1': (550, 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9'),
+    'customer-prepayment-v1': (558, 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49'),
+    'list-merge-v1': (562, 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0'),
+    'sales-order-v1': (570, '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89'),
+    'assembly-build-v1': (577, '9867de63eff7de723fadb1bf063ddb742ae0c2da0dafe2e57dbfbc259271de07'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -116,6 +120,16 @@ CHAIN_ADDITIONS = {
     'item-convert-v1': {'item convert'},
     'finance-charge-v1': {'finance-charge assess'},
     'vendor-refund-v1': {'vendor-credit refund'},
+    'budget-v1': {'budget clear', 'budget create', 'budget delete', 'budget fill', 'budget list', 'budget rename',
+                  'budget set', 'budget show', 'memorized-report create', 'memorized-report delete',
+                  'memorized-report list', 'memorized-report run', 'memorized-report show', 'memorized-report update',
+                  'report balance-sheet-comparison', 'report budget-overview', 'report budget-vs-actual',
+                  'report profit-and-loss-comparison'},
+    'customer-prepayment-v1': {'prepayment receive', 'prepayment attach', 'prepayment apply', 'prepayment unapply',
+                               'prepayment refund', 'prepayment show', 'prepayment query', 'report customer-prepayments'},
+    'list-merge-v1': {'account merge', 'account unmerge', 'item merge', 'item unmerge'},
+    'sales-order-v1': {'estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
+                       'sales-order query', 'sales-order show', 'sales-order update', 'sales-order void'},
     'assembly-build-v1': {'assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete', 'assembly show', 'assembly list'},
 }
 

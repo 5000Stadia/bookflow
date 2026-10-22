@@ -73,6 +73,8 @@ Database: `company`.
 | `order_printable_checks` | BOOLEAN | no | false | — | — | — | Company default for ordering printable checks. |
 | `estimates_enabled` | BOOLEAN | no | — | — | — | — | Enable new estimates; existing estimate workflows remain available. |
 | `progress_billing_enabled` | BOOLEAN | no | — | — | — | — | Enable partial quantity, amount, percentage and exact rebill selections. |
+| `sales_orders_enabled` | BOOLEAN | no | — | — | — | — | Enable new sales orders; existing orders stay readable and invoiceable. |
+| `available_deducts_sales_orders` | BOOLEAN | no | — | — | — | — | Quantity available deducts what open sales orders and work orders have committed. |
 | `close_estimates_after_billing` | BOOLEAN | no | — | — | — | — | Make estimates inactive after final positive net billing, effective only with progress billing disabled. |
 | `automatically_apply_payments` | BOOLEAN | no | — | — | — | — | Suggest exact-match then oldest invoice allocations for new cash. |
 | `automatically_calculate_payments` | BOOLEAN | no | — | — | — | — | Derive amounts for selected invoices while preserving explicitly entered cash. |

@@ -138,7 +138,7 @@ ITEM_LINE_TABLES = tuple(sorted(
 # Neither counts any quantity.
 _ADJUSTS = "CASE WHEN json_extract(item_snapshot,'$.item_type') IN ('discount','subtotal') THEN 1 ELSE 0 END"
 _ITEM_LINES = "\n UNION ALL ".join(
-    f"SELECT document_line_id, item_id, base_quantity_microunits, "
+    f"SELECT document_line_id, {survivor_sql('item', 'item_id')} AS item_id, base_quantity_microunits, "
     f"{_ADJUSTS if 'item_snapshot' in c.metadata.tables[name].c else '0'} AS adjusts FROM {name}"
     for name in ITEM_LINE_TABLES)
 

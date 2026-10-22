@@ -12,10 +12,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_vendor_refund_catalog as previous, permission_catalog as c
+from . import permission_sales_order_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '3d901d6cfbee13d14e3eaed653b835b5ce307483'
+SOURCE_COMMIT = '5c492ae2f6c1fc166a6f593a447977e6dc17c6ad'
 _PATH = 'src/bookflow/commands/assembly_cmds.py'
 _WRITES = ('assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete')
 _READS = ('assembly show', 'assembly list')

@@ -191,6 +191,9 @@ MATRIX["item list"]["E_RECORD_NOT_FOUND"] = "a referenced item disappeared durin
 MATRIX["item query"]["E_RECORD_NOT_FOUND"] = "a referenced item is absent during projection"
 MATRIX["item activate"]["E_HIERARCHY_CYCLE"] = "stored hierarchy or member graph is cyclic"
 MATRIX["other-name activate"]["E_RECORD_IN_USE"] = "a converted source cannot be reactivated directly"
+# R117: a merged-away account or item changes only by undoing its merge.
+for _merged in ("account activate", "item activate", "item update"):
+    MATRIX[_merged]["E_RECORD_IN_USE"] = "the entry is merged into another; undo the merge first"
 
 # Standalone local tooling has no actor, database role, or membership capability,
 # so it is kept out of the database command matrix and its frozen capability seed.
@@ -1801,6 +1804,30 @@ for _kind in ('customer', 'vendor'):
         'E_DIRECTIVE_INACTIVE': 'context directive inactive',
     }
 
+# Merging duplicate accounts and items (R117, second part): the same alias, editable references re-pointed.
+for _kind in ('account', 'item'):
+    MATRIX[f'{_kind} merge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries either name or id',
+        'E_MERGE_REFUSED': (f'the same {_kind} twice, a different type, one already merged or a survivor of other merges, '
+                            'children of its own, a system or uncategorized account, a bank, card, A/R or A/P account with '
+                            'postings, a tax or stocked item, a group listing both in different units, a price level pricing them differently, a member cycle '
+                            '(the details say which)'),
+        'E_REASON_REQUIRED': 'a merge is always given a reason',
+        'E_PERMISSION': 'an agent asked; merging is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+    MATRIX[f'{_kind} unmerge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries that name or id',
+        'E_MERGE_REFUSED': f'the {_kind} is not merged into another one',
+        'E_REASON_REQUIRED': 'an undo is always given a reason',
+        'E_PERMISSION': 'an agent asked; undoing a merge is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+
 # What a 1099 vendor was paid before the books began here (R179): one figure per vendor and year.
 MATRIX['vendor 1099-opening'] = {
     'E_RECORD_NOT_FOUND': 'no vendor carries that name or id',
@@ -1873,6 +1900,104 @@ MATRIX['vendor-credit refund'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+# Budgets, budget and comparison reports, memorized reports (R109).
+_BUDGET_CELL = {
+    'E_VALIDATION': 'an account of the wrong kind, a month outside the budget, a customer or class missing on a dimensional budget or given on another, more amounts than months remain',
+    'E_RECORD_NOT_FOUND': 'unknown budget, account, customer or class',
+    'E_INACTIVE_REFERENCE': 'an inactive account',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the currency allows',
+    'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+_WRITE_TAIL = {k: _BUDGET_CELL[k] for k in ('E_IDEMPOTENCY_MISMATCH', 'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}
+MATRIX['budget set'] = dict(_BUDGET_CELL)
+MATRIX['budget fill'] = dict(_BUDGET_CELL)
+MATRIX['budget clear'] = {k: _BUDGET_CELL[k] for k in ('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VERSION_CONFLICT')} | _WRITE_TAIL
+MATRIX['budget create'] = {'E_VALIDATION': 'a balance sheet budget kept per customer or class', 'E_NAME_TAKEN': 'a budget already has the name',
+                           'E_VALUE_RANGE': 'an actual amount beyond signed 64-bit range', 'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing for from_actuals'} | _WRITE_TAIL
+MATRIX['budget rename'] = {'E_RECORD_NOT_FOUND': 'unknown budget', 'E_NAME_TAKEN': 'another budget has the name',
+                           'E_VERSION_CONFLICT': 'stale expected_version', 'E_VALIDATION': 'a blank name'} | _WRITE_TAIL
+MATRIX['budget delete'] = {'E_RECORD_NOT_FOUND': 'unknown budget', 'E_VERSION_CONFLICT': 'stale expected_version'} | _WRITE_TAIL
+MATRIX['budget show'] = {'E_VALIDATION': 'a customer or class on a budget not kept that way', 'E_RECORD_NOT_FOUND': 'unknown budget, customer or class',
+                         'E_VALUE_RANGE': 'a row total beyond signed 64-bit range'}
+MATRIX['budget list'] = {}
+MATRIX['report budget-overview'] = {'E_QUERY_STALE': 'budget or books changed between pages', 'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+                                    'E_VALIDATION': 'a customer or class on a budget not kept that way', 'E_RECORD_NOT_FOUND': 'unknown budget, customer or class'}
+MATRIX['report budget-vs-actual'] = MATRIX['report budget-overview'] | {'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing'}
+MATRIX['report profit-and-loss-comparison'] = {'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing', 'E_QUERY_STALE': 'books changed between pages',
+                                               'E_VALUE_RANGE': 'an amount beyond signed 64-bit range'}
+MATRIX['report balance-sheet-comparison'] = dict(MATRIX['report profit-and-loss-comparison'])
+MATRIX['memorized-report create'] = {'E_VALIDATION': 'not a report, or options the report refuses', 'E_NAME_TAKEN': 'a memorized report already has the name',
+                                     'E_RECORD_NOT_FOUND': 'a name in the options matches nothing'} | _WRITE_TAIL
+MATRIX['memorized-report update'] = MATRIX['memorized-report create'] | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['memorized-report delete'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report', 'E_VERSION_CONFLICT': 'stale expected_version'} | _WRITE_TAIL
+MATRIX['memorized-report show'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report'}
+MATRIX['memorized-report list'] = {}
+MATRIX['memorized-report run'] = {'E_RECORD_NOT_FOUND': 'unknown memorized report', 'E_VALIDATION': 'kept options the report now refuses',
+                                  'E_QUERY_STALE': 'books changed between pages', 'E_VALUE_RANGE': 'an amount beyond signed 64-bit range',
+                                  'E_CASH_BASIS_EVIDENCE': 'cash basis evidence missing'}
+
+# Customer prepayments (R124): deposits held on a liability until the work bills.
+_PREPAYMENT_WRITE = {
+    'E_RECORD_NOT_FOUND': 'unknown customer, document, receipt, invoice, account or payment method',
+    'E_VALIDATION': 'no or two targets, an unaccepted, voided or cancelled document, another customer\'s document, nothing held, not a prepayment receipt or draw',
+    'E_PERIOD_CLOSED': 'the date, or a draw\'s application date when undoing it, is on or before the closing date',
+    'E_INACTIVE_REFERENCE': 'an inactive customer, account, item or payment method',
+    'E_AMOUNT_PRECISION': 'an amount with more decimal places than the home currency has',
+    'E_VALUE_RANGE': 'an amount outside the exact range',
+    'E_DUPLICATE_NUMBER': 'the receipt number is already used',
+    'E_APPLIED_EXCEEDS_TOTAL': 'more than is held, or more than the invoice owes',
+    'E_APPLICATION_INACTIVE': 'a voided receipt, invoice or draw',
+    'E_VERSION_CONFLICT': 'a document changed between reading and writing',
+    'E_PREVIEW_STALE': 'a document the step wrote changed under it',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['prepayment receive'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment attach'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment apply'] = dict(_PREPAYMENT_WRITE)
+MATRIX['prepayment unapply'] = dict(_PREPAYMENT_WRITE, E_REASON_REQUIRED='an unapply always takes a reason',
+                                    E_HAS_APPLICATIONS='the draw\'s credit memo still has an application it cannot release')
+MATRIX['prepayment refund'] = dict(_PREPAYMENT_WRITE, E_APPLICATION_INCOMPATIBLE='the refund cannot pay out that credit',
+                                   E_CREDIT_UNAVAILABLE='the drawing credit memo is no longer worth the amount')
+MATRIX['prepayment show'] = {
+    'E_RECORD_NOT_FOUND': 'unknown receipt, document or customer',
+    'E_VALIDATION': 'not exactly one of receipt, document, customer; a sales receipt that is not a prepayment',
+}
+MATRIX['prepayment query'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or document',
+    'E_VALIDATION': 'bad date or cursor',
+}
+MATRIX['report customer-prepayments'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer',
+    'E_INTERNAL': 'the Customer Prepayments account differs from what the receipts hold (an unattributed posting)',
+}
+
+# The sales order (R101): a fifth customer-work kind. It refuses for the family's reasons, plus its own:
+# new orders while the company has them off, and a void or a consumed-line change while an invoice
+# consumes the order (or, once prepayments land, while one is held on it).
+_ORDER_WRITE_ERRORS = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='an invoice consumes the order: its customer and invoiced lines are fixed and it cannot be voided; '
+                      'or a customer prepayment is held on it',
+    E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)',
+    E_REASON_REQUIRED='closing, reopening or voiding an order lacks its reason')
+for _verb in ('create', 'update', 'copy', 'void'):
+    MATRIX[f'sales-order {_verb}'] = dict(_ORDER_WRITE_ERRORS)
+MATRIX['sales-order show'] = {'E_RECORD_NOT_FOUND': 'order or selected revision does not exist',
+    'E_QUERY_STALE': 'company audit changed between source-link pages'}
+for _verb in ('query', 'history'):
+    MATRIX[f'sales-order {_verb}'] = {
+        'E_RECORD_NOT_FOUND': 'order or customer filter absent from selected company',
+        'E_QUERY_STALE': 'company audit changed between bounded pages',
+    }
+MATRIX['estimate sales-order'] = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='the estimate is not accepted, is voided, or already has its work order or sales order',
+    E_FEATURE_DISABLED='new sales orders are turned off for this company (sales_orders_enabled)')
 # Assembly builds (R103): an assembly built from its components, posted, pending, edited, voided or deleted.
 _BUILD_COMMON = {
     'E_IDEMPOTENCY_MISMATCH': 'same key, different input',

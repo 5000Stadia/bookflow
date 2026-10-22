@@ -148,6 +148,8 @@ def prepare(s, ctx, inp):
     if found is not None:
         return Plan(found.output, dict(recovered=True, input=inp))
     old = credits.resolve(s, inp.credit_memo)
+    from bookflow.company.prepayments import guard_draw_change
+    guard_draw_change(s, old['id'], 'deleted')
     if inp.expected_version != old['version']:
         raise BookflowError('E_VERSION_CONFLICT', details={'expected_version': inp.expected_version, 'current_version': old['version']})
     require_not_deleted(s, old['id'])

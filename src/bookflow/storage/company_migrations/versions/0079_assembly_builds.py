@@ -12,7 +12,7 @@ metadata.
 from alembic import op
 
 revision = 'co0079'
-down_revision = 'co0073'
+down_revision = 'co0077'
 branch_labels = depends_on = None
 
 DDL = ("\nCREATE TABLE assembly_builds (\n\tid VARCHAR(26) NOT NULL, \n\tbuild_id VARCHAR(26) NOT NULL, \n\trevision_number INTEGER NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\titem_id VARCHAR(26) NOT NULL, \n\tquantity_microunits BIGINT NOT NULL, \n\tbuild_date VARCHAR(10) NOT NULL, \n\tmemo TEXT, \n\treason TEXT, \n\ttransaction_id VARCHAR(26), \n\tcomponents TEXT NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\taudit_event_id VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_assembly_build_revision UNIQUE (build_id, revision_number), \n\tCONSTRAINT ck_assembly_build_status CHECK (status IN ('pending','built','voided','deleted')), \n\tCONSTRAINT ck_assembly_build_quantity CHECK (typeof(quantity_microunits) = 'integer' AND quantity_microunits > 0), \n\tCONSTRAINT ck_assembly_build_revision_number CHECK (revision_number > 0), \n\tCONSTRAINT ck_assembly_build_date CHECK (build_date LIKE '____-__-__'), \n\tCONSTRAINT ck_assembly_build_posted CHECK (status = 'pending' OR status = 'deleted' OR transaction_id IS NOT NULL), \n\tCONSTRAINT ck_assembly_build_pending CHECK (status != 'pending' OR transaction_id IS NULL), \n\tCONSTRAINT ck_assembly_build_components CHECK (json_valid(components) AND json_type(components) = 'array'), \n\tFOREIGN KEY(item_id) REFERENCES items (id), \n\tFOREIGN KEY(transaction_id) REFERENCES transactions (id), \n\tFOREIGN KEY(audit_event_id) REFERENCES audit_events (id)\n)\n\n",)

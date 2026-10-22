@@ -1,0 +1,43 @@
+{% set c = comparison %}
+<section id="comparison-report" class="document-detail comparison-report" data-report-kind="{{ c.kind }}">
+{% if c.budget %}<p class="muted">Budget <a href="{{ c.budget_url }}">{{ c.budget.name }}</a> · FY{{ c.budget.fiscal_year }}{% if c.budget.dimension != 'none' %} · by {{ 'customer:job' if c.budget.dimension == 'customer' else 'class' }}{% endif %}</p>{% endif %}
+<style>
+.comparison-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--line,#dde3e0);border-radius:.5rem;background:var(--surface,#fff)}
+.comparison-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.comparison-table caption{text-align:left;padding:.5rem .75rem;color:var(--muted,#5b6763)}
+.comparison-table th,.comparison-table td{padding:.45rem .65rem;border-bottom:1px solid var(--line,#e6ebe9);white-space:nowrap}
+.comparison-table td,.comparison-table th.num{text-align:right}
+.comparison-table th[scope=row],.comparison-table thead th:first-child{text-align:left;position:sticky;left:0;background:var(--surface,#fff);z-index:1;white-space:normal;min-width:11rem}
+.comparison-table thead th{font-size:.85rem;color:var(--muted,#5b6763)}
+.comparison-table th[scope=colgroup]{text-align:left;border-bottom:1px solid var(--line,#cfd8d5)}
+.comparison-table tfoot th,.comparison-table tfoot td{font-weight:600}
+.comparison-table tr.final th,.comparison-table tr.final td{border-top:2px solid var(--line,#9aa8a3)}
+@media (max-width:700px){.comparison-table th[scope=row],.comparison-table thead th:first-child{min-width:8.5rem;max-width:9.5rem}}
+</style>
+<div class="comparison-wrap"><table class="comparison-table" id="comparison-lines">
+<caption>{{ c.metadata.currency }} · {{ c.metadata.basis|capitalize }} basis</caption>
+<thead>
+{% if c.groups %}<tr><th scope="col" rowspan="2">Account</th>{% for g in c.groups %}<th scope="colgroup" colspan="{{ g.span }}" class="num">{{ g.period }}</th>{% endfor %}</tr>
+<tr>{% for head in c.heads %}<th scope="col" class="num" data-measure="{{ c.columns[loop.index0].measure }}">{{ head }}</th>{% endfor %}</tr>
+{% else %}<tr><th scope="col">Account</th>{% for head in c.heads %}<th scope="col" class="num" data-measure="{{ c.columns[loop.index0].measure }}">{{ head }}</th>{% endfor %}</tr>{% endif %}
+</thead>
+<tbody>
+{% for row in c.rows %}<tr data-account="{{ row.account_id }}" data-section="{{ row.section }}">
+<th scope="row" title="{{ row.current_account_label }}">{{ row.display_account_label }}{% if not row.active %} (inactive){% endif %}</th>
+{% for cell in row.cells %}<td class="num" data-measure="{{ cell.measure }}">{% if cell.amount is none %}{% elif cell.minor_units is none %}{{ cell.amount }}%{% else %}{{ cell|amount }}{% endif %}</td>{% endfor %}
+</tr>{% else %}<tr><td colspan="{{ c.columns|length + 1 }}">Nothing budgeted or posted for these dates.</td></tr>{% endfor %}
+</tbody>
+<tfoot>{% for line in c.summary %}<tr data-line="{{ line.key }}"{% if line.key in ('net_income', 'liabilities_and_equity', 'equity') %} class="final"{% endif %}>
+<th scope="row">{{ line.label }}</th>{% for cell in line.cells %}<td class="num" data-measure="{{ cell.measure }}">{% if cell.amount is none %}{% elif cell.minor_units is none %}{{ cell.amount }}%{% else %}{{ cell|amount }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tfoot>
+</table></div>
+{% if c.next_cursor %}<p class="muted statement-note" id="report-page-count">{{ c.count }} account rows on this page; more on the next page. The statement lines already include them.</p>
+<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">
+{% for name, value in c.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+<button name="action" value="submit">Next account page</button></form>{% endif %}
+{% set about %}
+{% if c.kind == 'budget-vs-actual' %}<p>Actual is the profit and loss for the same dates and basis. $ Over Budget is actual less budget; % of Budget is actual over budget. A budget month only partly inside the dates is prorated by days.</p>
+{% elif c.kind == 'budget-overview' %}<p>The budget alone, with the statement lines the entry grid does not show.</p>
+{% else %}<p>Each column is the {{ 'profit and loss' if c.kind == 'profit-and-loss-comparison' else 'balance sheet' }} for its own dates. % Change is the change over the earlier figure; it is blank where that is zero.</p>{% endif %}
+{% endset %}
+{% include "report_footer.html" %}
+</section>

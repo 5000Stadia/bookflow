@@ -134,7 +134,7 @@ def _labeller(raw):
 # additional line, cash back) is its own group. Sums are over stored INTEGER columns.
 _DEPOSIT = """
 WITH lines AS (
- SELECT l.id, l.transaction_id AS deposit_id, l.account_id, l.party_name, l.description,
+ SELECT l.id, l.transaction_id AS deposit_id, """ + ledger.LINE_ACCOUNT + """ AS account_id, l.party_name, l.description,
         l.debit_minor_units-l.credit_minor_units AS amount, b.effective_date,
         (l.account_id=p.bank_account_id) AS is_bank,
         (SELECT dc.source_transaction_id FROM posting_line_sources s
@@ -224,16 +224,16 @@ def deposit_detail(inp: DepositDetailInput, s, *, principal_id=None) -> DepositD
 _SIDES = """
 SELECT b.id AS batch_id, b.kind AS batch_kind, b.effective_date, b.created_at,
        t.id AS tx, t.type, m.kind AS money_out_kind, r.number, r.memo,
-       l.account_id, a.type AS account_type, (l.debit_minor_units>0) AS is_debit,
+       a.id AS account_id, a.type AS account_type, (l.debit_minor_units>0) AS is_debit,
        bookflow_sum_int(l.debit_minor_units+l.credit_minor_units) AS amount,
        min(l.line_no) AS first_line, min(l.party_name) AS party_name
 FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
 JOIN transactions t ON t.id=l.transaction_id
 JOIN transaction_revisions r ON r.id=b.revision_id
-JOIN accounts a ON a.id=l.account_id
+JOIN accounts a ON a.id=""" + ledger.LINE_ACCOUNT + """
 LEFT JOIN money_out_documents m ON m.transaction_id=t.id AND m.type=t.type
 WHERE b.effective_date>=:date_from AND b.effective_date<=:date_to
-GROUP BY b.id, l.account_id, is_debit
+GROUP BY b.id, a.id, is_debit
 ORDER BY b.effective_date, b.created_at, b.id, first_line
 """
 # The accounts a register is kept for, in the order a reader looks for them on an entry.
