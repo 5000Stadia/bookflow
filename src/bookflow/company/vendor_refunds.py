@@ -375,3 +375,13 @@ def apply_refund(plan, ctx, s, binding):
     return Applied(output, settled.touched,
                    f"refund of vendor credit {facts['header']['number']} banked as deposit "
                    f"{deposit.current.number}", audited=True)
+
+
+def obligation_types(s, identifiers):
+    """Which of these settled payables are refund deposits rather than bills."""
+    identifiers = sorted(identifiers)
+    if not identifiers:
+        return {}
+    t = c.transactions
+    return {row['id']: 'deposit' for row in s.company.conn.execute(
+        sa.select(t.c.id).where(t.c.id.in_(identifiers), t.c.type == 'deposit')).mappings()}

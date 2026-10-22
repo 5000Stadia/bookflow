@@ -213,6 +213,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `revision.applications[].obligation_key_id` | string | yes | no | — | — |
 | `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `revision.applications[].amount` | object | yes | no | — | — |
 | `revision.applications[].amount.amount` | string | yes | no | — | — |
 | `revision.applications[].amount.currency` | string | yes | no | — | — |
@@ -408,6 +409,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `applications[].obligation_key_id` | string | yes | no | — | — |
 | `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `applications[].amount` | object | yes | no | — | — |
 | `applications[].amount.amount` | string | yes | no | — | — |
 | `applications[].amount.currency` | string | yes | no | — | — |
@@ -746,6 +748,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `items[].applications[].obligation_key_id` | string | yes | no | — | — |
 | `items[].applications[].bill_number` | string | yes | no | — | — |
+| `items[].applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `items[].applications[].amount` | object | yes | no | — | — |
 | `items[].applications[].amount.amount` | string | yes | no | — | — |
 | `items[].applications[].amount.currency` | string | yes | no | — | — |
@@ -1038,6 +1041,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `revision.applications[].obligation_key_id` | string | yes | no | — | — |
 | `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `revision.applications[].amount` | object | yes | no | — | — |
 | `revision.applications[].amount.amount` | string | yes | no | — | — |
 | `revision.applications[].amount.currency` | string | yes | no | — | — |
@@ -1233,6 +1237,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `applications[].obligation_key_id` | string | yes | no | — | — |
 | `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `applications[].amount` | object | yes | no | — | — |
 | `applications[].amount.amount` | string | yes | no | — | — |
 | `applications[].amount.currency` | string | yes | no | — | — |
@@ -1978,6 +1983,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `revision.applications[].obligation_key_id` | string | yes | no | — | — |
 | `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `revision.applications[].amount` | object | yes | no | — | — |
 | `revision.applications[].amount.amount` | string | yes | no | — | — |
 | `revision.applications[].amount.currency` | string | yes | no | — | — |
@@ -2173,6 +2179,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `applications[].obligation_key_id` | string | yes | no | — | — |
 | `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `applications[].amount` | object | yes | no | — | — |
 | `applications[].amount.amount` | string | yes | no | — | — |
 | `applications[].amount.currency` | string | yes | no | — | — |
@@ -2565,6 +2572,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `revision.applications[].obligation_key_id` | string | yes | no | — | — |
 | `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `revision.applications[].amount` | object | yes | no | — | — |
 | `revision.applications[].amount.amount` | string | yes | no | — | — |
 | `revision.applications[].amount.currency` | string | yes | no | — | — |
@@ -2760,6 +2768,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `applications[].obligation_key_id` | string | yes | no | — | — |
 | `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `applications[].amount` | object | yes | no | — | — |
 | `applications[].amount.amount` | string | yes | no | — | — |
 | `applications[].amount.currency` | string | yes | no | — | — |
@@ -3186,6 +3195,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `revision.applications[].obligation_key_id` | string | yes | no | — | — |
 | `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `revision.applications[].amount` | object | yes | no | — | — |
 | `revision.applications[].amount.amount` | string | yes | no | — | — |
 | `revision.applications[].amount.currency` | string | yes | no | — | — |
@@ -3381,6 +3391,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `applications[].obligation_key_id` | string | yes | no | — | — |
 | `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `applications[].amount` | object | yes | no | — | — |
 | `applications[].amount.amount` | string | yes | no | — | — |
 | `applications[].amount.currency` | string | yes | no | — | — |
@@ -3789,6 +3800,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `revision.applications[].obligation_key_id` | string | yes | no | — | — |
 | `revision.applications[].bill_number` | string | yes | no | — | — |
+| `revision.applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `revision.applications[].amount` | object | yes | no | — | — |
 | `revision.applications[].amount.amount` | string | yes | no | — | — |
 | `revision.applications[].amount.currency` | string | yes | no | — | — |
@@ -3984,6 +3996,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].obligation_transaction_id` | string | yes | no | — | — |
 | `applications[].obligation_key_id` | string | yes | no | — | — |
 | `applications[].bill_number` | string | yes | no | — | — |
+| `applications[].obligation_type` | literal["bill", "deposit"] | no | no | "bill" | — |
 | `applications[].amount` | object | yes | no | — | — |
 | `applications[].amount.amount` | string | yes | no | — | — |
 | `applications[].amount.currency` | string | yes | no | — | — |

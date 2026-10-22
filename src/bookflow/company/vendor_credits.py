@@ -476,7 +476,7 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
                   item_total=Money(profile['item_total_minor_units'], currency).to_dict(),
                   total=Money(revision['total_minor_units'], currency).to_dict(),
                   line_count=line_count if summary_only else len(lines), batches=summaries,
-                  applications=bill_payments.application_outputs(mine, currency, numbers))
+                  applications=_applications(s, mine, currency, numbers))
     if summary_only:
         return VendorCreditRevisionSummaryOutput(**values)
     return VendorCreditRevisionOutput(
@@ -495,6 +495,14 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
             for line in by_family(lines, 'item')])
 
 
+def _applications(s, rows, currency, numbers):
+    """Settlement edges, each saying whether it answered a bill or a refund deposit."""
+    from bookflow.company import vendor_refunds
+    return bill_payments.application_outputs(
+        rows, currency, numbers,
+        types=vendor_refunds.obligation_types(s, {row['obligation_transaction_id'] for row in rows}))
+
+
 def _output(s, header, revision, pending=None, *, model=VendorCreditOutput, **extra):
     edges = bill_payments._edges(s, header, pending)
     source = source_row(s, header['id'], pending)
@@ -507,7 +515,7 @@ def _output(s, header, revision, pending=None, *, model=VendorCreditOutput, **ex
                   settlement_output(header, revision, source,
                                     0 if header['status'] == 'voided' else applied)),
         revision=revision_output(s, header, revision, edges, pending),
-        applications=bill_payments.application_outputs(edges, revision['currency'], numbers), **extra)
+        applications=_applications(s, edges, revision['currency'], numbers), **extra)
 
 
 def show(s, inp):
@@ -522,7 +530,7 @@ def show(s, inp):
                   settlement_output(header, current, source,
                                     0 if header['status'] == 'voided' else applied)),
         revision=revision_output(s, header, requested, edges),
-        applications=bill_payments.application_outputs(edges, current['currency'],
+        applications=_applications(s, edges, current['currency'],
                                                        bill_payments._bill_numbers(
                                                            s, sorted({row['obligation_transaction_id']
                                                                       for row in edges}))))
