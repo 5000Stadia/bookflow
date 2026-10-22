@@ -1801,6 +1801,30 @@ for _kind in ('customer', 'vendor'):
         'E_DIRECTIVE_INACTIVE': 'context directive inactive',
     }
 
+# Merging duplicate accounts and items (R117, second part): the same alias, editable references re-pointed.
+for _kind in ('account', 'item'):
+    MATRIX[f'{_kind} merge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries either name or id',
+        'E_MERGE_REFUSED': (f'the same {_kind} twice, a different type, one already merged or a survivor of other merges, '
+                            'children of its own, a system or uncategorized account, a bank, card, A/R or A/P account with '
+                            'postings, a tax or stocked item, or a group that would list both at different quantities '
+                            '(the details say which)'),
+        'E_REASON_REQUIRED': 'a merge is always given a reason',
+        'E_PERMISSION': 'an agent asked; merging is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+    MATRIX[f'{_kind} unmerge'] = {
+        'E_RECORD_NOT_FOUND': f'no {_kind} carries that name or id',
+        'E_MERGE_REFUSED': f'the {_kind} is not merged into another one',
+        'E_REASON_REQUIRED': 'an undo is always given a reason',
+        'E_PERMISSION': 'an agent asked; undoing a merge is a person\'s act',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+
 # What a 1099 vendor was paid before the books began here (R179): one figure per vendor and year.
 MATRIX['vendor 1099-opening'] = {
     'E_RECORD_NOT_FOUND': 'no vendor carries that name or id',

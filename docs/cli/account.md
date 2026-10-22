@@ -794,6 +794,161 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `account merge`
+
+Merge a duplicate account into another of the same type. Nothing posted changes: every report, balance, register and filter shows the merged account's postings under the survivor; item, vendor, account and preference fields naming it are re-pointed to the survivor, and the merged account is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `account unmerge`.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | account |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/account.merge` |
+| External binary body | none |
+
+### CLI
+
+`bookflow account merge "Office Supply" "Office Supplies" --reason "Same account entered twice" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "account merge", "input": {"merged": "Office Supply", "into": "Office Supplies"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `merged` | `MERGED` | string | yes | no | — | The duplicate entry to merge away: ID or canonical full name.; minimum length 1; maximum length 1000 |
+| `into` | `INTO` | string | yes | no | — | The entry it is merged into, which survives: ID or canonical full name.; minimum length 1; maximum length 1000 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/account.merge`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `merge_id` | string \| null | yes | yes | — | The merge; null only in a dry run of a new merge. |
+| `changed` | boolean | yes | no | — | False when this exact merge already stands; nothing was written. |
+| `merged_id` | string | yes | no | — | — |
+| `merged_name` | string | yes | no | — | — |
+| `survivor_id` | string | yes | no | — | — |
+| `survivor_name` | string | yes | no | — | — |
+| `documents` | array[object] | yes | no | — | Documents naming the merged entry, by type; they now read as the survivor's. |
+| `documents[].type` | string | yes | no | — | — |
+| `documents[].count` | integer | yes | no | — | Documents of this type that name the merged entry. |
+| `documents[].postings` | integer | yes | no | — | Posting lines (accounts) or item lines (items) on the merged entry in them. |
+| `document_count` | integer | yes | no | — | — |
+| `merged_balance` | object \| null | yes | yes | — | Accounts: the merged account's own balance (normal side). Null for items. |
+| `merged_balance.amount` | string | yes | no | — | — |
+| `merged_balance.currency` | string | yes | no | — | — |
+| `merged_balance.minor_units` | integer | yes | no | — | — |
+| `survivor_balance` | object \| null | yes | yes | — | Accounts: the survivor's balance before this merge. |
+| `survivor_balance.amount` | string | yes | no | — | — |
+| `survivor_balance.currency` | string | yes | no | — | — |
+| `survivor_balance.minor_units` | integer | yes | no | — | — |
+| `survivor_balance_after` | object \| null | yes | yes | — | Accounts: the survivor's balance with the merged account folded in. |
+| `survivor_balance_after.amount` | string | yes | no | — | — |
+| `survivor_balance_after.currency` | string | yes | no | — | — |
+| `survivor_balance_after.minor_units` | integer | yes | no | — | — |
+| `references` | array[object] | yes | no | — | Every editable list row naming the merged entry, re-pointed to the survivor (or ended where the survivor has its own); undo puts each back. |
+| `references[].table` | string | yes | no | — | — |
+| `references[].record_id` | string | yes | no | — | — |
+| `references[].field` | string | yes | no | — | — |
+| `references[].action` | string | yes | no | — | repoint: the row now names the survivor; end: the survivor already has its own row, which is kept, and this one is made inactive. |
+| `references[].owner_type` | string | yes | no | — | — |
+| `references[].owner_id` | string | yes | no | — | — |
+| `references[].label` | string | yes | no | — | — |
+| `references[].conflict` | string \| null | yes | yes | — | Why the survivor's own row is kept, for an ended row. |
+
+Example JSON output:
+
+```json
+{
+  "changed": false,
+  "document_count": 1,
+  "documents": [],
+  "merge_id": null,
+  "merged_balance": null,
+  "merged_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "merged_name": "value",
+  "references": [],
+  "survivor_balance": null,
+  "survivor_balance_after": null,
+  "survivor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "survivor_name": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MERGE_REFUSED` | These two entries cannot be merged; the details name why. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `account query`
 
 Query a bounded page of accounts; `query` searches by name (for example "query": "Riverside"), and `account query options` lists the filters, sorts and columns.
@@ -1244,6 +1399,130 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `account unmerge`
+
+Undo an account merge: the merged account reads as itself again, is made active again if the merge made it inactive, and every reference the merge re-pointed is put back unless it has been changed since. Nothing posted changes. People only, with a reason.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | account |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/account.unmerge` |
+| External binary body | none |
+
+### CLI
+
+`bookflow account unmerge "Office Supply" --reason "Two accounts after all" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "account unmerge", "input": {"merged": "Office Supply"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `merged` | `MERGED` | string | yes | no | — | The merged-away entry whose merge is undone: ID or canonical full name.; minimum length 1; maximum length 1000 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/account.unmerge`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `merge_id` | string | yes | no | — | — |
+| `changed` | boolean | yes | no | — | False when the merge was already undone; nothing was written. |
+| `merged_id` | string | yes | no | — | — |
+| `survivor_id` | string | yes | no | — | — |
+| `reactivated` | boolean | yes | no | — | Whether the merged entry was made active again. |
+| `restored` | integer | yes | no | — | Re-pointed references put back to the merged entry. |
+| `kept` | integer | yes | no | — | Re-pointed references changed since the merge, left as they now stand. |
+
+Example JSON output:
+
+```json
+{
+  "changed": false,
+  "kept": 1,
+  "merge_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "merged_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "reactivated": false,
+  "restored": 1,
+  "survivor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MERGE_REFUSED` | These two entries cannot be merged; the details name why. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

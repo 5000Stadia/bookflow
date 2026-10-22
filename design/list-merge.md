@@ -166,3 +166,28 @@ fixed script run afterwards (edit an old document, void, pay, deposit, sell the 
 memorized transaction). The only allowed differences are listed: the as-posted snapshot of M's
 name on ledger rows. Undoing a merge with nothing saved since reproduces the pre-merge results,
 re-pointed references included.
+
+### As built (accounts and items)
+
+- Storage: `list_merges` (co0075), a sibling of `party_merges` rather than a wider one (widening its
+  kind CHECK and entries trigger means rebuilding an append-only, triggered table), plus
+  `list_merge_references`: one row per editable reference the merge re-pointed or ended, with the
+  value before and after, so undo puts back each one still holding what the merge wrote and leaves
+  any changed since. `party_merges.survivor_sql` answers for all four kinds, so every reader asks
+  one module. Commands `account merge|unmerge`, `item merge|unmerge` (`merge_cmds.py`, logic in
+  `list_merges.py`); people only, reason, idempotent, `--dry-run` preview. Layer `list-merge-v1`.
+- Readers resolved: the shared ledger CTE and its account filters and splits (trial balance,
+  general ledger, transaction detail, P&L, balance sheet, cash flows), net balances, income tax
+  summary, P&L by class and by job, transaction list by date, deposit detail, prior balances,
+  Uncategorized, the account register, the account list and show, `transaction find --account`,
+  sales by item, purchases by item. The cash-basis view needs nothing: it feeds rows through the
+  same resolved readers.
+- Saving again: an account or item merged away resolves to its survivor when named by a new or
+  memorized document, and when a kept line of a corrected invoice, credit memo or bill, or a
+  journal, check, register entry, transfer or deposit names it.
+- Also refused beyond the list above: an Uncategorized account merged away, an inactive survivor,
+  an item whose group or price level holds both at different quantities or prices.
+- Checked by `tests/test_list_merge_twins.py` (every report command from the registry, each basis,
+  filtered by either name, before and after a post-merge script; undo reproduces the pre-merge
+  reads). Not yet resolved: unposted purchase orders and estimates naming a merged item are refused
+  on their next save until re-pointed, as for customers.
