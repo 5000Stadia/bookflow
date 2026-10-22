@@ -236,3 +236,14 @@ def test_a_retried_refund_writes_once_and_a_closed_period_stays_closed(books):
         _refund(books, amount='10.00')
     assert closed.value.code == 'E_PERIOD_CLOSED'
     assert _free(books) == 8000
+
+
+def test_the_co0073_guard_is_the_schema_modules():
+    import importlib
+    from bookflow.company.ap_settlement_schema import guard_statements
+    from bookflow.storage.migrate import HEADS
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0073_vendor_refund_deposits')
+    assert HEADS['company'] == m.revision == 'co0073'
+    current = [s for s in guard_statements() if s.split()[2] == m.REPLACED[0]]
+    assert current == [m.GUARD]
+    assert "type = 'bill'" in m.OLD_GUARD and 'deposit' not in m.OLD_GUARD

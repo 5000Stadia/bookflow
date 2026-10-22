@@ -172,6 +172,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0063 = importlib.import_module("bookflow.storage.company_migrations.versions.0063_card_credits")
     co0067 = importlib.import_module("bookflow.storage.company_migrations.versions.0067_sales_tax_adjustments")
     co0070 = importlib.import_module("bookflow.storage.company_migrations.versions.0070_vendor_credit_items")
+    co0073 = importlib.import_module("bookflow.storage.company_migrations.versions.0073_vendor_refund_deposits")
 
     def older(conn):
         conn.execute("PRAGMA writable_schema=ON")
@@ -198,12 +199,14 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("PRAGMA writable_schema=OFF")
         conn.execute("DROP TABLE vendor_credit_item_lines")
         conn.execute("DROP TABLE payment_bounces")  # co0069's, with its triggers
+        conn.execute("DROP TRIGGER " + co0073.REPLACED[0])  # co0073 widened one guard; put co0026's back
+        conn.execute(co0073.OLD_GUARD)
         conn.execute("UPDATE alembic_version SET version_num = 'co0062'")
 
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0071"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0073"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

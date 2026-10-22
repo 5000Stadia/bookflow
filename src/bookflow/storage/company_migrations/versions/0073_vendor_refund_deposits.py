@@ -12,20 +12,24 @@ revision = 'co0073'
 down_revision = 'co0071'
 branch_labels = depends_on = None
 
-REPLACED = 'ap_applications_obligation_transaction_id_type'
+REPLACED = ('ap_applications_obligation_transaction_id_type',)
 GUARD = ("CREATE TRIGGER ap_applications_obligation_transaction_id_type BEFORE INSERT ON ap_applications\n"
          "WHEN NOT EXISTS (SELECT 1 FROM transactions WHERE id = NEW.obligation_transaction_id AND "
          "(type = 'bill' OR (type = 'deposit' AND EXISTS (SELECT 1 FROM ap_source_keys k "
          "WHERE k.id = NEW.source_key_id AND k.source_type = 'vendor_credit'))))\n"
          "BEGIN SELECT RAISE(ABORT, 'settlement reference has wrong document type'); END")
+# co0026's text, kept so a test can rewind a file to before this revision.
+OLD_GUARD = ("CREATE TRIGGER ap_applications_obligation_transaction_id_type BEFORE INSERT ON ap_applications\n"
+             "WHEN NOT EXISTS (SELECT 1 FROM transactions WHERE id = NEW.obligation_transaction_id AND type = 'bill')\n"
+             "BEGIN SELECT RAISE(ABORT, 'settlement reference has wrong document type'); END")
 
 
 def upgrade():
     c = op.get_bind()
     present = {row[0] for row in c.exec_driver_sql("SELECT name FROM sqlite_schema WHERE type='trigger'")}
-    if REPLACED not in present:
+    if not set(REPLACED) <= present:
         raise RuntimeError('co0073 expects the co0026 payable-type guard')
-    c.exec_driver_sql('DROP TRIGGER ' + REPLACED)
+    c.exec_driver_sql('DROP TRIGGER ' + REPLACED[0])
     c.exec_driver_sql(GUARD)
 
 

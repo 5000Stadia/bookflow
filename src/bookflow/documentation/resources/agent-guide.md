@@ -648,6 +648,21 @@ that grid, and one left out keeps its captured rows and the stock they moved; `v
 void` puts the stock back at the value it left at. A return dated before later sales recosts
 those sales with their own dated entries, as a backdated bill does.
 
+## A vendor sends a refund check
+
+"Acme sent us a $120 refund check for our return" means a vendor credit is open and the vendor
+paid it in cash instead. Find the credit (`vendor-credit query --vendor Acme`, its
+`settlement_current.unapplied` is what is free), then one `vendor-credit refund <credit>
+--deposit-to <bank> --date <date> --amount 120.00` with `--payment-method Check --check-number`
+when you have them. Leave `amount` out to refund everything free; a smaller amount leaves the rest
+of the credit open. It banks one deposit (debit the bank, credit Accounts Payable for the vendor)
+and settles the credit against it, so the vendor's balance, the A/P aging, the deposit detail and
+the bank reconciliation all agree. Do not deposit the check to an expense or income account: that
+leaves the credit standing as money the vendor still owes. No credit entered yet? Post the
+`vendor-credit` first (the return itself), then refund it. To undo, void the deposit; the credit
+reopens. A refund already deposited with a line from Accounts Payable naming the vendor is settled
+with `vendor-credit apply <credit> --deposits '[{"deposit":"<deposit>"}]'`.
+
 ## Deleting duplicate documents
 
 Use `invoice delete`, `sales-receipt delete`, `check delete`, `card-charge delete`,

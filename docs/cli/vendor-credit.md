@@ -4,7 +4,7 @@
 
 ## `vendor-credit apply`
 
-Attach what a vendor credit still has free to one or more open bills of the same vendor. Nothing is posted and no money moves: Accounts Payable already fell when the credit posted, so this only decides which bills it answers, and those bills fall by exactly what is attached to them. A bill settled in full by a credit reads `paid`, leaves `report unpaid-bills` and ages to nothing, exactly as one settled by a check does. Free capacity is the credit's amount less what it currently answers -- never applied, or freed by `vendor-credit unapply`. Each named bill takes what you name for it, or everything still open on it when you name nothing; applying less than what is free leaves the rest free. The vendor, the payable account and the currency must match the credit exactly. `date` is the settlement date and defaults to the credit date; it may be later but never earlier than the credit or than a bill it settles, and never on or before the closing date.
+Attach what a vendor credit still has free to one or more open bills of the same vendor. Nothing is posted and no money moves: Accounts Payable already fell when the credit posted, so this only decides which bills it answers, and those bills fall by exactly what is attached to them. A bill settled in full by a credit reads `paid`, leaves `report unpaid-bills` and ages to nothing, exactly as one settled by a check does. Free capacity is the credit's amount less what it currently answers -- never applied, or freed by `vendor-credit unapply`. Each named bill takes what you name for it, or everything still open on it when you name nothing; applying less than what is free leaves the rest free. The vendor, the payable account and the currency must match the credit exactly. `date` is the settlement date and defaults to the credit date; it may be later but never earlier than the credit or than a bill it settles, and never on or before the closing date. Name refund deposits in `deposits` to apply the credit to a vendor’s refund check that was banked as a deposit line drawn from Accounts Payable with the vendor’s name; `vendor-credit refund` does both steps at once.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -39,6 +39,9 @@ The same example as complete `bookflow_run` arguments:
 | `bills[].bill` | inside `--bills` JSON array | string | yes | no | — | minimum length 1 |
 | `bills[].amount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | — |
 | `bills[].expected_version` | inside `--bills` JSON array | integer \| null | no | yes | null | — |
+| `deposits[].deposit` | inside `--deposits` JSON array | string | yes | no | — | minimum length 1 |
+| `deposits[].amount` | inside `--deposits` JSON array | string \| object \| null | no | yes | null | — |
+| `deposits[].expected_version` | inside `--deposits` JSON array | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
 
 ### Command and context options
@@ -1604,6 +1607,187 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `vendor-credit refund`
+
+Record a vendor’s refund check for an open vendor credit -- the vendor pays you back instead of letting you use the credit on a later bill -- in one write. It banks one deposit into `deposit_to` (debit the bank, credit Accounts Payable with the vendor’s name) and applies the credit to that deposit, so the credit is settled, the vendor owes you nothing more for it, and the deposit shows on the deposit detail report and in the bank reconciliation like any other. `amount` defaults to everything the credit still has free; a smaller amount leaves the rest of the credit open, and more than is free is refused with `E_APPLICATION_CAPACITY`. `date` is the deposit date and may not be before the credit. `check_number`, `payment_method`, `number` and `memo` go on the deposit. Voiding or deleting that deposit reopens the credit. The same result, the anchor’s two steps: `deposit post` with an `additional` line whose `from_account` is Accounts Payable and whose `received_from` is the vendor, then `vendor-credit apply` naming that deposit in `deposits`.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/vendor-credit.refund` |
+| External binary body | none |
+
+### CLI
+
+`bookflow vendor-credit refund 01ARZ3NDEKTSV4RRFFQ69G5FAV --deposit-to Checking --date 2026-05-20 --amount 120.00 --payment-method Check --check-number 8812 --company "Demo Plumbing Co" --reason "Acme sent a refund check for our return" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "vendor-credit refund", "input": {"credit": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "deposit_to": "Checking", "date": "2026-05-20", "amount": "120.00", "payment_method": "Check", "check_number": "8812"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `credit` | `CREDIT` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+| `deposit_to` | `--deposit-to` | string | yes | no | — | minimum length 1 |
+| `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `amount` | `--amount` | string \| object \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `check_number` | `--check-number` | string \| null | no | yes | null | — |
+| `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/vendor-credit.refund`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `credit_id` | string | yes | no | — | — |
+| `credit_number` | string | yes | no | — | — |
+| `credit_version` | integer | yes | no | — | — |
+| `vendor_id` | string | yes | no | — | — |
+| `vendor_name` | string | yes | no | — | — |
+| `deposit_id` | string | yes | no | — | — |
+| `deposit_number` | string \| null | no | yes | null | — |
+| `deposit_to_id` | string | yes | no | — | — |
+| `date` | string | yes | no | — | — |
+| `amount` | object | yes | no | — | — |
+| `amount.amount` | string | yes | no | — | — |
+| `amount.currency` | string | yes | no | — | — |
+| `amount.minor_units` | integer | yes | no | — | — |
+| `amount_minor_units` | integer | yes | no | — | — |
+| `credit_free_before` | object | yes | no | — | — |
+| `credit_free_before.amount` | string | yes | no | — | — |
+| `credit_free_before.currency` | string | yes | no | — | — |
+| `credit_free_before.minor_units` | integer | yes | no | — | — |
+| `credit_free_after` | object | yes | no | — | — |
+| `credit_free_after.amount` | string | yes | no | — | — |
+| `credit_free_after.currency` | string | yes | no | — | — |
+| `credit_free_after.minor_units` | integer | yes | no | — | — |
+| `credit_free_after_minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "amount": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "amount_minor_units": 1,
+  "changed": true,
+  "credit_free_after": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "credit_free_after_minor_units": 1,
+  "credit_free_before": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "credit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "credit_number": "value",
+  "credit_version": 1,
+  "date": "2026-01-01",
+  "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "deposit_number": null,
+  "deposit_to_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "dry_run": false,
+  "vendor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "vendor_name": "value",
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `vendor-credit show`
 
 Show a vendor credit: its captured vendor and payable, its credited lines, its posting batches, what it still has free, and every bill it has been applied to and detached from. Pass `revision_number` to read a superseded revision instead of the current one.
@@ -2177,7 +2361,7 @@ Example JSON output:
 
 ## `vendor-credit unapply`
 
-Take a vendor credit back off the bills it settled, without moving any money. The bills go back to open for what was applied and no account changes, which leaves the credit standing as an unapplied debit against the vendor. Name `bills` to detach only those; leave it out to detach everything still applied. Each detachment is dated at the settlement date it takes back, so an application dated on or before the closing date cannot be undone here.
+Take a vendor credit back off the bills it settled, without moving any money. The bills go back to open for what was applied and no account changes, which leaves the credit standing as an unapplied debit against the vendor. Name `bills` to detach only those; leave it out to detach everything still applied. Name `deposits` to detach refund deposits the same way; naming only `bills` leaves them standing. Each detachment is dated at the settlement date it takes back, so an application dated on or before the closing date cannot be undone here.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2210,6 +2394,7 @@ The same example as complete `bookflow_run` arguments:
 | `credit` | `CREDIT` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `bills` | `--bills` | array[string] \| null | no | yes | null | — |
+| `deposits` | `--deposits` | array[string] \| null | no | yes | null | — |
 
 ### Command and context options
 

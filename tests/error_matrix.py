@@ -1207,8 +1207,8 @@ MATRIX["vendor-credit apply"] = {
     "E_PERIOD_CLOSED": "settlement date on or before the closing date",
     "E_VERSION_CONFLICT": "stale expected_version on the credit or on a selected bill",
     "E_APPLICATION_CAPACITY": "more than the credit has free or more than the bill has open, including a concurrent write that took either first",
-    "E_APPLICATION_INCOMPATIBLE": "a bill owed to another vendor, from another payable account, or in another currency",
-    "E_APPLICATION_INACTIVE": "a voided credit, a voided bill, or a bill with no payable",
+    "E_APPLICATION_INCOMPATIBLE": "a bill owed to another vendor, from another payable account, or in another currency; a deposit with no Accounts Payable line naming the credit's vendor",
+    "E_APPLICATION_INACTIVE": "a voided credit, a voided bill or refund deposit, or a bill with no payable",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
@@ -1819,4 +1819,22 @@ MATRIX['attachment text'] = {
     'E_VALUE_RANGE': 'larger than the 64 KiB attachment text reads, or an invalid company byte limit',
     'E_IO': 'missing, collected, corrupt or unsafe body',
     'E_DB_BUSY': 'collection pending',
+}
+
+# A vendor's refund check for an open credit (R149): a deposit and the credit applied to it, in one write.
+MATRIX['vendor-credit refund'] = {
+    'E_RECORD_NOT_FOUND': 'unknown credit, deposit-to account or payment method',
+    'E_INACTIVE_REFERENCE': 'the deposit-to account or payment method is inactive',
+    'E_VALIDATION': 'a refund dated before the credit, an amount of zero or less, or a deposit-to account that is not a bank',
+    'E_VALUE_RANGE': 'a resulting version exceeds signed 64-bit range',
+    'E_AMOUNT_PRECISION': 'an amount with more precision than the currency has',
+    'E_PERIOD_CLOSED': 'refund date on or before the closing date',
+    'E_DUPLICATE_NUMBER': 'the supplied deposit number is already used',
+    'E_VERSION_CONFLICT': 'stale expected_version on the credit',
+    'E_APPLICATION_CAPACITY': 'more than the credit still has free, or nothing free at all',
+    'E_APPLICATION_INACTIVE': 'a voided credit',
+    'E_APPLICATION_INCOMPATIBLE': 'the deposit line does not match the credit vendor and payable account',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
