@@ -243,7 +243,8 @@ def test_the_co0073_guard_is_the_schema_modules():
     from bookflow.company.ap_settlement_schema import guard_statements
     from bookflow.storage.migrate import HEADS
     m = importlib.import_module('bookflow.storage.company_migrations.versions.0073_vendor_refund_deposits')
-    assert HEADS['company'] == m.revision == 'co0073'
+    # Not `HEADS['company'] == ...`: being the newest migration is not a property of this one (co0078 came after).
+    assert m.revision == 'co0073'
     current = [s for s in guard_statements() if s.split()[2] == m.REPLACED[0]]
     assert current == [m.GUARD]
     assert "type = 'bill'" in m.OLD_GUARD and 'deposit' not in m.OLD_GUARD

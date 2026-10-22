@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Memorized reports{% endblock %}{% block body %}<section id="memorized-reports">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/reports">Reports</a> / Memorized reports</nav>
+<h1>Memorized reports</h1>
+<p class="muted">Open a report from any report page and choose Memorize to keep it here. A report kept with a named date range shows today's dates each time it is opened.</p>
+{% for name, items in groups %}<section class="workspace-card" aria-label="{{ name }}" data-memorized-group="{{ name }}">
+<h2>{{ name }}</h2>
+<ul class="memorized-list">{% for item in items %}<li data-memorized-report="{{ item.id }}"><a href="/c/{{ company_id }}/memorized-report/{{ item.id }}/open" data-memorized-open><strong>{{ item.name }}</strong></a>
+<span class="muted"> · {{ item.title }}{% if item.date_range %} · {{ ranges.get(item.date_range, item.date_range) }}{% endif %}</span>
+<span class="actions"><a href="/c/{{ company_id }}/memorized-report/{{ item.id }}/update">Edit</a> <a href="/c/{{ company_id }}/memorized-report/{{ item.id }}/delete">Delete</a></span></li>{% endfor %}</ul>
+</section>{% else %}<p data-memorized-none>No memorized reports yet.</p>{% endfor %}
+</section>{% endblock %}

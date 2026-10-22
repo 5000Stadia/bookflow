@@ -1,0 +1,64 @@
+{% extends "base.html" %}{% block title %}{{ budget.name }} · Set up budgets{% endblock %}{% block body %}<section id="budget-grid" data-budget="{{ budget.id }}">
+<style>
+.budget-table input{width:5.4rem;text-align:right;padding-left:.3rem;padding-right:.3rem}
+.budget-table th,.budget-table td{padding-left:.3rem;padding-right:.3rem}
+.budget-table caption{text-align:left}
+.budget-table th[scope=row]{min-width:10rem;text-align:left;position:sticky;left:0;background:var(--surface,#fff);z-index:1}
+.budget-table td.total,.budget-table tfoot td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.budget-tools{display:flex;flex-wrap:wrap;gap:.75rem;align-items:end}
+.budget-tools label{display:flex;flex-direction:column;font-size:.9rem}
+@media (max-width:760px){
+ .budget-table thead,.budget-table caption{display:none}
+ .budget-table,.budget-table tbody,.budget-table tr,.budget-table tfoot{display:block;width:100%}
+ .budget-table tr{border:1px solid var(--line,#ccc);border-radius:.5rem;margin:0 0 .75rem;padding:.5rem}
+ .budget-table th[scope=row]{display:block;min-width:0;font-weight:600;margin-bottom:.25rem}
+ .budget-table td{display:flex;justify-content:space-between;align-items:center;padding:.15rem 0}
+ .budget-table td::before{content:attr(data-label);color:var(--muted,#666)}
+ .budget-table input{width:8.5rem}
+ .budget-table tr[data-empty]:not(:focus-within) td:not(.total){display:none}
+ .budget-table tr[data-empty] th[scope=row]::after{content:" · tap to enter";font-weight:400;color:var(--muted,#666)}
+}
+</style>
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/accounting">Accounting</a> / <a href="/c/{{ company_id }}/budget">Budgets</a> / {{ budget.name }}</nav>
+<h1>{{ budget.name }}</h1>
+<p class="muted">FY{{ budget.fiscal_year }} · {{ 'Profit and loss' if budget.kind == 'profit_and_loss' else 'Balance sheet (ending balances)' }}{% if budget.dimension != 'none' %} · by {{ 'customer:job' if budget.dimension == 'customer' else 'class' }}{% endif %} · {{ budget.currency }} · version {{ budget.version }}.
+Amounts never post. <a href="/c/{{ company_id }}/report/budget-overview?f:budget={{ budget.id }}">Budget overview</a> · <a href="/c/{{ company_id }}/report/budget-vs-actual?f:budget={{ budget.id }}">Budget vs. actual</a></p>
+{% if notice %}<p role="status" class="notice" data-budget-notice>{{ notice }}</p>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<form method="post" action="/c/{{ company_id }}/budget/{{ budget.id }}">
+<input type="hidden" name="version" value="{{ budget.version }}">
+{% if dimension_key %}<section class="workspace-card" aria-label="Current {{ 'customer:job' if budget.dimension == 'customer' else 'class' }}">
+<label>Current {{ 'customer:job' if budget.dimension == 'customer' else 'class' }} <input name="dimension" value="{{ dimension }}" list="budget-dimensions" data-budget-dimension placeholder="Name or id"></label>
+<datalist id="budget-dimensions">{% for value in budget.dimension_values %}<option value="{{ value.label }}">{% endfor %}</datalist>
+<button type="submit" name="action" value="show">Show</button>
+</section>{% endif %}
+<div class="table-wrap"><table class="list-table budget-table" data-budget-table>
+<caption class="muted">Accounts down, months across. Leave a month empty for no amount.</caption>
+<thead><tr><th scope="col">Account</th>{% for month, label in months %}<th scope="col" class="num">{{ label }}</th>{% endfor %}<th scope="col" class="num">Annual total</th></tr></thead>
+<tbody>
+{% for row in rows %}<tr data-budget-row="{{ row.account_id }}"{% if not row.total or row.total == '0.00' %} data-empty{% endif %}>
+<th scope="row" tabindex="0">{{ row.label }}{% if row.inactive %} (inactive){% endif %}</th>
+{% for month, label in months %}{% set i = loop.index0 %}<td data-label="{{ label }}"><input name="m:{{ row.account_id }}:{{ i }}" inputmode="decimal" aria-label="{{ row.label }} {{ label }}" value="{{ values.get('m:' ~ row.account_id ~ ':' ~ i, row.amounts[i]) if values else row.amounts[i] }}"{% if row.inactive %} readonly{% endif %}></td>{% endfor %}
+<td class="total" data-label="Annual total" data-budget-total>{{ row.total }}</td>
+</tr>{% endfor %}
+</tbody>
+<tfoot><tr><th scope="row">{{ 'Net income budgeted' if budget.kind == 'profit_and_loss' else 'Total' }}</th>{% for value in budget.month_totals %}<td data-label="{{ months[loop.index0][1] }}">{{ value.amount }}</td>{% endfor %}<td class="total" data-label="Annual total" data-budget-grand-total>{{ budget.total.amount }}</td></tr></tfoot>
+</table></div>
+<section class="workspace-card" aria-label="Save">
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') if values else '' }}" placeholder="Budget review"></label>
+<div class="actions"><button type="submit" name="action" value="save" class="primary-action" data-budget-save>Save</button>
+<button type="submit" name="action" value="clear" data-budget-clear formnovalidate onclick="return confirm('Clear every amount in this budget{{ ' for this ' ~ ('customer' if budget.dimension == 'customer' else 'class') if dimension_key else '' }}?')">Clear</button></div>
+</section>
+<section class="workspace-card" aria-label="Fill a row">
+<h2>Fill a row</h2>
+<p class="muted">Start from an amount and change it each month by an amount or a percent, compounding. Leave the amount empty to copy the start month across.</p>
+<div class="budget-tools">
+<label>Account <select name="fill_account" data-budget-fill-account>{% for row in rows if not row.inactive %}<option value="{{ row.account_id }}">{{ row.label }}</option>{% endfor %}</select></label>
+<label>Start month <select name="fill_start_month">{% for month, label in months %}<option value="{{ month }}">{{ label }}</option>{% endfor %}</select></label>
+<label>Amount <input name="fill_amount" inputmode="decimal" size="10" data-budget-fill-amount></label>
+<label>Change each month <input name="fill_change" inputmode="decimal" size="8"></label>
+<label>or % each month <input name="fill_change_percent" inputmode="decimal" size="6" data-budget-fill-percent></label>
+<button type="submit" name="action" value="fill" data-budget-fill>Fill row</button>
+</div></section>
+</form>
+</section>{% endblock %}
