@@ -76,7 +76,8 @@ def _posting_eligibility(s, source, selected):
     info = dict(s.company.conn.execute(c.company_info.select()).mappings().one())
     if info['sales_tax_liability_basis'] != 'invoice_date':
         raise _invalid('sales_tax_liability_basis', 'posting work requires invoice-date tax recognition')
-    if info['sales_tax_enabled'] != profile.preferences.sales_tax_enabled:
+    order = work.rows(s, c.work_documents, c.work_documents.c.id == source['document_id'])[0]['kind'] == 'sales_order'
+    if info['sales_tax_enabled'] != profile.preferences.sales_tax_enabled and not order:
         exempt = profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
         if any(lf.profile.tax_code and lf.profile.tax_code.taxable and not exempt for _, _, lf in selected):
             raise _invalid('sales_tax_enabled', 'current tax policy conflicts with the captured taxable source facts')
@@ -245,6 +246,11 @@ def billed_lines(s, rev, selected, profile, retax=None):
         lines.append(entry)
         sources.append(chosen.get(line['id']))
     from bookflow.company import tax_policy
+    if retax is not None:
+        # A sales order's billed discounts take taxable sales the way an ordinary invoice of today
+        # would, from the lines' taxability as it is now, not as quoted.
+        from bookflow.company.sales_orders import recut_discounts
+        recut_discounts(lines)
     sales_adjustments.apply(lines, tax_policy.effective(profile))
     return lines, sources
 
@@ -370,7 +376,8 @@ def prepare(s, ctx, inp, kind, destination):
     sale.preview.source_effect = source_effect(source, source_rev, pending_work['work_revisions'][0], source['version'])
     sale.preview.source_current = source_current(current)
     if kind == 'sales_order':
-        from bookflow.company.sales_orders import quoted_tax_difference
+        from bookflow.company.sales_orders import quoted_tax_difference, backdating_warnings
+        sale.preview.warnings = list(sale.preview.warnings) + backdating_warnings(s, inp, source)
         sale.preview.order_tax = quoted_tax_difference(
             selected, [profiles[envelope['id']]['tax_minor_units'] for envelope in billed], source_rev['currency'])
     from bookflow.company.billing_validation import validate

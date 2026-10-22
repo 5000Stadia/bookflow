@@ -48,7 +48,7 @@ def validate_sale_allocations(plan, s):
             and row['created_at'] == data['header']['updated_at'], 'allocation provenance')
 
 
-def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, currency):
+def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, currency, order=False):
     """Rebuild, from the quote alone, every line the sale carries along and each taxable base.
 
     In quote order: a billed line where its allocation is; a subtotal wherever a line of its
@@ -103,6 +103,9 @@ def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids
                 cut = None if quoted_cut is None else part(quoted_cut)
                 if cut is not None and proof is not None:
                     cut = min(cut, row['net_minor_units'] + share)
+                if order:
+                    # A sales order's invoice cuts taxable sales by today's taxability (sales_orders.recut_discounts).
+                    cut = next((t.taxable_minor_units for t in adjustment.targets if t.position == placed[position]), None)
                 wanted.append((placed[position], share, cut))
                 shares.setdefault(billed_envelope['id'], []).append((share, share if cut is None else cut, facts_posted))
             require([(t.position, t.amount_minor_units, t.taxable_minor_units) for t in adjustment.targets] ==
@@ -201,7 +204,8 @@ def _validate(plan, s, ctx):
     allocated_ids = {row['document_line_id'] for row in allocs}
     billed_envelopes = [envelope for envelope in envelopes if envelope['id'] in allocated_ids]
     require(len(allocs) == len(selected) == len(billed_envelopes), 'missing selected allocation')
-    bases = _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, rev['currency'])
+    bases = _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, rev['currency'],
+                           order=kind == 'sales_order')
     captured_header = work.facts(rev)
     posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
     expected_header = captured_header.profile
@@ -215,8 +219,8 @@ def _validate(plan, s, ctx):
         require(getattr(posted_header, field) == getattr(expected_header, field),
             'captured commercial header differs: ' + field)
     from bookflow.company import tax_policy
-    require(tax_policy.effective(posted_header) == tax_policy.effective(captured_header.profile)
-        and tax_policy.origin(posted_header) == tax_policy.origin(captured_header.profile), 'captured tax policy differs')
+    require(tax_policy.effective(posted_header) == tax_policy.effective(expected_header)
+        and tax_policy.origin(posted_header) == tax_policy.origin(expected_header), 'captured tax policy differs')
     if dest == 'sales_receipt':
         require(posted_header.terms is None, 'paid receipt cannot carry invoice credit terms')
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')

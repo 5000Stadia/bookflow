@@ -40,6 +40,11 @@ def register(kind, prefix, verb):
         if verb == 'invoice' and plan.data.get('changed', True) and not plan.preview.idempotent_replay:
             from bookflow.company import prepayments
             prepayments.conversion_preview(s, plan.preview, kind, getattr(inp, kind), inp.apply_prepayment)
+            if kind == 'sales_order':
+                from bookflow.company import sales_orders, work
+                note = sales_orders.prepayment_date_warning(s, work.resolve(s, inp.sales_order, kind), plan.preview, inp.date)
+                if note:
+                    plan.preview.warnings.append(note)
         elif verb == 'invoice':
             from bookflow.company import prepayments
             plan = Plan(prepayments.conversion_replay(s, plan.preview), plan.data)
@@ -70,6 +75,11 @@ def register(kind, prefix, verb):
                 if applied.output is not None and getattr(applied.output, 'changed', True):
                     applied.output = prepayments.conversion_draw(s, ctx, applied.output, kind, getattr(inp, kind),
                                                                  inp.apply_prepayment)
+                    if kind == 'sales_order':
+                        from bookflow.company import sales_orders, work
+                        note = sales_orders.prepayment_date_warning(s, work.resolve(s, inp.sales_order, kind), applied.output, inp.date)
+                        if note and note not in applied.output.warnings:
+                            applied.output.warnings.append(note)
                 elif applied.output is not None:
                     applied.output = prepayments.conversion_replay(s, applied.output)
                 return applied

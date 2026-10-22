@@ -252,3 +252,118 @@ def test_an_ordinary_sale_or_payment_is_steered_to_the_open_order(books, shop):
                                        payment_method=books['methods']['Check'], operation_key='deposit-maybe'),
                reason='Money in', dry_run=True)
     assert any(f'prepayment receive --document "sales-order {order["number"]}"' in w for w in paid['warnings']), paid['warnings']
+
+
+# ------------------------------------------------------------------ review fixes (increment 4)
+
+def _tax_on(books, rate='5'):
+    run = books['run']
+    agency = books['client'].vendor.create(company=books['company'], name='State Revenue', is_tax_agency=True)['id']
+    accounts = run('account query', dict(limit=200))['items']
+    liability = next((row['id'] for row in accounts if row.get('system_role') == 'sales_tax_payable'), None)
+    tax = run('item create', dict(name='State tax', type='sales_tax_item', tax_percent=rate, tax_agency_vendor_id=agency,
+                                  **({'liability_account_id': liability} if liability else {})), reason='Tax')
+    run('company update', dict(sales_tax_enabled=True, default_sales_tax_item_id=tax['id']), reason='Tax on')
+    return tax['id']
+
+
+def _ordinary(books, lines, date='2017-03-02'):
+    return books['run']('invoice post', dict(customer=books['customer'], date=date, lines=lines), reason='Same sale',
+                        dry_run=True)
+
+
+def test_voiding_a_work_order_invoice_billed_by_a_sub_microunit_amount_works_as_before(books, shop):
+    run = books['run']
+    work = run('work-order create', dict(customer=books['customer'], date='2017-03-01', title='Tiny',
+                                         lines=[dict(item=shop['install'], quantity='0.000001', net_amount='1.00')]), reason='Job')
+    line = work['revision']['lines'][0]['line_id']
+    for choice in ('reopen', 'cancel'):
+        current = run('work-order show', dict(work_order=work['id']))
+        invoice = run('work-order invoice', dict(work_order=work['id'], expected_version=current['version'], date='2017-03-02',
+                                                 conversion_key='tiny-' + choice, selections=[dict(line_id=line, net_amount='0.40')]),
+                      reason='Part')
+        voided = run('invoice void', dict(invoice=invoice['id'], **({} if choice == 'reopen' else {'release_to_order': 'cancel'})),
+                     reason='Undo')
+        assert voided['status'] == 'voided'
+    assert run('work-order billing', dict(work_order=work['id']))['lines'][0]['remaining_net_minor_units'] == 100
+
+
+def test_negative_availability_is_reported_signed(books, shop):
+    other = books['client'].customer.create(company=books['company'], name='Baker Bros')['id']
+    _order(books, [dict(item=shop['widget'], quantity='10')], customer=other)
+    order = _order(books, [dict(item=shop['widget'], quantity='1')])
+    error = _error(lambda: _invoice(books, order, 'none-left'))
+    assert error.code == 'E_VALIDATION' and error.details['lines'][0]['available'] == '-4'
+
+
+def test_duplicate_selections_of_one_line_are_refused(books, shop):
+    order = _order(books, [dict(item=shop['widget'], quantity='4')])
+    line = order['revision']['lines'][0]['line_id']
+    error = _error(lambda: _invoice(books, order, 'twice', selections=[dict(item=shop['widget'], quantity='1'),
+                                                                       dict(line_id=line, quantity='1')]))
+    assert error.code == 'E_VALIDATION' and line in str(error.details)
+
+
+def test_tax_turned_on_after_the_order_taxes_the_invoice_like_an_ordinary_one(books, shop):
+    run = books['run']
+    run('item update', dict(item=shop['widget'], sales_tax_code_id=books['tax_codes']['Tax']), reason='Taxable')
+    order = _order(books, [dict(item=shop['widget'], quantity='2')])          # sales tax off when ordered
+    assert order['tax']['amount'] == '0.00'
+    _tax_on(books)
+    invoice = _invoice(books, order, 'taxed-now')
+    assert invoice['tax']['amount'] == _ordinary(books, [dict(item=shop['widget'], quantity='2')])['tax']['amount'] == '0.45'
+
+
+def test_the_tax_policy_the_order_took_by_default_is_todays(books, shop):
+    run = books['run']
+    _tax_on(books, rate='7.5')
+    run('item update', dict(item=shop['widget'], sales_tax_code_id=books['tax_codes']['Tax']), reason='Taxable')
+    lines = [dict(item=shop['widget'], quantity='1', unit_price='0.33'), dict(item=shop['widget'], quantity='1', unit_price='0.33')]
+    order = _order(books, lines)
+    run('company update', dict(sales_tax_calculation='invoice_combined_half_up'), reason='New rounding')
+    invoice = _invoice(books, order, 'policy', all_open=True)
+    ordinary = _ordinary(books, lines)
+    assert invoice['tax']['amount'] == ordinary['tax']['amount']
+    assert invoice['revision']['profile']['sales_tax_calculation'] == 'invoice_combined_half_up'
+
+
+@pytest.mark.parametrize('turn', ['widget_untaxed', 'install_taxed'])
+def test_a_discount_cuts_taxable_sales_like_an_ordinary_invoice_after_taxability_changes(books, shop, turn):
+    run = books['run']
+    _tax_on(books)
+    taxed, exempt = books['tax_codes']['Tax'], books['tax_codes']['Non']
+    run('item update', dict(item=shop['widget'], sales_tax_code_id=taxed), reason='Taxable')
+    subtotal = run('item create', dict(name='Subtotal', type='subtotal', description='Subtotal'), reason='Kinds')['id']
+    off = run('item create', dict(name='Ten off', type='discount', description='Ten percent off', discount_percent='10',
+                                  income_account_id=books['income'], sales_tax_code_id=taxed), reason='Kinds')['id']
+    lines = [dict(item=shop['widget'], quantity='4'), dict(item=shop['install'], quantity='1'), dict(item=subtotal),
+             dict(item=off)]
+    order = _order(books, lines)
+    if turn == 'widget_untaxed':
+        run('item update', dict(item=shop['widget'], sales_tax_code_id=exempt), reason='Exempt now')
+    else:
+        run('item update', dict(item=shop['install'], sales_tax_code_id=taxed), reason='Taxable now')
+    invoice = _invoice(books, order, 'disc-' + turn, all_open=True)
+    ordinary = _ordinary(books, lines)
+    assert (invoice['subtotal']['amount'], invoice['tax']['amount']) == (ordinary['subtotal']['amount'], ordinary['tax']['amount'])
+
+
+def test_voiding_with_reopen_on_a_closed_order_says_it_returns_when_reopened(books, shop):
+    run = books['run']
+    order = _order(books, [dict(item=shop['widget'], quantity='10')])
+    invoice = _invoice(books, order, 'six')
+    current = run('sales-order show', dict(sales_order=order['id']))
+    run('sales-order update', dict(sales_order=order['id'], expected_version=current['version'], status='closed'), reason='Done')
+    voided = run('invoice void', dict(invoice=invoice['id']), reason='Wrong')
+    assert any('once the order is reopened' in w and 'closed' in w for w in voided['warnings']), voided['warnings']
+
+
+def test_backdated_invoices_warn(books, shop):
+    run = books['run']
+    order = _order(books, [dict(item=shop['install'], quantity='2')])
+    run('prepayment receive', dict(document=f'sales-order {order["number"]}', amount='50.00', date='2017-03-05',
+                                   payment_method=books['methods']['Check']))
+    early = _invoice(books, order, 'early', date='2017-03-02')
+    assert early['prepayment_applied']['minor_units'] == 0
+    assert any('dated after this invoice' in w for w in early['warnings'])
+    assert any('stock as it stands today' in w for w in early['warnings'])

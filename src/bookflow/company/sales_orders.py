@@ -23,8 +23,10 @@ NOT_LIVE = ('closed', 'voided', 'cancelled')
 
 
 def _quantity(microunits):
+    """An exact quantity from microunits; signed, because availability can be below zero."""
     from bookflow.company import billing_math as math
-    return math.format_fraction(Fraction(microunits, 1_000_000))
+    value = Fraction(microunits) / 1_000_000
+    return ('-' if value < 0 else '') + math.format_fraction(abs(value))
 
 
 def require_enabled(s):
@@ -284,6 +286,8 @@ def billing_choice(s, inp, header, rev, lines, identities):
                 if len(matches) != 1:
                     raise _invalid(f'selections.{index}.item', f'{len(matches)} open lines carry this item; name the line_id')
                 line_id = matches[0]
+            if any(existing.line_id == line_id for existing in chosen):
+                raise _invalid(f'selections.{index}', f'line {line_id} is already selected; name each order line once')
             chosen.append(BillingSelection(line_id=line_id, quantity=entry.quantity))
         return _Choice(selections=chosen)
     stocked = [row for row in open_rows if row[1].profile.item_type in TRACKED_TYPES]
@@ -348,9 +352,18 @@ def invoice_day_profile(s, rev, profile):
     selector = captured.sales_tax_item.id if captured.sales_tax_item else None
     if _defaulted(origins, 'sales_tax_item'):
         selector = customer['sales_tax_item_id'] or info['default_sales_tax_item_id']
-    if captured.preferences.sales_tax_enabled and selector:
+    # The company's sales tax setting and calculation policy as they stand today, unless a person
+    # chose the policy on the order: an ordinary invoice of today would take both from the company.
+    enabled = bool(info['sales_tax_enabled'])
+    if enabled and selector:
         item, rules = sd._tax_rules(db, selector)
-    return profile.model_copy(update=dict(customer_tax_code=code, sales_tax_item=item, tax_rules=rules))
+    update = dict(customer_tax_code=code, sales_tax_item=item, tax_rules=rules,
+                  preferences=profile.preferences.model_copy(update=dict(sales_tax_enabled=enabled)))
+    from bookflow.company import tax_policy
+    if getattr(profile, 'schema_version', 1) == 2 and tax_policy.origin(captured).kind != 'explicit':
+        update.update(sales_tax_calculation=info['sales_tax_calculation'],
+                      tax_policy_origin=tax_policy.TaxOrigin(kind='default', source_id=info['id']))
+    return profile.model_copy(update=update)
 
 
 def line_tax(s, lf, header):
@@ -464,3 +477,63 @@ def order_note(s, customer_id, context, output=None):
                 f'open. If it is a deposit on that work, take it with `prepayment receive --document "{noun} {first["number"]}"` '
                 'instead, so it is held for that work.')
     return None
+
+
+def discount_cuts(total, shares, taxed, amounts, taxable):
+    """A billed discount's cut from taxable sales per target position, or None, by the ordinary rule.
+
+    The QuickBooks rule ordinary invoices follow (`sales_adjustments.apply`): a taxable discount over
+    taxable and non-taxable lines reduces taxable sales by the whole discount, taken from the taxable
+    lines by their bases; otherwise each share is its own cut. `shares`, `taxed` and `amounts` are
+    keyed by target position.
+    """
+    from bookflow.company.sales_adjustments import distribute
+    if not taxable or not total or all(taxed.get(j) for j, share in shares.items() if share):
+        return None
+    bases = {j: amounts[j] for j in shares if taxed.get(j) and amounts[j] > 0}
+    if not bases:
+        return {j: 0 for j in shares}
+    cuts = dict(bases) if total >= sum(bases.values()) else distribute(total, bases)
+    return {j: cuts.get(j, 0) for j in shares}
+
+
+def recut_discounts(lines):
+    """Re-derive each billed discount's taxable cut from the billed lines' current taxability."""
+    from bookflow.company.sales_adjustments import kind
+    for line in lines:
+        adjustment = line['profile'].adjustment
+        if adjustment is None or kind(line['profile']) != 'discount' or adjustment.applies_to != 'billed':
+            continue
+        shares = {t.position: t.amount_minor_units for t in adjustment.targets}
+        taxed = {j: bool(lines[j - 1].get('adjustment_taxable')) for j in shares}
+        amounts = {j: lines[j - 1]['net_minor_units'] + (shares[j] if lines[j - 1]['profile'].pricing_basis == 'allocated' else 0)
+                   for j in shares}
+        cuts = discount_cuts(sum(shares.values()), shares, taxed, amounts, bool(line.get('adjustment_taxable')))
+        for target in adjustment.targets:
+            target.taxable_minor_units = None if cuts is None else cuts[target.position]
+
+
+def backdating_warnings(s, inp, header):
+    """An order invoice dated in the past: what-can-ship reads today's stock (warning only)."""
+    from bookflow.core import clock
+    if inp.all_open or inp.line_ids or inp.selections or inp.date >= clock.today_iso():
+        return []
+    return [f'This invoice is dated {inp.date} but what can ship was read from stock as it stands today; '
+            'name the quantities (selections) if that differs from what shipped then.']
+
+
+def prepayment_date_warning(s, header, preview, date):
+    """Money held on the order but received after the invoice date was not applied: say so."""
+    from bookflow.company import prepayments
+    if prepayments.find_account(s.company) is None:
+        return None
+    applied = getattr(preview, 'prepayment_applied', None)
+    if applied is not None and applied.minor_units:
+        return None
+    later = [row for row in prepayments.receipt_rows(s, document_ids=prepayments._pool_documents(s, header))
+             if row['held'] > 0 and row['date'] > date]
+    if not later:
+        return None
+    return (f'Customer prepayment receipt {", ".join(row["number"] for row in later)} is dated after this invoice '
+            f'({date}), so none of it was applied; date the invoice on or after the receipt, or apply it later '
+            'with `prepayment apply`.')

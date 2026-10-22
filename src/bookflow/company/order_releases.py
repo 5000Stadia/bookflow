@@ -15,7 +15,9 @@ import sqlalchemy as sa
 
 from bookflow.company import schema as c
 
-ORDER_KINDS = ('sales_order', 'work_order')
+# Only a sales order's lines are released this way; an invoice made from a work order is corrected
+# exactly as before (its billing ledger already reopens what a void takes back).
+ORDER_KINDS = ('sales_order',)
 
 
 def _current_allocations(s, invoice_id):
@@ -43,10 +45,12 @@ def _released(s, before, after):
             continue
         line = lines[row['source_line_id']]
         quantity = row['quantity_microunits']
-        if quantity is None:   # a quantity that is not whole microunits: read it from the proof
-            from bookflow.company import billing_allocations as alloc, billing_math as math
+        if quantity is None:
+            # Not a whole number of microunits (an inherited estimate line billed by amount): keep the
+            # exact fraction the billing ledger holds, in microunits.
+            from bookflow.company import billing_allocations as alloc
             proof = alloc.read_proof(row)
-            quantity = math.exact_microunits(proof.quantity()) if proof else line['quantity_microunits']
+            quantity = proof.quantity() * 1_000_000 if proof else Fraction(line['quantity_microunits'])
         out.append(dict(document=dict(doc), line_id=line['line_id'], item_id=line['item_id'], quantity=quantity))
     return out
 
@@ -56,16 +60,28 @@ def planned(s, invoice_id, after_allocations=()):
     return _released(s, _current_allocations(s, invoice_id), list(after_allocations))
 
 
+def _plain(quantity):
+    from bookflow.company import billing_math as math
+    return math.format_fraction(Fraction(quantity) / 1_000_000)
+
+
 def notes(s, released, choice):
-    from bookflow.core.exact import format_quantity_micro_units
     from bookflow.company.sales_defaults import _row
     out = []
     for row in released:
         doc = row['document']
+        current = s.company.conn.execute(sa.select(c.work_documents.c.status, c.work_documents.c.active).where(
+            c.work_documents.c.id == doc['id'])).first()
+        name = f"{doc['kind'].replace('_', ' ')} {doc['number']}"
         item = _row(s.company, 'item', row['item_id'], active=False)['full_name']
-        what = (f"cancelled on {doc['kind'].replace('_', ' ')} {doc['number']}" if choice == 'cancel'
-                else f"open again on {doc['kind'].replace('_', ' ')} {doc['number']}, committed and billable")
-        out.append(f"{format_quantity_micro_units(row['quantity'])} {item} (line {row['line_id']}) is {what}.")
+        if choice == 'cancel':
+            what = f'cancelled on {name}'
+        elif current is not None and (current.status != 'open' or not current.active):
+            what = (f'released back to {name}, which is {current.status}: it reads as open, committed and billable '
+                    f'once the order is reopened')
+        else:
+            what = f'open again on {name}, committed and billable'
+        out.append(f"{_plain(row['quantity'])} {item} (line {row['line_id']}) is {what}.")
     return out
 
 
@@ -84,7 +100,8 @@ def cancel(s, ctx, released):
         for line in work.saved_lines(s, rev):
             entry = dict(line_id=line['line_id'], item=line['item_id'])
             if line['line_id'] in added:
-                cancelled = line['cancelled_quantity_microunits'] + added[line['line_id']]
+                # Cancelled quantity is whole microunits; a fractional release cancels its whole part.
+                cancelled = line['cancelled_quantity_microunits'] + int(added[line['line_id']])
                 from bookflow.core.exact import format_quantity_micro_units
                 entry['cancelled_quantity'] = format_quantity_micro_units(cancelled)
             lines.append(entry)
