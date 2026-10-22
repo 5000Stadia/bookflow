@@ -474,6 +474,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
             Action("Record a bounced check", WRITE, ("payment bounce",), "/payment/bounce"),
             Action("Assess finance charges", WRITE, ("finance-charge assess",), "/finance-charge/assess"),
+            Action("Receive a customer deposit", WRITE, ("prepayment receive",), "/prepayment/receive"),
             Action("Invoice a billing group", WRITE, ("batch-invoice post",), "/batch-invoice/post"),
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             _report("Customer statement", "statement"),
@@ -481,6 +482,7 @@ SECTIONS: tuple[Section, ...] = (
             _report("Open invoices", "open-invoices"),
             _report("Customer balance summary", "customer-balance-summary"),
             _report("Customer balance detail", "customer-balance-detail"),
+            _report("Customer prepayments", "customer-prepayments"),
         ),
     ),
     Section(

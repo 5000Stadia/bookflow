@@ -2045,6 +2045,157 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report customer-prepayments`
+
+Customer prepayments held on as_of, by customer, document and receipt: each receipt and each draw to that date with the customer's running held balance. The total is the Customer Prepayments account on the balance sheet for the same date; the report refuses rather than print a figure the account contradicts. Customer balances, aging and statements stay receivable reports and leave held money out.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.customer-prepayments` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report customer-prepayments --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report customer-prepayments", "input": {"as_of": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string \| null | no | yes | null | Report date. Defaults to today. |
+| `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job. |
+| `include_drawn` | `--include-drawn` | boolean | no | no | false | Also list receipts fully drawn by the date. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.customer-prepayments`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `as_of` | string | yes | no | — | — |
+| `account_id` | string \| null | yes | yes | — | — |
+| `account` | string \| null | yes | yes | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].customer_id` | string | yes | no | — | — |
+| `rows[].customer` | string | yes | no | — | — |
+| `rows[].document` | object \| null | yes | yes | — | — |
+| `rows[].document.id` | string | yes | no | — | — |
+| `rows[].document.kind` | string | yes | no | — | — |
+| `rows[].document.number` | string | yes | no | — | — |
+| `rows[].document.status` | string | yes | no | — | — |
+| `rows[].receipt_id` | string | yes | no | — | — |
+| `rows[].receipt_number` | string | yes | no | — | — |
+| `rows[].kind` | literal["receipt", "draw"] | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].number` | string | yes | no | — | The receipt's number, or the drawing credit memo's. |
+| `rows[].applied_to` | string \| null | yes | yes | — | For a draw: "invoice N" or "refund N". |
+| `rows[].amount` | object | yes | no | — | Positive for a receipt, negative for a draw. |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].held` | object | yes | no | — | Running amount held for the customer after this row. |
+| `rows[].held.minor_units` | integer | yes | no | — | — |
+| `rows[].held.currency` | string | yes | no | — | — |
+| `rows[].held.amount` | string | yes | no | — | — |
+| `customers` | array[object] | yes | no | — | — |
+| `customers[].customer_id` | string | yes | no | — | — |
+| `customers[].customer` | string | yes | no | — | — |
+| `customers[].held` | object | yes | no | — | — |
+| `customers[].held.minor_units` | integer | yes | no | — | — |
+| `customers[].held.currency` | string | yes | no | — | — |
+| `customers[].held.amount` | string | yes | no | — | — |
+| `total_held` | object | yes | no | — | — |
+| `total_held.minor_units` | integer | yes | no | — | — |
+| `total_held.currency` | string | yes | no | — | — |
+| `total_held.amount` | string | yes | no | — | — |
+| `account_balance` | object | yes | no | — | The Customer Prepayments account on the general ledger at the date; always equal to total_held. |
+| `account_balance.minor_units` | integer | yes | no | — | — |
+| `account_balance.currency` | string | yes | no | — | — |
+| `account_balance.amount` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account": null,
+  "account_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "account_id": null,
+  "as_of": "value",
+  "customers": [],
+  "rows": [],
+  "total_held": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report deposit-detail`
 
 Every deposit posted between date_from and date_to, oldest first, each followed by what it gathered. A deposit row is its effect on the bank account it was made to; the rows beneath it are every other line of the same posting, one per document a deposited line came from -- the payment or sales receipt waiting in Undeposited Funds, with its own type, number, date and name -- and account, plus one per additional line or cash back. Lines are signed debit minus credit, so money taken out of Undeposited Funds is negative under a positive deposit and cash back is positive, and a deposit's lines always net its bank amount to nothing. A correction appears as the reversal and replacement it posted, and a voided deposit, worth nothing on its own date, has no rows. Totals are what was deposited to the bank across the whole report and how many deposits that was; rows are paged.
@@ -6099,6 +6250,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].balance.amount` | string | yes | no | — | — |
 | `rows[].balance.currency` | string | yes | no | — | — |
 | `rows[].balance.minor_units` | integer | yes | no | — | — |
+| `notes` | array[string] | no | no | [] | Below the balance: customer prepayments (deposits) held for the customer on date_to, which the balance leaves out because they are not owed. |
 
 Example JSON output:
 

@@ -191,6 +191,9 @@ class StatementOutput(ledger.Page):
     totals: StatementTotals
     aging: ArAgingTotals
     rows: list[StatementRow]
+    notes: list[str] = Field(default_factory=list, exclude_if=lambda v: not v, description=(
+        "Below the balance: customer prepayments (deposits) held for the customer on date_to, which the balance "
+        "leaves out because they are not owed."))
 
 
 class OpenInvoicesOutput(ledger.Page):
@@ -520,7 +523,9 @@ def statement(inp: StatementInput, s, *, principal_id=None) -> StatementOutput:
                 document_date=row["document_date"],
                 due_date=row["due_date"], memo=row["document_memo"],
                 amount=money(int(row["net"]), currency), balance=money(int(row["balance"]), currency)))
-        return StatementOutput(metadata=state.metadata, rows=rows, count=len(rows),
+        from bookflow.company.prepayments import statement_notes
+        notes = statement_notes(s, customer_id, inp.date_to)
+        return StatementOutput(metadata=state.metadata, rows=rows, count=len(rows), notes=notes,
             totals=StatementTotals(**{name: money(value, currency) for name, value in
                 (("opening", opening), ("charges", charges), ("credits", credits), ("closing", closing))}),
             aging=ArAgingTotals(**{name: money(aging[name], currency) for name in (*BUCKETS, "total")}),

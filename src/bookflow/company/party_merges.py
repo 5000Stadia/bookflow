@@ -218,6 +218,13 @@ def plan_merge(db, kind: str, merged_selector: str, survivor_selector: str) -> M
             raise _refuse("a customer cannot be merged into one of its own jobs", **ids)
         if db.raw.execute("SELECT 1 FROM customers WHERE parent_id=? LIMIT 1", (merged["id"],)).fetchone():
             raise _refuse("this customer has jobs of its own; move or merge its jobs first", **ids)
+    if kind == "customer":
+        from bookflow.company.prepayments import holding_refusal
+        holding = holding_refusal(db, merged["id"], merged.get("full_name") or merged["id"], "merged away")
+        if holding is not None:
+            from bookflow.core.money import Money
+            raise _refuse("this customer holds customer prepayment money; refund it or use it on an invoice first",
+                          prepayment_held=Money(holding[0], _home(db)).to_dict(), next=holding[1], **ids)
     if kind == "vendor" and _balance(db, kind, merged["id"]) != 0:
         # A bill payment never crosses vendors, so the merged vendor's open bills could not be
         # paid from the survivor; settle them first.

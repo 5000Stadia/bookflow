@@ -23,6 +23,9 @@ def _write(document_type, verb, model):
         if s.dry_run and document_type == 'invoice' and verb == 'update' and plan.preview.settlement is not None and not plan.data.get('recovered'):
             from bookflow.company.payment_pages import invoice_preview_output
             plan.preview.settlement = invoice_preview_output(s, ctx, inp, plan.preview.settlement)
+        if verb == 'post' and document_type in ('invoice', 'sales_receipt'):
+            from bookflow.company.prepayments import add_note
+            add_note(s, plan.preview, inp.customer, 'invoice' if document_type == 'invoice' else 'sales_receipt')
         return plan
 
     cmd = command(
@@ -50,7 +53,11 @@ def _write(document_type, verb, model):
     if document_type == 'invoice' and verb == 'update':
         from bookflow.company.payment_operations import recover
         cmd.permanent_recovery = lambda inp, ctx, s: recover(inp, ctx, s, 'invoice update')
-    cmd.applier(sales.apply)
+    if verb == 'post' and document_type in ('invoice', 'sales_receipt'):
+        from bookflow.company.prepayments import noted
+        cmd.applier(noted(sales.apply, 'invoice' if document_type == 'invoice' else 'sales_receipt'))
+    else:
+        cmd.applier(sales.apply)
     return cmd
 
 

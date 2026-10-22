@@ -625,6 +625,10 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                                        'line has no quantity; leave it at 1')
     elif 'percent' in fields.supplied:
         raise _invalid('percent', 'only a discount or percentage other-charge line takes a percent')
+    if item_changed or refresh or nonposting:
+        # The Customer Prepayment item (R124) is written only by the prepayment commands.
+        from bookflow.company import prepayments
+        prepayments.guard_line_item(s, item, nonposting=nonposting, item_changed=item_changed or refresh)
     if item_changed or refresh:
         # A stock-carrying item sells out of the inventory ledger, and that ledger is written
         # by the document that posts, so only a real sale may name one. A quote or a work
