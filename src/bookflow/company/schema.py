@@ -1200,3 +1200,5 @@ from bookflow.company.fixed_asset_schema import define_tables as _define_fixed_a
 globals().update(_define_fixed_asset_tables(metadata, _column, _table, _common))
 from bookflow.company.assembly_build_schema import define_tables as _define_assembly_build_tables
 globals().update(_define_assembly_build_tables(metadata, _column, _table))
+from bookflow.company.mileage_schema import define_tables as _define_mileage_tables
+globals().update(_define_mileage_tables(metadata, _column, _table, _common))
