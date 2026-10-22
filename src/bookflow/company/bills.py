@@ -239,9 +239,15 @@ def _account_facts(row):
                    normal_balance=accounts.NORMAL_BALANCE[row['type']])
 
 
+def _survivor_account(s, profile):
+    """A kept line whose account or item has since been merged into another saves with the survivor (R117)."""
+    from bookflow.company import list_merges
+    return list_merges.survive(s.company, profile)
+
+
 def _account_row(s, selector, field):
     try:
-        row = accounts.resolve_account(s.company, selector)
+        row = accounts.resolve_account(s.company, selector, follow_merge=True)
     except BookflowError as exc:
         if exc.code in ('E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE'):
             exc.details.setdefault('record_type', 'account')
@@ -987,7 +993,7 @@ def commercial(s, inp, old_header, old_revision, *, document_id, received=None):
         if old_revision and supplied is None:
             grids[family] = [dict(line_id=line['line_id'], family=family, memo=line['memo'],
                                   amount_minor_units=line['amount_minor_units'],
-                                  profile=LINE_FACTS[family].model_validate_json(line['line_snapshot']))
+                                  profile=_survivor_account(s, LINE_FACTS[family].model_validate_json(line['line_snapshot'])))
                              for line in kept]
             seen.update(line['line_id'] for line in kept)
             continue

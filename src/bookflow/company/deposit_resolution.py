@@ -42,8 +42,10 @@ def resolve(s, inp: InlineDocument, *, deposit_id):
 
 def resolve_account(s, selector, previous=None):
     raw=defaults._row(s.company,'account',selector,active=False)
-    if previous is not None and raw['id']==previous.id:
+    if previous is not None and raw['id']==previous.id and raw['active']:
         return previous
+    from bookflow.company import list_merges
+    raw=list_merges.resolve_saved(s.company,'account',dict(raw))  # a merged account saves as its survivor (R117)
     journals.active(raw,'account')
     return Account(**{k:raw[k] for k in ('id','name','full_name','number','type','system_role','active','currency')},
         normal_balance=defaults.NORMAL_BALANCE[raw['type']])

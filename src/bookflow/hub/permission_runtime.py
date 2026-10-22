@@ -132,6 +132,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.CUTOVER_REST_POLICY_VERSION: 'eec55b86544f824349e62bbdeb9c20a63c6873c4e6073f97ade1a3b0ebe9d084',
     c.ATTACHMENT_TEXT_POLICY_VERSION: 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284',
     c.TRANSACTION_FIND_POLICY_VERSION: '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1',
+    c.LIST_MERGE_POLICY_VERSION: '2d57379812813193f3996ed70ecb3562f6fed45b41917f539370a364653e4900',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -239,6 +240,7 @@ def known_catalog(version):
     from . import permission_cutover_rest_catalog
     from . import permission_attachment_text_catalog
     from . import permission_transaction_find_catalog
+    from . import permission_list_merge_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -272,6 +274,7 @@ def known_catalog(version):
         c.CUTOVER_REST_POLICY_VERSION: permission_cutover_rest_catalog,
         c.ATTACHMENT_TEXT_POLICY_VERSION: permission_attachment_text_catalog,
         c.TRANSACTION_FIND_POLICY_VERSION: permission_transaction_find_catalog,
+        c.LIST_MERGE_POLICY_VERSION: permission_list_merge_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -282,7 +285,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.TRANSACTION_FIND_POLICY_VERSION)
+    return known_catalog(c.LIST_MERGE_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

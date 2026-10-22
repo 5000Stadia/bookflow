@@ -363,10 +363,21 @@ def _row(db: Database, record_id: str) -> dict[str, Any]:
     return dict(found)
 
 
-def resolve_account(db: Database, selector: Any, *, by_number: bool = False) -> dict[str, Any]:
+def resolve_account(db: Database, selector: Any, *, by_number: bool = False, follow_merge: bool = False) -> dict[str, Any]:
     """An account by ID, then full name; with ``by_number``, then by account number, as the
     anchor's journal entry accepts a typed number. Without it, a selector that is some account's
-    number is refused with that account named, so the caller can pass its full name or ID."""
+    number is refused with that account named, so the caller can pass its full name or ID.
+
+    With ``follow_merge`` (a document line being saved), an account merged into another reads
+    as its survivor (R117): a memorized entry or a corrected old document naming it saves there."""
+    row = _resolve_account(db, selector, by_number=by_number)
+    if follow_merge and not row.get("active"):
+        from bookflow.company.list_merges import resolve_saved
+        return resolve_saved(db, "account", row)
+    return row
+
+
+def _resolve_account(db: Database, selector: Any, *, by_number: bool = False) -> dict[str, Any]:
     definition = get_list_definition("account")
     assert definition is not None
     try:
@@ -549,6 +560,22 @@ def _validate_references(
             )
 
 
+def _survivor_sql(kind: str, expr: str) -> str:
+    from bookflow.company.party_merges import survivor_sql
+    return survivor_sql(kind, expr)
+
+
+def _read_count(db: Database, account_id: str) -> int:
+    """Posting lines that read as this account: its own and those of accounts merged into it,
+    none for an account merged away (R117)."""
+    if not sa.inspect(db.conn).has_table("list_merges"):
+        return _transaction_count(db, account_id)
+    from bookflow.company.party_merges import members_sql
+    return int(db.conn.execute(sa.text(
+        f"SELECT count(*) FROM posting_lines WHERE account_id IN ({members_sql('account', ':a')})"),
+        {"a": account_id}).scalar_one())
+
+
 def _transaction_count(db: Database, account_id: str) -> int:
     if not sa.inspect(db.conn).has_table("posting_lines"):
         return 0
@@ -569,8 +596,11 @@ def balance_expression(db: Database):
     if not sa.inspect(db.conn).has_table("posting_lines"):
         return sa.literal("0").collate("bookflow_integer")
     lines = schema.posting_lines
+    # A merged account's lines count to its survivor, and a merged-away account reads as empty (R117).
+    from bookflow.company.party_merges import members_sql
+    reads_as = sa.text(f"posting_lines.account_id IN ({members_sql('account', 'accounts.id')})")
     net = sa.select(sa.func.coalesce(sa.func.bookflow_sum_int(lines.c.debit_minor_units - lines.c.credit_minor_units), "0")).where(
-        lines.c.account_id == schema.accounts.c.id).correlate(schema.accounts).scalar_subquery()
+        reads_as).correlate(schema.accounts).scalar_subquery()
     side = sa.case((schema.accounts.c.type.in_([kind for kind, normal in NORMAL_BALANCE.items() if normal == "credit"]), "credit"), else_="debit")
     return sa.func.bookflow_account_normal(net, side).collate("bookflow_integer")
 
@@ -1128,7 +1158,7 @@ def project_account(db: Database, row: Mapping[str, Any]) -> dict[str, Any]:
         row,
         home_currency=str(_company_info(db)["home_currency"]),
         child_count=child_count,
-        transaction_count=_transaction_count(db, str(row["id"])),
+        transaction_count=_read_count(db, str(row["id"])),
         net_balance=net_amount,
     )
 
@@ -1176,8 +1206,9 @@ def list_accounts(
             str(account_id): int(count)
             for account_id, count in db.conn.execute(
                 sa.text(
-                    "SELECT account_id, count(*) FROM posting_lines "
-                    "GROUP BY account_id"
+                    # A merged account's lines count to its survivor (R117).
+                    "SELECT " + _survivor_sql("account", "account_id") + ", count(*) FROM posting_lines "
+                    "GROUP BY 1"
                 )
             ).all()
         }

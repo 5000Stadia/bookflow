@@ -40,6 +40,9 @@ from pydantic import Field, field_validator, model_validator
 
 from bookflow.company import accounts as chart
 from bookflow.company import ledger_reports as ledger
+from bookflow.company.party_merges import survivor_sql
+# What a posting line's account reads as: its survivor when it was merged into another (R117).
+_ACCOUNT = survivor_sql("account", "l.account_id")
 
 
 UNASSIGNED = "Unassigned"
@@ -105,16 +108,16 @@ class IncomeTaxSummaryOutput(ledger.Page):
 # which bookflow_sum_int accepts exactly -- rather than arithmetic on it.
 _QUERY = f"""
 WITH amounts AS (
- SELECT l.account_id AS account_id,
+ SELECT {_ACCOUNT} AS account_id,
    bookflow_sum_int(CASE WHEN a.type IN {_in(CREDIT_NORMAL_TYPES)}
      THEN l.credit_minor_units - l.debit_minor_units
      ELSE l.debit_minor_units - l.credit_minor_units END) AS amount
  FROM posting_lines l
  JOIN posting_batches b ON b.id = l.batch_id
- JOIN accounts a ON a.id = l.account_id
+ JOIN accounts a ON a.id = {_ACCOUNT}
  WHERE b.effective_date >= :date_from AND b.effective_date <= :date_to
    AND a.type IN {_in(INCOME_TYPES)}
- GROUP BY l.account_id
+ GROUP BY 1
 ), tax_accounts AS (
  SELECT a.id, a.full_name, a.name, a.number, a.type, a.parent_id, a.active, a.full_name_key,
         a.tax_line, coalesce(m.amount, '0') AS amount
