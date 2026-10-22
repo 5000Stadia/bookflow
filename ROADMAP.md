@@ -187,7 +187,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R138 Find any transaction: search across every transaction type by name, number, amount or date range
 - [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
 - [ ] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
-- [~] R149 Vendor refunds received as deposits against vendor credits
+- [x] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment
 - [ ] R153 Very large deposits (over 200 rows) and billing part of a purchase order
