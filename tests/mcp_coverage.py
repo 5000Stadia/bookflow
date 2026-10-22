@@ -173,9 +173,13 @@ SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 's
 # surfaces over identical demo copies.
 COMMITTED_STOCK_COMMANDS = frozenset(('report open-sales-orders',))
 
+# R101 increment 4: invoicing from orders. Its witness invoices the demo order by its default, replays the key
+# and reads the order's billing through all four surfaces over identical demo copies.
+ORDER_INVOICING_COMMANDS = frozenset(('sales-order invoice', 'sales-order billing'))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | COMMITTED_STOCK_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | COMMITTED_STOCK_COMMANDS | ORDER_INVOICING_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -706,6 +710,7 @@ def execution_map():
     from tests.test_list_merge_surfaces import COMMANDS as LIST_MERGE_SURFACE_COMMANDS
     from tests.test_sales_order_surfaces import COMMANDS as SALES_ORDER_SURFACE_COMMANDS
     from tests.test_committed_stock_surfaces import COMMANDS as COMMITTED_STOCK_SURFACE_COMMANDS
+    from tests.test_order_invoicing_surfaces import COMMANDS as ORDER_INVOICING_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -785,6 +790,7 @@ def execution_map():
                    'tests/test_list_merge_surfaces.py::test_the_same_list_merge_through_python_cli_http_and_mcp' if cmd.name in LIST_MERGE_SURFACE_COMMANDS else  # all four
                    'tests/test_sales_order_surfaces.py::test_the_same_orders_through_python_cli_http_and_mcp' if cmd.name in SALES_ORDER_SURFACE_COMMANDS else  # all four
                    'tests/test_committed_stock_surfaces.py::test_the_same_open_orders_report_through_python_cli_http_and_mcp' if cmd.name in COMMITTED_STOCK_SURFACE_COMMANDS else  # all four
+                   'tests/test_order_invoicing_surfaces.py::test_the_same_order_invoice_through_python_cli_http_and_mcp' if cmd.name in ORDER_INVOICING_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

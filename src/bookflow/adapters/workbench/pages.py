@@ -2135,7 +2135,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                                  'from it does. Cancel part of a line with Cancelled quantity, or tick Close to cancel what is still open. '
                                  'Close the whole order (status closed, with a reason) when nothing more will ship.')
         if Billing.is_conversion(noun, verb):
-            described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent')]
+            described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent', 'all_open')]
             workflow_note = 'Bill remaining work, original-scope percentages, or per-line quantities and net amounts. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
         if noun == 'deposit' and verb == 'post':
             labels = {'document.deposit_to': 'Deposit to bank', 'document.date': 'Deposit date', 'document.number': 'Deposit number (automatic when blank)', 'document.memo': 'Memo', 'document.sources': 'Payments and sales receipts to bank', 'document.additional': 'Other money', 'document.cash_back.account': 'Cash back account', 'document.cash_back.amount': 'Cash back amount', 'document.cash_back.memo': 'Cash back memo'}

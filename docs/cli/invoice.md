@@ -38,6 +38,7 @@ The same example as complete `bookflow_run` arguments:
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
 | `operation_key` | `--operation-key` | string \| null | no | yes | null | Permanent retry identity; otherwise the context idempotency key is retained. |
 | `invoice` | `INVOICE` | string | yes | no | — | minimum length 1 |
+| `release_to_order` | `--release-to-order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. |
 
 ### Command and context options
 
@@ -1355,6 +1356,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -1367,7 +1369,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -1501,6 +1503,33 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `balance_due.amount` | string | yes | no | — | — |
 | `balance_due.currency` | string | yes | no | — | — |
 | `balance_due.minor_units` | integer | yes | no | — | — |
+| `order_tax` | object \| null | no | yes | null | An invoice made from a sales order: its tax per billed line and in total against the order's quoted tax for the part billed. Absent on every other sale. |
+| `order_tax.lines` | array[object] | yes | no | — | — |
+| `order_tax.lines[].line_id` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax` | object | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.amount` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.currency` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.lines[].invoice_tax` | object | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.amount` | string | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.currency` | string | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.lines[].difference` | object | yes | no | — | — |
+| `order_tax.lines[].difference.amount` | string | yes | no | — | — |
+| `order_tax.lines[].difference.currency` | string | yes | no | — | — |
+| `order_tax.lines[].difference.minor_units` | integer | yes | no | — | — |
+| `order_tax.quoted_tax` | object | yes | no | — | — |
+| `order_tax.quoted_tax.amount` | string | yes | no | — | — |
+| `order_tax.quoted_tax.currency` | string | yes | no | — | — |
+| `order_tax.quoted_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.invoice_tax` | object | yes | no | — | — |
+| `order_tax.invoice_tax.amount` | string | yes | no | — | — |
+| `order_tax.invoice_tax.currency` | string | yes | no | — | — |
+| `order_tax.invoice_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.difference` | object | yes | no | — | — |
+| `order_tax.difference.amount` | string | yes | no | — | — |
+| `order_tax.difference.currency` | string | yes | no | — | — |
+| `order_tax.difference.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -3100,6 +3129,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | — |
 | `invoice` | `INVOICE` | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `release_to_order` | `--release-to-order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. |
 | `operation_key` | `--operation-key` | string \| null | no | yes | null | Required when the invoice has active payment applications. Choose one unique key for this correction and reuse it for preview, save and retries. When supplied, also give a reason of 1–140 characters. |
 | `settlement_versions[].payment` | inside `--settlement-versions` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `settlement_versions[].expected_version` | inside `--settlement-versions` JSON array | integer | yes | no | — | minimum 1 |
@@ -3965,6 +3995,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -3977,7 +4008,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -4111,6 +4142,33 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `balance_due.amount` | string | yes | no | — | — |
 | `balance_due.currency` | string | yes | no | — | — |
 | `balance_due.minor_units` | integer | yes | no | — | — |
+| `order_tax` | object \| null | no | yes | null | An invoice made from a sales order: its tax per billed line and in total against the order's quoted tax for the part billed. Absent on every other sale. |
+| `order_tax.lines` | array[object] | yes | no | — | — |
+| `order_tax.lines[].line_id` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax` | object | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.amount` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.currency` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.lines[].invoice_tax` | object | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.amount` | string | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.currency` | string | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.lines[].difference` | object | yes | no | — | — |
+| `order_tax.lines[].difference.amount` | string | yes | no | — | — |
+| `order_tax.lines[].difference.currency` | string | yes | no | — | — |
+| `order_tax.lines[].difference.minor_units` | integer | yes | no | — | — |
+| `order_tax.quoted_tax` | object | yes | no | — | — |
+| `order_tax.quoted_tax.amount` | string | yes | no | — | — |
+| `order_tax.quoted_tax.currency` | string | yes | no | — | — |
+| `order_tax.quoted_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.invoice_tax` | object | yes | no | — | — |
+| `order_tax.invoice_tax.amount` | string | yes | no | — | — |
+| `order_tax.invoice_tax.currency` | string | yes | no | — | — |
+| `order_tax.invoice_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.difference` | object | yes | no | — | — |
+| `order_tax.difference.amount` | string | yes | no | — | — |
+| `order_tax.difference.currency` | string | yes | no | — | — |
+| `order_tax.difference.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -4355,6 +4413,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `invoice` | `INVOICE` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+| `release_to_order` | `--release-to-order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. |
 
 ### Command and context options
 
@@ -5215,6 +5274,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
@@ -5227,7 +5287,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].committed` | literal[false] | no | no | false | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
-| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity"] | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order", "time_activity", "sales_order"] | yes | no | — | — |
 | `source_effect.version_before` | integer | yes | no | — | — |
 | `source_effect.version_after` | integer | yes | no | — | — |
 | `source_effect.active_before` | boolean | yes | no | — | — |
@@ -5361,6 +5421,33 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `balance_due.amount` | string | yes | no | — | — |
 | `balance_due.currency` | string | yes | no | — | — |
 | `balance_due.minor_units` | integer | yes | no | — | — |
+| `order_tax` | object \| null | no | yes | null | An invoice made from a sales order: its tax per billed line and in total against the order's quoted tax for the part billed. Absent on every other sale. |
+| `order_tax.lines` | array[object] | yes | no | — | — |
+| `order_tax.lines[].line_id` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax` | object | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.amount` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.currency` | string | yes | no | — | — |
+| `order_tax.lines[].quoted_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.lines[].invoice_tax` | object | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.amount` | string | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.currency` | string | yes | no | — | — |
+| `order_tax.lines[].invoice_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.lines[].difference` | object | yes | no | — | — |
+| `order_tax.lines[].difference.amount` | string | yes | no | — | — |
+| `order_tax.lines[].difference.currency` | string | yes | no | — | — |
+| `order_tax.lines[].difference.minor_units` | integer | yes | no | — | — |
+| `order_tax.quoted_tax` | object | yes | no | — | — |
+| `order_tax.quoted_tax.amount` | string | yes | no | — | — |
+| `order_tax.quoted_tax.currency` | string | yes | no | — | — |
+| `order_tax.quoted_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.invoice_tax` | object | yes | no | — | — |
+| `order_tax.invoice_tax.amount` | string | yes | no | — | — |
+| `order_tax.invoice_tax.currency` | string | yes | no | — | — |
+| `order_tax.invoice_tax.minor_units` | integer | yes | no | — | — |
+| `order_tax.difference` | object | yes | no | — | — |
+| `order_tax.difference.amount` | string | yes | no | — | — |
+| `order_tax.difference.currency` | string | yes | no | — | — |
+| `order_tax.difference.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 

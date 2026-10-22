@@ -593,6 +593,23 @@ invoice made from it does. Its show output gives each line `order.ordered`, `inv
   by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
 - `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
 
+## Billing what shipped on an order
+
+"Bill Acme for what shipped today" is `sales-order invoice <number> --expected-version <v>
+--conversion-key <new key> --date <today>`. With no selection it bills what can ship: each
+stocked line up to what is available to this order (on hand less what other orders and work
+orders commit), and the order's other open lines with it. If nothing can ship it refuses and lists
+each line's open quantity and availability: choose `--all-open true` (bill every open quantity
+whatever the stock), `line_ids` or `selections` (a quantity per line, naming the line or its
+item). The invoice is taxed at its own date's rates; `order_tax` shows the difference from the
+order's quote. Money held on the order or its estimate is applied unless `apply_prepayment` is
+false. A retry with the same key returns the same invoice.
+
+Voiding, deleting or updating away an order-made invoice line reopens that quantity on the order
+by default; pass `release_to_order cancel` to cancel it on the order instead. The preview says
+which. A credit memo never changes the order. `invoice post`, `sales-receipt post` and
+`payment receive` warn when the customer has an open order and give the command to use instead.
+
 ## What is available to sell
 
 `report stock-status` and `item show` give each stocked item its quantity on hand, committed (the

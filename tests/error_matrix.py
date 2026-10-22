@@ -2004,3 +2004,15 @@ MATRIX['report open-sales-orders'] = {
     'E_RECORD_NOT_FOUND': 'unknown customer or item filter',
     'E_QUERY_STALE': 'company audit changed between pages',
 }
+
+# Invoicing from sales orders (R101 increment 4).
+MATRIX['sales-order invoice'] = {
+    **_SALES_WRITE_ERRORS, **_WORK_WRITE_ERRORS,
+    'E_VALIDATION': 'nothing on the order can ship by default (each line\'s open quantity and availability are given), a percent or net-amount selection, or an item that no single open line carries',
+    'E_WORK_DEPENDENCY': 'the order is voided, closed or inactive, a selected line is already invoiced, or a quantity exceeds what is open',
+    'E_CONVERSION_KEY_REUSED': 'permanent key already names a different operational or financial intent',
+}
+MATRIX['sales-order billing'] = {
+    'E_RECORD_NOT_FOUND': 'order absent from selected company',
+    'E_QUERY_STALE': 'company audit changed between linked destination pages',
+}

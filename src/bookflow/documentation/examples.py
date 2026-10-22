@@ -1292,3 +1292,10 @@ EXAMPLES['estimate sales-order'] = Example(
 # R102: what customers have ordered and not yet received, by item, with on hand, available and on order.
 EXAMPLES['report open-sales-orders'] = Example(
     'bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json', {'by': 'item', 'date_to': '2026-10-31'})
+# R101 increment 4: bill what can ship on an order; retries with the same key return the same invoice.
+EXAMPLES['sales-order invoice'] = Example(
+    'bookflow sales-order invoice DEMO-SO-1 --expected-version 2 --conversion-key "riverside-ship-1" --date 2026-10-22'
+    ' --company "Demo Plumbing Co" --reason "Shipped what we had" --json',
+    {'sales_order': 'DEMO-SO-1', 'expected_version': 2, 'conversion_key': 'riverside-ship-1', 'date': '2026-10-22'})
+EXAMPLES['sales-order billing'] = Example('bookflow sales-order billing DEMO-SO-1 --company "Demo Plumbing Co" --json',
+                                          {'sales_order': 'DEMO-SO-1'})

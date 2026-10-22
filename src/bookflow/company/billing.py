@@ -45,11 +45,17 @@ def source_selection(s, inp, kind):
         dependency('accept the estimate before billing', source_id=header['id'])
     if kind != 'estimate' and header['status'] == 'cancelled':
         dependency('cancelled work cannot be billed', source_id=header['id'])
+    if kind == 'sales_order' and header['status'] != 'open':
+        dependency('a closed sales order cannot be invoiced; reopen it first', source_id=header['id'])
     rev = work.revision(s, header)
     lines = work.saved_lines(s, rev)
     identities = query.root_identities(s, header)
-    policy.check_selection(s, inp, header, rev, lines, identities)
     from bookflow.company.billing_selection import select
+    if kind == 'sales_order':
+        # An order bills by quantity, by its own default; the progress preference is not consulted.
+        from bookflow.company.sales_orders import billing_choice
+        return header, rev, select(s, billing_choice(s, inp, header, rev, lines, identities), header, rev, lines, identities)
+    policy.check_selection(s, inp, header, rev, lines, identities)
     return header, rev, select(s, inp, header, rev, lines, identities)
 
 
@@ -173,7 +179,7 @@ def resolved_line(lf, proof=None):
     return resolved
 
 
-def billed_lines(s, rev, selected, profile):
+def billed_lines(s, rev, selected, profile, retax=None):
     """The sale a selection bills, in quote order, and what each line was billed from.
 
     Selected lines are billed as they always were. A quoted subtotal comes along when any
@@ -230,8 +236,11 @@ def billed_lines(s, rev, selected, profile):
             entry = resolved_line(item.facts, item.proof) if item.proof else resolved_line(item.facts)
         else:
             continue
-        entry['adjustment_taxable'] = bool(profile.preferences.sales_tax_enabled and lf.profile.tax_code is not None
-                                           and lf.profile.tax_code.taxable and not exempt)
+        if retax is not None:
+            retax(entry, lf)  # a sales order: taxed as an ordinary invoice of its own date
+        code = entry['profile'].tax_code
+        entry['adjustment_taxable'] = bool(profile.preferences.sales_tax_enabled and code is not None
+                                           and code.taxable and not exempt)
         placed[index] = len(lines) + 1
         lines.append(entry)
         sources.append(chosen.get(line['id']))
@@ -245,7 +254,12 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     warnings = posting_eligibility(s, rev, selected)
     profile, extra = financial_profile(s, inp, document_type, rev)
     warnings += extra
-    lines, sources = billed_lines(s, rev, selected, profile)
+    retax = None
+    if kind == 'sales_order':
+        from bookflow.company import sales_orders
+        profile = sales_orders.invoice_day_profile(s, rev, profile)
+        retax = sales_orders.retax(s, profile)
+    lines, sources = billed_lines(s, rev, selected, profile, retax)
     planned, extra = work._custom_plan(s, inp, document_type, document_id, carry=rev)
     warnings += extra
     number, sequence = effects.allocate(s, document_type, inp.number, document_id)
@@ -355,6 +369,10 @@ def prepare(s, ctx, inp, kind, destination):
     sale.preview.revision.billing_sources = query.sale_source_output(s, rev['id'], allocations)
     sale.preview.source_effect = source_effect(source, source_rev, pending_work['work_revisions'][0], source['version'])
     sale.preview.source_current = source_current(current)
+    if kind == 'sales_order':
+        from bookflow.company.sales_orders import quoted_tax_difference
+        sale.preview.order_tax = quoted_tax_difference(
+            selected, [profiles[envelope['id']]['tax_minor_units'] for envelope in billed], source_rev['currency'])
     from bookflow.company.billing_validation import validate
     validate(sale, s, ctx)
     from bookflow.company.billing_progress import projection

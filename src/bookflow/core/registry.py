@@ -313,7 +313,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.payment_cmds": ["payment", "payment selection", "invoice", "application", "payment operation", "payment preview", "payment settlement"],
     "bookflow.commands.work_cmds": ["proposal", "estimate", "work-order", "sales-order"],
     "bookflow.commands.time_cmds": ["time-activity"],
-    "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity"],
+    "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity", "sales-order"],
     "bookflow.commands.register_cmds": ["register"],
     "bookflow.commands.check_cmds": ["check", "card-charge", "card-credit"],
     "bookflow.commands.credit_memo_cmds": ["credit-memo"],
