@@ -1177,3 +1177,5 @@ from bookflow.company.payment_bounce_schema import define_tables as _define_paym
 globals().update(_define_payment_bounce_tables(metadata, _column, _table))
 from bookflow.company.vendor_1099_opening_schema import define_tables as _define_vendor_1099_opening_tables
 globals().update(_define_vendor_1099_opening_tables(metadata, _column, _table))
+from bookflow.company.item_conversion_schema import define_tables as _define_item_conversion_tables
+globals().update(_define_item_conversion_tables(metadata, _column, _table))

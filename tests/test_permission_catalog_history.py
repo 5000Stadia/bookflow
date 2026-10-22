@@ -58,6 +58,7 @@ ACCEPTED = {
     'cutover-rest-v1': (527, 'eec55b86544f824349e62bbdeb9c20a63c6873c4e6073f97ade1a3b0ebe9d084'),
     'attachment-text-v1': (528, 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284'),
     'transaction-find-v1': (529, '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1'),
+    'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -109,6 +110,7 @@ CHAIN_ADDITIONS = {
     'cutover-rest-v1': {'vendor 1099-opening'},
     'attachment-text-v1': {'attachment text'},
     'transaction-find-v1': {'transaction find'},
+    'item-convert-v1': {'item convert'},
 }
 
 _ANCESTOR_EDIT = """

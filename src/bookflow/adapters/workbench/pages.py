@@ -197,6 +197,9 @@ def runtime_custom_field_scope(noun, verb, cmd, definition):
     if noun in ('journal', 'register', *Document.MONEY_OUT) and verb in ('post', 'update'):
         return 'journal_entry'
     if definition is not None and definition.runtime_field_provider == 'custom-fields':
+        # `item convert` takes no custom fields: the item keeps its own.
+        if noun == 'item' and verb == 'convert':
+            return None
         return definition.record_type
     return None
 
@@ -1486,6 +1489,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     or (command.verb == "deactivate" and not out.get("active"))
                 )
             ]
+        if command_noun == "item" and (out.get("type") not in ("non_inventory_part", "other_charge")
+                                       or out.get("charge_percent") is not None):
+            # Only a non-inventory part or a fixed other charge converts to an inventory part (R154).
+            verbs = [command for command in verbs if command.verb != "convert"]
         if command_noun == "agent" and not out.get("active"):
             # A deactivated agent can only be brought back; everything else would refuse.
             verbs = [command for command in verbs if command.verb == "activate"]
@@ -1997,6 +2004,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # the form. Seed it, or the pinned field renders empty on a page opened from the
             # record it is about.
             originals[_record_selector(cmd, noun)] = record_id
+        if record_id is not None and cmd.name == "item convert":
+            # Opened from the item's page: the item is pinned and the one target preselected.
+            originals.update({"item": record_id, "to": originals.get("to") or "inventory"})
         if company_id is not None and record_id is not None and cmd.name == "other-name convert":
             try:
                 source = run(request, "other-name show", {"other_name": record_id}, company_id)

@@ -1180,3 +1180,7 @@ EXAMPLES["attachment text"] = Example(f'bookflow attachment text {ID} --company 
 EXAMPLES["transaction find"] = Example(
     'bookflow transaction find --types \'["check"]\' --name Regional --amount 184.00 --company "Demo Plumbing Co" --json',
     {"types": ["check"], "name": "Regional", "amount": "184.00"})
+# R154: a non-inventory part converted to an inventory part, one way. `--dry-run` is the preview.
+EXAMPLES["item convert"] = Example(
+    'bookflow item convert "Copper Coupling" --to inventory --reason "We stock couplings now"'
+    ' --company "Demo Plumbing Co" --json', {"item": "Copper Coupling", "to": "inventory"})

@@ -649,6 +649,14 @@ agent with `E_PERMISSION`. When the difference will not reach zero, leave the dr
 and tell the owner the account, the statement date and the remaining difference from
 `reconcile preview`.
 
+## An item that should have been stocked
+
+`item convert ITEM --to inventory` turns a non-inventory part or other charge into an inventory
+part. It is one-way and a person's act: an agent is refused with `E_PERMISSION`, so tell the
+owner which item and why, and suggest `--dry-run` to see the accounts it will carry. Nothing
+posted changes; stock starts at 0 on the conversion date and is counted with `inventory adjust`.
+After a conversion, no stock line for that item may be dated before the conversion date.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with
