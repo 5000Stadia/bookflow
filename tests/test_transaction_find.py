@@ -6,6 +6,7 @@ account, in any mix; voided documents found and marked, deleted ones not; a fami
 may not read left out and named; pages that join up; and the same answer on all four surfaces.
 """
 import json
+import re
 
 import anyio
 import pytest
@@ -165,3 +166,39 @@ def test_the_same_find_through_python_cli_http_and_mcp(root, tmp_path):
         assert found['matching_total'] == 1 and found['items'][0]['amount']['amount'] == '184.00', surface
         assert refused['code'] == 'E_RECORD_NOT_FOUND', surface
     assert len({repr(found['items']) for found, _ in results.values()}) == 1
+
+
+def test_the_find_page_is_in_the_header_and_opens_each_document(root):
+    """The workbench page: reached from the header and the menu, the filters as query parameters,
+    each row linking to its document's own page, a refusal shown in words."""
+    from fastapi.testclient import TestClient
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.config import os_login
+    from bookflow.core.context import client_version
+    login, password = os_login(), 'correct-horse-battery'
+    library = bookflow.connect(data_root=str(root))
+    library.run('user set-password', {'username': login, 'password': password})
+    company_id = library.company.list()['items'][0]['company_id']
+    del library
+    handle = start_serving(root, client_version(), bind='127.0.0.1:0', secure_cookies=False, publish_descriptor=False)
+    try:
+        browser = TestClient(handle.app)
+        assert browser.post('/login', json={'username': login, 'password': password}).status_code == 200
+        home = browser.get(f'/c/{company_id}/').text
+        assert home.count(f'href="/c/{company_id}/find"') == 2  # the header link and the menu entry
+        empty = browser.get(f'/c/{company_id}/find')
+        assert empty.status_code == 200 and 'id="find-filters"' in empty.text and 'id="find-lines"' not in empty.text
+        page = browser.get(f'/c/{company_id}/find', params=[('name', 'Regional'), ('types', 'check'),
+                                                            ('include_voided', '0'), ('include_voided', '1')]).text
+        assert '<strong>2</strong> transactions found for Regional Parts' in page
+        links = re.findall(rf'href="(/c/{company_id}/check/[0-9A-Z]{{26}})"', page)
+        assert len(links) == 2 and 'value="check" checked' in page
+        assert browser.get(links[0]).status_code == 200
+        paged = browser.get(f'/c/{company_id}/find', params={'limit': '1', 'include_voided': '0'}).text
+        assert 'data-status="void"' not in paged
+        refused = browser.get(f'/c/{company_id}/find', params={'name': 'Nobody At All'}).text
+        assert 'id="find-error"' in refused and 'Nobody At All' in refused
+        follow = browser.get(f'/c/{company_id}/find', params={'memo': 'kit'}).text
+        assert 'id="find-next"' not in follow and 'data-type="purchase_order"' in follow
+    finally:
+        handle.stop()

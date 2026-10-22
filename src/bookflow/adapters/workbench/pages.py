@@ -34,6 +34,7 @@ from bookflow.adapters.workbench import inventory as Stock
 from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import transaction_detail as Detail
 from bookflow.adapters.workbench import missing_checks as MissingChecks
+from bookflow.adapters.workbench import find_page as FindPage
 from bookflow.adapters.workbench import report_export as Export
 from bookflow.adapters.workbench import report_print as ReportPrint
 from bookflow.adapters.workbench import report_page as ReportPage
@@ -674,6 +675,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return result
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
+    FindPage.install(app, host=host, run=run, render=render, page_error=page_error)
 
     def result_names(request: Request, company_id: str | None, company_view: dict[str, Any] | None):
         """Name the records a read result points at, through each record's own `show`."""
