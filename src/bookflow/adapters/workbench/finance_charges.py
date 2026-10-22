@@ -35,7 +35,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 error = e.to_dict()
         return render('finance_charges.html', request, status_code=status_code, company=company, company_id=company['company_id'],
                       preview=preview, off=off, result=result, error=error, date=date or (preview or {}).get('date', ''),
-                      values=values or {})
+                      values=values or {}, can_set=role_allows('company update', company, credential(request)))
 
     @app.get('/c/{company_id}/finance-charge/assess')
     def finance_charge_page(request: Request, company_id: str):

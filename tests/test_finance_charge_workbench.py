@@ -37,6 +37,7 @@ def test_the_assess_finance_charges_screen_charges_the_marked_customers(hosted):
     # Off until set: the screen says so and points at the settings, where the seven preferences are grouped.
     off = browser.get(page, headers=HEADERS)
     assert off.status_code == 200 and "data-finance-charge-off" in off.text
+    assert f"/c/{hosted.company_id}/company/self/update" in off.text
     settings = browser.get(f"/c/{hosted.company_id}/company/self/update", headers=HEADERS)
     assert settings.status_code == 200 and "Finance charges" in settings.text
     for name in ("finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_grace_days", "finance_charge_account_id",

@@ -8,7 +8,7 @@
 </div>{% endif %}
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
 {% if off %}<section class="workspace-card" data-finance-charge-off>
-<p>Finance charges are off. Set the annual interest rate, minimum charge, grace period and the finance charge account in the company settings first{% if company.access in ('admin', 'hub_admin') %}: <a href="/c/{{ company_id }}/company/self/update">Company settings</a>{% else %}; a company administrator sets them{% endif %}.</p>
+<p>Finance charges are off. Set the annual interest rate, minimum charge, grace period and the finance charge account in the company settings first{% if can_set %}: <a href="/c/{{ company_id }}/company/self/update">Company settings</a>{% else %}; a company administrator sets them{% endif %}.</p>
 </section>{% endif %}
 <form method="post" action="/c/{{ company_id }}/finance-charge/assess">
 <section class="workspace-card" aria-label="Assessment">
