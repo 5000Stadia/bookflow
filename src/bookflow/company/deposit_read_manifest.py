@@ -1308,6 +1308,7 @@ FIELDS = {
         'unit_id': ('str', True, False, 'dependency_field'),
         'quantity_microunits': ('int', False, False, 'dependency_field'),
         'completed_quantity_microunits': ('int', False, False, 'dependency_field'),
+        'cancelled_quantity_microunits': ('int', False, False, 'dependency_field'),
         'unit_factor_nanounits': ('int', False, False, 'dependency_field'),
         'base_quantity_microunits': ('int', False, False, 'dependency_field'),
         'unit_price_minor_units': ('int', True, False, 'dependency_field'),

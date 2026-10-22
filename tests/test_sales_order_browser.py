@@ -55,17 +55,21 @@ def test_find_read_enter_and_print_a_sales_order(register_browser):
         assert cells == ['10'], cells
         assert 'Billable' not in b.evaluate('document.querySelector(".document-lines").innerText')
         assert _fits(b), width
-    printed = b.evaluate(f'fetch("/c/{company}/sales-order/{order["id"]}/print").then(r => r.headers.get("content-type"))')
-    assert printed.startswith('application/pdf')
+    # The print link is the order's own PDF route (served and read in tests/test_document_print.py).
+    hrefs = b.evaluate('[...document.querySelectorAll("a")].map(a => a.getAttribute("href") || "")')
+    assert f'/c/{company}/sales-order/{order["id"]}/print' in hrefs
 
     b.viewport(1440, 900)
-    b.navigate(base)
-    b.wait_for('document.readyState === "complete"')
+    b.navigate(base + '/_group/customers')
+    b.wait_for('document.body.innerText.includes("Sales orders")')
     hrefs = b.evaluate('[...document.querySelectorAll("a")].map(a => a.getAttribute("href") || "")')
     assert f'/c/{company}/sales-order' in hrefs and f'/c/{company}/sales-order/create' in hrefs
 
     b.navigate(base + '/sales-order/create')
     b.wait_for('document.readyState === "complete"')
+    # A line's controls appear once a line is added.
+    b.evaluate('[...document.querySelectorAll("button")].find(e => e.innerText.trim() === "Add entry").click()')
+    b.wait_for('[...document.querySelectorAll("[name]")].some(e => (e.getAttribute("name") || "").endsWith(":item"))')
     names = b.evaluate('[...document.querySelectorAll("[name]")].map(e => e.getAttribute("name"))')
     assert any(name.endswith(':cancelled_quantity') for name in names), names
     assert any(name.endswith(':close') for name in names), names
@@ -74,4 +78,5 @@ def test_find_read_enter_and_print_a_sales_order(register_browser):
     for width in (1440, 390):
         b.viewport(width, 900)
         assert _fits(b), width
-    assert run('sales-order.query', {'limit': 10})['count'] == 1
+    # Nothing was saved from the form: the orders are the demo's and this test's own.
+    assert {row['number'] for row in run('sales-order.query', {'limit': 10})['items']} <= {'SO-77', 'DEMO-SO-1'}

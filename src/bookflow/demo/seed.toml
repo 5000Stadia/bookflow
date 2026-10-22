@@ -2534,4 +2534,4 @@ input = { sales_order = "${demo_sales_order.id}", expected_version = 1, lines = 
 command = "work-order create"
 capture = "demo_stocked_work_order"
 reason = "Replace two shutoff valves on site"
-input = { customer = "${customer.id}", date = "2026-10-21", number = "DEMO-WORK-WO-STOCK", title = "Replace two shutoff valves", lines = [{ item = "${inventory_item.id}", quantity = "2" }, { item = "${service_item.id}", quantity = "1" }] }
+input = { customer = "${customer.id}", date = "2026-10-21", number = "DEMO-SO-WO-1", title = "Replace two shutoff valves", lines = [{ item = "${inventory_item.id}", quantity = "2" }, { item = "${service_item.id}", quantity = "1" }] }
