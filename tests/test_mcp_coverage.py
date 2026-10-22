@@ -50,7 +50,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +18 budgets, budget and comparison reports, memorized reports (R109).
     # +8 prepayment receive, attach, apply, unapply, refund, show, query and report customer-prepayments (R124).
     # +4 account merge, account unmerge, item merge, item unmerge (R117, second part).
-    assert len(rows) == 564
+    # +2 customer-credit transfer, customer-credit transfer-void (R148).
+    assert len(rows) == 566
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -244,7 +245,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3061 -> 3093 (R124), measured: the eight prepayment commands, 32 nodes -- the null branches of their optional
     # fields: receive 9, attach 1, apply 5, refund 7, show 3, query 5, report customer-prepayments 2 (unapply none).
     # apply_prepayment on the invoice conversions is a plain boolean and adds none. No new variant kind; the groups stay 26.
-    assert sum(len(group["paths"]) for group in mapped)==3093
+    # 3093 -> 3101 (R148), measured: payment receive's optional discount_class wherever the receive input is carried,
+    # and customer-credit transfer's optional credit_memo, payment, memo, expected_facts_fingerprint and apply_to
+    # amount -- their null branches. underpayment is a defaulted literal and adds none. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3101
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
