@@ -486,6 +486,34 @@ the ones to charge (`"customers": [{"customer": "Acme"}, {"customer": "Birch", "
 Each charge is a statement charge dated that day; assessing the same date again charges nobody twice.
 To take one back, `statement-charge void` it.
 
+## How are we doing against budget?
+
+A budget is a named plan for one fiscal year: an amount per account per month, entered positive for
+income and expense alike, and it never posts. For "how are we doing against budget this quarter?",
+find the budget (`budget list --fiscal-year 2026`) and read budget vs actual for the quarter's dates on
+the company's basis; each period has Actual, Budget, $ Over Budget and % of Budget, then a Total group,
+and `totals.net_income` answers the headline question.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "report budget-vs-actual",
+ "input": {"budget": "Plan 2026", "date_from": "2026-07-01", "date_to": "2026-09-30", "columns": "month"}}
+```
+
+Actual is `report profit-and-loss` for the same dates, account for account; a month only partly in the
+dates has its budget prorated by days. Report the accounts furthest over or under in money, not just
+percent: % of Budget is blank where nothing was budgeted. A customer or class budget compares only the
+customers or classes it budgets (name one with `customer` or `class_id`). For "compared with last year",
+use `report profit-and-loss-comparison --compare previous_year` (or `previous_period`), and
+`report balance-sheet-comparison` for balances.
+
+Building a budget is a person's plan, so an agent enters amounts only when asked: `budget create
+--from-actuals` copies last year month by month, `budget fill` sets a row from a starting amount with a
+monthly change (`change` or `change_percent`, compounding) or copies a month across, `budget set` sets
+months by hand, `budget clear` empties a row or the whole budget. To keep a report someone runs
+often, `memorized-report create` with a `date_range` such as `this_fiscal_quarter`, and
+`memorized-report run` it: the range is worked out again on every run.
+
 ## Customer-work vocabulary
 
 Use the same business nouns in conversation and commands:
