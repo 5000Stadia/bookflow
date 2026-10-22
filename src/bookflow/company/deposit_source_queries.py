@@ -45,13 +45,34 @@ def candidates(s,inp:SourceFilter,*,binding=None,ctx=None):
     values=[];facts=[]
     # Coarse producer classification is not a completeness predicate. The owning
     # adapter proves UF partition; every candidate is authorized before its decode.
-    headers=s.company.conn.execute(sa.select(c.transactions).where(c.transactions.c.type.in_(('payment','sales_receipt'))).order_by(c.transactions.c.id)).mappings()
+    headers=list(s.company.conn.execute(sa.select(c.transactions).where(c.transactions.c.type.in_(('payment','sales_receipt'))).order_by(c.transactions.c.id)).mappings())
+    # One admission of every candidate's whole graph at once: when it passes, each candidate's
+    # own graph (a subset) passes too. Only a refusal falls back to admitting one by one, so a
+    # receipt this member may not see is still left out on its own. Per-receipt admission walked
+    # each banked receipt's whole deposit, which made a month of checks take minutes.
+    try:
+        admit(s,ctx,binding,sources=tuple(h['id'] for h in headers));each=False
+    except BookflowError as error:
+        if error.code!='E_PERMISSION':raise
+        each=True
+    claims=deposit_dependencies.active_claims(s,[h['id'] for h in headers])
+    # Read the receipts that can still be listed in bounded batches, not one by one.
+    graphs={} if each else deposit_sources.graph_many(s,[h['id'] for h in headers
+        if not (claims.get(h['id']) and claims[h['id']]['transaction_id']!=inp.for_deposit)])
+    try:uf=deposit_sources.undeposited_funds(s) if graphs else None
+    except BookflowError as error:
+        if error.code!='E_DEPOSIT_SOURCE_INELIGIBLE':raise
+        graphs,uf={},None   # each read below answers ineligible on its own, as before
     for header in headers:
-        try:admit(s,ctx,binding,sources=(header['id'],))
-        except BookflowError as error:
-            if error.code=='E_PERMISSION':continue
-            raise
-        try:source=deposit_sources.load(s,header['id'])
+        if each:
+            try:admit(s,ctx,binding,sources=(header['id'],))
+            except BookflowError as error:
+                if error.code=='E_PERMISSION':continue
+                raise
+        claim=claims.get(header['id'])
+        if claim and claim['transaction_id']!=inp.for_deposit:continue   # banked elsewhere: never listed
+        try:source=(deposit_sources.project(graphs[header['id']],uf_account=uf,home_currency=s.company_info_row['home_currency'])
+                    if header['id'] in graphs else deposit_sources.load(s,header['id']))
         except BookflowError as error:
             if error.code=='E_DEPOSIT_SOURCE_INELIGIBLE':continue
             raise
@@ -61,7 +82,6 @@ def candidates(s,inp:SourceFilter,*,binding=None,ctx=None):
         method=profile.payment_method
         actual_method=s.company.conn.execute(sa.select(c.payment_methods).where(c.payment_methods.c.id==method.id)).mappings().one() if method else None
         kind=actual_method['kind'] if actual_method else None
-        claim=deposit_dependencies.active_claim(s,header['id'])
         reasons=[]
         if source.receipt_date>inp.date:reasons.append('date')
         if not current['active'] or (actual_method and not actual_method['active']):reasons.append('inactive')

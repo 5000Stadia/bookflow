@@ -158,6 +158,26 @@ class ReceiptBillingInput(_Input):
             raise ValueError('give unit_cost or amount, not both')
         return self
 
+class OrderLineSelection(_Input):
+    """Part of one purchase order line this bill takes (the anchor's Enter Bills against an order).
+
+    ``line`` is the ordered line's id from `purchase-order show`, or its 1-based position on the
+    order. An item line is taken by ``quantity`` (omit it to take everything still open on the
+    line), billed at the ordered rate unless ``unit_cost`` gives what the vendor charged. An
+    account line is taken by ``amount`` (omit it to take what is still open on the line).
+    """
+    line: Annotated[str, Field(min_length=1, max_length=64)]
+    quantity: Quantity | None = None
+    unit_cost: str | SalesMoneyInput | None = None
+    amount: str | SalesMoneyInput | None = None
+
+    @model_validator(mode='after')
+    def basis(self):
+        if self.amount is not None and (self.quantity is not None or self.unit_cost is not None):
+            raise ValueError('an item line is taken by quantity (and unit_cost); an account line by amount')
+        return self
+
+
 class ReceiptBillingOutput(ReceiptBillingInput):
     bill_line_id: str
     item: Reference
@@ -180,13 +200,19 @@ class BillPostInput(_BillFields):
     a line is saying what arrived, and filling the other grid in from the order would bill for
     goods nobody said came. To change one grid and keep the other, send both.
 
-    The order is closed and permanently recorded as consumed by this bill -- in full, even when
-    this bill covers only part of what was ordered. There is no remaining quantity.
+    Without ``order_lines`` the order is closed and permanently recorded as consumed by this
+    bill, in full. With ``order_lines`` the bill takes only those parts of the order: each line
+    tracks what has been received and billed, the rest stays open for later bills or receipts,
+    and voiding the bill gives its part back.
     """
 
     date: _Date
     vendor: _Selector | None = None
     purchase_order: _Selector | None = None
+    order_lines: list[OrderLineSelection] | None = Field(
+        default=None, min_length=1, max_length=200,
+        description='Bill part of the order: the ordered lines this bill takes, each with how much. '
+                    'Requires purchase_order; the bill is exactly these lines.')
     receipts: list[ReceiptBillingInput] | None = Field(default=None, min_length=1, max_length=100)
     expenses: Expenses | None = None
     items: Items | None = None
@@ -198,6 +224,12 @@ class BillPostInput(_BillFields):
         # requirement, because an order may have been placed entirely for items.
         if self.receipts is not None and (self.purchase_order is not None or self.items):
             raise ValueError("receipt selections cannot also receive new items or consume a whole order")
+        if self.order_lines is not None:
+            if self.purchase_order is None:
+                raise ValueError('order_lines take part of a purchase order; name it in purchase_order')
+            if self.expenses is not None or self.items is not None:
+                raise ValueError('a bill taking order_lines is exactly those lines; '
+                                 'enter other charges on a separate bill')
         if self.purchase_order is None and self.receipts is None:
             if self.vendor is None:
                 raise ValueError('vendor is required unless the bill names a purchase order')

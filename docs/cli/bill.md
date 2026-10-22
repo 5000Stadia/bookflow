@@ -778,6 +778,10 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `vendor` | `--vendor` | string \| null | no | yes | null | — |
 | `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
+| `order_lines[].line` | inside `--order-lines` JSON array | string | yes | no | — | minimum length 1; maximum length 64 |
+| `order_lines[].quantity` | inside `--order-lines` JSON array | string \| null | no | yes | null | — |
+| `order_lines[].unit_cost` | inside `--order-lines` JSON array | string \| object \| null | no | yes | null | — |
+| `order_lines[].amount` | inside `--order-lines` JSON array | string \| object \| null | no | yes | null | — |
 | `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
 | `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
 | `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |

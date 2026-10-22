@@ -907,6 +907,10 @@ EXAMPLES.update({
         f'bookflow purchase-order void {ID} --expected-version 1 --company "Demo Plumbing Co"'
         ' --reason "The vendor cannot supply it" --json',
         {"purchase_order": ID, "expected_version": 1}),
+    "purchase-order close-lines": Example(
+        f'bookflow purchase-order close-lines {ID} --lines \'["1"]\' --company "Demo Plumbing Co"'
+        ' --reason "The rest is never coming" --json',
+        {"purchase_order": ID, "lines": ["1"]}),
     "purchase-order query": Example(
         'bookflow purchase-order query --vendor "Northside Supply" --open-only --limit 25'
         ' --company "Demo Plumbing Co" --json',

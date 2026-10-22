@@ -154,12 +154,15 @@ def validate_current_sources(effect,s,*,replacing_deposit=None):
     validate(effect)
     require(effect.inverse_of is None)
     journals.open_dates(s, [effect.intent.date])
+    from bookflow.company import deposit_dependencies
+    identities=[row.source.transaction_id for row in effect.intent.sources]
+    loaded=deposit_sources.load_many(s,identities)
+    claims=deposit_dependencies.active_claims(s,identities)
     for row in effect.intent.sources:
-        actual=deposit_sources.load(s,row.source.transaction_id)
+        actual=loaded[row.source.transaction_id]
         if actual.model_dump(mode='json') != row.source.model_dump(mode='json'):
             raise BookflowError('E_PREVIEW_STALE', details={'reason':'deposit_source'})
-        claimed=s.company.conn.execute(sa.select(c.deposit_current_memberships).where(
-            c.deposit_current_memberships.c.source_transaction_id==actual.transaction_id)).mappings().first()
+        claimed=claims.get(actual.transaction_id)
         if claimed is not None and claimed['transaction_id']!=replacing_deposit:
             raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED')
 

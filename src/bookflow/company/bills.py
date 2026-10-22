@@ -624,8 +624,10 @@ def order_ids(s, transaction_ids):
     if not identifiers:
         return {}
     t = c.purchase_order_conversions
-    return {row['destination_transaction_id']: row['source_document_id']
-            for row in effects.rows(s, t, t.c.destination_transaction_id.in_(identifiers))}
+    from bookflow.company.purchase_order_billing import order_for_bill
+    return {**order_for_bill(s, identifiers),
+            **{row['destination_transaction_id']: row['source_document_id']
+               for row in effects.rows(s, t, t.c.destination_transaction_id.in_(identifiers))}}
 
 
 def early_discount(revision, profile, settlement):
@@ -1143,7 +1145,14 @@ def _stock_entries(pending, profile):
 
 
 def prepare(s, ctx, inp, operation):
-    source, entry = _from_order(s, inp, operation)
+    from bookflow.company import purchase_order_billing as order_billing
+    partial = None
+    if operation == 'post' and getattr(inp, 'order_lines', None) is not None:
+        # Part of an order: the order stays open for the rest (purchase_order_billing).
+        partial, entry = order_billing.source(s, inp)
+        source = None
+    else:
+        source, entry = _from_order(s, inp, operation)
     old_header = resolve(s, inp.bill) if operation != 'post' else None
     if old_header is not None:
         # A deleted bill is retained history: its own owner refuses every further write.
@@ -1166,7 +1175,9 @@ def prepare(s, ctx, inp, operation):
             'bill_id': old_header['id'],
             'next': 'Unapply what has been paid against this bill before correcting or voiding it.'})
 
-    order_id = source[0]['id'] if source else (
+    if operation == 'update' and old_header is not None:
+        order_billing.refuse_correction(s, old_header['id'])
+    order_id = source[0]['id'] if source else partial['header']['id'] if partial else (
         order_ids(s, [old_header['id']]).get(old_header['id']) if old_header else None)
 
     def unchanged(header, revision):
@@ -1299,6 +1310,11 @@ def prepare(s, ctx, inp, operation):
     if source is not None:
         from bookflow.company import purchase_orders as orders
         consumption = orders.consume(s, ctx, source, header['id'], revision['id'], at, event)
+    elif partial is not None:
+        consumption = order_billing.post_side(s, ctx, partial, header['id'], revision['id'], at, event)
+    elif operation == 'void':
+        # Voiding (or deleting) a bill that took part of an order gives that part back.
+        consumption = order_billing.release_side(s, ctx, header['id'], at, event)
 
     view_profile = (pending['purchase_profiles'][0] if pending['purchase_profiles']
                     else profile_row(s, revision))

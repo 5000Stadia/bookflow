@@ -6,6 +6,7 @@ from bookflow.core.commit_hooks import CommitHooks
 
 from typing import Any
 
+import functools
 import sqlite3
 import os
 import tempfile
@@ -18,7 +19,7 @@ from bookflow.core.durability import sync_directory, sync_file
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0015", "company": "co0080"}
+HEADS = {"hub": "hub0015", "company": "co0084"}
 _PKG = Path(__file__).parent
 
 
@@ -272,6 +273,16 @@ class FeatureRevision:
     revision: str | None
 
 
+@functools.lru_cache(maxsize=None)
+def _revision_parents(chain):
+    """Each shipped revision's parent(s), read once per process: the migration scripts are code
+    and do not change while it runs, and reading them on every admission dominated large reads
+    (a deposit source list admitted features once per receipt)."""
+    from alembic.script import ScriptDirectory
+    script = ScriptDirectory.from_config(_config(chain, None))
+    return {r.revision: r.down_revision for r in script.walk_revisions()}
+
+
 def feature_admission(db, feature: FeatureRevision, *, resolver):
     """Return absent only before the owned feature; return its real resolver if active.
 
@@ -279,11 +290,9 @@ def feature_admission(db, feature: FeatureRevision, *, resolver):
     resolver is returned, not invoked: the caller owns typed feature arguments,
     authorization and the existing database snapshot/transaction.
     """
-    from alembic.script import ScriptDirectory
     if type(feature) is not FeatureRevision or feature.chain not in ('company', 'hub'):
         raise ValueError('invalid feature metadata')
-    script = ScriptDirectory.from_config(_config(feature.chain, None))
-    known = {r.revision: r for r in script.walk_revisions()}
+    known = _revision_parents(feature.chain)
     current = current_revision_open(db)
     if current not in known:
         raise BookflowError('E_SCHEMA_UNKNOWN')
@@ -299,7 +308,7 @@ def feature_admission(db, feature: FeatureRevision, *, resolver):
         if revision in ancestors:
             continue
         ancestors.add(revision)
-        parent = known[revision].down_revision
+        parent = known[revision]
         frontier.extend(parent if isinstance(parent, tuple) else [parent] if parent else [])
     if feature.revision not in ancestors:
         return None

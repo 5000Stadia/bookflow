@@ -218,6 +218,14 @@ def project(g, *, uf_account, home_currency):
         raise BookflowError('E_DEPOSIT_SOURCE_INVALID') from exc
 
 
+def undeposited_funds(s):
+    """The one active home-currency Undeposited Funds account every source is read against."""
+    uf = s.company.conn.execute(sa.select(c.accounts).where(c.accounts.c.system_role == 'undeposited_funds')).mappings().all()
+    if len(uf)!=1 or not uf[0]['active'] or uf[0]['currency']!=s.company_info_row['home_currency']:
+        raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
+    return uf[0]['id']
+
+
 def load(s, identity):
     uf = s.company.conn.execute(sa.select(c.accounts).where(c.accounts.c.system_role == 'undeposited_funds')).mappings().all()
     if len(uf)!=1 or not uf[0]['active'] or uf[0]['currency']!=s.company_info_row['home_currency']:
