@@ -212,6 +212,8 @@ class PaymentApplicationOutput(StrictModel):
     discount: JournalMoneyOutput | None = Field(default=None, exclude_if=lambda v: v is None)
     suggested_discount: JournalMoneyOutput | None = Field(default=None, exclude_if=lambda v: v is None)
     discount_date: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    # An underpayment written off on this edge ("Write off the extra amount"), beside ``discount``.
+    write_off: JournalMoneyOutput | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PaymentAllocationOutput(StrictModel):

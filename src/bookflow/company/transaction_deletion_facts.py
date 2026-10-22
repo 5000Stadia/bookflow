@@ -229,8 +229,9 @@ def load(s, ctx, intent, binding):
     # A receipt's early-payment discounts post beside its cash, so its legs carry both.
     discounted=0
     if intent.family=='payment':
+        from bookflow.company.payments import live_discount_where
         discounted=s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.sum(c.payment_discounts.c.amount_minor_units),0))
-            .where(c.payment_discounts.c.transaction_id==intent.transaction_id)).scalar_one()
+            .where(*live_discount_where(c.payment_discounts.c.transaction_id==intent.transaction_id))).scalar_one()
     require(legs and sum(r.values()['debit_minor_units'] for r in legs)==sum(r.values()['credit_minor_units'] for r in legs)==revision.values()['total_minor_units']+discounted)
     require(sorted(r.values()['line_no'] for r in legs)==list(range(1,len(legs)+1)))
     for source in sources:

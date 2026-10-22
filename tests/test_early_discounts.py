@@ -259,7 +259,7 @@ def test_refusals(books):
     assert balances(books) == {account(books, 'Accounts Receivable'): 20000, books['income']: -20000}
 
 
-def test_unapply_leaves_the_discount_as_credit_and_void_reverses_it(books):
+def test_unapply_takes_the_discount_back_and_void_reverses_the_cash(books):
     run = books['run']
     sale = invoice(books, '1000.00')
     paid = receive(books, '980.00', [(sale, 1, '980.00')], discounts=[dict(invoice=sale['id'], amount='20.00')])
@@ -268,13 +268,15 @@ def test_unapply_leaves_the_discount_as_credit_and_void_reverses_it(books):
         applications=[dict(application_id=application, invoice_expected_version=version(books, sale))]),
         reason='Wrong invoice')
     shown = run('payment show', dict(payment=paid['id']))
-    # The anchor's rule: the discount on an invoice no longer paid stays with the payment as credit.
-    assert shown['current']['available_minor_units'] == 100000 and shown['current']['discount_minor_units'] == 2000
+    # The anchor's rule: the discount belongs to the payment's application to the invoice, so
+    # unapplying it takes the discount back; the receipt's free credit is its cash alone.
+    assert shown['current']['available_minor_units'] == 98000 and shown['current'].get('discount_minor_units', 0) == 0
     listed = run('payment query', {'has_available_credit': True})['items']
-    assert [row['unapplied_minor_units'] for row in listed] == [100000]
+    assert [row['unapplied_minor_units'] for row in listed] == [98000]
     assert settlement(books, sale)['due_minor_units'] == 100000
-    # Invoice 1,000.00 open, credit 1,000.00 unapplied: the customer owes nothing net.
-    assert reports(books)[2] == 0
+    assert account(books, 'Discounts Given') not in balances(books)
+    # Invoice 1,000.00 open, credit 980.00 unapplied: the customer owes 20.00 net.
+    assert reports(books)[2] == 2000
     run('payment void', dict(payment=paid['id'], expected_version=shown['version'], operation_key='void'),
         reason='Entered in error')
     given = account(books, 'Discounts Given')
@@ -484,8 +486,9 @@ def test_deleting_a_discounted_receipt_cancels_the_discount(books):
     enable(books, 'payment', deny_post=False)
     deleted = run('payment delete', dict(payment=paid['id'], expected_version=freed['version'],
                                          operation_key='delete'), reason='Duplicate receipt')
-    # Cash, discount and receivable credits all cancelled: 1 cash + 1 discount + 1 receivable leg.
-    assert deleted['status'] == 'deleted' and deleted['cancelled_posting_lines'] == 3
+    # The unapply already took the discount back (the receipt was restated as cash alone), so the
+    # deletion cancels 1 cash + 1 receivable leg.
+    assert deleted['status'] == 'deleted' and deleted['cancelled_posting_lines'] == 2
     assert balances(books) == {account(books, 'Accounts Receivable'): 100000, books['income']: -100000}
     assert reports(books) == (100000, 100000, 100000)
 
@@ -517,14 +520,14 @@ def test_customer_discount_on_an_invoice_given_no_cash(books):
     # The rest of the second invoice arrives later with no discount.
     receive(books, '294.00', [(second, version(books, second), '294.00')], date='2026-03-20', key='rest')
     assert balances(books) == {books['bank']: 78400, given: 1600, books['income']: -80000}
-    # Unapplied, the discount-only edge gives its 6.00 back to the receipt as the customer's
+    # Unapplied, the discount-only edge takes its 6.00 discount back with it: nothing is left as
     # credit, and the second invoice has those 6.00 open again.
     shown = books['run']('payment show', dict(payment=paid['id']))
     edge = next(row['application_id'] for row in paid['effect']['applications'] if row['invoice_id'] == second['id'])
     freed = books['run']('payment unapply', dict(payment=paid['id'], expected_version=shown['version'],
         operation_key='free-second', applications=[dict(application_id=edge, invoice_expected_version=version(books, second))]),
         reason='Discount not allowed after all')
-    assert freed['current']['available_minor_units'] == 600
+    assert freed['current']['available_minor_units'] == 0
     assert settlement(books, second)['due_minor_units'] == 600
 
 

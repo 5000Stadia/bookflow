@@ -69,7 +69,8 @@ ACCEPTED = {
     'assembly-build-v1': (587, 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2'),
     'committed-stock-v1': (588, 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5'),
     'mileage-v1': (606, '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24'),
-    'pricing-rules-v1': (615, '4214b545293087de0a2d887c9ca8f8a0953fd0eff5a16faf7735161ff6fba12a'),
+    'collections-v1': (608, '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c'),
+    'pricing-rules-v1': (617, 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -142,6 +143,7 @@ CHAIN_ADDITIONS = {
                    'report mileage-by-vehicle', 'trip billing', 'trip create', 'trip invoice', 'trip query',
                    'trip reimburse', 'trip sales-receipt', 'trip show', 'trip update', 'trip void', 'vehicle create',
                    'vehicle list', 'vehicle show', 'vehicle update'},
+    'collections-v1': {'customer-credit transfer', 'customer-credit transfer-void'},
     'pricing-rules-v1': {'price-rule activate', 'price-rule create', 'price-rule deactivate', 'price-rule list',
                          'price-rule preferences', 'price-rule preview', 'price-rule set-preferences',
                          'price-rule show', 'price-rule update'},

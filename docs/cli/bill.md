@@ -668,6 +668,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `summary.discount.amount` | string | yes | no | — | — |
 | `summary.discount.currency` | string | yes | no | — | — |
 | `summary.discount.minor_units` | integer | yes | no | — | — |
+| `summary.underpayment` | object \| null | no | yes | null | A customer receipt whose cash left an invoice it paid partly due, or whose shortfall was written off. |
+| `summary.underpayment.amount` | object | yes | no | — | — |
+| `summary.underpayment.amount.amount` | string | yes | no | — | — |
+| `summary.underpayment.amount.currency` | string | yes | no | — | — |
+| `summary.underpayment.amount.minor_units` | integer | yes | no | — | — |
+| `summary.underpayment.choice` | literal["left_open", "written_off"] | yes | no | — | "left_open": the invoices still owe it ("Leave this as an underpayment"). "written_off": it went to `account` ("Write off the extra amount"). |
+| `summary.underpayment.account` | string \| null | no | yes | null | — |
+| `summary.underpayment.text` | string | yes | no | — | — |
+| `summary.underpayment.next` | object \| null | no | yes | null | For "left_open": the 0.00 receipt that writes it off later, as the anchor's bad-debt write-off. |
+| `summary.underpayment.next.command` | string | yes | no | — | — |
+| `summary.underpayment.next.input` | dict | yes | no | — | The input to give it; replace each <...> placeholder. |
+| `summary.overpayment` | object \| null | no | yes | null | A customer receipt with cash no invoice took: left as credit, with the refund that sends it back. |
+| `summary.overpayment.amount` | object | yes | no | — | — |
+| `summary.overpayment.amount.amount` | string | yes | no | — | — |
+| `summary.overpayment.amount.currency` | string | yes | no | — | — |
+| `summary.overpayment.amount.minor_units` | integer | yes | no | — | — |
+| `summary.overpayment.choice` | literal["left_as_credit"] | yes | no | — | — |
+| `summary.overpayment.text` | string | yes | no | — | — |
+| `summary.overpayment.next` | object | yes | no | — | The refund that pays it back instead ("Refund the amount to the customer"). |
+| `summary.overpayment.next.command` | string | yes | no | — | — |
+| `summary.overpayment.next.input` | dict | yes | no | — | The input to give it; replace each <...> placeholder. |
 | `discount` | object \| null | no | yes | null | — |
 | `discount.amount` | string | yes | no | — | — |
 | `discount.currency` | string | yes | no | — | — |

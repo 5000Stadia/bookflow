@@ -87,6 +87,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].suggested_discount.currency` | string | no | no | — | Present in PaymentApplicationOutput. |
 | `items[].suggested_discount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput. |
 | `items[].discount_date` | string \| null | no | yes | null | Present in PaymentApplicationOutput. |
+| `items[].write_off` | object \| null | no | yes | null | Present in PaymentApplicationOutput. |
+| `items[].write_off.amount` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].write_off.currency` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].write_off.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput. |
 | `items[].reverses_allocation_id` | string \| null | no | yes | null | Present in PaymentAllocationOutput. |
 | `items[].allocation_id` | string \| null | no | yes | — | Present in PaymentAllocationOutput. |
 | `items[].target_ordinal` | integer | no | no | — | Present in PaymentAllocationOutput. |
@@ -276,6 +280,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
 | `request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else an active account named "Discounts Given"; with none of these the receipt is refused and the error lists the discount accounts in the chart (nothing is created). Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
+| `request.input.underpayment` | literal["leave_open", "write_off"] | no | no | "leave_open" | What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. "leave_open" (the default): each invoice keeps what it still owes, and the result's `summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay (after any early-payment discount listed) going to `write_off_account` (required; an expense account such as Bad Debt, or a discount account) with `write_off_class` if given. An early-payment discount on the same invoice still goes to `discount_account`. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, underpayment "write_off", write_off_account "Bad Debt". Unapplying the invoice later takes the write-off back with it. Present in ReceivePreviewRequest. |
+| `request.input.write_off_account` | string \| null | no | yes | null | Account the underpayment is written off to, for underpayment "write_off": an expense account such as Bad Debt, or a discount account (the anchor's Write Off Amount asks for the account and a class). Present in ReceivePreviewRequest. |
+| `request.input.write_off_class` | string \| null | no | yes | null | Class on the underpayment write-off posting. Present in ReceivePreviewRequest. |
+| `request.input.discount_class` | string \| null | no | yes | null | Class on the early-payment discount (or 0.00 write-off) posting. Present in ReceivePreviewRequest. |
 | `request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -422,6 +430,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.effect.applications[].suggested_discount.currency` | string | yes | no | — | — |
 | `original.effect.applications[].suggested_discount.minor_units` | integer | yes | no | — | — |
 | `original.effect.applications[].discount_date` | string \| null | no | yes | null | — |
+| `original.effect.applications[].write_off` | object \| null | no | yes | null | — |
+| `original.effect.applications[].write_off.amount` | string | yes | no | — | — |
+| `original.effect.applications[].write_off.currency` | string | yes | no | — | — |
+| `original.effect.applications[].write_off.minor_units` | integer | yes | no | — | — |
 | `original.effect.allocations` | array[object] | yes | no | — | — |
 | `original.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
 | `original.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
@@ -508,6 +520,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.prospective_pages[].request.input.discounts[].amount` | string \| object | no | no | — | Present in ReceivePreviewRequest. |
 | `original.prospective_pages[].request.input.discounts[].expected_version` | integer \| null | no | yes | null | Present in ReceivePreviewRequest. |
 | `original.prospective_pages[].request.input.discount_account` | string \| null | no | yes | null | Account debited for the discounts; defaults to the company customer discount account, else an active account named "Discounts Given"; with none of these the receipt is refused and the error lists the discount accounts in the chart (nothing is created). Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt. Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.underpayment` | literal["leave_open", "write_off"] | no | no | "leave_open" | What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. "leave_open" (the default): each invoice keeps what it still owes, and the result's `summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay (after any early-payment discount listed) going to `write_off_account` (required; an expense account such as Bad Debt, or a discount account) with `write_off_class` if given. An early-payment discount on the same invoice still goes to `discount_account`. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, underpayment "write_off", write_off_account "Bad Debt". Unapplying the invoice later takes the write-off back with it. Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.write_off_account` | string \| null | no | yes | null | Account the underpayment is written off to, for underpayment "write_off": an expense account such as Bad Debt, or a discount account (the anchor's Write Off Amount asks for the account and a class). Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.write_off_class` | string \| null | no | yes | null | Class on the underpayment write-off posting. Present in ReceivePreviewRequest. |
+| `original.prospective_pages[].request.input.discount_class` | string \| null | no | yes | null | Class on the early-payment discount (or 0.00 write-off) posting. Present in ReceivePreviewRequest. |
 | `original.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `original.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -618,6 +634,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `original.summary.discount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
 | `original.summary.discount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
 | `original.summary.discount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment` | object \| null | no | yes | null | A customer receipt whose cash left an invoice it paid partly due, or whose shortfall was written off. Present in PaymentWriteOutput. |
+| `original.summary.underpayment.amount` | object | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.amount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.amount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.amount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.choice` | literal["left_open", "written_off"] | no | no | — | "left_open": the invoices still owe it ("Leave this as an underpayment"). "written_off": it went to `account` ("Write off the extra amount"). Present in PaymentWriteOutput. |
+| `original.summary.underpayment.account` | string \| null | no | yes | null | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.text` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.next` | object \| null | no | yes | null | For "left_open": the 0.00 receipt that writes it off later, as the anchor's bad-debt write-off. Present in PaymentWriteOutput. |
+| `original.summary.underpayment.next.command` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.underpayment.next.input` | dict | no | no | — | The input to give it; replace each <...> placeholder. Present in PaymentWriteOutput. |
+| `original.summary.overpayment` | object \| null | no | yes | null | A customer receipt with cash no invoice took: left as credit, with the refund that sends it back. Present in PaymentWriteOutput. |
+| `original.summary.overpayment.amount` | object | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.amount.amount` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.amount.currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.amount.minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.choice` | literal["left_as_credit"] | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.text` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.next` | object | no | no | — | The refund that pays it back instead ("Refund the amount to the customer"). Present in PaymentWriteOutput. |
+| `original.summary.overpayment.next.command` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.summary.overpayment.next.input` | dict | no | no | — | The input to give it; replace each <...> placeholder. Present in PaymentWriteOutput. |
 | `original.effect.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
 | `original.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
@@ -805,6 +842,7 @@ Example JSON output:
       "date": "2026-01-01",
       "deposit_to": null,
       "discount_account": null,
+      "discount_class": null,
       "discounts": [],
       "expected_custom_field_kinds": {},
       "expected_facts_fingerprint": null,
@@ -812,7 +850,10 @@ Example JSON output:
       "number": null,
       "operation_key": "value",
       "payment_method": null,
-      "reference": null
+      "reference": null,
+      "underpayment": "leave_open",
+      "write_off_account": null,
+      "write_off_class": null
     }
   },
   "request_schema_version": 1

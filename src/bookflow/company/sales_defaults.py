@@ -51,6 +51,13 @@ _TABLES = {
 }
 
 
+import contextvars as _contextvars
+
+#: Customers a write may name although inactive: a credit transfer charges the closed job its
+#: leftover credit is moved off (credit_transfers.py), and nothing else sets it.
+INACTIVE_CUSTOMERS_OK = _contextvars.ContextVar('inactive_customers_ok', default=frozenset())
+
+
 def _info(db):
     return dict(db.conn.execute(sa.select(schema.company_info)).mappings().one())
 
@@ -220,7 +227,9 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
     customer_selector = getattr(inp, 'customer', None) or (previous.customer.id if previous else None)
     same_customer = previous is not None and _same(db, 'customer', customer_selector, previous.customer)
     customer_changed = not same_customer
-    row = _row(db, 'customer', customer_selector, active=customer_changed or refresh)
+    row = _row(db, 'customer', customer_selector, active=False)
+    if (customer_changed or refresh) and row['id'] not in INACTIVE_CUSTOMERS_OK.get():
+        _active(row, 'customer')
     # Passing empty custom values avoids unrelated orphan custom slots affecting
     # commercial party projection. None would read and validate all custom data.
     party = project_party_record(db, 'customer', row, custom_values=())

@@ -9,10 +9,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_mileage_catalog as previous, permission_catalog as c
+from . import permission_collections_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '352283d30a2253baad5efc3e8df22295de008e2e'
+SOURCE_COMMIT = 'd9a5fc50b874c6e9290d0dea7bfbaaefe2e80efa'
 _OWNER = 'bookflow.commands.pricing_rule_cmds.{}|src/bookflow/commands/pricing_rule_cmds.py'
 # (name, threshold, planner)
 _ADDED = (

@@ -143,7 +143,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.ASSEMBLY_BUILD_POLICY_VERSION: 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2',
     c.COMMITTED_STOCK_POLICY_VERSION: 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5',
     c.MILEAGE_POLICY_VERSION: '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24',
-    c.PRICING_RULES_POLICY_VERSION: '4214b545293087de0a2d887c9ca8f8a0953fd0eff5a16faf7735161ff6fba12a',
+    c.COLLECTIONS_POLICY_VERSION: '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c',
+    c.PRICING_RULES_POLICY_VERSION: 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -262,6 +263,7 @@ def known_catalog(version):
     from . import permission_assembly_build_catalog
     from . import permission_committed_stock_catalog
     from . import permission_mileage_catalog
+    from . import permission_collections_catalog
     from . import permission_pricing_rules_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -307,6 +309,7 @@ def known_catalog(version):
         c.ASSEMBLY_BUILD_POLICY_VERSION: permission_assembly_build_catalog,
         c.COMMITTED_STOCK_POLICY_VERSION: permission_committed_stock_catalog,
         c.MILEAGE_POLICY_VERSION: permission_mileage_catalog,
+        c.COLLECTIONS_POLICY_VERSION: permission_collections_catalog,
         c.PRICING_RULES_POLICY_VERSION: permission_pricing_rules_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

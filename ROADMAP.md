@@ -160,12 +160,12 @@ review cb5fcd7 (gate g96052d).
 - [~] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
 - [x] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
-- [ ] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
+- [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
-- [ ] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
+- [~] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
 - [~] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
 - [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends.
 - [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches.
@@ -185,8 +185,8 @@ review cb5fcd7 (gate g96052d).
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
 - [ ] R130 Windows: a supported Windows build with an authenticated local hand-off. On hold: no Windows machine here to build and test on.
 - [x] R138 Find any transaction: search across every transaction type by name, number, amount or date range
-- [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
-- [~] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
+- [~] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
+- [x] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
 - [x] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment
