@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}{{ schedule.item }} depreciation{% endblock %}{% block body %}<style>.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 18px;margin:0 0 16px}.facts div{min-width:0}.facts dt{font-size:12px;color:var(--muted)}.facts dd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}</style><section id="fixed-asset-schedule">
+<nav class="crumbs"><a href="/c/{{ company_id }}/fixed-asset">Fixed assets</a> / {{ schedule.item }}</nav>
+<h1>{{ schedule.item }}</h1>
+{% if schedule.set_up %}<dl class="facts">
+<div><dt>Cost</dt><dd>{{ schedule.cost.amount if schedule.cost else '' }}</dd></div>
+<div><dt>Method</dt><dd>{% if schedule.method == 'straight_line' %}Straight line{% else %}Declining balance {{ schedule.declining_percent }}%{% endif %}</dd></div>
+<div><dt>Salvage</dt><dd>{{ schedule.salvage.amount }}</dd></div>
+<div><dt>In service</dt><dd>{{ schedule.in_service_date }}</dd></div>
+<div><dt>Life</dt><dd>{{ schedule.life_months }} months, by the {{ schedule.period }}</dd></div>
+<div><dt>Posted</dt><dd data-accumulated>{{ schedule.accumulated_posted.amount }}</dd></div>
+<div><dt>Book value</dt><dd>{{ schedule.book_value.amount if schedule.book_value else '' }}</dd></div>
+<div><dt>Accounts</dt><dd>{{ schedule.depreciation_expense_account or 'no expense account' }} / {{ schedule.accumulated_depreciation_account or 'no accumulated depreciation account' }}</dd></div>
+</dl>{% else %}<p data-not-set-up>This asset has no depreciation setup yet.</p>{% endif %}
+{% if schedule.disposal %}<p data-disposal><strong>Disposed of {{ schedule.disposal.date }}</strong>: proceeds {{ schedule.disposal.proceeds.amount }}, {% if schedule.disposal.gain.minor_units >= 0 %}gain{% else %}loss{% endif %} {{ schedule.disposal.gain.amount.lstrip('-') }} (<a href="/c/{{ company_id }}/journal/{{ schedule.disposal.transaction_id }}">entry {{ schedule.disposal.journal_number }}</a>).</p>{% endif %}
+<nav class="actions" aria-label="Asset actions"><a href="/c/{{ company_id }}/fixed-asset/setup?item={{ schedule.item_id }}">{% if schedule.set_up %}Change setup{% else %}Set up depreciation{% endif %}</a>{% if schedule.set_up and schedule.pending_periods %}<a href="/c/{{ company_id }}/fixed-asset/depreciate">Post depreciation</a>{% endif %}{% if schedule.status == 'in_service' %}<a href="/c/{{ company_id }}/fixed-asset/dispose?item={{ schedule.item_id }}">Dispose</a>{% endif %}<a href="/c/{{ company_id }}/item/{{ schedule.item_id }}">Item</a></nav>
+{% if schedule.rows %}<div class="table-wrap"><table class="list-table" data-schedule-table><thead><tr><th class="num">Period</th><th>From</th><th>To</th><th>Method</th><th class="num">Depreciation</th><th class="num">Accumulated</th><th class="num">Book value</th><th>Status</th></tr></thead><tbody>
+{% for r in schedule.rows %}<tr data-period="{{ r.number }}" data-status="{{ r.status }}"><td class="num" data-label="Period">{{ r.number }}</td><td data-label="From">{{ r.start }}</td><td data-label="To">{{ r.end }}</td><td data-label="Method">{{ 'Straight line' if r.basis == 'straight_line' else 'Declining' }}</td><td class="num" data-label="Depreciation">{{ r.amount.amount }}</td><td class="num" data-label="Accumulated">{{ r.accumulated.amount }}</td><td class="num" data-label="Book value">{{ r.book_value.amount }}</td><td data-label="Status">{% if r.status == 'posted' %}<a href="/c/{{ company_id }}/journal/{{ r.transaction_id }}">Posted {{ r.journal_number }}</a>{% elif r.status == 'stopped' %}Stopped{% else %}Pending{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+</section>{% endblock %}
