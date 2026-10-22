@@ -1643,6 +1643,18 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             except BookflowError as err:
                 return page_error(request, err)
             verbs = [v for v in verbs if v.verb not in ('invoice', 'sales-receipt')]
+        prepayments = None
+        if company_id and noun in ('customer', 'estimate', 'work-order') and registry.get('prepayment show'):
+            # Held customer prepayments (R124): the customer's own, or a document's.
+            target = {'customer': out.get('id', record_id)} if noun == 'customer' else {'document': out.get('id', record_id)}
+            try:
+                prepayments = run(request, 'prepayment show', target, company_id)
+            except BookflowError:
+                prepayments = None
+            if prepayments is not None:
+                prepayments['target'] = next(iter(target.items()))
+                prepayments['can_write'] = _role_allows(registry.get('prepayment receive'), role_view, hub_admin=cred.hub_admin)
+                prepayments['holdable'] = noun == 'customer' or out.get('status') in ('accepted', 'draft', 'scheduled', 'in_progress', 'on_hold', 'complete') and not (noun == 'estimate' and out.get('status') != 'accepted')
         annotation_context = annotations(company_id, noun, record_id, out, role_view, cred)
         if noun in Work.DOCUMENTS and request.query_params.get('annotation_line'):
             line_id = request.query_params['annotation_line']
@@ -1664,6 +1676,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,
+                      prepayments=prepayments,
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
                       work=Work.detail_context(out, company_id) if noun in Work.DOCUMENTS else None,
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
@@ -1807,6 +1820,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             originals = json.loads(attempted['originals'])
         if noun == 'deposit' and verb == 'post' and not attempted:
             attempted.update({'f:operation_key': 'WB-' + secrets.token_urlsafe(24), 'f:document.mode': 'inline'})
+        if noun == 'prepayment' and cmd.is_write and not attempted:
+            # Opened from a customer's or a document's prepayment panel (R124): the link names
+            # who or what the money is for, the receipt or draw, or the invoice to pay.
+            for field in ('customer', 'document', 'receipt', 'draw', 'invoice'):
+                value = request.query_params.get('f:' + field, request.query_params.get(field))
+                if value is not None and field in cmd.input_model.model_fields:
+                    attempted['f:' + field] = value
         if noun in ('reconcile', 'reconcile opening') and not attempted:
             # A reconciliation is three pages, and the draft is what carries a person from one to
             # the next. Seeding it from the link they followed is what makes the chain a chain;
