@@ -56,6 +56,10 @@ HEADLINES = {
     "reconciliation-discrepancy": (None, "Reconciliations and what changed in them"),
     "entries-to-review": (None, "Entries an owner should look at"),
     "prior-balances": (None, "Reviewed balances that have since changed"),
+    "budget-overview": (None, "Budget by period"),
+    "budget-vs-actual": (None, "Actual against budget"),
+    "profit-and-loss-comparison": (None, "This period against the earlier one"),
+    "balance-sheet-comparison": (None, "This year against last"),
 }
 # Inputs the summary line already names, or that only steer paging.
 SUMMARISED = {"date_from", "date_to", "as_of", "basis", "limit", "cursor"}

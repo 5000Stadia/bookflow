@@ -63,6 +63,10 @@ REPORTS = {
     'deposit-detail': 'Deposit detail',
     'transaction-list-by-date': 'Transaction list by date',
     'vendor-1099-summary': '1099 summary',
+    'budget-overview': 'Budget overview',
+    'budget-vs-actual': 'Budget vs. actual',
+    'profit-and-loss-comparison': 'Profit and loss comparison',
+    'balance-sheet-comparison': 'Balance sheet previous year comparison',
 }
 
 # Pages whose title is neither the noun's own name nor a phrase the verb map knows. The

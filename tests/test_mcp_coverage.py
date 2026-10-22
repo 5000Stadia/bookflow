@@ -46,7 +46,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 transaction find (R138).
     # +1 item convert (R154).
     # +1 finance-charge assess (R120).
-    assert len(rows) == 533
+    # +18 budgets, budget and comparison reports, memorized reports (R109).
+    assert len(rows) == 551
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -231,7 +232,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 2989 -> 3002 (R120 finance charges): company update gains seven optional finance charge preferences (their
     # null branches, 7), and finance-charge assess's optional date, customers, amount, mark_to_print, memo and
     # expected_facts_fingerprint (6). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3002
+    # 3002 -> 3050 (R109), measured: eighteen new commands' optional inputs (budget, report and memorized-report
+    # filters, dates, customer/class selectors, expected_version and the like) -- their null branches.
+    # No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3050
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
