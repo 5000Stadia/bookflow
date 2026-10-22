@@ -61,6 +61,7 @@ ACCEPTED = {
     'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
     'finance-charge-v1': (531, '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe'),
     'vendor-refund-v1': (532, 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f'),
+    'assembly-build-v1': (539, '85a84e1289d89862d1bdb81a7ed7c70fb6f4c620360ee5f2d5be47876e73f1c1'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -115,6 +116,7 @@ CHAIN_ADDITIONS = {
     'item-convert-v1': {'item convert'},
     'finance-charge-v1': {'finance-charge assess'},
     'vendor-refund-v1': {'vendor-credit refund'},
+    'assembly-build-v1': {'assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete', 'assembly show', 'assembly list'},
 }
 
 _ANCESTOR_EDIT = """

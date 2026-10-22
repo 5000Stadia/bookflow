@@ -1188,3 +1188,5 @@ from bookflow.company.item_conversion_schema import define_tables as _define_ite
 globals().update(_define_item_conversion_tables(metadata, _column, _table))
 from bookflow.company.finance_charge_schema import define_tables as _define_finance_charge_tables
 globals().update(_define_finance_charge_tables(metadata, _column, _table))
+from bookflow.company.assembly_build_schema import define_tables as _define_assembly_build_tables
+globals().update(_define_assembly_build_tables(metadata, _column, _table))

@@ -270,8 +270,9 @@ def foreign_document(s, transaction_id, *, verb, owner=None):
     if held is not None:
         return BookflowError('E_VALIDATION', message=(
             f'This entry is an inventory {held.replace("recost", "cost correction")} and its '
-            'stock movements are part of it. Use `inventory void` so the quantities and the '
-            'accounting move together.'), details={'fields': [
+            'stock movements are part of it. Use '
+            + ('`assembly update`, `assembly void` or `assembly delete`' if held == 'assembly build' else '`inventory void`')
+            + ' so the quantities and the accounting move together.'), details={'fields': [
                 {'field': 'journal', 'problem': 'an inventory document is not edited as a journal entry'}],
                 'inventory_document': held, 'transaction_id': transaction_id})
     if item_receipt_entry(s, transaction_id):
