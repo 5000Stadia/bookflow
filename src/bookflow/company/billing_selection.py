@@ -134,6 +134,9 @@ def select(s, inp, source, revision, lines, identities):
                 problem='conversion exceeds 2000 allocation spans', recovery='select fewer source lines'))
         proof = None if spans == ((0,d),) and facts.schema_version==1 else alloc.make_proof(s, source, revision, line, root, facts, spans)
         selected.append(SelectedLine(line, root, facts, spans, proof))
-    if not selected or sum(item.proof.net() if item.proof else item.facts.net_minor_units for item in selected) <= 0:
+    # A free stocked part still ships, so an invoice for it may total zero, as `invoice post` allows;
+    # all-zero lines that move nothing are still refused.
+    if not selected or (sum(item.proof.net() if item.proof else item.facts.net_minor_units for item in selected) <= 0
+                        and not any(item.facts.profile.item_type in TRACKED_TYPES for item in selected)):
         dependency('No charge remains; zero-price lines were not invoiced', source_id=source['id'])
     return selected

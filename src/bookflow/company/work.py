@@ -448,7 +448,7 @@ def _state_invariants(kind, value):
         raise _invalid('scheduled_start', 'scheduled work needs a scheduled start')
     if status == 'complete' and (not f['actual_end'] or any(
             line['facts']['completed_quantity_microunits'] != _uncancelled(line['facts']) for line in value['lines'])):
-        raise _invalid('status', 'complete work needs an actual end and all ordered quantities completed')
+        raise _invalid('status', 'complete work needs an actual end and each line completed to its ordered less cancelled quantity')
 
 
 def _uncancelled(line_facts):

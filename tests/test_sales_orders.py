@@ -245,3 +245,50 @@ def test_void_is_refused_while_an_invoice_consumes_the_order(books):
         lines=[dict(line_id=got[widget]['line_id'], item=widget, unit_price='4.00'),
                dict(line_id=got[install]['line_id'], item=install)]), reason='Price match')
     assert repriced['version'] == 2
+
+
+def test_cancelled_quantity_is_not_remaining_in_billing_and_a_free_stocked_part_still_invoices(books):
+    """Review fixes: the billing view, its forecast and can_bill read what remains after a
+    cancellation; a work order whose only line is a free stocked part still invoices (zero total,
+    stock moves); completion is ordered less cancelled, and says so."""
+    run = books['run']
+    widget, install, _ = _items(books)
+    run('bill post', dict(vendor=books['vendor'], date='2017-02-01', items=[dict(item=widget, quantity='20', unit_cost='1.80')]),
+        reason='Stock up')
+    work = run('work-order create', dict(customer=books['customer'], date='2017-03-01', title='Widgets fitted',
+               lines=[dict(item=widget, quantity='10'), dict(item=install, quantity='2')]), reason='Job')
+    lines = work['revision']['lines']
+    work = run('work-order update', dict(work_order=work['id'], expected_version=1,
+        lines=[dict(line_id=lines[0]['line_id'], item=widget, cancelled_quantity='4'),
+               dict(line_id=lines[1]['line_id'], item=install, close=True)]), reason='Six widgets, no fitting')
+    billing = run('work-order billing', dict(work_order=work['id'], limit=10))
+    got = {line['item_id']: line for line in billing['lines']}
+    assert got[widget]['remaining_net_minor_units'] == 2700 and got[widget]['remaining_quantity'] == '6'
+    assert got[widget]['billed_quantity'] == '0'
+    assert got[install]['remaining_net_minor_units'] == 0 and got[install]['state'] == 'cancelled'
+    assert billing['can_invoice']
+
+    error = _error(lambda: run('work-order update', dict(work_order=work['id'], expected_version=work['version'],
+        status='complete', actual_start='2017-03-02T08:00:00Z', actual_end='2017-03-02T12:00:00Z',
+        lines=[dict(line_id=lines[0]['line_id'], item=widget, completed_quantity='10'),
+               dict(line_id=lines[1]['line_id'], item=install)]), reason='Done'))
+    assert error.code == 'E_VALIDATION' and 'ordered less cancelled' in str(error.details)
+
+    run('work-order invoice', dict(work_order=work['id'], expected_version=work['version'], date='2017-03-05',
+                                   conversion_key='six-widgets'), reason='Bill the six')
+    after = run('work-order billing', dict(work_order=work['id'], limit=10))
+    assert sum(line['remaining_net_minor_units'] for line in after['lines']) == 0 and not after['can_invoice']
+    assert {line['item_id']: line['billed_quantity'] for line in after['lines']}[widget] == '6'
+
+    free = run('work-order create', dict(customer=books['customer'], date='2017-03-06', title='Spare widgets',
+               lines=[dict(item=widget, quantity='5', unit_price='0.00')]), reason='Given free')
+    invoice = run('work-order invoice', dict(work_order=free['id'], expected_version=1, date='2017-03-06',
+                                             conversion_key='free-widgets'), reason='Ship the spares')
+    assert invoice['total']['minor_units'] == 0
+    assert run('item show', {'item': widget})['quantity_on_hand'] == '9'  # 20 - 6 - 5
+    # A free line that moves nothing is still refused.
+    nothing = run('work-order create', dict(customer=books['customer'], date='2017-03-06', title='Free visit',
+                  lines=[dict(item=install, quantity='1', unit_price='0.00')]), reason='Courtesy')
+    error = _error(lambda: run('work-order invoice', dict(work_order=nothing['id'], expected_version=1,
+                                                          date='2017-03-06', conversion_key='free-visit'), reason='Bill'))
+    assert error.code == 'E_WORK_DEPENDENCY' and 'No charge remains' in error.details['problem']

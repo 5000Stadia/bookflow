@@ -147,7 +147,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_id` | string | yes | no | — | — |
 | `lines[].description` | string \| null | yes | yes | — | — |
 | `lines[].billable` | boolean | yes | no | — | — |
-| `lines[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge"] | yes | no | — | — |
+| `lines[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge", "cancelled"] | yes | no | — | — |
 | `lines[].quantity` | string | yes | no | — | — |
 | `lines[].completed_quantity` | string | yes | no | — | — |
 | `lines[].billed_quantity` | string | yes | no | — | — |
