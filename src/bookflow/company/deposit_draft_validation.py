@@ -83,7 +83,8 @@ def summary(currency, header, sources, additional):
         for key,value in (('received_from',row.received_from),('from_account',row.account),('amount',row.units)):
             if value is None:problems.append(f'{row.row_id}:{key}:required')
         if row.units==0:problems.append(f'{row.row_id}:amount:zero')
-        if row.account and (not row.account.active or row.account.currency!=currency or row.account.type in ('accounts_receivable','accounts_payable','inventory') or row.account.system_role is not None or (header.bank and row.account.id==header.bank.id)):
+        refund=bool(row.account and row.received_from and row.account.type=='accounts_payable' and row.account.system_role in (None,'accounts_payable') and row.received_from.kind=='vendor')
+        if row.account and (not row.account.active or row.account.currency!=currency or (not refund and (row.account.type in ('accounts_receivable','accounts_payable','inventory') or row.account.system_role is not None)) or (header.bank and row.account.id==header.bank.id)):
             problems.append(f'{row.row_id}:from_account:ineligible')
     for identity,value in header.custom_fields.items():
         if value.required and value.canonical_text is None:problems.append(f'custom_fields.{identity}:required')

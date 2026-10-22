@@ -60,6 +60,7 @@ ACCEPTED = {
     'transaction-find-v1': (529, '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1'),
     'item-convert-v1': (530, '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4'),
     'finance-charge-v1': (531, '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe'),
+    'vendor-refund-v1': (532, 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -113,6 +114,7 @@ CHAIN_ADDITIONS = {
     'transaction-find-v1': {'transaction find'},
     'item-convert-v1': {'item convert'},
     'finance-charge-v1': {'finance-charge assess'},
+    'vendor-refund-v1': {'vendor-credit refund'},
 }
 
 _ANCESTOR_EDIT = """

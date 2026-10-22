@@ -174,6 +174,8 @@ class BillApplicationOutput(CreatedOutput):
     obligation_transaction_id: str
     obligation_key_id: str
     bill_number: str
+    # What the settled payable is: a bill, or a vendor's refund check deposited from A/P (R149).
+    obligation_type: Literal['bill', 'deposit'] = 'bill'
     amount: MoneyOutput
     amount_minor_units: int
     currency: str

@@ -182,12 +182,17 @@ def detail_context(noun, record, company_id, *, preview=False):
         # preview has nothing saved to correct, and a voided credit gave nothing back: the
         # command refuses both, so neither is offered the link.
         correctable = not preview and record['status'] == 'posted'
-        view.update(settlement=record.get('settlement_current') or {},
+        settlement = record.get('settlement_current') or {}
+        # A vendor's refund check (R149): offered while the credit still has something free.
+        refundable = correctable and (settlement.get('unapplied_minor_units') or 0) > 0
+        view.update(settlement=settlement,
                     applications=[{**row,
-                                   'url': _url(company_id, 'bill', row['obligation_transaction_id'])}
+                                   'url': _url(company_id, row.get('obligation_type') or 'bill',
+                                               row['obligation_transaction_id'])}
                                   for row in applications],
                     vendor_url=None if preview else _url(company_id, 'vendor', record['vendor_id']),
                     correct_url=_url(company_id, noun, record['id'], 'update') if correctable else None,
+                    refund_url=_url(company_id, noun, record['id'], 'refund') if refundable else None,
                     title='Vendor credit')
     return view
 
