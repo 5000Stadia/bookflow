@@ -39,6 +39,7 @@ REPORTS = {
     'report balance-sheet-comparison': ('date_to',),
     'report trial-balance': ('date_to',),
     'report open-purchase-orders': ('date_to',),
+    'report open-sales-orders': ('date_to',),
     # Read over a period, as the anchor's Sales Tax Liability report is; as_of stays a
     # synonym for date_to on the command, so the form leaves it empty.
     'sales-tax liability': ('date_from', 'date_to'),

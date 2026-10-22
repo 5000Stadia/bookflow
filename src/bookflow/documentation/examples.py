@@ -1332,3 +1332,6 @@ EXAMPLES["assembly show"] = Example(
     {"build": "01JASSEMBLYBUILD0000000001"})
 EXAMPLES["assembly list"] = Example(
     'bookflow assembly list --status pending --company "Demo Plumbing Co" --json', {"status": "pending"})
+# R102: what customers have ordered and not yet received, by item, with on hand, available and on order.
+EXAMPLES['report open-sales-orders'] = Example(
+    'bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json', {'by': 'item', 'date_to': '2026-10-31'})

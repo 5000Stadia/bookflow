@@ -141,6 +141,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.SALES_ORDER_POLICY_VERSION: '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89',
     c.FIXED_ASSET_POLICY_VERSION: '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc',
     c.ASSEMBLY_BUILD_POLICY_VERSION: 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2',
+    c.COMMITTED_STOCK_POLICY_VERSION: 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -257,6 +258,7 @@ def known_catalog(version):
     from . import permission_sales_order_catalog
     from . import permission_fixed_asset_catalog
     from . import permission_assembly_build_catalog
+    from . import permission_committed_stock_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -299,6 +301,7 @@ def known_catalog(version):
         c.SALES_ORDER_POLICY_VERSION: permission_sales_order_catalog,
         c.FIXED_ASSET_POLICY_VERSION: permission_fixed_asset_catalog,
         c.ASSEMBLY_BUILD_POLICY_VERSION: permission_assembly_build_catalog,
+        c.COMMITTED_STOCK_POLICY_VERSION: permission_committed_stock_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -309,7 +312,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.ASSEMBLY_BUILD_POLICY_VERSION)
+    return known_catalog(c.COMMITTED_STOCK_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

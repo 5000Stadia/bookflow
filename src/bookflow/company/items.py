@@ -1491,6 +1491,8 @@ class _ProjectionCache:
     unit_sets: Mapping[str, Mapping[str, Any]]
     home_currency: str
     stock: Mapping[str, tuple[int, int]] = field(default_factory=dict)
+    # Committed, on order and reserved for builds per stocked item, read once per page.
+    figures: Mapping[str, tuple[int, int, int, bool]] | None = None
 
 
 # The stock-carrying item types, and the running sums that value them. Both come from the
@@ -1526,6 +1528,24 @@ def quantity_on_hand_expression(owner: sa.Table | None = None) -> sa.ColumnEleme
         table.c.item_id == owner.c.id,
     ).correlate(owner).scalar_subquery()
     return sa.case((owner.c.type.in_(tuple(STOCK_TYPES)), sa.func.coalesce(moved, 0)), else_=0)
+
+
+def _stock_figures(db: Database, item_ids) -> dict[str, tuple[int, int, int, bool]]:
+    """Committed (open sales orders and work orders), on order and reserved for builds, per item.
+
+    The same owners `report stock-status` reads: `commitments` and `receiving.order_remaining`.
+    """
+    from types import SimpleNamespace
+    from bookflow.company import commitments
+    from bookflow.company.inventory_reports import _incoming
+    from bookflow.core import clock
+    s = SimpleNamespace(company=db)
+    item_ids = list(item_ids)
+    committed = commitments.committed(s, items=item_ids)
+    on_order, _ = _incoming(s, clock.today_iso())
+    builds = commitments.for_assemblies(s)
+    deducts = commitments.deducts_documents(s)
+    return {item: (committed.get(item, 0), on_order.get(item, 0), builds.get(item, 0), deducts) for item in item_ids}
 
 
 def _build_projection_cache(
@@ -1672,6 +1692,7 @@ def _build_projection_cache(
         unit_sets={str(row["id"]): row for row in unit_set_rows},
         home_currency=_home_currency(db),
         stock=_stock(db, [str(row["id"]) for row in owners if row["type"] in STOCK_TYPES]),
+        figures=_stock_figures(db, [str(row["id"]) for row in owners if row["type"] in STOCK_TYPES]),
     )
 
 
@@ -1827,10 +1848,10 @@ def project_item(
         combined = format_percentage_millionths(combined_value)
     currency = cache.home_currency if cache is not None else _home_currency(db)
     zero_money = MoneyOutput(**Money(0, currency).to_dict())
-    # An item that carries stock now has somewhere to read it from. Quantity committed, on
-    # order and pending build stay zero and unavailable-shaped until a sales order, a purchase
-    # order and an assembly build exist to produce them; on hand and value are real today, and
-    # `inventory_values_available` is what tells a reader which of those it is looking at.
+    # An item that carries stock reads on hand and value from the movement ledger, committed from
+    # open sales orders and work orders, on order from live purchase orders, and pending build from
+    # assembly builds (0 until they exist); available is on hand less committed under the company
+    # preference. `inventory_values_available` tells a reader whether any of this applies.
     stocked = owner["type"] in STOCK_TYPES
     if stocked:
         quantity, value = (cache.stock.get(owner_id, (0, 0)) if cache is not None
@@ -1838,6 +1859,13 @@ def project_item(
     else:
         quantity, value = 0, 0
     average = 0 if quantity <= 0 else round_ratio_half_even(value * 10 ** 6, quantity)
+    committed = on_order = builds = 0
+    deducts = True
+    if stocked:
+        if cache is not None and cache.figures is not None:
+            committed, on_order, builds, deducts = cache.figures.get(owner_id, (0, 0, 0, True))
+        else:
+            committed, on_order, builds, deducts = _stock_figures(db, [owner_id]).get(owner_id, (0, 0, 0, True))
     return ItemOutput(
         **{field: owner[field] for field in (
             "id", "version", "created_at", "created_by", "created_via", "updated_at",
@@ -1873,8 +1901,10 @@ def project_item(
         vendor_profiles=[_vendor_output(db, row, cache) for row in vendor_profiles],
         custom_fields=[CustomFieldValueOutput.model_validate(row) for row in custom_values],
         quantity_on_hand=format_quantity_micro_units(quantity),
-        quantity_available=format_quantity_micro_units(quantity),
-        quantity_committed="0", quantity_on_order="0", quantity_pending_build="0",
+        quantity_available=format_quantity_micro_units(quantity - (committed if deducts else 0)),
+        quantity_committed=format_quantity_micro_units(committed),
+        quantity_on_order=format_quantity_micro_units(on_order),
+        quantity_pending_build=format_quantity_micro_units(builds),
         average_cost=MoneyOutput(**Money(average, currency).to_dict()) if stocked else zero_money,
         inventory_value=MoneyOutput(**Money(value, currency).to_dict()) if stocked else zero_money,
         inventory_values_available=stocked,

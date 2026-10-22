@@ -58,6 +58,7 @@ REPORTS = {
     'vendor-balance-summary': 'Vendor balance summary',
     'vendor-balance-detail': 'Vendor balance detail',
     'open-purchase-orders': 'Open purchase orders',
+    'open-sales-orders': 'Open sales orders',
     'purchases-by-vendor': 'Purchases by vendor summary',
     'purchases-by-item': 'Purchases by item summary',
     'deposit-detail': 'Deposit detail',

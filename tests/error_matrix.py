@@ -2074,3 +2074,9 @@ MATRIX['assembly list'] = {
     'E_RECORD_NOT_FOUND': 'unknown item filter',
     'E_VALIDATION': 'bad status or limit',
 }
+
+# Committed stock (R102): the open-sales-orders report.
+MATRIX['report open-sales-orders'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or item filter',
+    'E_QUERY_STALE': 'company audit changed between pages',
+}

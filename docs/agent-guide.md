@@ -624,6 +624,18 @@ invoice made from it does. Its show output gives each line `order.ordered`, `inv
   by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
 - `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
 
+## What is available to sell
+
+`report stock-status` and `item show` give each stocked item its quantity on hand, committed (the
+open quantity on open sales orders and work orders, a complete but uninvoiced work order included),
+available (on hand less committed) and on order, with the next expected delivery. The company
+preference `available_deducts_sales_orders` (on by default) decides whether available deducts
+committed. An order or work-order preview gives each stocked line its on hand, committed elsewhere,
+on order and available to it, and warns when it ends short; an ordinary invoice or sales receipt
+that takes committed stock warns and names the documents. Neither refuses. `report
+open-sales-orders` (`--by customer` or `--by item`, `--short-only`) lists what customers have
+ordered and not yet received.
+
 ## Bill work in installments
 
 Read `estimate billing` or `work-order billing` first. It identifies the current

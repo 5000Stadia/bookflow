@@ -133,6 +133,9 @@ def test_short_components_are_refused_or_marked_pending_and_finalized(kit):
     assert _stock(books, kit['kit']) == ('0', 0)
     report = run('assembly list', {'status': 'pending'})
     assert report['count'] == 1 and report['reserved'] == {kit['tank']: '6', kit['valve']: '12'}
+    # R102 x R103: the stock status report's For Assemblies column reads the same reservations.
+    status = {row['item_id']: row for row in run('report stock-status', dict(as_of='2017-12-31', limit=200))['rows']}
+    assert (status[kit['tank']]['quantity_for_assemblies'], status[kit['valve']]['quantity_for_assemblies']) == ('6', '12')
     with pytest.raises(BookflowError) as error:
         run('assembly finalize', {'build': pending['build_id']}, reason='Not yet')
     assert error.value.details['reason'] == 'insufficient_components'
