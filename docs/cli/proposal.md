@@ -458,6 +458,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -1320,6 +1334,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -2131,6 +2159,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -3299,6 +3341,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -4145,6 +4201,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |

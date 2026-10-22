@@ -1385,3 +1385,33 @@ EXAMPLES.update({
     'report mileage-by-job': Example('bookflow report mileage-by-job --date-from 2026-01-01 --date-to 2026-12-31 --detail'
                                      + _MILES_CO, {'date_from': '2026-01-01', 'date_to': '2026-12-31', 'detail': True}),
 })
+
+# Price rules (R110): a promotion for one customer's category, quantity breaks, and the price a line would get.
+_PRICE_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'price-rule create': Example(
+        'bookflow price-rule create --name "Riverside clearing 10% off" --customers "Riverside Apartments"'
+        ' --items "Mainline Clearing" --value 10 --date-to 2026-12-31 --reason "Year-end deal"' + _PRICE_CO,
+        {'name': 'Riverside clearing 10% off', 'customers': ['Riverside Apartments'], 'items': ['Mainline Clearing'],
+         'value': '10', 'date_to': '2026-12-31'}),
+    'price-rule update': Example(
+        'bookflow price-rule update "Riverside clearing 10% off" --expected-version 1 --rounding x.99'
+        ' --reason "Charm pricing"' + _PRICE_CO,
+        {'rule': 'Riverside clearing 10% off', 'expected_version': 1, 'rounding': 'x.99'}),
+    'price-rule activate': Example(f'bookflow price-rule activate {ID} --expected-version 2 --reason "Deal back on"' + _PRICE_CO,
+                                   {'rule': ID, 'expected_version': 2}),
+    'price-rule deactivate': Example(f'bookflow price-rule deactivate {ID} --expected-version 1 --reason "Deal ended"' + _PRICE_CO,
+                                     {'rule': ID, 'expected_version': 1}),
+    'price-rule show': Example('bookflow price-rule show "Riverside clearing 10% off"' + _PRICE_CO,
+                               {'rule': 'Riverside clearing 10% off'}),
+    'price-rule list': Example('bookflow price-rule list --customer "Riverside Apartments"' + _PRICE_CO,
+                               {'customer': 'Riverside Apartments'}),
+    'price-rule preview': Example(
+        'bookflow price-rule preview --item "Mainline Clearing" --customer "Riverside Apartments" --quantity 10'
+        ' --date 2026-11-02' + _PRICE_CO,
+        {'item': 'Mainline Clearing', 'customer': 'Riverside Apartments', 'quantity': '10', 'date': '2026-11-02'}),
+    'price-rule preferences': Example('bookflow price-rule preferences' + _PRICE_CO, {}),
+    'price-rule set-preferences': Example(
+        'bookflow price-rule set-preferences --conflict-policy priority --reason "Rules over price levels"' + _PRICE_CO,
+        {'conflict_policy': 'priority'}),
+})

@@ -532,6 +532,29 @@ A billed trip cannot be voided or have its miles changed until its invoice is vo
 (`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
 for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
 
+## Special prices: "give Acme 10% off pipe fittings through December"
+
+A price rule changes the price a sales line defaults to when its conditions hold: items or
+`item_categories`, `customers` (a customer covers its jobs) or `customer_types`, `classes`, `sales_reps`,
+a `date_from`/`date_to` window on the transaction date, and `min_quantity`. Its adjustment is a percent or
+amount (`kind`), `down` or `up`, from the item's `sales_price` or `cost`, rounded to the `cent`, `x.99`,
+`x.95` or `dollar`. Quantity discounts are `breaks`: `[{"min_quantity": "10", "value": "5"}, {"min_quantity":
+"50", "value": "10"}]` is 5% off from 10 and 10% off from 50.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "price-rule create", "reason": "Acme year-end deal",
+ "input": {"name": "Acme fittings 10% off", "customers": ["Acme"], "item_categories": ["Pipe fittings"],
+           "value": "10", "date_to": "2026-12-31"}}
+```
+
+Before quoting, `price-rule preview` (item, customer, quantity, date) says what a line would cost and
+why ("price from rule Acme fittings 10% off: ..."). When a price level and rules both price a line, the
+company preference picks the lowest price (the default) or the first rule by `priority`
+(`price-rule set-preferences`). A line priced by a rule carries it in `item_snapshot.pricing_rule`; a typed
+`unit_price` overrides it. Saved documents never change when a rule does; end a deal early with
+`price-rule deactivate`.
+
 ## How are we doing against budget?
 
 A budget is a named plan for one fiscal year: an amount per account per month, entered positive for

@@ -2123,3 +2123,22 @@ MATRIX['trip reimburse'] = {'E_VALIDATION': 'a trip named twice, a voided trip, 
                             'E_PREVIEW_STALE': 'the trips or rates changed since the preview whose fingerprint was given'} | _MILEAGE_TAIL
 MATRIX['report mileage-by-vehicle'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown vehicle'}
 MATRIX['report mileage-by-job'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown customer'}
+
+# Price rules (R110).
+_PRICE_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+               'E_DIRECTIVE_INACTIVE': 'deactivated --directive', 'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive'}
+_PRICE_WRITE = {'E_VALIDATION': 'no value or breaks, both, breaks not rising, date_to before date_from, a zero min_quantity, or x.99 rounding without cents',
+                'E_RECORD_NOT_FOUND': 'an unknown item, category, customer, customer type, class or sales rep',
+                'E_INACTIVE_REFERENCE': 'a named item, customer, class or rep is inactive',
+                'E_VALUE_RANGE': 'a discount over 100 percent', 'E_AMOUNT_PRECISION': 'an amount finer than the currency allows',
+                'E_NAME_TAKEN': 'another rule has the name'} | _PRICE_TAIL
+MATRIX['price-rule create'] = dict(_PRICE_WRITE)
+MATRIX['price-rule update'] = _PRICE_WRITE | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['price-rule activate'] = {'E_RECORD_NOT_FOUND': 'unknown rule', 'E_VERSION_CONFLICT': 'stale expected_version'} | _PRICE_TAIL
+MATRIX['price-rule deactivate'] = {'E_RECORD_NOT_FOUND': 'unknown rule', 'E_VERSION_CONFLICT': 'stale expected_version'} | _PRICE_TAIL
+MATRIX['price-rule show'] = {'E_RECORD_NOT_FOUND': 'unknown rule'}
+MATRIX['price-rule list'] = {'E_RECORD_NOT_FOUND': 'unknown item or customer filter'}
+MATRIX['price-rule preview'] = {'E_VALIDATION': 'a zero quantity, or an item with no price that no rule prices',
+                                'E_RECORD_NOT_FOUND': 'unknown item, customer, class, rep or price level'}
+MATRIX['price-rule preferences'] = {}
+MATRIX['price-rule set-preferences'] = {'E_VALIDATION': 'not lowest_price or priority'} | _PRICE_TAIL
