@@ -174,7 +174,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module.
 - [ ] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
 - [ ] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
-- [ ] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
+- [~] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
 - [ ] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
 - [ ] R122 Approvals: purchase and bill approval steps before posting.
 - [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
