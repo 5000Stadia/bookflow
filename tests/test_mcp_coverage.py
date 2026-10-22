@@ -54,8 +54,11 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +10 the five fixed-asset and five loan commands (R119).
     # +7 assembly build, update, finalize, void, delete, show and list (R103).
     # +1 report open-sales-orders (R102).
+    # +18 mileage (R118): vehicle create/update/show/list, mileage-rate set/delete/list, trip create/update/void/show/
+    # query/invoice/sales-receipt/billing/reimburse, report mileage-by-vehicle and mileage-by-job.
+    # +2 customer-credit transfer, customer-credit transfer-void (R148).
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
-    assert len(rows) == 601
+    assert len(rows) == 621
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -262,9 +265,17 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # status and item. No new variant kind.
     # 3265 -> 3269 (R102), measured: report open-sales-orders is new with 4, the null branches of its optional
     # customer, item, date_from and cursor (date_to is required). No existing command moved. No new variant kind.
-    # 3269 -> 3299 (R111), measured as a whole: the eleven todo, notice and reminders commands' optional inputs
+    # 3269 -> 3343 (R118, mileage), measured per command: trip create 10, update 13, query 6, invoice 14,
+    # sales-receipt 15 (the work billing conversion's optional fields, as time-activity's have), billing 1,
+    # reimburse 4, vehicle create 1 and update 4, report mileage-by-vehicle 3 and mileage-by-job 3 -- 74. No
+    # existing command moved. No new variant kind; the groups stay 26.
+    # 3343 -> 3355 (R148), measured: payment receive's optional discount_class, write_off_account and
+    # write_off_class wherever the receive input is carried, and customer-credit transfer's optional credit_memo,
+    # payment, memo, expected_facts_fingerprint and apply_to amount -- their null branches. underpayment is a
+    # defaulted literal and adds none. No new variant kind.
+    # 3355 -> 3385 (R111), measured as a whole: the eleven todo, notice and reminders commands' optional inputs
     # and company update's five scheduler and overdue notice preferences, their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3299
+    assert sum(len(group["paths"]) for group in mapped)==3385
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

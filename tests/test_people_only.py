@@ -32,7 +32,10 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # sales-order-v1 adds none: an agent with the standard role takes, revises and voids orders as a person does.
     # fixed-asset-v1 adds no people-only act.
     # assembly-build-v1 adds none: building assemblies is bookkeeping.
-    # committed-stock-v1 adds none (a report); scheduling-v1 adds none (to-dos, notices, reminders).
+    # committed-stock-v1 adds none (a report).
+    # mileage-v1 adds none: vehicles, rates, trips, trip billing and reimbursement are an agent's to do as a person's.
+    # collections-v1 adds none: moving a customer's credit between jobs is bookkeeping.
+    # scheduling-v1 adds none (to-dos, notices, reminders).
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

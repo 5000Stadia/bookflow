@@ -68,7 +68,9 @@ ACCEPTED = {
     'fixed-asset-v1': (580, '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc'),
     'assembly-build-v1': (587, 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2'),
     'committed-stock-v1': (588, 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5'),
-    'scheduling-v1': (599, 'b9c00f3dd9c2dca5267e8a5be114ee46d50a14d3049dd59c96b2b77a72e09d78'),
+    'mileage-v1': (606, '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24'),
+    'collections-v1': (608, '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c'),
+    'scheduling-v1': (619, 'c20da0053c1131960bf352445e89c8ee75cc203854747bfde99629fea786a433'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -137,6 +139,11 @@ CHAIN_ADDITIONS = {
                        'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'},
     'assembly-build-v1': {'assembly build', 'assembly update', 'assembly finalize', 'assembly void', 'assembly delete', 'assembly show', 'assembly list'},
     'committed-stock-v1': {'report open-sales-orders'},
+    'mileage-v1': {'mileage-rate delete', 'mileage-rate list', 'mileage-rate set', 'report mileage-by-job',
+                   'report mileage-by-vehicle', 'trip billing', 'trip create', 'trip invoice', 'trip query',
+                   'trip reimburse', 'trip sales-receipt', 'trip show', 'trip update', 'trip void', 'vehicle create',
+                   'vehicle list', 'vehicle show', 'vehicle update'},
+    'collections-v1': {'customer-credit transfer', 'customer-credit transfer-void'},
     'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
                       'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
 }

@@ -244,6 +244,8 @@ def prepare_unapply(s, ctx, inp):
             raise BookflowError('E_APPLICATION_INACTIVE', details={
                 'application_id': identifier, 'credit_memo_id': old_header['id'],
                 'next': 'Read the credit memo to see which applications are still live.'})
+        from bookflow.company.credit_transfers import guard_applications
+        guard_applications(s, [app])
         invoice = query.invoice_facts(s, app['paid_transaction_id'], write=True)
         sales._version(s, invoice['header'], reference.invoice_expected_version)
         # The inverse carries the original date, never today's: an unapply undoes a

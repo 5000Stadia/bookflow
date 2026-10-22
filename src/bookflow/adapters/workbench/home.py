@@ -476,7 +476,9 @@ SECTIONS: tuple[Section, ...] = (
         tasks=(
             Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
             Action("Record a bounced check", WRITE, ("payment bounce",), "/payment/bounce"),
+            Action("Move a credit between jobs", WRITE, ("customer-credit transfer",), "/customer-credit/transfer"),
             Action("Assess finance charges", WRITE, ("finance-charge assess",), "/finance-charge/assess"),
+            Action("Enter vehicle mileage", READ, ("trip query",), "/mileage"),
             Action("Receive a customer deposit", WRITE, ("prepayment receive",), "/prepayment/receive"),
             Action("Invoice a billing group", WRITE, ("batch-invoice post",), "/batch-invoice/post"),
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),

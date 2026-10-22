@@ -369,7 +369,7 @@ def apply_write(plan, ctx, s):
         # saved it with -- the checks a bearer token gets: assignment, suspension and epoch (R111).
         from bookflow.hub.credentials import _binding
         _, epoch = _binding(s.hub, s.actor.id, ctx.on_behalf_of)
-        s.company.conn.execute(c.memorized_revision_authority.insert().values(
+        s.company.conn.execute(c.scheduled_revision_authority.insert().values(
             revision_id=revision_id, agent_id=s.actor.id, principal_id=ctx.on_behalf_of, authority_epoch=epoch, created_at=at))
     for edge in index:
         s.company.conn.execute(c.memorized_references.insert().values(

@@ -164,6 +164,10 @@ PREPAYMENT_COMMANDS = frozenset(('prepayment receive', 'prepayment attach', 'pre
 # balance and undoes, for an account and an item, through all four surfaces over identical small companies.
 LIST_MERGE_COMMANDS = frozenset(('account merge', 'account unmerge', 'item merge', 'item unmerge'))
 
+# R148 the rest of customer collections: moving credit between jobs. Its witness previews a transfer,
+# records it, records it again (nothing written), reads both jobs' aging and voids it, on all four surfaces.
+COLLECTIONS_COMMANDS = frozenset(('customer-credit transfer', 'customer-credit transfer-void'))
+
 # R101: the sales order. Its witness quotes, converts (and replays), creates, revises, closes, copies,
 # voids and reads orders back through all four surfaces over identical demo copies.
 SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
@@ -183,6 +187,14 @@ ASSEMBLY_BUILD_COMMANDS = frozenset(('assembly build', 'assembly update', 'assem
 # surfaces over identical demo copies.
 COMMITTED_STOCK_COMMANDS = frozenset(('report open-sales-orders',))
 
+# R118: mileage. Its witness adds and renames a vehicle, sets, lists and removes rates, records, corrects, voids,
+# reads and queries trips, bills one by invoice and one by sales receipt, reads the billing window, pays the
+# driver back by check and runs both mileage reports through all four surfaces over identical demo copies.
+MILEAGE_COMMANDS = frozenset(('mileage-rate delete', 'mileage-rate list', 'mileage-rate set', 'report mileage-by-job',
+                              'report mileage-by-vehicle', 'trip billing', 'trip create', 'trip invoice', 'trip query',
+                              'trip reimburse', 'trip sales-receipt', 'trip show', 'trip update', 'trip void',
+                              'vehicle create', 'vehicle list', 'vehicle show', 'vehicle update'))
+
 # R111: to-dos, overdue notices and the Reminders list. Its witness creates, updates, completes, shows and lists a
 # to-do, generates, lists, shows, marks sent and dismisses overdue notices, and reads reminders through all four
 # surfaces over identical demo copies.
@@ -192,7 +204,7 @@ SCHEDULING_COMMANDS = frozenset(('todo create', 'todo update', 'todo complete', 
 
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = SCHEDULING_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = SCHEDULING_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -725,6 +737,8 @@ def execution_map():
     from tests.test_fixed_asset_surfaces import COMMANDS as FIXED_ASSET_SURFACE_COMMANDS
     from tests.test_assembly_build_surfaces import COMMANDS as ASSEMBLY_BUILD_SURFACE_COMMANDS
     from tests.test_committed_stock_surfaces import COMMANDS as COMMITTED_STOCK_SURFACE_COMMANDS
+    from tests.test_mileage_surfaces import COMMANDS as MILEAGE_SURFACE_COMMANDS
+    from tests.test_credit_transfer_surfaces import COMMANDS as COLLECTIONS_SURFACE_COMMANDS
     from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
@@ -807,6 +821,8 @@ def execution_map():
                    'tests/test_fixed_asset_surfaces.py::test_the_same_fixed_assets_and_loan_through_python_cli_http_and_mcp' if cmd.name in FIXED_ASSET_SURFACE_COMMANDS else  # all four
                    'tests/test_assembly_build_surfaces.py::test_the_same_assembly_builds_through_python_cli_http_and_mcp' if cmd.name in ASSEMBLY_BUILD_SURFACE_COMMANDS else  # all four
                    'tests/test_committed_stock_surfaces.py::test_the_same_open_orders_report_through_python_cli_http_and_mcp' if cmd.name in COMMITTED_STOCK_SURFACE_COMMANDS else  # all four
+                   'tests/test_mileage_surfaces.py::test_the_same_mileage_through_python_cli_http_and_mcp' if cmd.name in MILEAGE_SURFACE_COMMANDS else  # all four
+                   'tests/test_credit_transfer_surfaces.py::test_the_same_credit_transfer_through_python_cli_http_and_mcp' if cmd.name in COLLECTIONS_SURFACE_COMMANDS else  # all four
                    'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else

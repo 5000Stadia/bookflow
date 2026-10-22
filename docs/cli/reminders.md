@@ -4,7 +4,7 @@
 
 ## `reminders`
 
-What needs doing, across the company, as of today (or `as_of`) -- the anchor's Reminders list. One heading per kind with its count and total: memorized transactions due (reminder slots and missed ones left for a person), memorized entries that need a person (blocked: a closed period, an inactive account, a permission the owner lost), to-dos due (`--mine` for yours), overdue notices ready to send, overdue invoices, and bills to pay within `bills_days_ahead` days. Each heading lists up to `limit` lines. An agent asking "what needs doing today?" starts here, then `todo list --mine`.
+What needs doing, across the company, as of today (or `as_of`) -- the anchor's Reminders list. One heading per kind with its count and total: memorized transactions due (reminder slots and missed ones left for a person), memorized entries that need a person (blocked: a closed period, an inactive account, a permission the owner lost), to-dos due (`--mine` for yours), overdue notices ready to send, overdue invoices, and bills to pay within `bills_days_ahead` days. Each heading lists up to `limit` lines. An agent asking "what needs doing today?" starts here, then `todo list --mine`. A heading is shown only to a reader its own list command would answer -- to-dos need `note`, notices `customer`, overdue invoices and bills `reports` -- and a heading left out takes its count and total with it.
 
 | Contract | Value |
 |---|---|

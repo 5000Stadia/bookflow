@@ -153,7 +153,7 @@ review cb5fcd7 (gate g96052d).
 
 ## M4 — After V1.5: concepts to develop
 
-- [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows)
+- [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows) On hold: needs the anchor desktop software and its SDK on a Windows machine, and a sample company file; none is on this machine.
 - [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
@@ -165,14 +165,14 @@ review cb5fcd7 (gate g96052d).
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
-- [ ] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
-- [ ] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
+- [~] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
+- [~] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
 - [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends.
 - [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches.
 - [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout.
 - [ ] R115 CRM: leads, a sales pipeline, follow-ups and customer communication history beyond contact records.
 - [ ] R116 Payroll: paychecks, withholding, benefits, tax forms and electronic filing, designed as its own module.
-- [~] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
+- [x] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
 - [x] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
 - [x] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
 - [ ] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
@@ -183,10 +183,10 @@ review cb5fcd7 (gate g96052d).
 - [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically.
 - [ ] R127 Multi-currency and non-US tax: foreign-currency ledgers, revaluation, and tax regimes beyond US sales tax, after a design pass.
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network.
-- [ ] R130 Windows: a supported Windows build with an authenticated local hand-off.
+- [ ] R130 Windows: a supported Windows build with an authenticated local hand-off. On hold: no Windows machine here to build and test on.
 - [x] R138 Find any transaction: search across every transaction type by name, number, amount or date range
 - [ ] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
-- [~] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
+- [x] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
 - [x] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment

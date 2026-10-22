@@ -701,6 +701,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     if operation != 'post':
         from bookflow.company.sales_deletions import require_not_deleted
         require_not_deleted(s, resolve(s, getattr(inp, document_type), document_type)['id'])
+    if document_type == 'invoice' and operation in ('update', 'void'):
+        from bookflow.company.credit_transfers import guard_document
+        guard_document(s, resolve(s, inp.invoice, 'invoice')['id'], 'corrected' if operation == 'update' else 'voided')
     if document_type == 'invoice' and operation == 'update' and not _settlement_internal:
         from bookflow.company.payment_invoice_corrections import prepare as settlement_prepare
         return settlement_prepare(s, ctx, inp)

@@ -291,8 +291,9 @@ def _intent(s, ctx, inp):
                        'customer or job')
     key = keys[0]
     component = next(row for row in facts['components'] if row['component_key_id'] == key['id'])
-    discount = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.sum(c.payment_discounts.c.amount_minor_units), 0)).where(
-        c.payment_discounts.c.transaction_id == header['id'])).scalar_one()
+    from bookflow.company.payments import discount_rows
+    # Only the discounts the receipt still holds (an unapplied one left with its application).
+    discount = sum(row['amount_minor_units'] for row in discount_rows(s, header['id']).values())
     cash = component['amount_minor_units'] - discount
     if cash <= 0:
         raise _invalid('payment', 'this receipt took no cash (it is a write-off), so there is no check to record as returned')
@@ -376,15 +377,23 @@ def _document(output, kind, account=None):
                           amount=total.model_dump() if hasattr(total, 'model_dump') else total, account=account)
 
 
-def _reopened(s, unapply_plan, currency):
-    """The invoices the unapply reopens: what the receipt had paid on each and what each owes now."""
+def _reopened(s, unapply_plan, currency, kept=None):
+    """The invoices the unapply reopens: the cash the receipt had paid on each and what each owes now.
+
+    A discount the receipt took stays on its invoice (``kept``), so only the cash is owed again.
+    """
     if unapply_plan is None:
         return []
     effect = unapply_plan.preview.effect.model_dump(mode='json')
-    due = {row['invoice_id']: row['due_minor_units'] for row in effect['document_changes']}
+    kept = kept or {}
+    held = {invoice: row['discount']['amount_minor_units'] for invoice, row in kept.items()}
+    due = {row['invoice_id']: row['due_minor_units'] - held.get(row['invoice_id'], 0) for row in effect['document_changes']}
     paid = {}
     for row in effect['applications']:
         paid[row['invoice_id']] = paid.get(row['invoice_id'], 0) + row['amount']['minor_units']
+    for invoice, units in held.items():
+        if invoice in paid:
+            paid[invoice] -= units
     numbers = {row['id']: row['number'] for row in effects.rows(s, c.transactions, c.transactions.c.id.in_(sorted(paid)))}
     return [ReopenedInvoice(invoice_id=invoice_id, number=numbers[invoice_id], reopened=_money(paid[invoice_id], currency),
                             due=_money(due[invoice_id], currency)) for invoice_id in sorted(paid, key=lambda i: numbers[i])]
@@ -476,7 +485,8 @@ def prepare(s, ctx, inp, operation='bounce'):
         refund = refunds.prepare_post(s, ctx, intent['refund'], released=released)
         register = registers.prepare(s, ctx, intent['register'], 'post') if intent['register'] else None
         invoice = sales.prepare(s, ctx, intent['invoice'], 'invoice', 'post') if intent['invoice'] else None
-    reopened = _reopened(s, unapply, currency)
+    kept = payments.kept_discounts(s, intent['header']['id'], [row['id'] for row in intent['facts']['applications']])
+    reopened = _reopened(s, unapply, currency, kept)
     fee_bank = _document(register.preview, 'journal_entry', intent['bank_fee']['account']['full_name']) if register else None
     fee_customer = _document(invoice.preview, 'invoice') if invoice else None
     if intent['customer_fee'] and invoice is None:
@@ -494,7 +504,7 @@ def prepare(s, ctx, inp, operation='bounce'):
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'bounce_facts', 'current_facts_fingerprint': fingerprint})
     version = unapply.preview.version if unapply else intent['header']['version']
-    credit_left = sum(intent['facts']['available'].values()) + intent['applied'] - intent['cash']
+    credit_left = sum(intent['facts']['available'].values()) + intent['applied'] - intent['cash'] - sum(row['discount']['amount_minor_units'] for row in kept.values())
     output = PaymentBounceOutput(
         id=intent['header']['id'], version=version, bounce_id=None, bounced_on=inp.date, operation_key=inp.operation_key,
         facts_fingerprint=fingerprint, returned=_money(intent['cash'], currency), bank_account=intent['bank']['full_name'],
@@ -518,9 +528,31 @@ def apply(plan, ctx, s):
     # own audit event; they share this request, and a refusal in any of them rolls back all.
     version = intent['header']['version']
     if intent['unapply']:
+        # What the receipt gave an invoice beyond its cash (an early-payment discount, an underpayment
+        # written off) was never money: it stays on the invoice, applied back on a new edge, and only
+        # the cash is owed again and returned.
+        apps = intent['facts']['applications']
+        kept = payments.kept_discounts(s, intent['header']['id'], [row['id'] for row in apps])
         step = payments.prepare(s, ctx, intent['unapply'], 'unapply')
         version = step.preview.version
         payments.apply(step, ctx, s)
+        if kept:
+            from bookflow.company.payment_models import InlineApplications, InvoiceAmount, PaymentApplyInput
+            by_date = {}
+            for app in apps:
+                if app['paid_transaction_id'] in kept:
+                    by_date.setdefault(app['effective_date'], []).append(app['paid_transaction_id'])
+            with payments.reattaching(kept):
+                for position, (date, invoices) in enumerate(sorted(by_date.items()), 1):
+                    items = [InvoiceAmount(invoice=invoice, expected_version=sales.resolve(s, invoice, ('invoice', 'statement_charge'))['version'],
+                                           amount=_plain(kept[invoice]['discount']['amount_minor_units'], intent['currency']))
+                             for invoice in invoices]
+                    reapply = PaymentApplyInput(payment=intent['header']['id'], expected_version=version, date=date,
+                                                operation_key=f"{inp.operation_key}.keep{position}",
+                                                applications=InlineApplications(items=items))
+                    step = payments.prepare(s, ctx, reapply, 'apply')
+                    version = step.preview.version
+                    payments.apply(step, ctx, s)
     refund = refunds.prepare(s, ctx, intent['refund'], 'post')
     refund_out = refunds.apply(refund, ctx, s).output
     register_out = invoice_out = None

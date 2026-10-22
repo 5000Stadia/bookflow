@@ -1667,7 +1667,7 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # `discounts`/`discount_account` (a discount row may carry expected_version) and the payment effect
 # optional discount fields (omitted when absent). Re-pinned again for R175: its producer literal is
 # ledger_schema.TRANSACTION_TYPES, which gained sales_tax_adjustment.
-CODECS = {'CoordinateOutput': 'e16d424c2d30c255c29242c7395c7259a6fd178119144d99d978b149e826f36f', 'Effect': '2459fecc3964de9d19380152bfdf4f0732a8e8a1055884ab347d1b7e23b3a06d', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'bbf9b0d895d08daf1e24611d334d7bd8d41fe87bcbf33b935cd92dafab8f34fd', 'Manifest': '8753528651e3ddaa96582656f34eae8e8f1641120603eb4e34f074a7395508dd', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+CODECS = {'CoordinateOutput': '9521e181253a08c0c71bd4830ba8bd920e7b0d61fb9cd81969a4eecb08dfeebd', 'Effect': '2459fecc3964de9d19380152bfdf4f0732a8e8a1055884ab347d1b7e23b3a06d', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'bbf9b0d895d08daf1e24611d334d7bd8d41fe87bcbf33b935cd92dafab8f34fd', 'Manifest': '8753528651e3ddaa96582656f34eae8e8f1641120603eb4e34f074a7395508dd', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

@@ -132,8 +132,8 @@ def _cannot_act(s, user_id: str | None, principal: str | None = None,
     eligible, epoch = credentials._binding(s.hub, user_id, principal)
     if not eligible:
         return f'{name} (an agent) no longer acts for the person it saved it for', None
-    saved = s.company.conn.execute(sa.select(c.memorized_revision_authority.c.authority_epoch).where(
-        c.memorized_revision_authority.c.revision_id == revision_id)).first() if revision_id else None
+    saved = s.company.conn.execute(sa.select(c.scheduled_revision_authority.c.authority_epoch).where(
+        c.scheduled_revision_authority.c.revision_id == revision_id)).first() if revision_id else None
     if saved is None or saved[0] != epoch:
         return f"{name} (an agent) holds different authority than when it saved this memorized transaction", None
     return None, epoch
