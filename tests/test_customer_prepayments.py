@@ -443,9 +443,18 @@ def test_a_parents_deposit_serves_its_jobs_work(books):
     run('prepayment attach', dict(receipt=got['receipt']['number'], document=f'work-order {made["number"]}'))
     shown = run('prepayment show', dict(customer=books['ortega']))
     assert shown['held']['minor_units'] == 8000 and shown['receipts'][0]['document']['number'] == made['number']
+    other_job = run('customer create', dict(name='Bath', parent_id=books['ortega']))['id']
+    receive(books, '30.00', '2026-03-03', customer=other_job)
     inv = bill(books, made, 'job-1', '2026-03-05')
     assert inv['prepayment_applied']['minor_units'] == 8000 and owed(books, inv['id']) == 2000
-    assert held(books) == 0 and balances(books).get('Customer Prepayments', 0) == 0
+    assert held(books) == 3000 and abs(balances(books)['Customer Prepayments']) == 3000
+    # The parent's receipt was drawn by the job's credit memo; filtered on either, the report ties
+    # on the family (parent and jobs together) and does not refuse.
+    for who in (books['ortega'], job, other_job):
+        for date in ('2026-03-04', '2026-12-31'):
+            report = run('report customer-prepayments', dict(as_of=date, customer=who, include_drawn=True))
+            assert report['total_held']['minor_units'] == report['account_balance']['minor_units'] == (
+                11000 if date == '2026-03-04' else 3000)
 
 
 def test_conversion_replay_and_the_default_flag(books):

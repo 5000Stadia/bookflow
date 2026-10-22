@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import json
 
 import sqlalchemy as sa
 from sqlalchemy import alias
@@ -1310,7 +1311,16 @@ def report(s, inp):
     as_of = inp.as_of or clock.today_iso()
     account = find_account(s.company)
     customer_id = defaults._row(s.company, 'customer', inp.customer, active=False)['id'] if inp.customer else None
-    receipts = receipt_rows(s, customer_id=customer_id, as_of=as_of) if account else []
+    # A customer is reported with its family (its top customer and every job), because a parent's
+    # deposit may pay a job's invoice: the receipt names one, the draw the other.
+    members = None
+    if customer_id is not None:
+        top = customer_id
+        while (parent := s.company.conn.execute(sa.select(c.customers.c.parent_id).where(
+                c.customers.c.id == top)).scalar()) is not None:
+            top = parent
+        members = sorted(descendants(s, top))
+    receipts = receipt_rows(s, customer_ids=members, as_of=as_of) if account else []
     draws = draw_rows(s, receipt_ids=[row['receipt_id'] for row in receipts], as_of=as_of) if receipts else []
     documents = _documents(s, [row['work_document_id'] for row in receipts] + [row['work_document_id'] for row in draws])
     by_receipt = {row['receipt_id']: row for row in receipts}
@@ -1343,8 +1353,8 @@ def report(s, inp):
         balance = s.company.conn.execute(sa.text(
             'SELECT COALESCE(SUM(l.credit_minor_units - l.debit_minor_units), 0) FROM posting_lines l '
             'JOIN posting_batches b ON b.id = l.batch_id WHERE l.account_id = :account AND b.effective_date <= :date'
-            + (' AND l.name_id = :customer' if customer_id else '')),
-            dict(account=account['id'], date=as_of, customer=customer_id)).scalar()
+            + (' AND l.name_id IN (SELECT value FROM json_each(:members))' if members else '')),
+            dict(account=account['id'], date=as_of, members=json.dumps(members) if members else None)).scalar()
     if balance != total:
         raise BookflowError('E_INTERNAL', message=(
             f'The Customer Prepayments account is {_plain(balance, currency)} on {as_of} and the prepayment receipts hold '
