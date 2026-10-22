@@ -191,6 +191,9 @@ MATRIX["item list"]["E_RECORD_NOT_FOUND"] = "a referenced item disappeared durin
 MATRIX["item query"]["E_RECORD_NOT_FOUND"] = "a referenced item is absent during projection"
 MATRIX["item activate"]["E_HIERARCHY_CYCLE"] = "stored hierarchy or member graph is cyclic"
 MATRIX["other-name activate"]["E_RECORD_IN_USE"] = "a converted source cannot be reactivated directly"
+# R117: a merged-away account or item changes only by undoing its merge.
+for _merged in ("account activate", "item activate", "item update"):
+    MATRIX[_merged]["E_RECORD_IN_USE"] = "the entry is merged into another; undo the merge first"
 
 # Standalone local tooling has no actor, database role, or membership capability,
 # so it is kept out of the database command matrix and its frozen capability seed.
@@ -1807,7 +1810,7 @@ for _kind in ('account', 'item'):
         'E_RECORD_NOT_FOUND': f'no {_kind} carries either name or id',
         'E_MERGE_REFUSED': (f'the same {_kind} twice, a different type, one already merged or a survivor of other merges, '
                             'children of its own, a system or uncategorized account, a bank, card, A/R or A/P account with '
-                            'postings, a tax or stocked item, or a group that would list both at different quantities '
+                            'postings, a tax or stocked item, a group listing both in different units, a price level pricing them differently, a member cycle '
                             '(the details say which)'),
         'E_REASON_REQUIRED': 'a merge is always given a reason',
         'E_PERMISSION': 'an agent asked; merging is a person\'s act',

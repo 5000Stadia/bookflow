@@ -61,6 +61,7 @@ def test_account_merge_is_idempotent_chains_are_refused_and_undo_restores(books)
     done = _run(books, "account merge", dict(merged="Truck Fuel", into="Truck Fuel Costs"))
     assert done["changed"] and done["document_count"] == 1
     assert done["survivor_balance_after"]["minor_units"] == 1000
+    assert any("Reports of every period" in note for note in done["notes"])
     assert not _run(books, "account merge", dict(merged="Truck Fuel", into="Truck Fuel Costs"))["changed"]
     _refused(books, "Truck Fuel", "Gas Spend", "already merged")
     _refused(books, "Truck Fuel Costs", "Gas Spend:Diesel Spend", "other accounts are merged into this one")
@@ -119,7 +120,7 @@ def _item(client, name, kind="service", **extra):
     tax = next(c["id"] for c in _run(client, "sales-tax-code list", {})["items"] if not c.get("taxable"))
     income = _run(client, "account show", dict(account="Side Income"))["id"]
     body = dict(name=name, type=kind, description=name, sales_tax_code_id=tax, price="10.00", income_account_id=income)
-    if kind == "inventory_part":
+    if kind in ("inventory_part", "inventory_assembly"):
         body.update(purchase_description=name, cost="4.00",
                     cogs_account_id=_run(client, "account show", dict(account="Cost of Goods Sold"))["id"],
                     asset_account_id=_run(client, "account show", dict(account="Inventory Asset"))["id"])
@@ -148,7 +149,8 @@ def test_item_refusals(books):
     c = _item(books, "Snake Cable")
     _run(books, "item create", dict(name="Cable Kit", type="group", description="Kit", print_members=True,
                                     members=[dict(component_item_id=b, quantity="1"), dict(component_item_id=c, quantity="2")]))
-    _refused(books, "Snake Cable", "Snake Hire", "different quantities", kind="item")
+    preview = _run(books, "item merge", dict(merged="Snake Cable", into="Snake Hire"), dry_run=True)
+    assert any(r["label"] == "Cable Kit: Snake Hire ×1 and Snake Cable ×2 become Snake Hire ×3" for r in preview["references"])
 
 
 def test_item_merge_repoints_and_undo_puts_back(books):
@@ -170,3 +172,103 @@ def test_item_merge_repoints_and_undo_puts_back(books):
     assert _run(books, "item unmerge", dict(merged="Jetting Dup"))["restored"] == 1
     kit = _run(books, "item show", dict(item="Jet Kit"))
     assert [m["component_item_id"] for m in kit["members"]] == [dup]
+
+
+def test_each_money_out_family_saves_again_after_an_account_merge(books):
+    """A memo-only correction of a check, card charge, card credit and vendor credit whose lines
+    (or captured item expense account) name the merged account saves with the survivor."""
+    _run(books, "account create", dict(name="Visa Card", type="credit_card"))
+    _run(books, "vendor create", dict(name="Fuel Vendor"))
+    expense = _run(books, "account show", dict(account="Truck Fuel"))["id"]
+    _item(books, "Fuel Delivery", purchase_enabled=True, purchase_description="Delivery", cost="5.00",
+          expense_account_id=expense)
+    payee = dict(name_type="vendor", name_id="Fuel Vendor")
+    line = [dict(account="Truck Fuel", amount="12.00")]
+    made = {
+        "check": _run(books, "check post", dict(account="Bank One", pay_to=payee, date="2026-02-10", number="7",
+                                                 amount="12.00", expenses=line)),
+        "card-charge": _run(books, "card-charge post", dict(account="Visa Card", pay_to=payee, date="2026-02-10",
+                                                             amount="12.00", expenses=line)),
+        "card-credit": _run(books, "card-credit post", dict(account="Visa Card", pay_to=payee, date="2026-02-11",
+                                                             amount="12.00", expenses=line)),
+        "vendor-credit": _run(books, "vendor-credit post", dict(vendor="Fuel Vendor", date="2026-02-12", expenses=line,
+                                                                 items=[dict(item="Fuel Delivery", quantity="1", unit_cost="5.00")])),
+    }
+    _run(books, "account merge", dict(merged="Truck Fuel", into="Truck Fuel Costs"))
+    survivor = _run(books, "account show", dict(account="Truck Fuel Costs"))
+    for family, doc in made.items():
+        selector = {"check": "check", "card-charge": "card_charge", "card-credit": "card_credit",
+                    "vendor-credit": "credit"}[family]
+        shown = _run(books, f"{family} show", {selector: doc["id"]})
+        _run(books, f"{family} update", {selector: doc["id"], "expected_version": shown["version"],
+                                         "memo": "corrected after the merge"})
+    # The survivor holds everything, the merged account reads as nothing.
+    after = _run(books, "account show", dict(account="Truck Fuel Costs"))
+    assert after["balance"] == survivor["balance"]
+    assert _run(books, "account list", dict(include_inactive=True))["count"] >= 1
+
+
+def test_survivor_guards_count_what_reads_as_the_survivor(books):
+    _run(books, "account merge", dict(merged="Truck Fuel", into="Truck Fuel Costs"))
+    for change in (dict(type="income"), dict(currency="CAD")):
+        current = _run(books, "account show", dict(account="Truck Fuel Costs"))
+        with pytest.raises(BookflowError) as error:
+            _run(books, "account update", dict(account="Truck Fuel Costs", expected_version=current["version"], **change))
+        assert error.value.code in ("E_TYPE_CHANGE", "E_RECORD_IN_USE"), change
+    with pytest.raises(BookflowError) as error:
+        _run(books, "account deactivate", dict(account="Truck Fuel Costs"))
+    assert error.value.code == "E_RECORD_IN_USE"
+    assert _run(books, "account show", dict(account="Truck Fuel Costs"))["has_transactions"]
+    # The merged account itself changes only by undoing its merge.
+    merged = _run(books, "account show", dict(account="Truck Fuel"))
+    for name, body in (("account activate", dict(account="Truck Fuel")),
+                       ("account update", dict(account="Truck Fuel", expected_version=merged["version"], name="Fuel Two"))):
+        with pytest.raises(BookflowError) as error:
+            _run(books, name, body)
+        assert error.value.code == "E_RECORD_IN_USE", name
+
+
+def test_item_merge_sums_a_group_listing_both_refuses_a_cycle_and_undo_respects_a_rewritten_kit(books):
+    widget, dup = _item(books, "Widget"), _item(books, "Widget Dup")
+    kit = _run(books, "item create", dict(name="Widget Kit", type="group", description="Kit", print_members=True,
+                                          members=[dict(component_item_id=widget, quantity="1"),
+                                                   dict(component_item_id=dup, quantity="1")]))["id"]
+    preview = _run(books, "item merge", dict(merged="Widget Dup", into="Widget"), dry_run=True)
+    assert any(r["label"] == "Widget Kit: Widget ×1 and Widget Dup ×1 become Widget ×2" for r in preview["references"])
+    _run(books, "item merge", dict(merged="Widget Dup", into="Widget"))
+    members = _run(books, "item show", dict(item=kit))["members"]
+    members = [m for m in members if m["active"]]
+    assert [(m["component_item_id"], m["quantity"]) for m in members] == [(widget, "2")]
+    # Undo with the kit unchanged restores both rows.
+    _run(books, "item unmerge", dict(merged="Widget Dup"))
+    members = _run(books, "item show", dict(item=kit))["members"]
+    members = [m for m in members if m["active"]]
+    assert sorted((m["component_item_id"], m["quantity"]) for m in members) == sorted([(widget, "1"), (dup, "1")])
+    # Merge again, rewrite the kit, and undo: the kit stays as the person saved it.
+    _run(books, "item merge", dict(merged="Widget Dup", into="Widget"))
+    shown = _run(books, "item show", dict(item=kit))
+    _run(books, "item update", dict(item=kit, expected_version=shown["version"],
+                                    members=[dict(component_item_id=widget, quantity="5")]))
+    undone = _run(books, "item unmerge", dict(merged="Widget Dup"))
+    assert undone["kept"] >= 1
+    members = _run(books, "item show", dict(item=kit))["members"]
+    members = [m for m in members if m["active"]]
+    assert [(m["component_item_id"], m["quantity"]) for m in members] == [(widget, "5")]
+    # A merge that would make an assembly contain itself is refused (assemblies with no stock movement).
+    part = _item(books, "Part P", kind="inventory_part")
+    mx = _item(books, "Assembly Mx", kind="inventory_assembly", members=[dict(component_item_id=part, quantity="1")])
+    a2 = _item(books, "Assembly A2", kind="inventory_assembly", members=[dict(component_item_id=mx, quantity="1")])
+    _item(books, "Assembly Sx", kind="inventory_assembly", members=[dict(component_item_id=a2, quantity="1")])
+    _refused(books, "Assembly Mx", "Assembly Sx", "contain itself", kind="item")
+    s1, m1 = _item(books, "Svc S"), _item(books, "Svc M")
+    assert s1 and m1
+    # The merged item itself changes only by undoing its merge.
+    _run(books, "item merge", dict(merged="Svc M", into="Svc S"))
+    m_row = _run(books, "item show", dict(item="Svc M"))
+    with pytest.raises(BookflowError) as error:
+        _run(books, "item update", dict(item="Svc M", expected_version=m_row["version"], name="Svc M2"))
+    assert error.value.code == "E_RECORD_IN_USE"
+    with pytest.raises(BookflowError) as error:
+        _run(books, "item activate", dict(item="Svc M"))
+    assert error.value.code == "E_RECORD_IN_USE"
+    assert s1

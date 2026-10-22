@@ -576,12 +576,26 @@ def _read_count(db: Database, account_id: str) -> int:
         {"a": account_id}).scalar_one())
 
 
+def _in_use_ids(db: Database, account_id: str) -> list[str]:
+    """This account and every account merged into it (R117): what an in-use guard must count,
+    since their postings and captured facts read as this account."""
+    if not sa.inspect(db.conn).has_table("list_merges"):
+        return [account_id]
+    merged = db.conn.execute(sa.text(
+        "SELECT merged_id FROM list_merges WHERE list_kind='account' AND survivor_id=:a AND undone_at IS NULL"),
+        {"a": account_id}).scalars().all()
+    return [account_id, *merged]
+
+
 def _transaction_count(db: Database, account_id: str) -> int:
+    """Posting lines on this account or on any account merged into it (the in-use count)."""
     if not sa.inspect(db.conn).has_table("posting_lines"):
         return 0
+    ids = _in_use_ids(db, account_id)
     value = db.conn.execute(
-        sa.text("SELECT count(*) FROM posting_lines WHERE account_id = :account_id"),
-        {"account_id": account_id},
+        sa.text("SELECT count(*) FROM posting_lines WHERE account_id IN :ids").bindparams(
+            sa.bindparam("ids", expanding=True)),
+        {"ids": ids},
     ).scalar_one()
     return int(value)
 
@@ -680,10 +694,11 @@ def _has_captured_posting_use(db: Database, account_id: str) -> bool:
 
     # Single-purpose view for feature_admission's revision-marker read only.
     revision_view = SimpleNamespace(raw=db.conn.connection.driver_connection)
+    ids = _in_use_ids(db, account_id)  # captured use through an account merged into this one counts (R117)
     for revision, queries in _CAPTURED_ACCOUNT_QUERIES:
         def resolve(queries=queries):
-            return any(db.conn.execute(sa.text(sql), {"account_id": account_id}).first()
-                       is not None for sql in queries)
+            return any(db.conn.execute(sa.text(sql), {"account_id": member}).first()
+                       is not None for sql in queries for member in ids)
         resolver = feature_admission(revision_view, FeatureRevision('company', revision), resolver=resolve)
         if resolver is not None and resolver():
             return True
@@ -828,6 +843,8 @@ def plan_account_update(
     if unknown:
         raise _validation("input", f"unknown account fields {sorted(unknown)}")
     current = _row(db, record_id)
+    from bookflow.company.list_merges import refuse_while_merged
+    refuse_while_merged(db, "account", record_id, "edit")
     for required in ("name", "type", "currency"):
         if required in changes and changes[required] is None:
             raise _validation(required, "must not be null")
@@ -1018,6 +1035,9 @@ def plan_account_active_change(
     if not isinstance(active, bool):
         raise _validation("active", "must be a boolean")
     requested = _row(db, record_id)
+    if active:
+        from bookflow.company.list_merges import refuse_while_merged
+        refuse_while_merged(db, "account", record_id, "make active")
     _validate_stored_account(db, requested, activating=active)
     if requested.get("system_role") is not None and bool(requested["active"]) is not active:
         raise BookflowError(

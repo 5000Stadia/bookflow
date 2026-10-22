@@ -186,8 +186,17 @@ re-pointed references included.
   memorized document, and when a kept line of a corrected invoice, credit memo or bill, or a
   journal, check, register entry, transfer or deposit names it.
 - Also refused beyond the list above: an Uncategorized account merged away, an inactive survivor,
-  an item whose group or price level holds both at different quantities or prices.
+  an item whose group lists both in different units or whose price level prices them differently, and a merge that would make a group or assembly contain itself.
 - Checked by `tests/test_list_merge_twins.py` (every report command from the registry, each basis,
   filtered by either name, before and after a post-merge script; undo reproduces the pre-merge
-  reads). Not yet resolved: unposted purchase orders and estimates naming a merged item are refused
-  on their next save until re-pointed, as for customers.
+  reads). Estimate and work-order lines naming a merged item or account save as the survivor when
+  resupplied (they resolve through the sales defaults). Not yet resolved: an unposted purchase order
+  naming a merged item is refused on its next save until re-pointed, as for customers.
+- Review fixes (2026-10-22): every in-use guard on an account (type, currency, deactivate,
+  `has_transactions`, captured-snapshot use) counts the accounts merged into it; a merged-away
+  account or item cannot be edited or made active while merged; an item merge that would make a
+  group or assembly contain itself is refused; a group listing both keeps the survivor's row with
+  the summed quantity (refused when the units differ); undo puts a group's or price level's rows
+  back only when that list is unchanged since the merge; kept vendor-credit lines save as the
+  survivor. A merge re-presents closed-period reports without a closing-date check, as a customer
+  merge does; the preview's notes say so.

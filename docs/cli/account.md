@@ -202,6 +202,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_IN_USE` | The record is still used by active records. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -897,6 +898,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `references[].owner_id` | string | yes | no | — | — |
 | `references[].label` | string | yes | no | — | — |
 | `references[].conflict` | string \| null | yes | yes | — | Why the survivor's own row is kept, for an ended row. |
+| `notes` | array[string] | no | no | [] | What the merge also means, in plain words: for example that reports of closed periods read the merged entry as the survivor too. |
 
 Example JSON output:
 
@@ -909,6 +911,7 @@ Example JSON output:
   "merged_balance": null,
   "merged_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "merged_name": "value",
+  "notes": [],
   "references": [],
   "survivor_balance": null,
   "survivor_balance_after": null,

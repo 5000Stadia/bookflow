@@ -1208,6 +1208,7 @@ def plan_item_update(
     at: str | None = None,
 ) -> ItemUpdatePlan:
     current = _row(db, record_id)
+    from bookflow.company.list_merges import refuse_while_merged; refuse_while_merged(db, "item", record_id, "edit")  # R117
     existing_members = _members(db, record_id)
     existing_vendors = _vendors(db, record_id)
     existing_custom = tuple(custom_fields.read_owner_values(db, record_type=ITEM_RECORD_TYPE, record_id=record_id))
@@ -1363,6 +1364,8 @@ def plan_item_active_change(
     at: str | None = None,
 ) -> ItemActivePlan:
     current = _row(db, record_id)
+    if active:
+        from bookflow.company.list_merges import refuse_while_merged; refuse_while_merged(db, "item", record_id, "make active")  # R117
     _validate_stored(db, current, activating=active)
     if bool(current["active"]) is active:
         if active:

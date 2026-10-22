@@ -149,6 +149,7 @@ class ListMergeOutput(_Strict):
     survivor_balance: MoneyOut | None = Field(description="Accounts: the survivor's balance before this merge.")
     survivor_balance_after: MoneyOut | None = Field(description="Accounts: the survivor's balance with the merged account folded in.")
     references: list[ReferenceOut] = Field(description="Every editable list row naming the merged entry, re-pointed to the survivor (or ended where the survivor has its own); undo puts each back.")
+    notes: list[str] = Field(default_factory=list, description="What the merge also means, in plain words: for example that reports of closed periods read the merged entry as the survivor too.")
 
 
 class ListUnmergeOutput(_Strict):

@@ -133,6 +133,18 @@ def member_ids(db, kind: str, entry_id: str) -> list[str]:
     return [entry_id, *_merged_into(db, kind, entry_id)]
 
 
+def refuse_while_merged(db, kind: str, entry_id: str, verb: str) -> None:
+    """An entry merged away changes only by undoing its merge (as `customer activate` refuses)."""
+    if not db.raw.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='list_merges'").fetchone():
+        return
+    merge = live_merge(db, kind, entry_id)
+    if merge is not None:
+        raise BookflowError("E_RECORD_IN_USE", message=f"This {kind} is merged into another; undo the merge "
+                            f"(`{kind} unmerge`) before you {verb} it.",
+                            details={"record_type": kind, "record_id": entry_id, "survivor_id": merge["survivor_id"],
+                                     "problem": f"a merged {kind} can be changed only by undoing its merge"})
+
+
 def is_merged_away(db, kind: str, entry_id: str | None) -> bool:
     return bool(entry_id) and live_merge(db, kind, str(entry_id)) is not None
 
@@ -195,22 +207,36 @@ def _account_references(db, merged: str, survivor: str) -> list[Reference]:
 def _item_references(db, merged: str, survivor: str) -> list[Reference]:
     refs: list[Reference] = []
     # Group and assembly members naming M.
+    from bookflow.company.items import _graph_reaches
+    from bookflow.core.exact import format_quantity_micro_units as qty_text
+    names = {i: _owner_name(db, "item", i) for i in (merged, survivor)}
     for row_id, owner, qty, unit in db.raw.execute(
             "SELECT id, owner_item_id, quantity_microunits, unit_id FROM item_members "
             "WHERE component_item_id=? AND active=1 ORDER BY owner_item_id, position, id", (merged,)):
-        label = f"item {_owner_name(db, 'item', owner)}: member"
+        kit = _owner_name(db, 'item', owner)
+        label = f"item {kit}: member"
         if owner == survivor:
             raise _refuse("the item to merge into lists this item as one of its own members", owner_item_id=owner)
-        own = db.raw.execute("SELECT quantity_microunits, unit_id FROM item_members WHERE owner_item_id=? "
+        if _graph_reaches(db, survivor, owner):
+            # The owner would list the survivor, which already contains the owner: a member cycle.
+            raise _refuse(f"{kit} lists this item, and the item to merge into already contains {kit}; "
+                          "the merge would make a group contain itself", owner_item_id=owner)
+        own = db.raw.execute("SELECT id, quantity_microunits, unit_id FROM item_members WHERE owner_item_id=? "
                              "AND component_item_id=? AND active=1", (owner, survivor)).fetchone()
         if own is None:
             refs.append(Reference("item_members", row_id, "component_item_id", "repoint", "item", owner, label))
-        elif (own[0], own[1]) != (qty, unit):
-            raise _refuse(f"{_owner_name(db, 'item', owner)} lists both items with different quantities; "
-                          "make them agree or remove one first", owner_item_id=owner)
+        elif own[2] != unit:
+            raise _refuse(f"{kit} lists both items in different units; make them agree or remove one first",
+                          owner_item_id=owner)
         else:
+            # The same thing listed twice: S's row keeps the sum, M's row ends.
+            total = int(own[1] or 0) + int(qty or 0)
+            plain = (f"{kit}: {names[survivor]} ×{qty_text(own[1] or 0)} and {names[merged]} ×{qty_text(qty or 0)} "
+                     f"become {names[survivor]} ×{qty_text(total)}")
+            refs.append(Reference("item_members", own[0], "quantity_microunits", "repoint", "item", owner, plain,
+                                  before=str(own[1]), after=str(total), explicit=True))
             refs.append(Reference("item_members", row_id, "component_item_id", "end", "item", owner, label,
-                                  "it already lists the survivor at the same quantity; its own row is kept"))
+                                  "summed into the survivor's own row"))
     # Price-level rows naming M.
     for row_id, level, price, cur, pct, basis in db.raw.execute(
             "SELECT id, price_level_id, price_minor_units, price_currency, percent_millionths, adjustment_basis "
@@ -431,6 +457,20 @@ def _plan(db, kind, merged, target, existing, refs) -> MergePlan:
     return MergePlan(kind, merged, target, existing, _item_documents(db, merged["id"]), None, None, refs)
 
 
+def _notes(db, plan: MergePlan) -> list[str]:
+    notes = []
+    closing = db.raw.execute("SELECT closing_date FROM company_info").fetchone()
+    if closing and closing[0]:
+        notes.append(f"Reports of periods closed through {closing[0]} will also show the merged {plan.kind}'s "
+                     f"entries under {plan.survivor['full_name']}; nothing posted in them changes.")
+    else:
+        notes.append(f"Reports of every period, earlier ones included, will show the merged {plan.kind}'s entries "
+                     f"under {plan.survivor['full_name']}; nothing posted changes.")
+    if any(r.conflict for r in plan.references):
+        notes.append("Where the survivor already has its own row, its row is kept; see each reference's conflict.")
+    return notes
+
+
 def preview(db, plan: MergePlan) -> dict[str, Any]:
     from bookflow.core.money import Money
     currency = plan.survivor.get("currency") or _home(db) if plan.kind == "account" else _home(db)
@@ -444,6 +484,7 @@ def preview(db, plan: MergePlan) -> dict[str, Any]:
         document_count=sum(v["documents"] for v in plan.documents.values()),
         merged_balance=money(plan.merged_balance), survivor_balance=money(plan.survivor_balance),
         survivor_balance_after=money(after),
+        notes=_notes(db, plan),
         references=[dict(table=r.table, record_id=r.record_id, field=r.column, action=r.action,
                          owner_type=r.owner_kind, owner_id=r.owner_id, label=r.label, conflict=r.conflict)
                     for r in plan.references],
@@ -463,6 +504,11 @@ def _snapshot(db, owner_kind: str, owner_id: str) -> dict[str, Any]:
         return dict(handler.snapshotter(db.conn, owner_id))
     table = _OWNER_TABLES[owner_kind]
     return dict(db.conn.execute(sa.select(table).where(table.c.id == owner_id)).mappings().one())
+
+
+def _typed(column: str, value):
+    """A stored reference value as its column holds it: quantities are integers."""
+    return int(value) if value is not None and column.endswith("_microunits") else value
 
 
 def _write(s, ctx, *, kind: str, entry_id: str, entry_active: bool, steps: list[tuple[str, str, str, Any]],
@@ -497,7 +543,8 @@ def apply_merge(s, ctx, plan: MergePlan, command: str) -> tuple[str, list[Touche
     at, event, merge_id = clock.now_iso(), new_id(), new_id()
     survivor = plan.survivor["id"]
     steps = [(r.table, r.record_id, r.column if r.action == "repoint" else "active",
-              (r.after if r.explicit else survivor) if r.action == "repoint" else 0) for r in plan.references]
+              _typed(r.column, r.after if r.explicit else survivor) if r.action == "repoint" else 0)
+             for r in plan.references]
     touched = _write(s, ctx, kind=kind, entry_id=plan.merged["id"], entry_active=False, steps=steps,
                      owners=[(r.owner_kind, r.owner_id) for r in plan.references], action="merge", at=at)
     row = dict(id=merge_id, list_kind=kind, merged_id=plan.merged["id"], survivor_id=survivor,
@@ -526,6 +573,15 @@ class UnmergePlan:
     kept: tuple[dict[str, Any], ...] = ()
 
 
+def _owner_unchanged(db, merge: dict[str, Any], ref: dict[str, Any]) -> bool:
+    """Whether the list record owning a re-pointed row is still at the version the merge wrote."""
+    written = db.raw.execute("SELECT version_after FROM audit_entries WHERE event_id=? AND record_type=? AND record_id=?",
+                             (merge["audit_event_id"], ref["owner_kind"], ref["owner_id"])).fetchone()
+    table = _OWNER_TABLES[ref["owner_kind"]].name
+    now = db.raw.execute(f"SELECT version FROM {table} WHERE id=?", (ref["owner_id"],)).fetchone()
+    return written is not None and now is not None and int(written[0]) == int(now[0])
+
+
 def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
     merged = _resolve(db, kind, merged_selector)
     merge = live_merge(db, kind, merged["id"])
@@ -543,9 +599,13 @@ def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
                                  (ref["record_id"],)).fetchone() if ref["table_name"] not in ("items", "accounts", "company_info") \
             else (db.raw.execute(f"SELECT {ref['column_name']}, 1 FROM {ref['table_name']} WHERE id=?",
                                  (ref["record_id"],)).fetchone())
+        child = ref["table_name"] not in ("items", "accounts", "company_info")
         if current is None:
             kept.append(ref)
-        elif ref["action"] == "repoint" and current[0] == ref["after_value"]:
+        elif child and not _owner_unchanged(db, merge, ref):
+            # The owner's list was saved again since (a kit rewritten): its rows stay as the person left them.
+            kept.append(ref)
+        elif ref["action"] == "repoint" and (None if current[0] is None else str(current[0])) == ref["after_value"]:
             restores.append(ref)
         elif ref["action"] == "end" and not current[1]:
             restores.append(ref)
@@ -562,7 +622,7 @@ def apply_unmerge(s, ctx, plan: UnmergePlan, command: str) -> list[Touched]:
                  undo_reason=ctx.reason.strip(), undo_audit_event_id=event)
     t = schema.list_merges
     steps = [(r["table_name"], r["record_id"], r["column_name"] if r["action"] == "repoint" else "active",
-              r["before_value"] if r["action"] == "repoint" else 1) for r in plan.restores]
+              _typed(r["column_name"], r["before_value"]) if r["action"] == "repoint" else 1) for r in plan.restores]
     entry_active = bool(merge["deactivated_merged"]) or bool(plan.merged.get("active"))
     touched = _write(s, ctx, kind=kind, entry_id=merge["merged_id"], entry_active=entry_active, steps=steps,
                      owners=[(r["owner_kind"], r["owner_id"]) for r in plan.restores], action="unmerge", at=at)

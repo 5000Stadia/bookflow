@@ -348,7 +348,7 @@ ACCOUNT_COMMANDS = register_lifecycle(
     selector_field="account",
     error_codes={
         "update": ("E_SYSTEM_RECORD", "E_TYPE_CHANGE", "E_RECORD_IN_USE"),
-        "activate": ("E_SYSTEM_RECORD",),
+        "activate": ("E_SYSTEM_RECORD", "E_RECORD_IN_USE"),
         "deactivate": ("E_RECORD_IN_USE",),
     },
 )
