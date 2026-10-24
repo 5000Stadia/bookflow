@@ -13,6 +13,7 @@ from typing import Any, Literal, Mapping, Sequence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import list_service, schema
 from bookflow.company.lists import get_list_definition, normalize_display_name
 from bookflow.core.errors import BookflowError
@@ -291,11 +292,13 @@ def _prepared_item(
         "adjustment_basis": item.adjustment_basis,
         "price_minor_units": None,
         "price_currency": None,
+        "price_fraction": None,
         "percent_millionths": None,
     }
     if item.price is not None:
-        price = _money(item.price, currency, field="items.price", default_minor_units=0)
-        values.update(price_minor_units=price.minor_units, price_currency=price.currency)
+        # R150: a per-item fixed price is a unit price, exact to three places beyond the cent.
+        minor, fraction = unit_price.split(unit_price.parse(item.price, currency, "items.price"))
+        values.update(price_minor_units=minor, price_currency=currency, price_fraction=fraction)
     else:
         values["percent_millionths"] = parse_percentage_millionths(
             item.percent, field="items.percent"
@@ -335,7 +338,7 @@ def _child_input(row: Mapping[str, Any]) -> dict[str, Any]:
         "id": row["id"],
         "item_id": row["item_id"],
         "price": (
-            _money_input(row["price_minor_units"], row["price_currency"])
+            f'{unit_price.text(unit_price.row_units(row, "price"), str(row["price_currency"]))} {row["price_currency"]}'
             if row["price_minor_units"] is not None
             else None
         ),
@@ -383,7 +386,7 @@ def _child_output(db: Database, row: Mapping[str, Any]) -> PriceLevelItemOutput:
         item_id=str(row["item_id"]),
         item_name=str(item["full_name"]),
         price=(
-            _money_output(row["price_minor_units"], row["price_currency"])
+            MoneyOutput(**unit_price.to_dict(unit_price.row_units(row, "price"), str(row["price_currency"])))
             if row["price_minor_units"] is not None
             else None
         ),
@@ -447,7 +450,7 @@ def aggregate_snapshot(
             "active": bool(child["active"]),
             "item_id": child["item_id"],
             "price": (
-                Money(int(child["price_minor_units"]), str(child["price_currency"])).to_dict()
+                unit_price.to_dict(unit_price.row_units(child, "price"), str(child["price_currency"]))
                 if child["price_minor_units"] is not None
                 else None
             ),
@@ -703,7 +706,8 @@ def persist_price_mutation(db: Database, mutation: PriceMutation) -> None:
     )
     existing_ids = {str(row["id"]) for row in mutation.before_children}
     for row in mutation.after_children:
-        values = {field: row[field] for field in schema.price_level_items.c.keys()}
+        values = {field: row[field] if field != "price_fraction" else row.get(field)
+                  for field in schema.price_level_items.c.keys()}
         if str(row["id"]) in existing_ids:
             db.conn.execute(
                 schema.price_level_items.update()

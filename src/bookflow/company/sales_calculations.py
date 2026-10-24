@@ -1,6 +1,7 @@
 """Exact sales arithmetic; intermediate ratios use unbounded Python integers."""
 from bookflow.core.exact import INT64_MAX, _require_i64, round_ratio_half_even
 from bookflow.company.sales_models import _invalid
+from bookflow.core import unit_price as up
 
 
 def nonnegative(value, field):
@@ -10,8 +11,14 @@ def nonnegative(value, field):
     return value
 
 
-def extension(quantity_microunits, price_minor_units):
-    return nonnegative(round_ratio_half_even(quantity_microunits * price_minor_units, 1_000_000), "line.net")
+def extension(quantity_microunits, price_minor_units, fraction=None):
+    """quantity x the exact stored price (minor units plus its R150 fraction), rounded once."""
+    return extension_units(quantity_microunits, up.join(price_minor_units, fraction))
+
+
+def extension_units(quantity_microunits, price_units):
+    """quantity x unit price in price units (thousandths of a minor unit), rounded once to the minor unit."""
+    return nonnegative(up.extension(quantity_microunits, price_units), "line.net")
 
 
 def base_quantity(quantity_microunits, factor_nanounits):
@@ -27,6 +34,31 @@ def selected_price(base_minor_units, factor_nanounits):
     return nonnegative(round_ratio_half_even(base_minor_units * factor_nanounits, 1_000_000_000), "unit_price")
 
 
+def selected_price_units(base_units, factor_nanounits):
+    """Price per selected unit, in price units: a whole-minor base rounds to the minor unit as
+    before R150; a sub-minor base keeps price precision (thousandths of a minor unit)."""
+    nonnegative(base_units, "unit_price")
+    if up.is_whole(base_units):
+        return selected_price(base_units // up.SCALE, factor_nanounits) * up.SCALE
+    return nonnegative(round_ratio_half_even(base_units * factor_nanounits, 1_000_000_000), "unit_price")
+
+
+def adjusted_price_units(base_units, percent_millionths, increment_minor_units=1,
+                         offset_minor_units=0, rounding_mode="nearest"):
+    """adjusted_price in price units. A whole-minor base behaves exactly as before R150; a
+    sub-minor base at the default one-minor increment and no offset keeps price precision."""
+    nonnegative(base_units, "price_basis")
+    if up.is_whole(base_units):
+        return adjusted_price(base_units // up.SCALE, percent_millionths, increment_minor_units,
+                              offset_minor_units, rounding_mode) * up.SCALE
+    _require_i64(increment_minor_units, field="increment", positive=True)
+    _require_i64(offset_minor_units, field="offset")
+    fine = increment_minor_units == 1 and offset_minor_units == 0
+    increment = 1 if fine else increment_minor_units * up.SCALE
+    return _adjusted(base_units, percent_millionths, increment,
+                     0 if fine else offset_minor_units * up.SCALE, rounding_mode)
+
+
 def adjusted_price(base_minor_units, percent_millionths, increment_minor_units=1,
                    offset_minor_units=0, rounding_mode="nearest"):
     """Adjust and round (price-offset)/increment once, then restore the offset."""
@@ -36,6 +68,12 @@ def adjusted_price(base_minor_units, percent_millionths, increment_minor_units=1
         raise _invalid("percent", "outside supported price-level range")
     _require_i64(increment_minor_units, field="increment", positive=True)
     _require_i64(offset_minor_units, field="offset")
+    return _adjusted(base_minor_units, percent_millionths, increment_minor_units, offset_minor_units, rounding_mode)
+
+
+def _adjusted(base_minor_units, percent_millionths, increment_minor_units, offset_minor_units, rounding_mode):
+    if not -100_000_000 <= percent_millionths <= 1_000_000_000_000:
+        raise _invalid("percent", "outside supported price-level range")
     numerator = base_minor_units * (100_000_000 + percent_millionths) - offset_minor_units * 100_000_000
     denominator = increment_minor_units * 100_000_000
     if rounding_mode == "nearest":

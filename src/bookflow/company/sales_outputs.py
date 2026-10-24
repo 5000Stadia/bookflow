@@ -71,6 +71,9 @@ class SalesLineOutput(CreatedOutput):
     tax: MoneyOutput
     gross: MoneyOutput
     unit_price_minor_units: int | None
+    # R150: the unit price's thousandths of a minor unit beyond unit_price_minor_units (its
+    # nearest minor unit); absent when the price is whole. ``unit_price.amount`` is exact.
+    unit_price_fraction: int | None = Field(default=None, exclude_if=lambda v: v is None)
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int

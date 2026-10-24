@@ -296,12 +296,15 @@ def _validate(plan, s, ctx):
                 'ordinary sale cannot create an allocation proof')
             numeric_projection(s,line,facts.allocation_proof)
         elif facts.pricing_basis == 'amount':
-            require(line['unit_price_minor_units'] is None and line['net_minor_units'] == facts.net_amount_minor_units
+            require(line['unit_price_minor_units'] is None and line.get('unit_price_fraction') is None
+                    and line['net_minor_units'] == facts.net_amount_minor_units
                     - sum(units for _, units in shares.get(envelope['id'], [])), 'amount extension')
         else:
-            require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units'])
+            require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units'],
+                                                              line.get('unit_price_fraction'))
                     - sum(units for _, units in shares.get(envelope['id'], [])), 'line extension')
-            require(role in ('item', 'charge') or line['unit_price_minor_units'] == 0, 'priced subtotal or discount')
+            require(role in ('item', 'charge') or (line['unit_price_minor_units'] == 0 and line.get('unit_price_fraction') is None),
+                    'priced subtotal or discount')
         own_taxes = sorted((comp for comp in components if comp['document_line_id'] == envelope['id']),
             key=lambda comp: json.loads(comp['component_snapshot'])['position'])
         taxable = profile.preferences.sales_tax_enabled and bool(facts.tax_code and facts.tax_code.taxable)

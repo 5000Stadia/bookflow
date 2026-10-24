@@ -27,6 +27,7 @@ that edge -- the aging, the unpaid list, ``bills.applied_totals`` -- answers wit
 """
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 
 def define_tables(metadata, column, table):
@@ -110,6 +111,7 @@ def define_tables(metadata, column, table):
         identifier('account_id', "Account credited by this line, captured from the item's own account.", 'accounts.id'),
         C('quantity_microunits', sa.BigInteger, 'Positive quantity credited, in millionths of one unit.', nullable=False),
         C('unit_cost_minor_units', sa.BigInteger, 'Home-currency credit of one unit; null when the amount was entered outright.', nullable=True),
+        fraction_column('unit_cost', 'Unit cost'),
         integer('amount_minor_units', 'Positive home-currency amount credited to the account.'),
         identifier('customer_id', 'Customer or job the cost was attributed to; null when unattributed.', 'customers.id', nullable=True),
         C('billable', sa.Boolean, 'Whether the cost this line gives back was marked for rebilling to the named customer or job.', nullable=False),

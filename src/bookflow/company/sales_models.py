@@ -74,6 +74,30 @@ class SalesMoneyInput(StrictModel):
         return self
 
 
+class SalesPriceInput(StrictModel):
+    """A unit price or cost as money: ``amount`` may carry up to three places beyond the minor
+    unit (R150), and ``minor_units``, when given with it, is its nearest minor unit."""
+    minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX)
+    currency: str = Field(min_length=3, max_length=3)
+    amount: str | None = None
+
+    @model_validator(mode="after")
+    def consistent(self):
+        from bookflow.core import unit_price
+        if not is_currency(self.currency):
+            raise ValueError("unknown currency code")
+        if self.amount is None and self.minor_units is None:
+            raise ValueError("give amount or minor_units")
+        if self.amount is not None:
+            try:
+                unit_price.parse(self.model_dump(exclude_none=True), self.currency, "amount")
+            except BookflowError as exc:
+                if exc.code == "E_AMOUNT_PRECISION":
+                    raise
+                raise ValueError("amount must be exact and agree with minor_units") from None
+        return self
+
+
 def money(value: str | SalesMoneyInput | dict, currency: str, field="unit_price") -> Money:
     """Parse nonnegative home money; floats, booleans and foreign prices fail."""
     if not is_currency(currency):
@@ -112,13 +136,13 @@ class SalesLineInput(StrictModel):
     item: Selector
     quantity: Quantity = "1"
     unit: Selector | None = None
-    unit_price: str | SalesMoneyInput | None = None
+    unit_price: str | SalesPriceInput | None = None
     net_amount: str | SalesMoneyInput | None = None
     description: Text | None = None
     class_id: Selector | None = None
     tax_code: Selector | None = None
     price_level: Selector | None = None
-    price_basis_amount: str | SalesMoneyInput | None = None
+    price_basis_amount: str | SalesPriceInput | None = None
     percent: str | None = Field(default=None, description=(
         "Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line "
         "directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; "

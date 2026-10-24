@@ -14,13 +14,13 @@ from typing import Any, Literal, Mapping, Sequence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import custom_fields, list_service, schema, units
 from bookflow.company.lists import get_list_definition, hierarchy_projection, normalize_display_name
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import (
     INT64_MAX,
     INT64_MIN,
-    bom_component_extension_minor_units,
     convert_quantity_micro_units,
     format_percentage_millionths,
     format_quantity_micro_units,
@@ -534,7 +534,23 @@ def _home_currency(db: Database) -> str:
     return str(_info(db)["home_currency"])
 
 
+# R150: unit prices and costs may carry three places beyond the minor unit (five for USD).
+_PRICE_FIELDS = frozenset({"price", "cost", "purchase_cost"})
+
+
 def _money(value: Any | None, db: Database, field: str) -> dict[str, Any]:
+    if field in _PRICE_FIELDS:
+        if value is None:
+            return {f"{field}_minor_units": None, f"{field}_currency": None, f"{field}_fraction": None}
+        home = _home_currency(db)
+        if isinstance(value, str) and value.strip()[-3:].isalpha() and value.strip()[-3:] != home:
+            raise _validation(field, "must use the company home currency")
+        if isinstance(value, dict) and value.get("currency", home) != home:
+            raise _validation(field, "must use the company home currency")
+        units = unit_price.parse(dict(value, currency=home) if isinstance(value, dict) and "currency" not in value
+                                 else value, home, field)
+        minor, fraction = unit_price.split(units)
+        return {f"{field}_minor_units": minor, f"{field}_currency": home, f"{field}_fraction": fraction}
     if value is None:
         return {f"{field}_minor_units": None, f"{field}_currency": None}
     result = Money.parse(value, _home_currency(db))
@@ -550,7 +566,9 @@ def _money(value: Any | None, db: Database, field: str) -> dict[str, Any]:
 def _money_output(row: Mapping[str, Any], field: str) -> MoneyOutput | None:
     minor = row.get(f"{field}_minor_units")
     currency = row.get(f"{field}_currency")
-    return None if minor is None else MoneyOutput(**Money(int(minor), str(currency)).to_dict())
+    if minor is None:
+        return None
+    return MoneyOutput(**unit_price.to_dict(unit_price.join(int(minor), row.get(f"{field}_fraction")), str(currency)))
 
 
 def _reference(db: Database, table: sa.Table, record_id: str, *, field: str, record_type: str, active: bool) -> dict[str, Any]:
@@ -970,6 +988,7 @@ def _normalize_vendor_ranks(
             "vendor_item_name": None,
             "purchase_cost_minor_units": None,
             "purchase_cost_currency": None,
+            "purchase_cost_fraction": None,
             "minimum_quantity_microunits": None,
             "lead_time_days": None,
             "manufacturer_part_number": None,
@@ -1760,7 +1779,7 @@ def _bom_cost(
         if not member["active"]:
             continue
         component = _cached_item(db, str(member["component_item_id"]), cache)
-        cost = int(component["cost_minor_units"] or 0)
+        cost = unit_price.join(int(component["cost_minor_units"] or 0), component.get("cost_fraction"))
         quantity = int(member["quantity_microunits"])
         if member["unit_id"] is not None:
             source = (
@@ -1804,7 +1823,7 @@ def _bom_cost(
                 int(source["base_factor_nanounits"]),
                 int(target["base_factor_nanounits"]),
             )
-        extension = bom_component_extension_minor_units(quantity, cost)
+        extension = unit_price.extension(quantity, cost)  # R150: exact cost, rounded once
         total += extension
         if not INT64_MIN <= total <= INT64_MAX:
             raise _validation("bill_of_material_cost", "does not fit signed 64-bit storage", code="E_VALUE_RANGE")
@@ -1951,7 +1970,8 @@ def aggregate_snapshot(
             "vendor_item_name": row["vendor_item_name"],
             "purchase_cost": (
                 None if row["purchase_cost_minor_units"] is None
-                else Money(int(row["purchase_cost_minor_units"]), str(row["purchase_cost_currency"])).to_dict()
+                else unit_price.to_dict(unit_price.join(int(row["purchase_cost_minor_units"]), row.get("purchase_cost_fraction")),
+                                        str(row["purchase_cost_currency"]))
             ),
             "minimum_quantity": (
                 None if row["minimum_quantity_microunits"] is None
@@ -2058,8 +2078,8 @@ def item_query_options(
             "$custom-searchable": sa.func.lower(sa.func.coalesce(custom_search, "")),
         },
         sort_expressions={
-            "price": owner.c.price_minor_units,
-            "cost": owner.c.cost_minor_units,
+            "price": owner.c.price_minor_units * unit_price.SCALE + sa.func.coalesce(owner.c.price_fraction, 0),
+            "cost": owner.c.cost_minor_units * unit_price.SCALE + sa.func.coalesce(owner.c.cost_fraction, 0),
             "quantity_on_hand": quantity_on_hand_expression(owner),
             "preferred_vendor": preferred,
             "category": category,
