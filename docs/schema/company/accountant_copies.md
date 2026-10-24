@@ -20,7 +20,8 @@ Database: `company`.
 | `status` | VARCHAR(12) | no | — | — | — | — | owner side: out, returned or cancelled; accountant side: working. |
 | `dividing_date` | VARCHAR(10) | no | — | — | — | — | YYYY-MM-DD: the accountant works on or before it, the owner after it. |
 | `origin_company_id` | VARCHAR(26) | no | — | — | — | — | Company id of the books the copy was made from. |
-| `mac_key` | VARCHAR(64) | no | — | — | — | — | Hex HMAC-SHA256 key that signs and verifies this copy's change file; never shown. |
+| `accountant_user_id` | VARCHAR(26) | yes | — | — | — | — | The designated external accountant the copy was made for; every change it sends back is posted as them. |
+| `mac_key` | VARCHAR(64) | no | — | — | — | — | Hex HMAC-SHA256 key that signs and verifies this copy's change file; never shown, blanked in every backup, wiped once the copy is returned or cancelled. |
 | `base_audit_seq` | INTEGER | yes | — | — | — | — | Accountant side: the audit cursor when the copy was taken; later events are the accountant's. |
 | `file_name` | VARCHAR(255) | yes | — | — | — | — | Owner side: the exported archive's file name. |
 | `archive_sha256` | VARCHAR(64) | yes | — | — | — | — | Owner side: SHA-256 of the exported archive. |

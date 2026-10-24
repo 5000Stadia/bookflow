@@ -4,7 +4,7 @@
 
 ## `accountant add`
 
-Make a member of this company its external accountant, the anchor's External Accountant user: they read everything, and write only adjusting journal entries (`journal post`, correcting or voiding only their own), reclassifications (`accountant reclassify`), review marks (`accountant mark-entry`, `accountant reviewed-through`) and notes, all dated on or before `through`, the end of the review period. Everything else they try is refused, and every change is attributed to them. The user must be a person with standard or higher access to the company. Run again to move the period end. A person's step: an agent is refused.
+Make a member of this company its external accountant, the anchor's External Accountant user: they read everything, and write only adjusting journal entries (`journal post`, correcting or voiding only their own), reclassifications (`accountant reclassify`), review marks (`accountant mark-entry`, `accountant reviewed-through`) and notes, all dated on or before `through`, the end of the review period. Everything else they try is refused, and every change is attributed to them. The user must be a person holding the standard role on the company (no admin, as the anchor's External Accountant). Run again to move the period end. A person's step: an agent is refused.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -34,7 +34,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `user` | `USER` | string | yes | no | — | Username or user id of a person with standard or higher access to this company.; minimum length 1; maximum length 64 |
+| `user` | `USER` | string | yes | no | — | Username or user id of a person holding the standard role on this company (no admin, as the anchor's External Accountant).; minimum length 1; maximum length 64 |
 | `through` | `--through` | string | yes | no | — | End of the review period, YYYY-MM-DD: the accountant posts only on or before it.; minimum length 10; maximum length 10 |
 | `note` | `--note` | string \| null | no | yes | null | What the engagement is, such as 2026 year-end review. |
 

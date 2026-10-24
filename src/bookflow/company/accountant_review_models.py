@@ -18,7 +18,7 @@ class _In(BaseModel):
 # ------------------------------------------------------------------ the external accountant
 
 class AccountantAddInput(_In):
-    user: str = Field(min_length=1, max_length=64, description='Username or user id of a person holding the standard role on this company (no admin, as the anchor's External Accountant).')
+    user: str = Field(min_length=1, max_length=64, description='Username or user id of a person holding the standard role on this company (no admin, as the anchor\'s External Accountant).')
     through: str = Field(**_DATE, description='End of the review period, YYYY-MM-DD: the accountant posts only on or before it.')
     note: str | None = Field(None, max_length=500, description='What the engagement is, such as 2026 year-end review.')
     _through = field_validator('through')(iso_date)

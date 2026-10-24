@@ -75,6 +75,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `status` | literal["out", "returned", "cancelled", "working"] | yes | no | — | — |
 | `dividing_date` | string | yes | no | — | — |
 | `origin_company_id` | string | yes | no | — | — |
+| `accountant_name` | string \| null | no | yes | null | The external accountant the copy was made for; its changes are posted as them. |
 | `created_at` | string | yes | no | — | — |
 | `created_by_name` | string \| null | yes | yes | — | — |
 | `file_name` | string \| null | no | yes | null | — |
@@ -89,6 +90,7 @@ Example JSON output:
 
 ```json
 {
+  "accountant_name": null,
   "archive_sha256": null,
   "close_reason": null,
   "closed_at": null,
@@ -138,7 +140,7 @@ Example JSON output:
 
 ## `accountant-copy changes`
 
-In an accountant's copy: write the change file to send back, in the company folder's exports/. It holds every adjusting entry and reclassification made in the copy (each as it stands now; voided ones are left out), notes, review marks and reviewed-through marks, signed so the owner's books can tell it came unaltered from this copy. Run it again after more work; the owner imports each change once.
+In an accountant's copy: write the change file to send back, in the company folder's exports/. It holds every adjusting entry and reclassification made in the copy (each as it stands now; voided ones are left out), notes, review marks and reviewed-through marks, signed so the owner's books can tell it came unaltered from this copy. Run it again after more work; the owner imports one file, which closes the copy.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -282,7 +284,7 @@ Example JSON output:
 
 ## `accountant-copy export`
 
-Make an accountant's copy, as the anchor does: a verified backup archive of the company (open it on the accountant's machine with `company restore --as-copy`) whose books know the dividing date `through`, with a small manifest beside it, in the company folder's exports/. Bookflow sends it nowhere; hand it over yourself. While the copy is out these books refuse every change dated on or before the dividing date, and account edits and list merges, until `accountant-copy import` takes the accountant's changes back or a person runs `accountant-copy cancel`. The copy takes only adjusting entries, reclassifications, review marks and notes dated on or before the dividing date. The dividing date must be after the closing date. An agent may prepare this hand-off.
+Make an accountant's copy, as the anchor does: a verified backup archive of the company (open it on the accountant's machine with `company restore --as-copy`) whose books know the dividing date `through`, with a small manifest beside it, in the company folder's exports/. Bookflow sends it nowhere; hand it over yourself. While the copy is out these books refuse every change dated on or before the dividing date, and account edits and list merges, until `accountant-copy import` takes the accountant's changes back or a person runs `accountant-copy cancel`. The copy takes only adjusting entries, reclassifications, review marks and notes dated on or before the dividing date. The copy is for one designated external accountant (`accountant`; default the one designated, and one must be): every change it sends back is posted as them. The dividing date must be after the closing date. No backup ever carries the key that verifies the copy's change file. An agent may prepare this hand-off.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -312,6 +314,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `accountant` | `--accountant` | string \| null | no | yes | null | Username or user id of the designated external accountant the copy is for; default the one designated. Every change the copy sends back is posted as them. |
 | `through` | `THROUGH` | string | yes | no | — | Dividing date, YYYY-MM-DD: the accountant works on or before it; these books then refuse changes dated on or before it until the copy comes back or is cancelled.; minimum length 10; maximum length 10 |
 
 ### Command and context options
@@ -353,6 +356,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `status` | literal["out", "returned", "cancelled", "working"] | yes | no | — | — |
 | `dividing_date` | string | yes | no | — | — |
 | `origin_company_id` | string | yes | no | — | — |
+| `accountant_name` | string \| null | no | yes | null | The external accountant the copy was made for; its changes are posted as them. |
 | `created_at` | string | yes | no | — | — |
 | `created_by_name` | string \| null | yes | yes | — | — |
 | `file_name` | string \| null | no | yes | null | — |
@@ -370,6 +374,7 @@ Example JSON output:
 
 ```json
 {
+  "accountant_name": null,
   "archive_sha256": null,
   "close_reason": null,
   "closed_at": null,
@@ -422,7 +427,7 @@ Example JSON output:
 
 ## `accountant-copy import`
 
-Take an accountant's changes back from their change file, as the anchor's Import Accountant's Changes: every new change, or only the keys in `changes`. Each is posted as the accountant, under its own audit event naming the copy and the accountant's reason; a change already taken is skipped, so importing twice changes nothing. The copy comes back: these books take changes on or before the dividing date again. A person's step: an agent may preview, never import.
+Take an accountant's changes back from their change file, as the anchor's Import Accountant's Changes: every new change, or only the keys in `changes`. Each is posted as the external accountant the copy was made for (never as a name the file gives), under its own audit event naming the copy and the accountant's reason; each change is taken at most once. The copy comes back and is closed: these books take changes on or before the dividing date again, changes left out are declined, and the file (or any other for that copy) is refused from then on. A person's step: an agent may preview, never import.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -756,6 +761,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.status` | literal["out", "returned", "cancelled", "working"] | yes | no | — | — |
 | `current.dividing_date` | string | yes | no | — | — |
 | `current.origin_company_id` | string | yes | no | — | — |
+| `current.accountant_name` | string \| null | no | yes | null | The external accountant the copy was made for; its changes are posted as them. |
 | `current.created_at` | string | yes | no | — | — |
 | `current.created_by_name` | string \| null | yes | yes | — | — |
 | `current.file_name` | string \| null | no | yes | null | — |
@@ -769,6 +775,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].status` | literal["out", "returned", "cancelled", "working"] | yes | no | — | — |
 | `history[].dividing_date` | string | yes | no | — | — |
 | `history[].origin_company_id` | string | yes | no | — | — |
+| `history[].accountant_name` | string \| null | no | yes | null | The external accountant the copy was made for; its changes are posted as them. |
 | `history[].created_at` | string | yes | no | — | — |
 | `history[].created_by_name` | string \| null | yes | yes | — | — |
 | `history[].file_name` | string \| null | no | yes | null | — |
