@@ -1,0 +1,35 @@
+/* Weekly Timesheet, time clock and job calendar (R106). Desk width: grids; phone width: cards and lists. */
+.timesheet-grid { border-collapse: collapse; width: 100%; }
+.timesheet-grid th, .timesheet-grid td { padding: 4px; vertical-align: top; border-bottom: 1px solid var(--line, #ddd); }
+.timesheet-grid input.hours { width: 3.6em; text-align: right; }
+.timesheet-grid input.class-input { width: 5em; }
+.timesheet-grid input.wide { width: 100%; min-width: 6em; box-sizing: border-box; }
+.timesheet-grid td.locked { background: var(--muted-bg, #f4f1e8); }
+.timesheet-grid td.locked .hours-value { display: inline-block; width: 3.6em; text-align: right; font-weight: 600; }
+.timesheet-grid .num, .timesheet-grid tfoot td { text-align: right; }
+.sheet-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.calendar-day { border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 6px; min-height: 8em; }
+.calendar-day h3 { font-size: 0.9em; margin: 0 0 4px; }
+.calendar-item { border-left: 3px solid var(--accent, #2b6cb0); padding: 2px 6px; margin: 4px 0; font-size: 0.88em; }
+.calendar-item button { padding: 2px 8px; font-size: 0.85em; min-height: 0; }
+.calendar-item.work-order { border-left-color: var(--accent-2, #6b46c1); }
+.calendar-item.conflict { border-left-color: var(--danger, #c53030); }
+.calendar-month .calendar-day { min-height: 4em; }
+.clock-list { display: grid; gap: 8px; }
+.clock-card { border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 8px; }
+@media (max-width: 700px) {
+  .timesheet-grid thead { display: none; }
+  .timesheet-grid tr.blank-extra { display: none; }
+  .timesheet-grid, .timesheet-grid tbody, .timesheet-grid tr, .timesheet-grid td { display: block; width: auto; }
+  .timesheet-grid tr { border: 1px solid var(--line, #ddd); border-radius: 6px; margin: 0 0 10px; padding: 6px; }
+  .timesheet-grid td { border: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .timesheet-grid td::before { content: attr(data-label); font-weight: 600; flex: 0 0 auto; }
+  .timesheet-grid td.cell-text { display: block; }
+  .timesheet-grid td.cell-text::before { display: block; }
+  .timesheet-grid tfoot tr { display: block; }
+  .calendar-week { grid-template-columns: 1fr; }
+  .calendar-day { min-height: 0; }
+  .calendar-day.empty { display: none; }
+}
+.clock-banner { margin: 8px 0 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
