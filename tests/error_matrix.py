@@ -2216,19 +2216,19 @@ _ACCT_JOURNAL = {'E_RECORD_NOT_FOUND': 'unknown transaction or account', 'E_UNBA
                  'E_PERIOD_CLOSED': 'dated in a closed period, after the review period or dividing date, or on or before the dividing date while a copy is out',
                  'E_DUPLICATE_NUMBER': 'the entry number is taken', 'E_INACTIVE_REFERENCE': 'an account, name or class is inactive',
                  'E_VALUE_RANGE': 'an amount beyond supported bounds', 'E_AMOUNT_PRECISION': 'an amount finer than the currency allows'}
-MATRIX['accountant add'] = {'E_RECORD_NOT_FOUND': 'unknown user', 'E_VALIDATION': 'an agent, an inactive user, or no standard access to the company'} | _ACCT_PERSON | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant add'] = {'E_RECORD_NOT_FOUND': 'unknown user', 'E_VALIDATION': 'an agent, an inactive user, or a role on the company other than standard (none, read-only, admin or owner)'} | _ACCT_PERSON | _ACCT_KEY | _ACCT_TAIL
 MATRIX['accountant remove'] = {'E_RECORD_NOT_FOUND': 'unknown user, or never designated'} | _ACCT_PERSON | _ACCT_KEY | _ACCT_TAIL
 MATRIX['accountant list'] = {}
 MATRIX['accountant reclassify'] = _ACCT_JOURNAL | {'E_VALIDATION': 'a voided entry, the same account twice, an entry posting nothing to from_account, or an amount over what it posts there'} | _ACCT_ONLY | _ACCT_KEY | _ACCT_TAIL
-MATRIX['accountant mark-entry'] = {'E_RECORD_NOT_FOUND': 'unknown transaction', 'E_VALIDATION': 'not on the entries-to-review list'} | _ACCT_ONLY | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant mark-entry'] = {'E_RECORD_NOT_FOUND': 'unknown transaction', 'E_VALIDATION': 'not on the entries-to-review list'} | {'E_PERMISSION': 'an agent, or not the external accountant'} | _ACCT_KEY | _ACCT_TAIL
 MATRIX['accountant reviewed-through'] = {'E_VALIDATION': 'after the review period end or the dividing date'} | _ACCT_ONLY | _ACCT_KEY | _ACCT_TAIL
-MATRIX['accountant-copy export'] = {'E_VALIDATION': 'a copy is already out, or the dividing date is on or before the closing date',
+MATRIX['accountant-copy export'] = {'E_VALIDATION': 'a copy is already out, the dividing date is on or before the closing date, or no single designated accountant',
                                     'E_PERMISSION': "these books are an accountant's copy", 'E_IO': 'the archive could not be written',
                                     'E_BACKUP_INVALID': 'the written archive did not verify'} | _ACCT_TAIL
 MATRIX['accountant-copy status'] = {}
 MATRIX['accountant-copy cancel'] = {'E_RECORD_NOT_FOUND': 'no copy is out', 'E_REASON_REQUIRED': 'no reason given'} | _ACCT_PERSON | _ACCT_TAIL
 MATRIX['accountant-copy changes'] = {'E_PERMISSION': "these books are not an accountant's copy", 'E_IO': 'the change file could not be written'} | _ACCT_TAIL
-MATRIX['accountant-copy preview'] = {'E_VALIDATION': "no such file, not a change file, another company's, an unknown copy, tampered, or its copy cancelled"}
+MATRIX['accountant-copy preview'] = {'E_VALIDATION': "no such file, not a change file, another company's, an unknown copy, tampered, its copy cancelled or returned, or its key not in these books"}
 MATRIX['accountant-copy import'] = _ACCT_JOURNAL | {'E_VALIDATION': "the file is refused (see preview), or a chosen change is unknown or cannot be taken"} | _ACCT_PERSON | _ACCT_TAIL
 MATRIX['report accountant-review'] = {'E_VALIDATION': 'as_of is not a date'}
 MATRIX['report accountant-changes'] = {}

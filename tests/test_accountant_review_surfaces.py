@@ -1,7 +1,7 @@
 """R121: the accountant review commands through Python, the CLI, HTTP and MCP.
 
 Each surface gets an identical copy of the demo. The owner posts a 300.00 office expense, designates an
-external accountant and ends it, exports an accountant's copy through 2026-09-30 and opens it as a
+external accountant, exports an accountant's copy through 2026-09-30 and opens it as a
 separate company (as the accountant's Bookflow would). In the copy the accountant reclassifies 100.00
 of the expense to repairs, posts an entry to Opening Balance Equity and marks it reviewed, marks the books
 reviewed through 2026-09-30 and writes the change file. The owner previews and imports it, reads the
@@ -40,7 +40,6 @@ def test_the_same_accountant_review_through_python_cli_http_and_mcp(root, tmp_pa
                                         'password': 'pw-as-cpa-123456'})
                 added = await call('accountant add', {'user': 'as-cpa', 'through': THROUGH, 'note': 'Q3'})
                 listed = await call('accountant list', {})
-                removed = await call('accountant remove', {'user': 'as-cpa'})
                 out = await call('accountant-copy export', {'through': THROUGH})
                 status = await call('accountant-copy status', {})
                 copy = (await call('company restore', {'archive': found(out['file_name']), 'as_copy': True,
@@ -56,8 +55,10 @@ def test_the_same_accountant_review_through_python_cli_http_and_mcp(root, tmp_pa
                 path = found(changes['file_name'])
                 seen = await call('accountant-copy preview', {'file': path})
                 taken = await call('accountant-copy import', {'file': path})
+                removed = await call('accountant remove', {'user': 'as-cpa'})
                 checklist = await call('report accountant-review', {'as_of': THROUGH})
                 report = await call('report accountant-changes', {})
+                await call('accountant add', {'user': 'as-cpa', 'through': THROUGH})
                 again = await call('accountant-copy export', {'through': THROUGH})
                 cancelled = await call('accountant-copy cancel', {}, reason='Not needed')
                 results[surface] = (added, listed, removed, out, status, moved, marked, through, changes, seen, taken,

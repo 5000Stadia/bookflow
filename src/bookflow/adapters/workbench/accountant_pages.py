@@ -46,7 +46,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         preview = None
         try:
             if action == 'export':
-                out = run(request, 'accountant-copy export', {'through': form.get('through', '').strip()}, company_id, headers=headers)
+                raw = {'through': form.get('through', '').strip()}
+                if (form.get('accountant') or '').strip():
+                    raw['accountant'] = form['accountant'].strip()
+                out = run(request, 'accountant-copy export', raw, company_id, headers=headers)
                 result = (f"Made the accountant's copy {out['file_name']} (with {out['manifest_file']}) in the company folder's "
                           f"exports/. These books now refuse changes dated on or before {out['dividing_date']}.")
             elif action == 'preview':

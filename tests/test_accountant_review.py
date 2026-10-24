@@ -56,9 +56,13 @@ def test_the_external_accountant_writes_only_adjustments_dated_in_their_period(r
     company = read(client, 'company show')['company_id']
     make_actor(root, 'outside-cpa', company_role=(company, 'standard'))
     make_actor(root, 'viewer', company_role=(company, 'readonly'))
+    make_actor(root, 'admin-cpa', company_role=(company, 'admin'))
     cpa = as_user(root, 'outside-cpa')
     # A read-only member cannot be one; the designation is a person's act.
     refused(lambda: write(client, 'accountant add', user='viewer', through=THROUGH), 'E_VALIDATION')
+    # Nor an admin: an External Accountant administers nothing, so no membership above standard.
+    above = refused(lambda: write(client, 'accountant add', user='admin-cpa', through=THROUGH), 'E_VALIDATION')
+    assert above.details['role'] == 'admin' and 'standard' in above.message
     added = write(client, 'accountant add', user='outside-cpa', through=THROUGH, note='2026 Q3 review')
     assert added['through'] == THROUGH and added['active'] and added['username'] == 'outside-cpa'
     assert [a['username'] for a in read(client, 'accountant list')['accountants']] == ['outside-cpa']
@@ -108,9 +112,14 @@ def test_the_external_accountant_writes_only_adjustments_dated_in_their_period(r
 
 def _copy(root, client, books, through=THROUGH):
     """Export, and open the copy as the accountant would on their own Bookflow: restored as a separate company."""
+    company = read(client, 'company show')['company_id']
+    make_actor(root, 'copy-cpa', hub_admin=True, company_role=(company, 'standard'))
+    # The copy is for the designated accountant: everything it sends back is posted as them.
+    refused(lambda: write(client, 'accountant-copy export', through=through), 'E_VALIDATION')
+    write(client, 'accountant add', user='copy-cpa', through=through)
     out = write(client, 'accountant-copy export', through=through)
     assert out['status'] == 'out' and out['path'].endswith('.bookflow-backup') and out['manifest_file']
-    make_actor(root, 'copy-cpa', hub_admin=True)
+    assert out['accountant_name'] == 'Copy-Cpa'
     cpa = as_user(root, 'copy-cpa')
     copy = cpa.run('company restore', {'archive': out['path'], 'as_copy': True, 'name': 'AR Accountant copy'},
                    reason='Accountant copy')
@@ -161,10 +170,11 @@ def test_the_copy_round_trip_brings_back_only_the_accountants_changes_attributed
     # The lock is lifted.
     je(client, '2026-09-20', books['office'], books['bank'], '1.00', memo='after return')
 
-    # Importing again changes nothing.
-    again = write(client, 'accountant-copy import', file=path, reason='again')
-    assert again['imported'] == [] and again['counts']['imported'] == 4
+    # The copy is closed: its file cannot come in again, and nothing changes.
+    again = refused(lambda: write(client, 'accountant-copy import', file=path, reason='again'), 'E_VALIDATION')
+    assert again.details['reason'] == 'returned'
     assert balance(client, books['repairs'])['amount'] == '200.00'
+    assert by_copy['journal_entries'] == 2  # the reclassification and the accrual, both posted as the accountant
 
 
 def test_a_tampered_or_foreign_change_file_is_refused_whole(root, client, books, tmp_path):
@@ -215,3 +225,90 @@ def test_closed_periods_stay_closed(root, client, books):
     refused(lambda: write(client, 'accountant-copy import', file=path, changes=[early['id']]), 'E_VALIDATION')
     taken = write(client, 'accountant-copy import', file=path)
     assert len(taken['imported']) == 1 and taken['counts']['refused'] == 1
+
+
+def _as_agent(root, login, principal, name, raw):
+    from bookflow.core import registry
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import run as dispatch_run
+    ctx = Context.new(Interface.python, 'accountant agent', on_behalf_of=principal, reason='agent work')
+    return dispatch_run(registry.get(name), raw, ctx, data_root=str(root), company_selector=COMPANY,
+                        company_source='option', _login=login)
+
+
+def test_an_agent_acting_for_the_accountant_is_held_to_the_accountants_terms(root, client, books):
+    from bookflow.core.config import Config
+    from tests.conftest import make_agent
+    company = read(client, 'company show')['company_id']
+    cpa = make_actor(root, 'outside-cpa', company_role=(company, 'standard'))
+    write(client, 'accountant add', user='outside-cpa', through=THROUGH)
+    agent = make_agent(lambda n, b: client.run(n, b), 'cpa-agent', principals=cpa, company=company, role='standard')
+    cfg = Config.load(root / 'config.toml')
+    cfg.set_user('cpa-agent', agent)
+    cfg.save()
+    run = lambda name, raw: _as_agent(root, 'cpa-agent', cpa, name, raw)  # noqa: E731
+    line = lambda date, amount: {'date': date, 'memo': 'agent', 'lines': [  # noqa: E731
+        {'account': books['repairs'], 'side': 'debit', 'amount': amount}, {'account': books['accrued'], 'side': 'credit', 'amount': amount}]}
+    assert refused(lambda: run('customer create', {'name': 'Agent customer'}), 'E_PERMISSION').details['reason'] == 'external_accountant'
+    assert refused(lambda: run('journal post', line('2026-12-15', '7.00')), 'E_PERIOD_CLOSED').details['reason'] == 'review_period'
+    assert refused(lambda: run('journal void', {'journal': books['spend']}), 'E_PERMISSION').details['reason'] == 'external_accountant'
+    # Inside the terms it works, and the report counts it as the accountant's.
+    run('journal post', line('2026-09-29', '3.00'))
+    assert refused(lambda: run('accountant reviewed-through', {'through': THROUGH}), 'E_PERMISSION').details['reason'] == 'person_only'
+    assert read(client, 'report accountant-changes')['journal_entries'] == 1
+
+
+def test_the_change_file_cannot_name_who_made_a_change(root, client, books, tmp_path):
+    import hashlib
+    import hmac
+    import sqlite3
+    cpa, copy = _copy(root, client, books)
+    je(cpa, '2026-09-29', books['repairs'], books['accrued'], '80.00', company=copy, memo='Accrue')
+    path = write(cpa, 'accountant-copy changes', company=copy)['path']
+    copy_db = next(p for p in root.rglob('company.db') if p.parent.name == 'AR Accountant copy')
+    with sqlite3.connect(copy_db) as db:  # the copy holder has the key: it is in their copy
+        key = db.execute("SELECT mac_key FROM accountant_copies WHERE side='accountant'").fetchone()[0]
+    owner_db = next(p for p in root.rglob('company.db') if p.parent.name == COMPANY)
+    with sqlite3.connect(owner_db) as db:
+        owner_id = db.execute("SELECT created_by FROM transactions WHERE id=?", (books['spend'],)).fetchone()[0]
+        principals = db.execute('SELECT user_id, username, display_name FROM principals ORDER BY user_id').fetchall()
+    body = json.loads(open(path, encoding='utf-8').read())
+    body.pop('mac')
+    body['changes'][0]['by'] = {'user_id': owner_id, 'name': 'TOTALLY THE OWNER'}
+    body['accountant'] = {'user_id': owner_id, 'username': 'owner', 'name': 'TOTALLY THE OWNER'}
+    canonical = json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+    body['mac'] = hmac.new(bytes.fromhex(key), canonical, hashlib.sha256).hexdigest()
+    forged = tmp_path / 'forged.json'
+    forged.write_text(json.dumps(body))
+    taken = write(client, 'accountant-copy import', file=str(forged), reason='Q3')
+    tx = taken['imported'][0]
+    with sqlite3.connect(owner_db) as db:
+        actors = {r[0] for r in db.execute("""SELECT e.actor_id FROM audit_events e JOIN audit_entries ae ON ae.event_id=e.id
+                                               WHERE ae.record_type='transaction' AND ae.record_id IN
+                                               (SELECT transaction_id FROM accountant_adjustments)""")}
+        adjusted = db.execute('SELECT accountant_user_id FROM accountant_adjustments').fetchall()
+        reasons = [r[0] for r in db.execute("SELECT reason FROM audit_events WHERE source_ref LIKE 'accountant-copy:%'")]
+        after = db.execute('SELECT user_id, username, display_name FROM principals ORDER BY user_id').fetchall()
+        cpa_id = db.execute("SELECT user_id FROM accountant_designations").fetchone()[0]
+    assert tx and actors == {cpa_id} and adjusted == [(cpa_id,)], 'posted as the copy\'s accountant, never the file\'s name'
+    assert after == principals, 'no principal is created or renamed from a change file'
+    assert any('TOTALLY THE OWNER' in (r or '') for r in reasons)  # kept only as a label in the reason
+
+
+def test_no_backup_carries_the_copy_key_and_a_returned_copy_is_closed(root, client, books, tmp_path):
+    import sqlite3
+    import zipfile
+    cpa, copy = _copy(root, client, books)
+    je(cpa, '2026-09-29', books['repairs'], books['accrued'], '80.00', company=copy, memo='Accrue')
+    path = write(cpa, 'accountant-copy changes', company=copy)['path']
+    archive = write(client, 'company backup')['path']
+    with zipfile.ZipFile(archive) as z:
+        z.extract('company.db', tmp_path)
+    with sqlite3.connect(tmp_path / 'company.db') as db:
+        keys = {r[0] for r in db.execute("SELECT mac_key FROM accountant_copies WHERE side='owner'")}
+    assert keys == {'0' * 64}
+    owner_db = next(p for p in root.rglob('company.db') if p.parent.name == COMPANY)
+    write(client, 'accountant-copy import', file=path, reason='Q3')
+    with sqlite3.connect(owner_db) as db:
+        assert {r[0] for r in db.execute('SELECT mac_key FROM accountant_copies')} == {'0' * 64}  # wiped on return
+    assert refused(lambda: read(client, 'accountant-copy preview', file=path), 'E_VALIDATION').details['reason'] == 'returned'

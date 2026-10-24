@@ -47,6 +47,8 @@ from bookflow.core.registry import Applied, Plan, Touched
 CHANGE_FORMAT = 'bookflow-accountant-changes'
 CHANGE_FORMAT_VERSION = 1
 CHANGE_FILE_LIMIT = 32 * 1024 * 1024
+# What a copy's key reads once it can no longer verify anything: returned, cancelled, or in a backup.
+WIPED_KEY = '0' * 64
 # What an external accountant may write, in these books or in their copy.
 ACCOUNTANT_WRITES = frozenset({
     'journal post', 'journal update', 'journal void', 'accountant reclassify', 'accountant mark-entry',
@@ -91,11 +93,21 @@ def active_copy(s):
     return dict(row) if row else None
 
 
+def _acting_ids(s):
+    """Whose terms bind this write: the actor, and the person an agent acts for."""
+    ctx = getattr(s, '_permission_context', None)
+    return [x for x in (s.actor.id if s.actor else None, getattr(ctx, 'on_behalf_of', None)) if x]
+
+
 def designation(s):
-    """The actor's own active external-accountant designation in these books, or None."""
-    if s.actor is None:
+    """The active external-accountant designation of the actor or of the person an agent acts for, or None.
+
+    An agent acting for the accountant is held to the accountant's terms, as the accountant is."""
+    ids = _acting_ids(s)
+    if not ids:
         return None
-    row = _one(s, 'SELECT * FROM accountant_designations WHERE user_id=:u AND active=1', u=s.actor.id)
+    row = _one(s, """SELECT * FROM accountant_designations WHERE active=1 AND user_id IN (SELECT value FROM json_each(:ids))
+                     ORDER BY through_date LIMIT 1""", ids=json.dumps(ids))
     return dict(row) if row else None
 
 
@@ -116,6 +128,7 @@ def admit(s, cmd, inp) -> None:
         if cmd.name in _OWN_ENTRY and not _made_in_copy(s, copy, _journal_id(s, inp)):
             raise _refuse("In an accountant's copy only the entries made in the copy can be corrected or voided; "
                           'post an adjusting entry instead.', 'accountant_copy', cmd.name)
+        return  # in the copy, the copy's terms are the accountant's terms
     elif copy and copy['side'] == 'owner' and cmd.name in OWNER_LOCKED:
         raise _refuse(f"An accountant's copy is out (dividing date {copy['dividing_date']}): accounts cannot be edited and "
                       'list entries cannot be merged until its changes are imported or the copy is cancelled.',
@@ -131,7 +144,7 @@ def admit(s, cmd, inp) -> None:
             journal = _journal_id(s, inp)
             first = _one(s, """SELECT r.created_by FROM transaction_revisions r WHERE r.transaction_id=:t
                                ORDER BY r.revision_number LIMIT 1""", t=journal)
-            if first is None or first['created_by'] != s.actor.id:
+            if first is None or first['created_by'] not in _acting_ids(s):
                 raise _refuse('As the external accountant you can correct or void only the entries you made; post an adjusting '
                               'entry instead.', 'external_accountant', cmd.name)
 
@@ -166,6 +179,7 @@ def check_dates(s, dates) -> None:
                 raise BookflowError('E_PERIOD_CLOSED', message=(
                     f"This accountant's copy takes changes dated on or before {copy['dividing_date']}; later dates are the "
                     "owner's."), details={'date': date, 'dividing_date': copy['dividing_date'], 'reason': 'accountant_copy'})
+        return
     mine = designation(s)
     if mine is not None:
         for date in dates:
@@ -217,9 +231,11 @@ def plan_add(s, ctx, inp) -> Plan:
     if user['kind'] != 'human' or not user['active']:
         raise _invalid('user', 'must be an active person', 'An external accountant is a person; an agent cannot be one.')
     role = _member_role(s, user['id'])
-    if role is None or role == 'readonly':
-        raise _invalid('user', 'needs standard or higher access to this company',
-                       'Give the accountant standard access to this company first (`membership grant`), then designate them.')
+    if role != 'standard':
+        raise _invalid('user', 'must hold the standard role on this company, no more and no less',
+                       'An external accountant holds standard access to this company and no admin, as the anchor\'s External '
+                       f"Accountant cannot administer users; this user's role is {role or 'none'}. Give them standard access "
+                       '(`membership grant`, or revoke the higher one), then designate them.', role=role)
     old = _one(s, 'SELECT * FROM accountant_designations WHERE user_id=:u', u=user['id'])
     at = _now()
     if old:
@@ -276,6 +292,13 @@ def accountant_list(s, inp) -> m.AccountantListOutput:
     rows = _all(s, 'SELECT * FROM accountant_designations' + ('' if inp.include_inactive else ' WHERE active=1')
                 + ' ORDER BY through_date DESC, id')
     return m.AccountantListOutput(accountants=[m.AccountantOut(**_accountant_out(s, r)) for r in rows])
+
+
+def _require_person(s, command):
+    """A review mark is the accountant's own judgement: an agent working for them tells them what it found."""
+    if s.actor is None or s.actor.kind != 'human':
+        raise _refuse('Marking the books reviewed is the accountant\'s own step; an agent cannot mark them.', 'person_only', command,
+                      next='Tell the accountant what you found; they mark it.')
 
 
 def _require_accountant(s, command):
@@ -358,6 +381,7 @@ def apply_reclassify(plan, ctx, s) -> Applied:
 def plan_mark_entry(s, ctx, inp) -> Plan:
     from bookflow.commands.review_cmds import _current
     from bookflow.company import entry_review as review
+    _require_person(s, 'accountant mark-entry')
     _require_accountant(s, 'accountant mark-entry')
     identity, doc, flags, mark = _current(s, inp.transaction)
     if not flags:
@@ -391,6 +415,7 @@ def _is_copy_side(s):
 
 
 def plan_reviewed_through(s, ctx, inp) -> Plan:
+    _require_person(s, 'accountant reviewed-through')
     copy = _require_accountant(s, 'accountant reviewed-through')
     limit = copy['dividing_date'] if copy else designation(s)['through_date']
     if inp.through > limit:
@@ -419,7 +444,11 @@ def reviewed_through(s):
 def _copy_out(s, row) -> dict:
     from bookflow.company.info import principal_names
     names = principal_names(s.company, {x for x in (row['created_by'], row['closed_by']) if x})
+    accountant = row.get('accountant_user_id')
+    if accountant:
+        names.update(principal_names(s.company, {accountant}))
     return dict(copy_id=row['id'], side=row['side'], status=row['status'], dividing_date=row['dividing_date'],
+                accountant_name=names.get(accountant) if accountant else None,
                 origin_company_id=row['origin_company_id'], created_at=row['created_at'],
                 created_by_name=names.get(row['created_by']), file_name=row['file_name'], archive_sha256=row['archive_sha256'],
                 closed_at=row['closed_at'], closed_by_name=names.get(row['closed_by']), close_reason=row['close_reason'])
@@ -439,11 +468,31 @@ def plan_export(s, ctx, inp) -> Plan:
         raise _invalid('through', f'must be after the closing date {closing_date}',
                        f'The books are closed through {closing_date}; the accountant could change nothing on or before it. '
                        'Choose a later dividing date, or move the closing date (a person\'s step).')
+    accountant = _copy_accountant(s, inp.accountant)
     row = dict(_common(s, ctx), id=new_id(), side='owner', status='out', dividing_date=inp.through,
-               origin_company_id=s.company_row['id'], mac_key=secrets.token_hex(32), base_audit_seq=None,
+               origin_company_id=s.company_row['id'], accountant_user_id=accountant['user_id'],
+               mac_key=secrets.token_hex(32), base_audit_seq=None,
                file_name=None, archive_sha256=None, closed_at=None, closed_by=None, close_reason=None)
     preview = m.CopyExportOutput(**_copy_out(s, row))
     return Plan(preview, dict(row=row))
+
+
+def _copy_accountant(s, selector):
+    """The designated external accountant the copy goes to: every change it sends back is theirs."""
+    rows = _all(s, 'SELECT user_id FROM accountant_designations WHERE active=1')
+    if selector is not None:
+        user = _user(s, selector)
+        rows = [r for r in rows if r['user_id'] == user['id']]
+        if not rows:
+            raise _invalid('accountant', 'is not a designated external accountant',
+                           f"{user['display_name']} is not this company's external accountant; designate them with `accountant add` "
+                           "(a person's step) first.")
+    if len(rows) != 1:
+        raise _invalid('accountant', 'name the designated external accountant' if rows else 'no external accountant is designated',
+                       "Name which external accountant the copy is for (`accountant`)." if rows else
+                       "Designate the external accountant the copy is for (`accountant add`, a person's step) first: every "
+                       "change the copy sends back is posted as them.")
+    return rows[0]
 
 
 def _seed_copy(row):
@@ -451,7 +500,7 @@ def _seed_copy(row):
     def inspect(snapshot: Path):
         with closing(sqlite3.connect(str(snapshot))) as db:
             base = db.execute('SELECT COALESCE(MAX(seq), 0) FROM audit_events').fetchone()[0]
-            db.execute('UPDATE accountant_copies SET mac_key=?', ('0' * 64,))
+            db.execute('UPDATE accountant_copies SET mac_key=?', (WIPED_KEY,))
             values = dict(row, side='accountant', status='working', base_audit_seq=base)
             db.execute(f"INSERT INTO accountant_copies ({', '.join(values)}) VALUES ({', '.join('?' for _ in values)})",
                        tuple(values.values()))
@@ -508,7 +557,7 @@ def plan_cancel(s, ctx) -> Plan:
                             details={'record_type': 'accountant_copy', 'selector': 'out'})
     if not (ctx.reason or '').strip():
         raise BookflowError('E_REASON_REQUIRED', message="Say why the accountant's copy is cancelled; its changes can no longer be imported.")
-    row = dict(copy, status='cancelled', version=copy['version'] + 1, closed_at=_now(), closed_by=s.actor.id,
+    row = dict(copy, status='cancelled', mac_key=WIPED_KEY, version=copy['version'] + 1, closed_at=_now(), closed_by=s.actor.id,
                close_reason=ctx.reason.strip()[:140], updated_at=_now(), updated_by=s.actor.id, updated_via=ctx.interface.value)
     out = m.CopyCancelOutput(**_copy_out(s, row), warnings=["The accountant's change file for this copy can no longer be imported."])
     return Plan(out, dict(row=row, old=copy))
@@ -672,14 +721,21 @@ def read_changes(s, path_text):
     if copy is None:
         raise _invalid('file', 'is not from a copy these books made', "This change file is not from an accountant's copy of these books.",
                        reason='unknown_copy')
+    if copy['status'] == 'cancelled':
+        raise _invalid('file', 'its copy was cancelled', f"The accountant's copy through {copy['dividing_date']} was cancelled; "
+                       'its changes can no longer be imported.', reason='cancelled')
+    if copy['status'] == 'returned':
+        raise _invalid('file', 'its copy has already come back', f"The accountant's copy through {copy['dividing_date']} was "
+                       'imported and is closed; send the accountant a new copy for further changes.', reason='returned')
+    if not copy['mac_key'] or set(copy['mac_key']) == {'0'}:
+        raise _invalid('file', "these books do not hold the copy's key", "These books do not hold this copy's key (they were "
+                       'restored from a backup, which never carries it), so no change file can be verified. Cancel the copy and '
+                       'make a new one.', reason='key_unavailable')
     mac = body.pop('mac', None)
     if not isinstance(mac, str) or not hmac.compare_digest(mac, _sign(copy['mac_key'], body)):
         raise _invalid('file', 'has been changed since the accountant\'s copy wrote it',
                        "The change file does not verify: it was changed after the accountant's Bookflow wrote it, or was not "
                        'written by that copy. Ask the accountant for a fresh one.', reason='tampered')
-    if copy['status'] == 'cancelled':
-        raise _invalid('file', 'its copy was cancelled', f"The accountant's copy through {copy['dividing_date']} was cancelled; "
-                       'its changes can no longer be imported.', reason='cancelled')
     if body.get('dividing_date') != copy['dividing_date'] or not isinstance(body.get('changes'), list):
         raise _invalid('file', 'does not match its copy', reason='tampered')
     return body, dict(copy)
@@ -806,6 +862,7 @@ def preview(s, ctx, inp) -> m.ChangesFileOutput:
 
 def plan_import(s, ctx, inp) -> Plan:
     body, copy = read_changes(s, inp.file)
+    _copy_accountant_identity(s, copy)
     states = _states(s, ctx, body, copy)
     keys = [ch.get('key') for ch in body['changes']]
     if inp.changes is not None:
@@ -818,8 +875,8 @@ def plan_import(s, ctx, inp) -> Plan:
                            '`accountant-copy preview` says why.', refused={k: states[k][1] for k in refused})
     chosen = [k for k in (inp.changes if inp.changes is not None else keys) if states.get(k, ('',))[0] == 'new']
     view = _view(s, body, states)
-    # Importing brings the copy back and lifts its restrictions, as the anchor's import does; changes left
-    # out stay in the file and can be taken later, until the copy is cancelled.
+    # Importing brings the copy back, closes it and lifts its restrictions, as the anchor's import does; changes
+    # left out are declined, and the copy's key is wiped so no file for it verifies again.
     new_status = 'returned' if copy['status'] == 'out' else copy['status']
     out = m.CopyImportOutput(**view, imported=chosen, status=new_status)
     return Plan(out, dict(body=body, copy=copy, chosen=chosen, status=new_status))
@@ -827,7 +884,6 @@ def plan_import(s, ctx, inp) -> Plan:
 
 def apply_import(plan, ctx, s) -> Applied:
     from bookflow.company import journals
-    from bookflow.company.info import upsert_principal
     from bookflow.core.audit import write_event_to
     from bookflow.core.session import Actor
     d = plan.data
@@ -835,9 +891,11 @@ def apply_import(plan, ctx, s) -> Applied:
     # Rebuild under the write lock: another import may have taken some of these meanwhile.
     states = _states(s, ctx, body, copy)
     by_key = {ch['key']: ch for ch in body['changes']}
-    accountant = body.get('accountant') or {}
-    acct_name = str(accountant.get('name') or accountant.get('username') or 'the accountant')[:200]
-    acct_id = str(accountant.get('user_id') or '')[:26] or None
+    # Every change is the accountant's the copy was made for, as these books recorded them at export. The file's
+    # own names are the copy holder's to write, so they are only a label in the reason, never an identity.
+    who_id, who_name, who_username = _copy_accountant_identity(s, copy)
+    acct_name = who_name
+    as_accountant = Actor(id=who_id, kind='human', username=who_username, display_name=who_name, hub_admin=False)
     person, touched, imported = s.actor, [], []
     mapped = {k: r['result_id'] for k, r in _imported(s, copy['id']).items() if r['result_type'] == 'transaction'}
     source_ref = f"accountant-copy:{copy['id']}"
@@ -847,12 +905,9 @@ def apply_import(plan, ctx, s) -> Applied:
             if states.get(key, ('',))[0] != 'new':
                 continue
             ch = by_key[key]
-            by = ch.get('by') or {}
-            who_id = str(by.get('user_id') or acct_id or person.id)[:26]
-            who_name = str(by.get('name') or acct_name)[:128]
-            upsert_principal(s.company, user_id=who_id, username=who_name[:64], display_name=who_name, kind='human')
-            as_accountant = Actor(id=who_id, kind='human', username=who_name[:64], display_name=who_name, hub_admin=False)
-            reason = (ch.get('reason') or f"From {acct_name}'s accountant's copy")[:140]
+            label = str((ch.get('by') or {}).get('name') or '')[:40]
+            reason = (str(ch.get('reason') or f"From {acct_name}'s accountant's copy")
+                      + (f' (entered in the copy as {label})' if label and label != who_name else ''))[:140]
             change_ctx = ctx.model_copy(update={'reason': reason, 'source_ref': f'{source_ref}:{key}'[:512], 'idempotency_key': None,
                                                 'directive_id': None})
             result_type = result_id = None
@@ -888,7 +943,7 @@ def apply_import(plan, ctx, s) -> Applied:
         s._accountant_import = False
     if d['status'] != copy['status']:
         t = c.accountant_copies
-        new = dict(copy, status=d['status'], version=copy['version'] + 1, closed_at=_now(), closed_by=person.id,
+        new = dict(copy, status=d['status'], mac_key=WIPED_KEY, version=copy['version'] + 1, closed_at=_now(), closed_by=person.id,
                    updated_at=_now(), updated_by=person.id, updated_via=ctx.interface.value)
         s.company.conn.execute(t.update().where(t.c.id == copy['id']).values(**new))
         strip = lambda r: {k: v for k, v in r.items() if k != 'mac_key'}  # noqa: E731
@@ -898,6 +953,21 @@ def apply_import(plan, ctx, s) -> Applied:
     if not touched:
         return Applied(out, [], 'no change')
     return Applied(out, touched, f"imported {len(imported)} changes from {acct_name}'s accountant's copy through {copy['dividing_date']}")
+
+
+def _copy_accountant_identity(s, copy):
+    """(user id, display name, username) of the accountant the copy was made for."""
+    from bookflow.company.info import principal_names
+    user_id = copy.get('accountant_user_id')
+    if not user_id:
+        raise _invalid('file', 'its copy names no accountant', 'This copy was made without an external accountant; '
+                       'cancel it and make a new one for the designated accountant.', reason='no_accountant')
+    try:
+        user = _user(s, user_id)
+        return user_id, user['display_name'], user['username']
+    except BookflowError:
+        name = principal_names(s.company, {user_id}).get(user_id) or 'the external accountant'
+        return user_id, name, name[:64]
 
 
 def _apply_other(s, ctx, ch, copy, mapped, who_id):
@@ -947,8 +1017,8 @@ def changes_report(s, inp) -> m.AccountantChangesOutput:
     if not ids:
         return m.AccountantChangesOutput(count=0, rows=[], journal_entries=0, reclassifications=0, notes=0, review_marks=0)
     params = dict(ids=json.dumps(sorted(ids)), cmds=json.dumps(list(_CHANGE_COMMANDS)))
-    where = """FROM audit_events e WHERE e.actor_id IN (SELECT value FROM json_each(:ids))
-               AND e.command IN (SELECT value FROM json_each(:cmds))"""
+    where = """FROM audit_events e WHERE (e.actor_id IN (SELECT value FROM json_each(:ids))
+               OR e.on_behalf_of IN (SELECT value FROM json_each(:ids))) AND e.command IN (SELECT value FROM json_each(:cmds))"""
     count = _one(s, f'SELECT COUNT(*) AS n {where}', **params)['n']
     events = _all(s, f'SELECT e.id, e.at, e.command, e.summary, e.actor_id, e.reason, e.source_ref {where} ORDER BY e.seq DESC LIMIT :lim',
                   lim=inp.limit, **params)
@@ -963,8 +1033,10 @@ def changes_report(s, inp) -> m.AccountantChangesOutput:
                                   from_copy=(e['source_ref'] or '').startswith('accountant-copy:'),
                                   records=entries.get(e['id'], [])) for e in events]
     kinds = _one(s, f"""SELECT
-        (SELECT COUNT(*) FROM transactions t JOIN transaction_revisions r ON r.transaction_id=t.id AND r.revision_number=1
-          WHERE t.type='journal_entry' AND r.created_by IN (SELECT value FROM json_each(:ids))) AS journals,
+        (SELECT COUNT(*) FROM (SELECT transaction_id FROM accountant_adjustments UNION
+          SELECT t.id FROM transactions t JOIN transaction_revisions r ON r.transaction_id=t.id AND r.revision_number=1
+          JOIN audit_events e ON e.id=r.audit_event_id WHERE t.type='journal_entry'
+          AND (e.actor_id IN (SELECT value FROM json_each(:ids)) OR e.on_behalf_of IN (SELECT value FROM json_each(:ids))))) AS journals,
         (SELECT COUNT(*) FROM accountant_adjustments WHERE kind='reclassification') AS reclass,
         (SELECT COUNT(*) FROM notes WHERE author_id IN (SELECT value FROM json_each(:ids))) AS notes,
         (SELECT COUNT(*) FROM audit_entries ae JOIN audit_events e ON e.id=ae.event_id WHERE ae.record_type='transaction_review'

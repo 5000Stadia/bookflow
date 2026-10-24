@@ -608,7 +608,8 @@ Before a review, read `report accountant-review` (as_of the period end): entries
 the Uncategorized accounts, bank and card accounts not reconciled through the date, open receivables,
 payables and undeposited funds, and the accountant's reviewed-through mark. Tell the owner what is open.
 
-When the owner asks for an accountant's copy, `accountant-copy export` with the dividing date writes an
+When the owner asks for an accountant's copy (for the designated external accountant; the copy's changes come
+back as theirs), `accountant-copy export` with the dividing date writes an
 archive and a small manifest into the company folder's exports/; Bookflow sends it nowhere, so tell the
 owner the file name to hand over. While it is out, a posting dated on or before the dividing date, an
 account edit or a list merge is refused (E_PERIOD_CLOSED with `reason` accountant_copy_out, or E_PERMISSION):

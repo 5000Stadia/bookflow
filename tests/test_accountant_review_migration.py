@@ -37,7 +37,7 @@ def test_a_fresh_database_reaches_the_head_and_the_tables_hold_their_rules(tmp_p
     common = "1, 'now', 'U', 'cli', 'now', 'U', 'cli'"
     with sqlite3.connect(path) as raw:
         def copy(identity, side, status):
-            raw.execute(f"INSERT INTO accountant_copies VALUES (?, {common}, ?, ?, '2026-09-30', 'C', ?, NULL, NULL, NULL,"
+            raw.execute(f"INSERT INTO accountant_copies VALUES (?, {common}, ?, ?, '2026-09-30', 'C', NULL, ?, NULL, NULL, NULL,"
                         " NULL, NULL, NULL)", (identity, side, status, '0' * 64))
 
         copy('K1', 'owner', 'returned')

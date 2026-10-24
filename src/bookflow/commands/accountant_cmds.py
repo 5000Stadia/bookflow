@@ -28,8 +28,8 @@ accountant_add = command(
                  'everything, and write only adjusting journal entries (`journal post`, correcting or voiding only their own), '
                  'reclassifications (`accountant reclassify`), review marks (`accountant mark-entry`, `accountant '
                  'reviewed-through`) and notes, all dated on or before `through`, the end of the review period. Everything else '
-                 'they try is refused, and every change is attributed to them. The user must be a person with standard or higher '
-                 "access to the company. Run again to move the period end. A person's step: an agent is refused."),
+                 'they try is refused, and every change is attributed to them. The user must be a person holding the standard role '
+                 "on the company (no admin, as the anchor's External Accountant). Run again to move the period end. A person's step: an agent is refused."),
     input_model=m.AccountantAddInput, output_model=m.AccountantWriteOutput, writes={'company'}, required_role='admin',
     capability='company', accepts_idempotency_key=True, positional=['user'],
     error_codes=['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PERMISSION'])
@@ -127,8 +127,10 @@ accountant_copy_export = command(
                  'While the copy is out these books refuse every change dated on or before the dividing date, and account edits '
                  "and list merges, until `accountant-copy import` takes the accountant's changes back or a person runs "
                  '`accountant-copy cancel`. The copy takes only adjusting entries, reclassifications, review marks and notes '
-                 'dated on or before the dividing date. The dividing date must be after the closing date. An agent may prepare '
-                 'this hand-off.'),
+                 'dated on or before the dividing date. The copy is for one designated external accountant (`accountant`; '
+                 'default the one designated, and one must be): every change it sends back is posted as them. The dividing '
+                 'date must be after the closing date. No backup ever carries the key that verifies the copy\'s change file. '
+                 'An agent may prepare this hand-off.'),
     input_model=m.CopyExportInput, output_model=m.CopyExportOutput, writes={'company'}, required_role='admin',
     capability='company', positional=['through'], error_codes=['E_VALIDATION', 'E_PERMISSION', 'E_IO', 'E_BACKUP_INVALID'])
 
@@ -171,7 +173,7 @@ accountant_copy_changes = command(
     description=("In an accountant's copy: write the change file to send back, in the company folder's exports/. It holds "
                  'every adjusting entry and reclassification made in the copy (each as it stands now; voided ones are left out), '
                  "notes, review marks and reviewed-through marks, signed so the owner's books can tell it came unaltered from "
-                 'this copy. Run it again after more work; the owner imports each change once.'),
+                 'this copy. Run it again after more work; the owner imports one file, which closes the copy.'),
     input_model=Empty, output_model=m.CopyChangesOutput, writes={'company'}, required_role='admin', capability='company',
     error_codes=['E_PERMISSION', 'E_IO'])
 
@@ -197,10 +199,11 @@ def plan_copy_preview(inp, ctx, s) -> Plan:
 accountant_copy_import = command(
     'accountant-copy import', scope='company',
     description=("Take an accountant's changes back from their change file, as the anchor's Import Accountant's Changes: every "
-                 'new change, or only the keys in `changes`. Each is posted as the accountant, under its own audit event naming '
-                 "the copy and the accountant's reason; a change already taken is skipped, so importing twice changes nothing. "
-                 "The copy comes back: these books take changes on or before the dividing date again. A person's step: an agent "
-                 'may preview, never import.'),
+                 'new change, or only the keys in `changes`. Each is posted as the external accountant the copy was made for '
+                 "(never as a name the file gives), under its own audit event naming the copy and the accountant's reason; each "
+                 'change is taken at most once. The copy comes back and is closed: these books take changes on or before the '
+                 'dividing date again, changes left out are declined, and the file (or any other for that copy) is refused from '
+                 "then on. A person's step: an agent may preview, never import."),
     input_model=m.CopyImportInput, output_model=m.CopyImportOutput, writes={'company'}, required_role='admin',
     capability='company', positional=['file'], error_codes=_JOURNAL_ERRORS)
 

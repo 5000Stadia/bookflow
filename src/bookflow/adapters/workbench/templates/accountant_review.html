@@ -13,7 +13,7 @@
 {% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML"><label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
 <div class="actions"><button type="submit" name="action" value="changes" data-write-changes>Write the change file</button></div></form>{% endif %}
 {% elif cur %}
-<p data-copy-side="owner">A copy is <strong>out</strong> with dividing date <strong>{{ cur.dividing_date }}</strong> ({{ cur.file_name }}, made {{ cur.created_at[:10] }} by {{ cur.created_by_name }}). Until its changes come back, these books refuse changes dated on or before that date, account edits and list merges.</p>
+<p data-copy-side="owner">A copy is <strong>out</strong>{% if cur.accountant_name %} to {{ cur.accountant_name }}{% endif %} with dividing date <strong>{{ cur.dividing_date }}</strong> ({{ cur.file_name }}, made {{ cur.created_at[:10] }} by {{ cur.created_by_name }}). Until its changes come back, these books refuse changes dated on or before that date, account edits and list merges.</p>
 {% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML">
 <label>Reason (needed to cancel) <input name="ctx:reason" placeholder="Accountant sent a list instead"></label>
 <div class="actions"><button type="submit" name="action" value="cancel" data-cancel-copy>Cancel the copy (remove restrictions)</button></div></form>{% endif %}
@@ -21,6 +21,7 @@
 <p data-no-copy>No copy is out.</p>
 {% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML">
 <label>Dividing date <input type="date" name="through" required></label>
+{% if accountants|length > 1 %}<label>For <select name="accountant">{% for a in accountants %}<option value="{{ a.username or a.user_id }}">{{ a.display_name or a.username }}</option>{% endfor %}</select></label>{% elif not accountants %}<p class="warn" data-no-accountant>Designate the external accountant first (<code>accountant add</code>, a person's step): the copy's changes come back as theirs.</p>{% endif %}
 <label>Reason <input name="ctx:reason" placeholder="Year-end review"></label>
 <p class="muted">Your accountant works on or before the dividing date; you keep working after it.</p>
 <div class="actions"><button type="submit" name="action" value="export" data-export-copy>Make the accountant's copy</button></div></form>{% endif %}
@@ -46,7 +47,7 @@
 </tr>{% endfor %}</tbody></table></div>
 {% if preview.counts.new %}<label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
 <div class="actions"><button type="submit" name="action" value="import" data-import>Import the ticked changes</button></div>
-<p class="muted">Each change is posted as the accountant, and the audit trail names the copy and the reason. Importing is a person's step.</p>{% endif %}
+<p class="muted">Each change is posted as the accountant the copy was made for, and the audit trail names the copy and the reason. Importing closes the copy: changes left unticked are declined. Importing is a person's step.</p>{% endif %}
 {% endif %}
 </form>
 </section>

@@ -18,7 +18,7 @@ class _In(BaseModel):
 # ------------------------------------------------------------------ the external accountant
 
 class AccountantAddInput(_In):
-    user: str = Field(min_length=1, max_length=64, description='Username or user id of a person with standard or higher access to this company.')
+    user: str = Field(min_length=1, max_length=64, description='Username or user id of a person holding the standard role on this company (no admin, as the anchor's External Accountant).')
     through: str = Field(**_DATE, description='End of the review period, YYYY-MM-DD: the accountant posts only on or before it.')
     note: str | None = Field(None, max_length=500, description='What the engagement is, such as 2026 year-end review.')
     _through = field_validator('through')(iso_date)
@@ -96,6 +96,7 @@ class ReviewedThroughWriteOutput(WriteOutput, ReviewedThroughOut):
 # ------------------------------------------------------------------ the accountant's copy
 
 class CopyExportInput(_In):
+    accountant: str | None = Field(None, min_length=1, max_length=64, description='Username or user id of the designated external accountant the copy is for; default the one designated. Every change the copy sends back is posted as them.')
     through: str = Field(**_DATE, description='Dividing date, YYYY-MM-DD: the accountant works on or before it; these books then refuse changes dated on or before it until the copy comes back or is cancelled.')
     _through = field_validator('through')(iso_date)
 
@@ -106,6 +107,7 @@ class CopyOut(BaseModel):
     status: Literal['out', 'returned', 'cancelled', 'working']
     dividing_date: str
     origin_company_id: str
+    accountant_name: str | None = Field(None, description='The external accountant the copy was made for; its changes are posted as them.')
     created_at: str
     created_by_name: str | None
     file_name: str | None = None

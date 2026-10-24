@@ -33,6 +33,8 @@ def test_accountant_review_page_exports_previews_and_imports(hosted):
     run("journal post", {"date": "2026-09-15", "memo": "Office", "lines": [
         {"account": office, "side": "debit", "amount": "300.00"}, {"account": bank, "side": "credit", "amount": "300.00"}]})
 
+    run("user add", {"username": "aw-cpa", "company": hosted.company_id, "role": "standard", "password": "pw-aw-cpa-123456"}, company=None)
+    run("accountant add", {"user": "aw-cpa", "through": "2026-09-30"})
     page = f"/c/{hosted.company_id}/accountant"
     assert page in browser.get(f"/c/{hosted.company_id}/_group/company", headers=HEADERS).text
     empty = browser.get(page, headers=HEADERS)
