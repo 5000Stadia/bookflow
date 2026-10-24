@@ -112,6 +112,16 @@ class BillItemInput(_Input):
     billable: bool = False
     class_id: _Selector | None = None
     class_mode: Literal['inherit', 'none', 'value'] = 'inherit'
+    site: _Selector | None = Field(default=None, description=(
+        'Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the '
+        "document's site, else the purchase-order line's, else the default site."))
+
+    @model_serializer(mode='wrap')
+    def unset_site(self, handler):
+        values = handler(self)
+        if 'site' not in self.model_fields_set:
+            values.pop('site', None)
+        return values
 
     @model_validator(mode='after')
     def one_basis(self) -> Self:
@@ -140,6 +150,8 @@ class _BillFields(_Input):
     supplier_reference: SupplierReference | None = None
     memo: Text | None = None
     class_id: _Selector | None = None
+    site: _Selector | None = Field(default=None, description=(
+        'Inventory site the stocked item lines are received at where a line names none; omitted, the default site.'))
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     custom_field_kinds: CustomFieldKindExpectations = Field(
         default_factory=lambda: CustomFieldKindExpectations({}))

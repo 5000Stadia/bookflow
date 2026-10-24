@@ -601,7 +601,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -748,6 +748,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R106: Weekly Timesheet, the time clock and the job calendar.
+    from bookflow.adapters.workbench import timekeeping_pages as TimekeepingPages
+    TimekeepingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                           role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R152: Print Checks -- the queue, a print run, "Did checks print OK?", reprints and alignment.
     from bookflow.adapters.workbench import check_print_pages as CheckPrintPages
     CheckPrintPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -756,6 +760,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import mileage_pages as MileagePages
     MileagePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R104: sites and transfers, where stock is and moving it.
+    from bookflow.adapters.workbench import inventory_site_pages as InventorySitePages
+    InventorySitePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                             role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R110: the price rule list and form, the conflict preference and a price check.
     from bookflow.adapters.workbench import pricing_rule_pages as PricingRulePages
     PricingRulePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -834,6 +842,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         permits = company_permits(request, show)
         return [(n, [cmd for cmd in _verbs(n, "company") if permits(cmd)]) for n in _nouns("company")]
 
+    def _open_clocks(request: Request, company_id: str):
+        """Who is clocked in, for the home page (R106); nothing when the caller cannot read the clock."""
+        try:
+            return run(request, "clock status", {}, company_id)["clocks"]
+        except BookflowError:
+            return []
+
     @app.get("/c/{company_id}/", response_class=HTMLResponse)
     @permission_read_package(host)
     def company_index(company_id: str, request: Request):
@@ -848,6 +863,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company=show,
             company_id=show["company_id"],
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
+            clocks=_open_clocks(request, show["company_id"]),
         )
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp

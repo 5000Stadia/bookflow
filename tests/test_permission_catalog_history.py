@@ -74,7 +74,9 @@ ACCEPTED = {
     'order-invoicing-v1': (619, '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531'),
     'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
-    'check-printing-v1': (631, '9c23839164c720973415eddfee3b6829602df24884e49f1e01c26bd4b116e7ec'),
+    'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
+    'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
+    'check-printing-v1': (659, '20ef229d22f9a3d330c79968ebe8f58fa9927aea43013768d030e5104c69eca6'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -154,6 +156,14 @@ CHAIN_ADDITIONS = {
     'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
     'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
     'partial-po-v1': {'purchase-order close-lines'},
+    'timesheets-v1': {'clock cancel', 'clock in', 'clock link', 'clock out', 'clock status', 'schedule calendar',
+                      'schedule cancel', 'schedule create', 'schedule show', 'schedule update', 'timesheet copy-last',
+                      'timesheet preferences', 'timesheet save', 'timesheet set-preferences', 'timesheet show'},
+    'inventory-sites-v1': {'inventory-site activate', 'inventory-site create', 'inventory-site deactivate',
+                           'inventory-site list', 'inventory-site show', 'inventory-site update',
+                           'inventory-transfer history', 'inventory-transfer post', 'inventory-transfer query',
+                           'inventory-transfer show', 'inventory-transfer update', 'inventory-transfer void',
+                           'report quantity-by-site'},
     'check-printing-v1': {'check print', 'check print-alignment', 'check print-cancel', 'check print-confirm',
                           'check print-pdf', 'check print-queue', 'check print-run', 'check print-setup', 'check reprint'},
 }

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}{{ loan.name }}{% endblock %}{% block body %}<style>.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 18px;margin:0 0 16px}.facts div{min-width:0}.facts dt{font-size:12px;color:var(--muted)}.facts dd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}</style><section id="loan">
+{% extends "base.html" %}{% block title %}{{ loan.name }}{% endblock %}{% block body %}<style>.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 18px;margin:0 0 16px}.facts div{min-width:0}.facts dt{font-size:12px;color:var(--muted)}.facts dd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}</style><section id="loan" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/loan">Loans</a> / {{ loan.name }}</nav>
 <h1>{{ loan.name }}</h1>
 {% if notice %}<p class="notice" role="status" data-notice>{{ notice }}</p>{% endif %}
@@ -14,7 +14,7 @@
 <div><dt>Maturity</dt><dd>{{ loan.maturity_date or 'Paid off' }}</dd></div>
 </dl>
 <nav class="actions" aria-label="Loan actions"><a href="/c/{{ company_id }}/loan/{{ loan.id }}/update">Edit loan details</a></nav>
-{% if loan.next_payment %}<form method="post" class="workspace-card" aria-label="Pay" data-loan-pay>
+{% if loan.next_payment %}<form method="post" action="/c/{{ company_id }}/loan/{{ loan.id }}" class="workspace-card" aria-label="Pay" data-loan-pay hx-post="/c/{{ company_id }}/loan/{{ loan.id }}" hx-target="#loan" hx-select="#loan" hx-swap="outerHTML">
 <h2>Pay {% if loan.next_payment.number %}payment {{ loan.next_payment.number }}{% endif %}</h2>
 <p>Due {{ loan.next_payment.due_date }}: principal {{ loan.next_payment.principal.amount }}, interest {{ loan.next_payment.interest.amount }}{% if loan.next_payment.escrow.minor_units %}, escrow {{ loan.next_payment.escrow.amount }}{% endif %} = <strong>{{ loan.next_payment.total.amount }}</strong></p>
 <div class="row"><label for="pay-date">Date</label><input id="pay-date" type="date" name="date" value="{{ values.get('date', '') }}"></div>

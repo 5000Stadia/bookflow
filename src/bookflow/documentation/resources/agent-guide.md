@@ -576,6 +576,46 @@ A billed trip cannot be voided or have its miles changed until its invoice is vo
 (`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
 for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
 
+## Log hours: "log my 8 hours on the Smith job yesterday"
+
+Hours worked are time entries, and a person's week is a timesheet: one row per customer:job, service
+item, class, billable and notes, seven daily hours. `timesheet save` takes the whole week and writes one
+time entry per row per day with hours, so read the week first (`timesheet show`) and save it back with
+the new hours added; saving the same sheet twice changes nothing. "My" is the person you act for: leave
+`employee` out and their linked employee is used (a person links it once with `clock link`). You may
+record time and schedule entries for any employee, as the person you act for could -- typing up
+everyone's paper timesheets is ordinary work; name the employee.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "timesheet save", "reason": "Kabe: log my 8 hours on Smith yesterday",
+ "input": {"week": "2026-10-20",
+           "rows": [{"customer": "Smith", "item": "Labor", "billable": true, "notes": "Rough-in",
+                     "hours": [null, "8", null, null, null, null, null]}]}}
+```
+
+The hours list starts on the company's first work day (`timesheet preferences`; Monday by default).
+Hours already billed stay billed: a billed cell can take more hours (they become a new, unbilled entry),
+but lowering it below what was billed is refused with `E_WORK_DEPENDENCY` until the invoice is voided or
+edited. Bill time as always with `time-activity invoice`; `report unbilled-costs` lists it.
+
+Clocking: `clock in` and `clock out` record attendance as it happens (rounded per the preference, split
+at midnight). That is the one exception: you may clock in or out only the person you act for (their login
+linked to their employee record), on their instruction; clocking anyone else is refused -- record their
+hours with `timesheet save` instead. A clock left on past the maximum shift is closed only with the `end` time the person stopped.
+
+## Who is where: "what's Dave doing tomorrow?"
+
+`schedule calendar` with `employee` and `view: "day"` (or `week`, `month`) and the date lists Dave's
+schedule entries and the work orders he is assigned that day; `customer` instead shows one job's calendar.
+`schedule create` books someone on a job or work order from a local start to an end
+(`YYYY-MM-DDTHH:MM`); a double-booking still saves, with a warning naming the clash, so tell the person.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "schedule calendar", "input": {"employee": "Dave Brazer", "view": "day", "date": "2026-10-25"}}
+```
+
 ## Printing checks: "print this week's checks"
 
 Write the checks with `to_be_printed: true` (on `check post`, or on `bill pay` by check from a bank
@@ -953,6 +993,27 @@ arrive, send `"pending": true` (nothing posts, the parts are reserved) and later
 BUILD`. `assembly list --status pending` is the pending builds report. Correct a build with
 `assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
 use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
+
+## Move 5 widgets from the van to the warehouse
+
+Stock lives at inventory sites: a warehouse, a service van, a consignment location. Every company starts
+with one, Main, the default; `inventory-site list` names them. Moving stock between sites is
+`inventory-transfer post`, never `transfer post` (that moves money) and never `inventory adjust`:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "inventory-transfer post", "reason": "Unloaded 5 widgets from the van",
+ "input": {"from_site": "Van 1", "to_site": "Warehouse", "lines": [{"item": "Widget", "quantity": "5"}]}}
+```
+
+A transfer posts nothing: an item has one average cost company-wide, so value and the general ledger
+do not move. The result gives each site's quantity after it and warns, naming the other sites, when the
+van goes below zero. Every stock line (`invoice`, `sales-receipt`, `credit-memo`, `bill`, `check`,
+`card-charge`, `vendor-credit`, `item-receipt`, `inventory adjust`, `assembly build`, sales-order,
+work-order and purchase-order lines) takes `site`; a document may name one `site` for all its lines.
+Leave it out and the line uses the default site; a return goes back where its sale took from, and a
+receipt against a purchase-order line arrives where that line said. `report quantity-by-site` and
+`report stock-status --site` read stock by site.
 
 ## Stock sent back to a vendor
 

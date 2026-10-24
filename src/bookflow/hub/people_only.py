@@ -29,6 +29,7 @@ ACT_SUBJECTS = {
     'check print-confirm': 'Confirming which checks printed', 'check print-cancel': 'Cancelling a check print run',
     'check reprint': 'Reprinting a check',
     'item merge': 'Merging items', 'item unmerge': 'Undoing an item merge',
+    'clock link': "Linking a person's login to an employee",
 }
 
 

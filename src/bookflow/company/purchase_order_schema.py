@@ -150,6 +150,7 @@ def define_tables(metadata, column, table, common):
         C('billable', sa.Boolean, 'Whether this cost is marked to be passed on to the named customer.', nullable=False),
         ident('class_id', 'Class captured for this line; null when unclassified.', 'classes.id', nullable=True),
         text('line_snapshot', 'Versioned typed JSON object of the resolved item, account, job and class facts.'),
+        ident('site_id', 'Inventory site an item line is to arrive at; null arrives at the default site.', 'inventory_sites.id', nullable=True),
         sa.UniqueConstraint('document_id', 'revision_id', 'id', name='uq_purchase_order_line_owner'),
         sa.UniqueConstraint('revision_id', 'line_id', name='uq_purchase_order_line_identity'),
         sa.UniqueConstraint('revision_id', 'position', name='uq_purchase_order_line_position'),

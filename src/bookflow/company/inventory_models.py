@@ -76,6 +76,7 @@ class InventoryAdjustInput(_Input):
                     'Money is entered as a positive amount everywhere in Bookflow; this says '
                     'which way it moves.')
     class_id: _Selector | None = Field(default=None, description='Class captured on both posting lines.')
+    site: _Selector | None = Field(default=None, description='Inventory site the quantity change is at, by id or name; omitted, the default site.')
     memo: str | None = Field(default=None, max_length=2000, description='Why the stock was adjusted.')
     number: str | None = Field(default=None, min_length=1, max_length=64,
                                description='Document number; omit to take the next journal number.')

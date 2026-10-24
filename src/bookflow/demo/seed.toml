@@ -2245,10 +2245,30 @@ capture = "purchase_demo_card"
 input = { account = "${register_card.id}", date = "2026-12-02", pay_to = { name_type = "vendor", name_id = "${backup_vendor.id}" }, amount = "20.00", memo = "Service kits: two bought on the company card", items = [{ item = "${purchase_demo_item.id}", quantity = "2", unit_cost = "10.00" }] }
 reason = "Receive two service kits paid directly by card"
 
+# Sites (R104): the default site renamed Warehouse, a service van, and a kit moved onto the van so
+# the free sample below leaves from it. A transfer posts nothing; no money figure moves.
+[[commands]]
+command = "inventory-site update"
+capture = "warehouse_site"
+input = { site = "Main", name = "Warehouse", description = "Shop warehouse" }
+reason = "Name the default site for what it is"
+
+[[commands]]
+command = "inventory-site create"
+capture = "van_site"
+input = { name = "Van 1", description = "Service van" }
+reason = "Track the stock carried on the service van"
+
+[[commands]]
+command = "inventory-transfer post"
+capture = "van_transfer"
+input = { date = "2026-12-02", number = "DEMO-VAN-LOAD", from_site = "Warehouse", to_site = "Van 1", lines = [{ item = "${purchase_demo_item.id}", quantity = "1" }], memo = "Load a service kit for the day's calls" }
+reason = "Put a service kit on the van"
+
 [[commands]]
 command = "sales-receipt post"
 capture = "purchase_demo_free_sale"
-input = { date = "2026-12-03", number = "DEMO-KIT-FREE", customer = "${pay_customer.id}", deposit_to = "${pay_bank.id}", payment_method = "Cash", memo = "Complimentary half-kit sample; no money collected", lines = [{ item = "${purchase_demo_item.id}", quantity = "0.5", unit_price = "0.00" }] }
+input = { date = "2026-12-03", number = "DEMO-KIT-FREE", site = "Van 1", customer = "${pay_customer.id}", deposit_to = "${pay_bank.id}", payment_method = "Cash", memo = "Complimentary half-kit sample; no money collected", lines = [{ item = "${purchase_demo_item.id}", quantity = "0.5", unit_price = "0.00" }] }
 reason = "Give a free half-kit sample while recording its actual inventory cost"
 
 [[commands]]

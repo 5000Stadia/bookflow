@@ -43,7 +43,7 @@ import json
 
 import sqlalchemy as sa
 
-from bookflow.company import inventory, inventory_effects, items as item_service, journals, schema as c
+from bookflow.company import inventory, inventory_effects, items as item_service, journals, placements, schema as c
 from bookflow.company.assembly_build_models import (
     AssemblyBuildListOutput, AssemblyBuildListRow, AssemblyBuildOutput, AssemblyComponentOutput,
     AssemblyCorrectionOutput,
@@ -262,6 +262,28 @@ def reserved(s, *, exclude=None, as_of=None):
     return held
 
 
+def reserved_by_site(s, *, as_of=None):
+    """``reserved`` by ``(item_id, site_id)``: a pending build reserves its components at its site (R104)."""
+    t = c.assembly_builds
+    latest = sa.select(t.c.build_id, sa.func.max(t.c.revision_number).label('n')).group_by(t.c.build_id).subquery()
+    rows = s.company.conn.execute(sa.select(t).join(latest, sa.and_(
+        latest.c.build_id == t.c.build_id, latest.c.n == t.c.revision_number)).where(t.c.status == 'pending')).mappings()
+    default = None
+    held: dict[tuple, int] = {}
+    for row in rows:
+        if as_of is not None and row['build_date'] > as_of:
+            continue
+        site = row['site_id']
+        if site is None:
+            default = default or placements.default_site_id(s)
+            site = default
+        for component in json.loads(row['components']):
+            if component['kind'] == 'stock':
+                key = (component['item_id'], site)
+                held[key] = held.get(key, 0) + _need(component['quantity_microunits'], row['quantity_microunits'])
+    return held
+
+
 # ---------------------------------------------------------------- the bill of materials
 
 
@@ -336,15 +358,17 @@ class _Build:
         self.line_of = {}       # entry key -> line position
         self.total = 0
         self.on_hand_after = 0
+        self.site_id = None     # the inventory site it takes from and puts at (R104); None is the default
 
 
 def _on_hand(history, date):
     return sum(int(row['quantity_microunits']) for row in history if row['effective_date'] <= date)
 
 
-def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
+def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, site_id=None):
     currency = _home(s)
     build = _Build(item, components, quantity, date, currency)
+    build.site_id = site_id
     planned_reversals = {}
     for row in reversing:
         planned_reversals.setdefault(row['item_id'], []).append(
@@ -378,7 +402,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
     issues = [inventory_effects.Entry(
         key=f'c{index}', item_id=entry['item']['id'], item_name=entry['item']['full_name'], kind='issue',
         quantity_microunits=entry['need'], asset_account_id=entry['component']['account_id'],
-        offset_account_id=item['asset_account_id'])
+        offset_account_id=item['asset_account_id'], site_id=site_id)
         for index, entry in enumerate(build.rows) if entry['component']['kind'] == 'stock' and entry['need'] > 0]
     # The first pass prices the components. It carries the assembly's receipt too, at a provisional value
     # (what the build being restated received, else nothing): without it, a later build that consumed this
@@ -388,7 +412,8 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
     placeholder = inventory_effects.Entry(key='assembly', item_id=item['id'], item_name=item['full_name'],
                                           kind='receipt', quantity_microunits=quantity,
                                           asset_account_id=item['asset_account_id'],
-                                          offset_account_id=item['asset_account_id'], value_minor_units=max(provisional, 0))
+                                          offset_account_id=item['asset_account_id'], value_minor_units=max(provisional, 0),
+                                          site_id=site_id)
     first = inventory_effects.plan(s, entries=issues + [placeholder], reversing=reversing, date=date, currency=currency,
                                    field='quantity')
     total = 0
@@ -417,7 +442,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
         entry['component']['account_id'] for entry in build.rows if entry['cost'])
     receipt = inventory_effects.Entry(key='assembly', item_id=item['id'], item_name=item['full_name'], kind='receipt',
                                       quantity_microunits=quantity, asset_account_id=item['asset_account_id'],
-                                      offset_account_id=offset, value_minor_units=total)
+                                      offset_account_id=offset, value_minor_units=total, site_id=site_id)
     build.change = inventory_effects.plan(s, entries=issues + [receipt], reversing=reversing, date=date,
                                           currency=currency, field='quantity')
     for index, entry in enumerate(build.rows):
@@ -503,7 +528,13 @@ def _output(s, build, *, status, current=None, number=None, transaction_id=None,
         history=[dict(version=row['revision_number'], status=row['status'], date=row['build_date'],
                       quantity=format_quantity_micro_units(row['quantity_microunits']), memo=row['memo'],
                       reason=row['reason'], created_at=row['created_at'], created_by=row['created_by'],
-                      created_via=row['created_via']) for row in history])
+                      created_via=row['created_via']) for row in history],
+        site_id=(current or {}).get('site_id') or build.site_id,
+        site_name=_site_name(s, (current or {}).get('site_id') or build.site_id))
+
+
+def _site_name(s, site_id):
+    return placements.site_names(s).get(site_id) if site_id else placements.default_site(s)['name']
 
 
 def _correction_values(change):
@@ -514,8 +545,9 @@ def _correction_values(change):
 
 
 def _revision(s, ctx, *, build_id, number, status, item, quantity, date, memo, transaction_id, components,
-              event, at):
+              event, at, site_id=None):
     return dict(id=new_id(), build_id=build_id, revision_number=number, status=status, item_id=item['id'],
+                site_id=site_id,
                 quantity_microunits=quantity, build_date=date, memo=memo,
                 reason=(ctx.reason or '').strip() or None, transaction_id=transaction_id,
                 components=json.dumps(components, sort_keys=True, separators=(',', ':')),
@@ -572,6 +604,9 @@ def _post(s, ctx, build, journal, operation, *, command_name, revision_row, pers
                                   audit_event_id=event) if build.change is not None else []
     extra = [('assembly_builds', 'assembly_build', 'id', [row])]
     if movements:
+        # Placed before the movements, which the database refuses unless their placements sum to them (R104).
+        extra.append(placements.extra(placements.placements_for_rows(
+            s, movements, build.change.sites, build.change.placements)))
         extra.append(('inventory_movements', 'inventory_movement', 'id', movements))
     applied = journals.persist_prepared(fresh, ctx, s, command_name=command_name, extra=tuple(extra),
                                         noun='assembly build')
@@ -628,21 +663,23 @@ def _run(s, ctx, inp, operation, *, persist):
         currency = _home(s)
         components = capture(s, item, currency)
         _require_open(s, inp.date)
-        build = _plan(s, item, components, quantity, inp.date)
+        site_id = placements.site_id_for(s, getattr(inp, 'site', None))
+        build = _plan(s, item, components, quantity, inp.date, site_id=site_id)
         if build.shortfall and not inp.pending:
             raise _short(build)
         build_id = new_id()
         if build.shortfall:
             row = _revision(s, ctx, build_id=build_id, number=1, status='pending', item=item, quantity=quantity,
                             date=inp.date, memo=inp.memo, transaction_id=None, components=components,
-                            event=new_id(), at=at)
+                            event=new_id(), at=at, site_id=site_id)
             if not persist:
                 return _output(s, build, status='will_pend', memo=inp.memo), [], 'preview'
             touched = _write_revision(s, ctx, row, command_name, f'mark pending a build of {item["full_name"]}')
             return _output(s, build, status='pending', current=row, memo=inp.memo, history=[row]), touched, \
                 f'pending build of {item["full_name"]}'
         row = _revision(s, ctx, build_id=build_id, number=1, status='built', item=item, quantity=quantity,
-                        date=inp.date, memo=inp.memo, transaction_id=None, components=components, event=None, at=at)
+                        date=inp.date, memo=inp.memo, transaction_id=None, components=components, event=None, at=at,
+                        site_id=site_id)
         journal = JournalPostInput(date=inp.date, memo=inp.memo, lines=build.lines)
         inventory_effects.open_dates(s, build.change)
         header, touched = _post(s, ctx, build, journal, 'post', command_name=command_name, revision_row=row,
@@ -675,11 +712,14 @@ def _run(s, ctx, inp, operation, *, persist):
         memo = inp.memo if 'memo' in inp.model_fields_set else current['memo']
         _require_open(s, date, current['build_date'] if status == 'built' else None)
         reversing = inventory_effects.own_movements(s, current['transaction_id']) if status == 'built' else ()
-        build = _plan(s, item, components, quantity, date, reversing=reversing, exclude=current['build_id'])
+        site_id = (placements.site_id_for(s, inp.site) if getattr(inp, 'site', None) is not None
+                   else current.get('site_id'))
+        build = _plan(s, item, components, quantity, date, reversing=reversing, exclude=current['build_id'],
+                      site_id=site_id)
         if status == 'pending' and operation == 'update':
             row = _revision(s, ctx, build_id=current['build_id'], number=next_number, status='pending', item=item,
                             quantity=quantity, date=date, memo=memo, transaction_id=None, components=components,
-                            event=new_id(), at=at)
+                            event=new_id(), at=at, site_id=site_id)
             if not persist:
                 return _output(s, build, status='pending', current=current, memo=memo, history=history), [], 'preview'
             touched = _write_revision(s, ctx, row, command_name, f'edit pending build of {item["full_name"]}')
@@ -689,7 +729,7 @@ def _run(s, ctx, inp, operation, *, persist):
             raise _short(build)
         row = _revision(s, ctx, build_id=current['build_id'], number=next_number, status='built', item=item,
                         quantity=quantity, date=date, memo=memo, transaction_id=None, components=components,
-                        event=None, at=at)
+                        event=None, at=at, site_id=site_id)
         inventory_effects.open_dates(s, build.change)
         if status == 'built':
             journal = JournalUpdateInput(journal=current['transaction_id'], expected_version=_journal_version(s, current), date=date, memo=memo, lines=build.lines)
@@ -718,7 +758,8 @@ def _run(s, ctx, inp, operation, *, persist):
         inventory_effects.open_dates(s, build.change, [current['build_date']])
         row = _revision(s, ctx, build_id=current['build_id'], number=next_number, status=new_status, item=item,
                         quantity=int(current['quantity_microunits']), date=current['build_date'], memo=current['memo'],
-                        transaction_id=current['transaction_id'], components=components, event=None, at=at)
+                        transaction_id=current['transaction_id'], components=components, event=None, at=at,
+                        site_id=current.get('site_id'))
         header, touched = _post(s, ctx, build, JournalVoidInput(journal=current['transaction_id'], expected_version=_journal_version(s, current)), 'void',
                                 command_name=command_name, revision_row=row, persist=persist)
         number = header['number']
@@ -731,7 +772,8 @@ def _run(s, ctx, inp, operation, *, persist):
             build.change = None
         row = _revision(s, ctx, build_id=current['build_id'], number=next_number, status=new_status, item=item,
                         quantity=int(current['quantity_microunits']), date=current['build_date'], memo=current['memo'],
-                        transaction_id=current['transaction_id'], components=components, event=new_id(), at=at)
+                        transaction_id=current['transaction_id'], components=components, event=new_id(), at=at,
+                        site_id=current.get('site_id'))
         touched = _write_revision(s, ctx, row, command_name, f'{operation} build of {item["full_name"]}') if persist else []
         number, corrections, warnings = _transaction_number(s, current['transaction_id']), [], []
     shown = _revisions(s, current['build_id']) if persist else history
@@ -809,6 +851,9 @@ def page(s, inp):
         query = query.where(t.c.status == inp.status)
     if inp.item is not None:
         query = query.where(t.c.item_id == item_service.resolve_item(s.company, inp.item)['id'])
+    if inp.site is not None:
+        site = placements.resolve_site(s, inp.site, active=False)
+        query = query.where(sa.func.coalesce(t.c.site_id, placements.default_site_id(s)) == site['id'])
     rows = [dict(row) for row in s.company.conn.execute(
         query.order_by(t.c.build_date.desc(), t.c.build_id.desc()).limit(inp.limit)).mappings()]
     currency = _home(s)
@@ -826,6 +871,7 @@ def page(s, inp):
             build_id=row['build_id'], version=row['revision_number'], status=row['status'],
             number=_transaction_number(s, row['transaction_id']), item_id=row['item_id'],
             item_name=inventory.item_name(s, row['item_id']), date=row['build_date'],
-            quantity=format_quantity_micro_units(row['quantity_microunits']), memo=row['memo'], assembly_cost=cost))
+            quantity=format_quantity_micro_units(row['quantity_microunits']), memo=row['memo'], assembly_cost=cost,
+            site_name=_site_name(s, row.get('site_id'))))
     return AssemblyBuildListOutput(rows=out, count=len(out), reserved={
         key: format_quantity_micro_units(value) for key, value in reserved(s).items()})

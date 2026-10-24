@@ -148,7 +148,9 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.ORDER_INVOICING_POLICY_VERSION: '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531',
     c.SHORTFALL_PO_POLICY_VERSION: 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374',
     c.PARTIAL_PO_POLICY_VERSION: '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb',
-    c.CHECK_PRINTING_POLICY_VERSION: '9c23839164c720973415eddfee3b6829602df24884e49f1e01c26bd4b116e7ec',
+    c.TIMESHEETS_POLICY_VERSION: '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357',
+    c.INVENTORY_SITES_POLICY_VERSION: '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529',
+    c.CHECK_PRINTING_POLICY_VERSION: '20ef229d22f9a3d330c79968ebe8f58fa9927aea43013768d030e5104c69eca6',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -272,6 +274,8 @@ def known_catalog(version):
     from . import permission_order_invoicing_catalog
     from . import permission_shortfall_po_catalog
     from . import permission_partial_po_catalog
+    from . import permission_timesheets_catalog
+    from . import permission_inventory_sites_catalog
     from . import permission_check_printing_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -322,6 +326,8 @@ def known_catalog(version):
         c.ORDER_INVOICING_POLICY_VERSION: permission_order_invoicing_catalog,
         c.SHORTFALL_PO_POLICY_VERSION: permission_shortfall_po_catalog,
         c.PARTIAL_PO_POLICY_VERSION: permission_partial_po_catalog,
+        c.TIMESHEETS_POLICY_VERSION: permission_timesheets_catalog,
+        c.INVENTORY_SITES_POLICY_VERSION: permission_inventory_sites_catalog,
         c.CHECK_PRINTING_POLICY_VERSION: permission_check_printing_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

@@ -445,6 +445,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `number` | `--number` | string \| null | no | yes | null | The number written on the face of the cheque, which belongs to this bank account and not to the shared document series. Leave it out to take the next number from the account's own next check number, skipping any it has already issued. A number below that pointer is accepted and does not move it backwards; a number already on another cheque drawn on the same account is refused. Leading zeros are kept as typed, and 01001 and 1001 are one number. A number that is not a plain run of digits is a real cheque number with no place in the sequence. |
@@ -957,6 +958,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
 
 Example JSON output:
 
@@ -975,6 +983,7 @@ Example JSON output:
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
+  "skipped": [],
   "spoiled_numbers": [],
   "status": "awaiting_confirmation",
   "style": "voucher",
@@ -1233,6 +1242,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
 
 Example JSON output:
 
@@ -1251,6 +1267,7 @@ Example JSON output:
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
+  "skipped": [],
   "spoiled_numbers": [],
   "status": "awaiting_confirmation",
   "style": "voucher",
@@ -1400,6 +1417,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
 
 Example JSON output:
 
@@ -1418,6 +1442,7 @@ Example JSON output:
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
+  "skipped": [],
   "spoiled_numbers": [],
   "status": "awaiting_confirmation",
   "style": "voucher",
@@ -1780,6 +1805,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
 
 Example JSON output:
 
@@ -1797,6 +1829,7 @@ Example JSON output:
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
+  "skipped": [],
   "spoiled_numbers": [],
   "status": "awaiting_confirmation",
   "style": "voucher",
@@ -2294,6 +2327,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
 
 Example JSON output:
 
@@ -2312,6 +2352,7 @@ Example JSON output:
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
+  "skipped": [],
   "spoiled_numbers": [],
   "status": "awaiting_confirmation",
   "style": "voucher",
@@ -2819,6 +2860,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `check` | `CHECK` | string | yes | no | — | minimum length 1 |

@@ -91,6 +91,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -576,6 +577,7 @@ The same example as complete `bookflow_run` arguments:
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the item lines are to arrive at where a line names none; omitted, the default site. |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `vendor` | `--vendor` | string | yes | no | — | minimum length 1 |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -589,6 +591,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_mode` | inside `--lines` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
 
 ### Command and context options
 
@@ -642,6 +645,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -1032,6 +1036,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `items[].receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `items[].receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `items[].receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `items[].line_tracking` | array[object] | no | no | [] | — |
 | `items[].line_tracking[].line_id` | string | yes | no | — | — |
 | `items[].line_tracking[].position` | integer | yes | no | — | — |
@@ -1187,6 +1192,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -1519,6 +1525,7 @@ The same example as complete `bookflow_run` arguments:
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the item lines are to arrive at where a line names none; omitted, the default site. |
 | `purchase_order` | `PURCHASE_ORDER` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
@@ -1535,6 +1542,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_mode` | inside `--lines` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
 
 ### Command and context options
 
@@ -1589,6 +1597,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -1984,6 +1993,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |

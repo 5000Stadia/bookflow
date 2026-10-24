@@ -61,9 +61,12 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +2 sales-order invoice and sales-order billing (R101 increment 4).
     # +2 sales-order purchase-order and work-order purchase-order (R101 increment 5).
     # +1 purchase-order close-lines (R153).
+    # +15 timekeeping (R106): timesheet show/copy-last/save/preferences/set-preferences, clock in/out/cancel/status/
+    # link, schedule create/update/cancel/show/calendar.
+    # +13 inventory-site, inventory-transfer and report quantity-by-site (R104 increment 1).
     # +9 check printing (R152): check print-queue, print, print-confirm, print-cancel, reprint, print-run, print-pdf,
     # print-setup and print-alignment.
-    assert len(rows) == 633
+    assert len(rows) == 661
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -291,10 +294,18 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3423 -> 3430 (R153), measured per command: bill post's optional order_lines adds 6 (its null
     # branch, quantity's, unit_cost's and amount's null and money-object branches), and purchase-order
     # close-lines adds 1 (expected_version's null branch). No new variant kind.
-    # 3430 -> 3447 (R152, check printing), measured: +17 from the nine check print commands' optional fields
+    # 3430 -> 3472 (R106, timekeeping), measured per command: clock in 6, out 7, cancel 1, status 1, link 1;
+    # schedule create 3, update 7, cancel 1, calendar 3; timesheet show 2, copy-last 2, save 5, set-preferences 3
+    # -- 42. No existing command moved. No new variant kind; the groups stay 26.
+    # 3472 -> 3549 (R104 increment 1): the thirteen inventory-site, inventory-transfer and quantity-by-site
+    # commands, plus the null branch of the optional `site` now on every stock-moving line and header (sales and
+    # work lines, credit-memo lines, bill item lines shared by checks, card charges, vendor credits and receipts,
+    # purchase-order lines and headers, inventory adjust, assembly build and update, item update's site_settings,
+    # the stock reports' site filter, and report sales-by-item's site). No new variant kind.
+    # 3549 -> 3566 (R152, check printing), measured: +17 from the nine check print commands' optional fields
     # (account, first_number, style, checks, failed_from, failed, new_number, offsets, expected_version null branches)
-    # and to_be_printed on check post, check update and bill pay. No existing variant moved kind; the groups stay.
-    assert sum(len(group["paths"]) for group in mapped)==3447
+    # and to_be_printed on check post, check update and bill pay. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3566
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

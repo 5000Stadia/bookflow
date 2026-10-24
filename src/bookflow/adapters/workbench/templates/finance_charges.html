@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Assess finance charges{% endblock %}{% block body %}<section id="finance-charges">
+{% extends "base.html" %}{% block title %}Assess finance charges{% endblock %}{% block body %}<section id="finance-charges" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Assess finance charges</nav>
 <h1>Assess finance charges</h1>
 {% if result %}<div role="status" class="notice" data-finance-charge-result>
@@ -10,7 +10,7 @@
 {% if off %}<section class="workspace-card" data-finance-charge-off>
 <p>Finance charges are off. Set the annual interest rate, minimum charge, grace period and the finance charge account in the company settings first{% if can_set %}: <a href="/c/{{ company_id }}/company/self/update">Company settings</a>{% else %}; a company administrator sets them{% endif %}.</p>
 </section>{% endif %}
-<form method="post" action="/c/{{ company_id }}/finance-charge/assess">
+<form method="post" action="/c/{{ company_id }}/finance-charge/assess" hx-post="/c/{{ company_id }}/finance-charge/assess" hx-target="#finance-charges" hx-select="#finance-charges" hx-swap="outerHTML">
 <section class="workspace-card" aria-label="Assessment">
 <label>Assessment date <input type="date" name="date" value="{{ date }}" data-finance-charge-date></label>
 <button type="submit" name="action" value="preview">Recalculate</button>

@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% block title %}Job calendar{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['timekeeping.css'] }}"><section id="job-calendar">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/employees">Employees</a> / Job calendar</nav>
+<h1>Job calendar</h1>
+<p class="actions"><a href="/c/{{ company_id }}/timesheet">Weekly timesheet</a> <a href="/c/{{ company_id }}/clock">Time clock</a></p>
+{% if result %}<div role="status" class="notice" data-calendar-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<form method="get" action="/c/{{ company_id }}/calendar" class="sheet-nav" data-calendar-filter>
+<label>Employee <input name="employee" list="cal-employees" value="{{ query.get('employee', '') }}"></label>
+<label>Customer:job <input name="customer" list="cal-customers" value="{{ query.get('customer', '') }}"></label>
+<label>View <select name="view">{% for v in ('day', 'week', 'month') %}<option value="{{ v }}" {% if cal.view == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+<label>Date <input type="date" name="date" value="{{ query.get('date', cal.date_from) }}"></label>
+<button type="submit">Show</button>
+{% set keep = '&employee=' ~ (query.get('employee', '') | urlencode) ~ '&customer=' ~ (query.get('customer', '') | urlencode) ~ '&view=' ~ cal.view %}
+<a href="?date={{ prev_date }}{{ keep }}">Previous</a> <a href="?date={{ next_date }}{{ keep }}">Next</a>
+</form>
+<datalist id="cal-employees">{% for name in employees %}<option value="{{ name }}">{% endfor %}</datalist>
+<datalist id="cal-customers">{% for name in customers %}<option value="{{ name }}">{% endfor %}</datalist>
+<h2>{{ cal.date_from }}{% if cal.date_to != cal.date_from %} to {{ cal.date_to }}{% endif %}{% if cal.employee_name %} &middot; {{ cal.employee_name }}{% endif %}{% if cal.customer_name %} &middot; {{ cal.customer_name }}{% endif %}</h2>
+{% if cal.conflicts %}<p class="error" data-calendar-conflicts>{{ cal.conflicts }} booking{{ '' if cal.conflicts == 1 else 's' }} overlap another for the same person.</p>{% endif %}
+{% set post = '/c/' ~ company_id ~ '/calendar?' ~ keep[1:] ~ '&date=' ~ cal.date_from %}
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML">
+<div class="calendar-week{% if cal.view == 'month' %} calendar-month{% endif %}" data-calendar-grid>
+{% for day in cal.days %}<section class="calendar-day{% if not day['items'] %} empty{% endif %}" data-calendar-day="{{ day.date }}" aria-label="{{ day.date }}"><h3>{{ weekday(day.date) }} {{ day.date }}</h3>
+{% for i in day['items'] %}<div class="calendar-item{% if i.kind == 'work_order' %} work-order{% endif %}{% if i.conflicts %} conflict{% endif %}" data-calendar-item="{{ i.id }}">
+<strong>{{ i.starts[11:] }}&ndash;{{ i.ends[11:] if i.ends[:10] == i.starts[:10] else i.ends.replace('T', ' ') }}</strong> {{ i.employee_name or 'Unassigned' }}<br>
+{% if i.kind == 'work_order' %}<a href="/c/{{ company_id }}/work-order/{{ i.work_order_id }}">Work order {{ i.work_order_number }}</a> &middot; {% elif i.work_order_number %}WO {{ i.work_order_number }} &middot; {% endif %}{{ i.customer_name }}{% if i.notes %} &middot; {{ i.notes }}{% endif %}
+{% if i.conflicts %}<br><span class="muted">Double-booked with {{ i.conflicts | map(attribute='label') | join(', ') }}</span>{% endif %}
+{% if can_write and i.kind == 'schedule' %} <button type="submit" name="action" value="cancel:{{ i.id }}:{{ i.version }}" formnovalidate aria-label="Cancel {{ i.employee_name }} on {{ day.date }}">Cancel</button>{% endif %}
+</div>{% endfor %}</section>{% endfor %}
+</div>
+{% if not (cal.days | map(attribute='items') | select | list) %}<p class="muted" data-calendar-empty>Nothing scheduled.</p>{% endif %}
+{% if can_write %}<section class="workspace-card" aria-label="Schedule someone" data-schedule-form>
+<h2>Schedule someone</h2>
+<label>Employee <input name="employee" list="cal-employees" value="{{ values.get('employee', query.get('employee', '')) }}"></label>
+<label>Customer:job <input name="customer" list="cal-customers" value="{{ values.get('customer', query.get('customer', '')) }}"></label>
+<label>or work order <input name="work_order" size="8" value="{{ values.get('work_order', '') }}"></label>
+<label>Day <input type="date" name="day" value="{{ values.get('day', cal.date_from) }}"></label>
+<label>From <input type="time" name="start_time" value="{{ values.get('start_time', '08:00') }}"></label>
+<label>To <input type="time" name="end_time" value="{{ values.get('end_time', '12:00') }}"></label>
+<label>Notes <input name="notes" value="{{ values.get('notes', '') }}"></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Job calendar"></label>
+<div class="actions"><button type="submit" name="action" value="schedule" formnovalidate data-schedule-save>Schedule</button></div>
+</section>{% endif %}
+</form>
+</section>{% endblock %}
