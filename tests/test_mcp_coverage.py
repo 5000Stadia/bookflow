@@ -295,12 +295,12 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3430 -> 3472 (R106, timekeeping), measured per command: clock in 6, out 7, cancel 1, status 1, link 1;
     # schedule create 3, update 7, cancel 1, calendar 3; timesheet show 2, copy-last 2, save 5, set-preferences 3
     # -- 42. No existing command moved. No new variant kind; the groups stay 26.
-    # 3472 -> 3548 (R104 increment 1): the thirteen inventory-site, inventory-transfer and quantity-by-site
+    # 3472 -> 3549 (R104 increment 1): the thirteen inventory-site, inventory-transfer and quantity-by-site
     # commands, plus the null branch of the optional `site` now on every stock-moving line and header (sales and
     # work lines, credit-memo lines, bill item lines shared by checks, card charges, vendor credits and receipts,
     # purchase-order lines and headers, inventory adjust, assembly build and update, item update's site_settings,
-    # and the stock reports' site filter). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3548
+    # the stock reports' site filter, and report sales-by-item's site). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3549
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

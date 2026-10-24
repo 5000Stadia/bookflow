@@ -294,7 +294,7 @@ def test_migration_places_every_existing_movement_at_main(books):
     with sqlite3.connect(path) as source, sqlite3.connect(copy) as target:
         source.backup(target)
     with sqlite3.connect(copy) as conn:
-        # Back to co0084: the new objects gone, the three columns stripped from the schema text.
+        # Back to co0090: the new objects gone, the three columns stripped from the schema text.
         conn.execute('PRAGMA foreign_keys=OFF')
         for (name,) in conn.execute("SELECT name FROM sqlite_schema WHERE type='trigger' AND sql LIKE '%placement%' "
                                     "OR name LIKE 'inventory_transfer%' AND type='trigger' "
@@ -308,7 +308,7 @@ def test_migration_places_every_existing_movement_at_main(books):
         conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', site_id VARCHAR(26) REFERENCES inventory_sites (id)', '') "
                      "WHERE name IN ('work_lines', 'purchase_order_lines', 'assembly_builds')")
         conn.execute('PRAGMA writable_schema=OFF')
-        conn.execute("UPDATE alembic_version SET version_num='co0084'")
+        conn.execute("UPDATE alembic_version SET version_num='co0090'")
         conn.commit()
     _at(copy, 'co0089')
     with sqlite3.connect(copy) as conn:
