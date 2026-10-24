@@ -1098,6 +1098,13 @@ def payment_workspace_row(cmd, url, page_text, config):
         'discounts[].expected_version': ('captured_state', 'payment-invoices', 'the discounted invoice row version'),
         'discount_account': ('registry_alternative_not_emitted', None,
                              "the company's customer discount account preference; the workspace does not choose one"),
+        # The anchor's Underpayment choice (R148), shown once a preview finds the cash short: Write off sends
+        # `underpayment: write_off` with its account and class; Leave open sends nothing.
+        'underpayment': ('control', 'payment-underpayment-write-off', 'Write off the extra amount (else leave open)'),
+        'write_off_account': ('control', 'payment-write-off-account', 'visible input under Write off'),
+        'write_off_class': ('control', 'payment-write-off-class', 'visible input under Write off'),
+        'discount_class': ('registry_alternative_not_emitted', None,
+                           'a typed discount posts without a class from the workspace; agents may name one'),
     })
     for path in ('applications.items[].invoice', 'applications.items[].expected_version',
                  'applications.items[].amount', 'invoice_versions[].invoice', 'invoice_versions[].expected_version'):
