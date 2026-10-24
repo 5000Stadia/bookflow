@@ -359,7 +359,7 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
     # those tables and triggers and nothing else.
     added=[x for x in hub_after_rows[0] if x not in hub_before_rows[0]]
     assert [x for x in hub_after_rows[0] if x in hub_before_rows[0]]==hub_before_rows[0]
-    assert added and all(x[1].startswith(('authority_generation','audit_events_no_','audit_entries_no_','company_accountant','ix_company_accountants')) for x in added),added
+    assert added and all(x[1].startswith(('authority_generation','audit_events_no_','audit_entries_no_','company_accountant','ix_company_accountants','sqlite_autoindex_company_accountant')) for x in added),added
     event_cols=[c[1] for c in hub_before_rows[1]['audit_events'][0]]
     new_events=hub_after_rows[1]['audit_events'][1][len(hub_before_rows[1]['audit_events'][1]):]
     upgrade_events={r[2+3*event_cols.index('id')] for r in new_events}
