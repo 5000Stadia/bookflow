@@ -137,7 +137,9 @@ def test_an_agent_prepares_a_run_but_only_a_person_confirms_cancels_or_reprints(
 
     bank = hosted.ok('account.create', {'name': 'AG Checking', 'type': 'bank'}, company=cid, headers=REASON)['id']
     expense = hosted.ok('account.create', {'name': 'AG Supplies', 'type': 'expense'}, company=cid, headers=REASON)['id']
+    vendor = hosted.ok('vendor.create', {'name': 'AG Vendor'}, company=cid, headers=REASON)['id']
     queued = agent_call('check.post', {'account': bank, 'date': '2026-10-20', 'amount': '10.00', 'to_be_printed': True,
+                                       'pay_to': {'name_type': 'vendor', 'name_id': vendor},
                                        'expenses': [{'account': expense, 'amount': '10.00'}]})
     assert queued.status_code == 200, queued.text
     prepared = agent_call('check.print', {'account': bank, 'first_number': '501'})

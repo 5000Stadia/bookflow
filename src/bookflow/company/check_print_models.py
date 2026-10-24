@@ -88,6 +88,15 @@ class CheckPrintInput(_Strict):
         return self
 
 
+class SkippedCheck(_Strict):
+    transaction_id: str
+    document_type: Literal['check', 'bill_payment']
+    reference: str
+    date: str
+    payee_name: str | None
+    reason: str
+
+
 class PrintRunItem(_Strict):
     item_id: str
     position: int
@@ -118,6 +127,8 @@ class CheckPrintRunOutput(_Strict):
     total: MoneyOutput
     spoiled_numbers: list[str] = Field(default_factory=list, description='Numbers this run left on spoiled paper.')
     pdf: str = Field(description='The command that returns this run as a PDF.')
+    skipped: list[SkippedCheck] = Field(default_factory=list, description=(
+        'Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date.'))
 
 
 class CheckPrintWriteOutput(CheckPrintRunOutput, WriteOutput):

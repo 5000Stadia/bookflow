@@ -55,7 +55,7 @@ import sqlalchemy as sa
 from bookflow.company import accounts, check_numbers, journals, schema as c
 from bookflow.company.check_print_models import (
     CheckPdfOutput, CheckPrintQueueOutput, CheckPrintRunOutput, CheckPrintSetupOutput,
-    CheckPrintWriteOutput, PrintRunItem, PrintSettingsOutput, QueueAccount, QueuedCheck,
+    CheckPrintWriteOutput, PrintRunItem, PrintSettingsOutput, QueueAccount, QueuedCheck, SkippedCheck,
 )
 from bookflow.company.ledger_reports import money
 from bookflow.core import audit, clock
@@ -195,7 +195,11 @@ def facts(s, header):
             bill_revision = journals.revision(s, bill) if bill else None
             stub.append(('bill', application.bill_number, bill_revision['date'] if bill_revision else '',
                          bill_revision['total_minor_units'] if bill_revision else None,
-                         application.discount_minor_units, application.amount_minor_units))
+                         application.discount_minor_units,
+                         # What the cheque paid on the bill: the application settles the
+                         # discount as well, so the money is what is left after it, and the
+                         # stub's Paid column adds up to the face.
+                         application.amount_minor_units - application.discount_minor_units))
         base.update(account_id=profile['funding_account_id'], amount_minor_units=profile['amount_minor_units'],
                     currency=revision['currency'], name_type='vendor', name_id=profile['vendor_id'],
                     party_name=shown.vendor_name, stub=stub)
@@ -418,10 +422,13 @@ def show_run(s, inp):
 
 def _printed_check(fact, number, sample=False):
     from bookflow.documents.check_pdf import PrintedCheck, StubLine
-    from bookflow.core.money import Money
+    from bookflow.documents.check_pdf import amount_in_figures
 
     def shown(units):
-        return '' if units is None else Money(units, fact['currency']).to_dict()['amount']
+        # Grouped like the figure on the face (1,234.56), without its protective asterisks.
+        if units is None:
+            return ''
+        return ('-' if units < 0 else '') + amount_in_figures(abs(units), fact['currency']).lstrip('*')
 
     if fact['type'] == 'bill_payment':
         heading = ('Bill', 'Date', 'Original', 'Discount', 'Paid')
@@ -543,7 +550,28 @@ def _print_plan(s, ctx, inp, at, event):
     if not waiting:
         raise _invalid('account', f'no cheques are waiting to be printed on "{account["name"]}"')
     closing = _conn(s).execute(sa.select(c.company_info.c.closing_date)).scalar_one()
+    skipped = []
+    if inp.checks is None and closing:
+        # A bare run prints what it can: a cheque dated in a closed period (a misprint left
+        # behind when the period closed, say) is left in the queue and named, rather than
+        # holding up every other cheque on the account.
+        skipped = [SkippedCheck(transaction_id=fact['transaction_id'], document_type=fact['document_type'],
+                                reference=fact['reference'], date=fact['date'], payee_name=fact['payee'] or None,
+                                reason=f'dated {fact["date"]}, on or before the closing date {closing}')
+                   for fact in waiting if fact['date'] <= closing]
+        waiting = [fact for fact in waiting if fact['date'] > closing]
+        if not waiting:
+            raise BookflowError('E_PERIOD_CLOSED', message=(
+                f'Every cheque waiting on "{account["name"]}" is dated on or before the closing date {closing}; '
+                f'printing one would give a closed-period document its number.'),
+                details={'closing_date': closing, 'skipped': [row.transaction_id for row in skipped]})
     for fact in waiting:
+        if not fact['name_id']:
+            raise _invalid('checks', (
+                f'{fact["document_type"].replace("_", " ")} {fact["reference"]} dated {fact["date"]} for '
+                f'{money(fact["amount_minor_units"], fact["currency"]).amount} has no payee, so there is no name or address '
+                f'to print; set its pay_to with `check update`, or leave it out of this run with `checks`'),
+                transaction_id=fact['transaction_id'])
         if closing and fact['date'] <= closing:
             raise BookflowError('E_PERIOD_CLOSED', message=(
                 f'{fact["document_type"].replace("_", " ").capitalize()} {fact["reference"]} to {fact["payee"]} is dated '
@@ -567,7 +595,7 @@ def _print_plan(s, ctx, inp, at, event):
              for position, (fact, (text, key, seq)) in enumerate(zip(waiting, numbers), 1)]
     pointer = _move_pointer(s, account, after_last)
     output = run_output(s, run, items, {fact['transaction_id']: fact for fact in waiting}, cls=CheckPrintWriteOutput,
-                        spoiled=[])
+                        spoiled=[], skipped=skipped)
     return output, dict(run=run, items=items, pointer=(account, pointer) if pointer else None)
 
 

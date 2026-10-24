@@ -304,3 +304,109 @@ def test_layout_arranges_partial_sheets():
     placed = check_pdf.arrange(checks, 'wallet', 2).placed
     assert [(p.page, p.slot) for p in placed] == [(0, 0), (0, 1), (1, 0), (1, 1), (1, 2)]
     assert [(p.page, p.slot) for p in check_pdf.arrange(checks, 'voucher').placed] == [(i, 0) for i in range(5)]
+
+
+# ---------------------------------------------------------------- review fixes (R152 review)
+
+
+def _print_all(books, first):
+    run = books['run']('check print', {'account': books['bank'], 'first_number': first}, reason='Print')
+    books['run']('check print-confirm', {'run': run['id']}, reason='OK')
+    return run
+
+
+def test_statement_import_matches_a_reprinted_check_on_its_new_number_only(books):
+    a = _check(books, '50.00')
+    _print_all(books, '1001')
+    books['run']('check reprint', {'check': a['id'], 'new_number': '1020'}, reason='Jammed')
+
+    def imported(number):
+        csv = f'Date,Description,Amount,Check\n2026-03-10,CHK,-50.00,{number}\n'
+        out = books['run']('reconcile import', dict(account=books['bank'], content=csv), reason='Statement')
+        return out['lines'][0]
+    new, old = imported('1020'), imported('1001')
+    assert (new['status'], new['reason'], new['movement']['transaction_id']) == (
+        'matched', 'same amount and check number', a['id'])
+    assert old['status'] == 'unmatched' and old['movement'] is None
+
+
+def test_bill_payment_show_and_query_carry_the_printed_number(books):
+    _, payment = _bill_payment(books)
+    _print_all(books, '1001')
+    assert books['run']('bill payment show', {'payment': payment['id']})['check_number'] == '1001'
+    assert [(row['id'], row['check_number']) for row in books['run']('bill payment query', {})['items']] == [
+        (payment['id'], '1001')]
+    assert [row['id'] for row in books['run']('bill payment query', {'check_number': '1001'})['items']] == [payment['id']]
+    books['run']('check reprint', {'check': payment['id'], 'new_number': '1005'}, reason='Jammed')
+    assert books['run']('bill payment query', {})['items'][0]['check_number'] == '1005'
+    assert books['run']('bill payment show', {'payment': payment['id']})['check_number'] == '1005'
+    assert [row['id'] for row in books['run']('bill payment query', {'check_number': '1005'})['items']] == [payment['id']]
+    assert books['run']('bill payment query', {'check_number': '1001'})['items'] == []
+
+
+def test_the_voucher_stub_pays_the_bill_less_its_discount_and_adds_up_to_the_face(books):
+    books['run']('account create', {'name': 'Discounts Taken', 'type': 'income'}, reason='Discount account')
+    bill = books['run']('bill post', dict(vendor=books['vendor'], date='2026-03-01', number='D-1',
+                                          expenses=[{'account': books['expense'], 'amount': '1000.00'}]), reason='Bill')
+    books['run']('bill pay', dict(date='2026-03-05', bills=[{'bill': bill['id'], 'amount': '980.00', 'discount': '20.00'}],
+                                  funding_account=books['bank'], method=books['methods']['check'], to_be_printed=True),
+                 reason='Pay with discount')
+    big = _check(books, '1234.56')
+    run = books['run']('check print', {'account': books['bank'], 'first_number': '1001', 'style': 'voucher'}, reason='Print')
+    reader = _pdf(books['run']('check print-pdf', {'run': run['id']}))
+    texts = [page.extract_text() for page in reader.pages]
+    stub = next(t for t in texts if 'D-1' in t)
+    assert '980.00' in stub and '20.00' in stub and '1,000.00' in stub and 'Total 980.00' in stub
+    assert not any(line.strip().endswith('1,000.00') and line.count('1,000.00') == 2 for line in stub.splitlines())
+    assert 'Total 1,234.56' in next(t for t in texts if 'One thousand two hundred thirty-four' in t)
+    assert big['id']
+
+
+def test_a_check_without_a_payee_is_refused_at_print_by_name(books):
+    nameless = books['run']('check post', dict(account=books['bank'], date='2026-03-04', amount='15.00', to_be_printed=True,
+                                               expenses=[{'account': books['expense'], 'amount': '15.00'}]), reason='No payee')
+    named = _check(books, '20.00')
+    with pytest.raises(BookflowError) as refused:
+        books['run']('check print', {'account': books['bank'], 'first_number': '1001'}, reason='Print')
+    assert refused.value.code == 'E_VALIDATION' and refused.value.details['transaction_id'] == nameless['id']
+    assert 'pay_to' in refused.value.details['fields'][0]['problem']
+    run = books['run']('check print', {'account': books['bank'], 'first_number': '1001', 'checks': [named['id']]},
+                       reason='Print the named one')
+    assert [i['transaction_id'] for i in run['items']] == [named['id']]
+
+
+def test_a_printed_check_cannot_be_renumbered_by_update(books):
+    a = _check(books, '30.00')
+    _print_all(books, '1001')
+    with pytest.raises(BookflowError) as refused:
+        books['run']('check update', {'check': a['id'], 'number': '1009'}, reason='Renumber')
+    assert refused.value.code == 'E_VALIDATION' and 'check reprint --new-number 1009' in str(refused.value.details)
+    assert books['run']('check show', {'check': a['id']})['document']['check_number'] == '1001'
+
+
+def test_a_bare_run_skips_closed_period_checks_and_says_why(books):
+    old = _check(books, '2.00')
+    new = _check(books, '3.00', date='2026-05-01')
+    run = books['run']('check print', {'account': books['bank'], 'first_number': '1001'}, reason='Print')
+    books['run']('company update', {'closing_date': '2026-03-31'}, reason='Close March')
+    books['run']('check print-confirm', {'run': run['id'], 'failed': ['1001', '1002']}, reason='Both jammed')
+    bare = books['run']('check print', {'account': books['bank'], 'first_number': '1003'}, reason='Print again')
+    assert [i['transaction_id'] for i in bare['items']] == [new['id']]
+    assert [(row['transaction_id'], 'closing date' in row['reason']) for row in bare['skipped']] == [(old['id'], True)]
+    books['run']('check print-cancel', {'run': bare['id']}, reason='Not now')
+    with pytest.raises(BookflowError) as named:
+        books['run']('check print', {'account': books['bank'], 'first_number': '1003', 'checks': [old['id']]}, reason='P')
+    assert named.value.code == 'E_PERIOD_CLOSED'
+
+
+def test_a_payment_in_an_unanswered_run_cannot_be_unapplied_until_answered(books):
+    bill, payment = _bill_payment(books)
+    run = books['run']('check print', {'account': books['bank'], 'first_number': '1001'}, reason='Print')
+    with pytest.raises(BookflowError) as refused:
+        books['run']('bill payment unapply', {'payment': payment['id']}, reason='Undo')
+    assert refused.value.code == 'E_VALIDATION' and refused.value.details['run'] == run['id']
+    with pytest.raises(BookflowError) as held:
+        books['run']('bill void', {'bill': bill['id']}, reason='Wrong bill')
+    assert held.value.code == 'E_HAS_APPLICATIONS'
+    books['run']('check print-confirm', {'run': run['id']}, reason='OK')
+    books['run']('bill payment unapply', {'payment': payment['id']}, reason='Printed: allowed as before')

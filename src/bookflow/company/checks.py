@@ -427,6 +427,12 @@ def _translate(s, ctx, inp, noun, operation):
         from bookflow.company import check_printing
         before = check_items.funding(s, money_out.lines(s, journals.revision(s, header)))
         check_printing.guard_correction(s, header, before=before, after=funding)
+        held = check_numbers.current(s, header['id'])
+        if (getattr(inp, 'number', None) is not None and held is not None and check_printing.printed(s, header['id'])
+                and check_numbers.canonical(inp.number)[1] != held['check_number_key']):
+            raise journals.invalid('number', (
+                f'check {held["check_number"]} has been printed, so its number is on paper; print it on a new '
+                f'check with `check reprint --new-number {inp.number.strip()}`, which records {held["check_number"]} as spoiled'))
     if not summary.amount.minor_units:
         summary = summary.model_copy(update={'funding_details': funding})
     return journal, summary, header, instrument, items, funding
