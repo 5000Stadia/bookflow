@@ -244,8 +244,9 @@ def generate(target: Path, profile: str = "large", seed: int = 180,
                 say(f"month {month + 1}/{p.months} {y}-{m:02d}: {sum(counts.get(k, 0) for k in ('invoices', 'payments', 'deposits', 'bills', 'bill_payments'))} documents, "
                     f"{time.perf_counter() - started:.0f}s")
         phase("history", t0)
-        post_times.sort()
-        invoice_post = {"count": len(post_times), "first_tenth_ms": round(1000 * sum(post_times[:max(1, len(post_times) // 10)]) / max(1, len(post_times) // 10), 1)}
+        tenth = max(1, len(post_times) // 10)
+        invoice_post = {"first_tenth_ms": round(1000 * sum(post_times[:tenth]) / tenth, 1),
+                        "last_tenth_ms": round(1000 * sum(post_times[-tenth:]) / tenth, 1)}
 
         # R180: payments left in Undeposited Funds, for one deposit of all of them.
         t0 = time.perf_counter()
@@ -275,7 +276,7 @@ def generate(target: Path, profile: str = "large", seed: int = 180,
         "profile": asdict(p), "seed": seed, "template": target.name, "counts": counts, "ids": ids,
         "organization": ORG, "group_organization": GROUP_ORG, "member": MEMBER, "company_name": COMPANY,
         "generation_seconds": round(time.perf_counter() - started, 1), "phases": phases,
-        "invoice_post_early_ms": invoice_post["first_tenth_ms"],
+        "invoice_post_ms": invoice_post,  # mean of the first and last tenth, in posting order
         "disk_bytes": disk_bytes(root), "history": [f"{HISTORY_START[0]}-{HISTORY_START[1]:02d}", ids["last_day"]],
     }
     (target / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))

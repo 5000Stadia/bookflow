@@ -37,6 +37,13 @@ process. The store is never touched on the request's thread and never inside its
 transaction: if the store is missing, locked, full or corrupt, the writer drops the batch and
 the command has already succeeded.
 
+Measured overhead (load 37 on 16 cores): 9 us per command for `begin` and `end`, plus 0.55 us per
+SQL statement for the counter (5.1 us to 5.7 us for a trivial `SELECT 1`). An invoice post issues
+about 455 statements, so the hook adds about 0.26 ms to a 250 ms command, 0.1%.
+
+Not recorded: a command refused before `execute` on the offline path (an unknown command, input
+that fails validation before the lock is taken). Those are cheap refusals, not slow work.
+
 ## What a row holds, and what it never holds
 
 | field | meaning |
@@ -70,7 +77,10 @@ runs are JSON files, not rows here (below).
 Retention, applied by the writer at most once a minute: a finished day is rolled up into
 `daily` and sealed (sealed days are never recomputed); raw rows older than 30 days are deleted;
 raw rows beyond 100,000 are deleted oldest first, their days rolled up first; `daily` rows
-older than 730 days are deleted. The file size at the raw cap is measured and stated below.
+older than 730 days are deleted. Measured: 100,000 raw rows (120 commands, 4 surfaces, 29 days)
+plus their 4,137 daily rows make a 14.9 MB file; a daily row costs about 60 bytes, so two full years
+of daily rows for 50 commands on 3 surfaces add about 6.5 MB. Writing 110,000 rows in batches of
+5,000 took 2.6 s; a 7-day report over 26,000 rows takes 0.22 s.
 
 **Off switch.** `perf settings --recording off` (installation administrators) sets the flag in
 the store; the writer reads it before each batch, so nothing more is written within 2 seconds
