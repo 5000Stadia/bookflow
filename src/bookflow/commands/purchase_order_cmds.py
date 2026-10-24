@@ -109,5 +109,33 @@ purchase_order_show = _read('show', PurchaseOrderShowInput, PurchaseOrderOutput)
 purchase_order_query = _read('query', PurchaseOrderQueryInput, PurchaseOrderPageOutput)
 purchase_order_history = _read('history', PurchaseOrderHistoryInput, PurchaseOrderHistoryOutput)
 
-PURCHASE_ORDER_COMMANDS = [purchase_order_post, purchase_order_show, purchase_order_update,
+def _close_lines():
+    from bookflow.company import purchase_order_billing as order_billing
+    from bookflow.company.purchase_order_models import PurchaseOrderCloseLinesInput
+    cmd = command(
+        'purchase-order close-lines', scope='company',
+        description=('Close ordered lines by hand when the rest of them is never coming (the line\'s'
+                     ' Closed box), or reopen them with `reopen`. Name each line by its `line_id` from'
+                     ' `purchase-order show` or its 1-based position. A closed line is no longer on'
+                     ' order, takes no further receipts or bills, and drops out of the open purchase'
+                     ' orders report; when every line is received or closed the order is closed.'
+                     ' Posts nothing. Reversible.'),
+        input_model=PurchaseOrderCloseLinesInput, output_model=PurchaseOrderWriteOutput,
+        writes={'company'}, required_role='standard', capability='ledger.post',
+        accepts_idempotency_key=True, positional=['purchase_order'],
+        version_source=('purchase-order show', 'purchase_order', 'version'),
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION',
+                     'E_WORK_DEPENDENCY'])(plan_purchase_order_close_lines)
+    cmd.applier(order_billing.close_lines_apply)
+    return cmd
+
+
+def plan_purchase_order_close_lines(inp, ctx, s):
+    from bookflow.company import purchase_order_billing as order_billing
+    return order_billing.close_lines_plan(inp, ctx, s)
+
+
+purchase_order_close_lines = _close_lines()
+
+PURCHASE_ORDER_COMMANDS = [purchase_order_post, purchase_order_close_lines, purchase_order_show, purchase_order_update,
                            purchase_order_void, purchase_order_query, purchase_order_history]

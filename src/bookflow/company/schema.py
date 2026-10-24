@@ -1212,5 +1212,7 @@ from bookflow.company.credit_transfer_schema import define_tables as _define_cre
 globals().update(_define_credit_transfer_tables(metadata, _column, _table))
 from bookflow.company.pricing_rule_schema import define_tables as _define_pricing_rule_tables
 globals().update(_define_pricing_rule_tables(metadata, _column, _table, _common))
+from bookflow.company.purchase_order_billing_schema import define_tables as _define_po_billing_tables
+globals().update(_define_po_billing_tables(metadata, _column, _table))
 from bookflow.company.scheduling_schema import define_tables as _define_scheduling_tables
 globals().update(_define_scheduling_tables(metadata, _column, _table, _common))

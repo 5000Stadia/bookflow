@@ -58,13 +58,20 @@ def _business(effect):
 
 
 def _logical(value, mapping):
-    if isinstance(value,dict):return {k:_logical(v,mapping) for k,v in value.items()}
-    if isinstance(value,(list,tuple)):return [_logical(v,mapping) for v in value]
-    if isinstance(value,str):
-        if value in mapping:return mapping[value]
-        for identity,token in mapping.items():
-            value=value.replace(identity,token)
-    return value
+    """Every new identity in ``value`` replaced by its logical token, inside strings too.
+
+    One pattern of all the new identities, not a pass per identity per string: a deposit's
+    rows each add an identity, so the per-identity loop grew with the square of its size."""
+    import re
+    pattern=re.compile('|'.join(re.escape(k) for k in sorted(mapping,key=len,reverse=True))) if mapping else None
+    def walk(value):
+        if isinstance(value,dict):return {k:walk(v) for k,v in value.items()}
+        if isinstance(value,(list,tuple)):return [walk(v) for v in value]
+        if isinstance(value,str) and pattern is not None:
+            if value in mapping:return mapping[value]
+            return pattern.sub(lambda m:mapping[m.group(0)],value)
+        return value
+    return walk(value)
 
 
 
@@ -230,8 +237,17 @@ def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, ma
     oldextras={r.row_id:r for r in previous.intent.additional} if previous else {}
     extra_lines={r['line_id']:oldextras[r['id']] for r in keys if r['id'] in oldextras}
     from bookflow.company.deposit_coordinate_models import SourceResult
-    current_claims=dependencies.active_claims(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)]) if doc.pin is not None else None
-    current_sources=deposit_sources.load_many(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)]) if doc.pin is not None else None
+    # Read every receipt in bounded batches, inline or drafted alike: one at a time, each read
+    # re-ran the whole authority check, which dominated a deposit of a month of checks.
+    # A refusal falls back to reading row by row, so the row reported first and its code are
+    # exactly those base reported (an inline stale version before a later unknown id). A draft
+    # pin was always read in one batch.
+    try:
+        current_claims=dependencies.active_claims(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)])
+        current_sources=deposit_sources.load_many(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)])
+    except BookflowError:
+        if doc.pin is not None:raise
+        current_claims=current_sources=None
     for index,value in enumerate(doc.sources):
         from bookflow.company.deposit_coordinate_models import SourceResult
         if isinstance(value, SourceResult):

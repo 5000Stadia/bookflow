@@ -82,6 +82,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `memorized_due[].mode` | string | yes | no | — | — |
 | `memorized_due[].error_code` | string \| null | yes | yes | — | — |
 | `memorized_due[].error_message` | string \| null | yes | yes | — | — |
+| `memorized_due[].waiting_reason` | string \| null | no | yes | null | Why the scheduler left an automatic entry for a person, e.g. "memorized by helper, scheduled by k". |
 | `memorized_failed` | array[object] | yes | no | — | — |
 | `memorized_failed[].template_id` | string | yes | no | — | — |
 | `memorized_failed[].template_name` | string | yes | no | — | — |
@@ -92,6 +93,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `memorized_failed[].mode` | string | yes | no | — | — |
 | `memorized_failed[].error_code` | string \| null | yes | yes | — | — |
 | `memorized_failed[].error_message` | string \| null | yes | yes | — | — |
+| `memorized_failed[].waiting_reason` | string \| null | no | yes | null | Why the scheduler left an automatic entry for a person, e.g. "memorized by helper, scheduled by k". |
 | `todos_due` | array[object] | yes | no | — | — |
 | `todos_due[].id` | string | yes | no | — | — |
 | `todos_due[].version` | integer | yes | no | — | — |

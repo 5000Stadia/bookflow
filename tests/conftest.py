@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("BOOKFLOW_LOCK_TIMEOUT", "0.2")
+# The R111 scheduler is driven by tests through Host.schedule_now(now=...); a live test host must not
+# enter memorized transactions on the real clock behind a test's back.
+os.environ.setdefault("BOOKFLOW_SCHEDULE_CHECK_SECONDS", "86400")
 
 import bookflow  # noqa: E402
 from bookflow.core import registry  # noqa: E402

@@ -464,6 +464,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entered[].attempt_count` | integer | yes | no | — | — |
 | `entered[].group_run_id` | string \| null | yes | yes | — | — |
 | `entered[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `entered[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `entered[].replays_author` | string \| null | no | yes | null | — |
 | `blocked` | array[object] | no | no | [] | — |
 | `blocked[].id` | string | yes | no | — | — |
 | `blocked[].version` | integer | yes | no | — | — |
@@ -483,6 +485,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `blocked[].attempt_count` | integer | yes | no | — | — |
 | `blocked[].group_run_id` | string \| null | yes | yes | — | — |
 | `blocked[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `blocked[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `blocked[].replays_author` | string \| null | no | yes | null | — |
 | `pending` | array[object] | no | no | [] | — |
 | `pending[].id` | string | yes | no | — | — |
 | `pending[].version` | integer | yes | no | — | — |
@@ -502,9 +506,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pending[].attempt_count` | integer | yes | no | — | — |
 | `pending[].group_run_id` | string \| null | yes | yes | — | — |
 | `pending[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `pending[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `pending[].replays_author` | string \| null | no | yes | null | — |
 | `entered_count` | integer | no | no | 0 | — |
 | `blocked_count` | integer | no | no | 0 | — |
 | `pending_count` | integer | no | no | 0 | — |
+| `facts_fingerprint` | string \| null | no | yes | null | Which revision of each template this run posts; send it back as expected_facts_fingerprint. |
 | `idempotent_replay` | boolean | no | no | false | — |
 
 Example JSON output:
@@ -517,6 +524,7 @@ Example JSON output:
   "dry_run": false,
   "entered": [],
   "entered_count": 0,
+  "facts_fingerprint": null,
   "idempotent_replay": false,
   "pending": [],
   "pending_count": 0,
@@ -547,6 +555,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -680,7 +689,7 @@ Example JSON output:
 
 ## `memorized process`
 
-Enter every memorized transaction that is due, oldest slot first. A slot is due when its date, less the template's days in advance, has arrived in the company's own timezone -- so a host in one zone never enters a company's transaction a day early. A backlog is entered as a backlog: each missed slot is entered at its own accounting date, not collapsed onto today. Only templates whose mode is `enter_automatically` are entered; one whose mode is `remind` gets a pending occurrence you can see and enter yourself. Running this twice, or on a host that restarted twice in the same day, cannot enter the same slot twice: an occurrence is identified by its template and its nominal slot, and its entry carries a retry key that the command it replays already honours. An entry that fails becomes a blocked occurrence carrying its reason, at its own date, which `memorized retry` runs again and `memorized skip` sets aside; one failure never stops the template or any other template. Document numbers are allocated only by an entry that succeeds.
+Enter every memorized transaction that is due, oldest slot first. A slot is due when its date, less the template's days in advance, has arrived in the company's own timezone -- so a host in one zone never enters a company's transaction a day early. A backlog is entered as a backlog: each missed slot is entered at its own accounting date, not collapsed onto today. Only templates whose mode is `enter_automatically` are entered; one whose mode is `remind` gets a pending occurrence you can see and enter yourself. Running this twice, or on a host that restarted twice in the same day, cannot enter the same slot twice: an occurrence is identified by its template and its nominal slot, and its entry carries a retry key that the command it replays already honours. An entry that fails becomes a blocked occurrence carrying its reason, at its own date, which `memorized retry` runs again and `memorized skip` sets aside; one failure never stops the template or any other template. Document numbers are allocated only by an entry that succeeds. A slot that has not posted enters the template as it is now; the preview (dry run) names, for each entry, the revision that will post and who saved it, and its facts_fingerprint sent back as expected_facts_fingerprint refuses the run with E_PREVIEW_STALE if a template changed in between.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -713,6 +722,7 @@ The same example as complete `bookflow_run` arguments:
 | `memorized` | `--memorized` | string \| null | no | yes | null | — |
 | `as_of` | `--as-of` | string \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | The facts_fingerprint of the preview this run was decided from: which revision of each template will post. A template changed since is refused with E_PREVIEW_STALE. |
 
 ### Command and context options
 
@@ -772,6 +782,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entered[].attempt_count` | integer | yes | no | — | — |
 | `entered[].group_run_id` | string \| null | yes | yes | — | — |
 | `entered[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `entered[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `entered[].replays_author` | string \| null | no | yes | null | — |
 | `blocked` | array[object] | no | no | [] | — |
 | `blocked[].id` | string | yes | no | — | — |
 | `blocked[].version` | integer | yes | no | — | — |
@@ -791,6 +803,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `blocked[].attempt_count` | integer | yes | no | — | — |
 | `blocked[].group_run_id` | string \| null | yes | yes | — | — |
 | `blocked[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `blocked[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `blocked[].replays_author` | string \| null | no | yes | null | — |
 | `pending` | array[object] | no | no | [] | — |
 | `pending[].id` | string | yes | no | — | — |
 | `pending[].version` | integer | yes | no | — | — |
@@ -810,9 +824,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pending[].attempt_count` | integer | yes | no | — | — |
 | `pending[].group_run_id` | string \| null | yes | yes | — | — |
 | `pending[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `pending[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `pending[].replays_author` | string \| null | no | yes | null | — |
 | `entered_count` | integer | no | no | 0 | — |
 | `blocked_count` | integer | no | no | 0 | — |
 | `pending_count` | integer | no | no | 0 | — |
+| `facts_fingerprint` | string \| null | no | yes | null | Which revision of each template this run posts; send it back as expected_facts_fingerprint. |
 | `idempotent_replay` | boolean | no | no | false | — |
 
 Example JSON output:
@@ -825,6 +842,7 @@ Example JSON output:
   "dry_run": false,
   "entered": [],
   "entered_count": 0,
+  "facts_fingerprint": null,
   "idempotent_replay": false,
   "pending": [],
   "pending_count": 0,
@@ -855,6 +873,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -897,6 +916,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `occurrence` | `OCCURRENCE` | string | yes | no | — | minimum length 1; maximum length 64 |
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | retry: the facts_fingerprint of the preview -- the revision that will post. A template changed since is refused with E_PREVIEW_STALE. |
 
 ### Command and context options
 
@@ -955,6 +975,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `occurrence.attempt_count` | integer | yes | no | — | — |
 | `occurrence.group_run_id` | string \| null | yes | yes | — | — |
 | `occurrence.group_ordinal` | integer \| null | yes | yes | — | — |
+| `occurrence.replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `occurrence.replays_author` | string \| null | no | yes | null | — |
+| `facts_fingerprint` | string \| null | no | yes | null | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 
 Example JSON output:
@@ -962,6 +985,7 @@ Example JSON output:
 ```json
 {
   "dry_run": false,
+  "facts_fingerprint": null,
   "idempotent_replay": false,
   "occurrence": {
     "attempt_count": 1,
@@ -975,6 +999,8 @@ Example JSON output:
     "group_run_id": null,
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "origin": "value",
+    "replays_author": null,
+    "replays_author_id": null,
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "slot_date": "2026-01-01",
     "status": "value",
@@ -1010,6 +1036,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -1136,6 +1163,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `occurrences[].attempt_count` | integer | yes | no | — | — |
 | `occurrences[].group_run_id` | string \| null | yes | yes | — | — |
 | `occurrences[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `occurrences[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `occurrences[].replays_author` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -1239,6 +1268,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `occurrence` | `OCCURRENCE` | string | yes | no | — | minimum length 1; maximum length 64 |
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | retry: the facts_fingerprint of the preview -- the revision that will post. A template changed since is refused with E_PREVIEW_STALE. |
 
 ### Command and context options
 
@@ -1297,6 +1327,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `occurrence.attempt_count` | integer | yes | no | — | — |
 | `occurrence.group_run_id` | string \| null | yes | yes | — | — |
 | `occurrence.group_ordinal` | integer \| null | yes | yes | — | — |
+| `occurrence.replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `occurrence.replays_author` | string \| null | no | yes | null | — |
+| `facts_fingerprint` | string \| null | no | yes | null | — |
 | `idempotent_replay` | boolean | no | no | false | — |
 
 Example JSON output:
@@ -1304,6 +1337,7 @@ Example JSON output:
 ```json
 {
   "dry_run": false,
+  "facts_fingerprint": null,
   "idempotent_replay": false,
   "occurrence": {
     "attempt_count": 1,
@@ -1317,6 +1351,8 @@ Example JSON output:
     "group_run_id": null,
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "origin": "value",
+    "replays_author": null,
+    "replays_author_id": null,
     "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "slot_date": "2026-01-01",
     "status": "value",

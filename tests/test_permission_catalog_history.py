@@ -73,7 +73,8 @@ ACCEPTED = {
     'pricing-rules-v1': (617, 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2'),
     'order-invoicing-v1': (619, '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531'),
     'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
-    'scheduling-v1': (632, 'ee96eee179cba1f324edf7072853098056af4dbe5bd72428ab9429e343abf044'),
+    'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
+    'scheduling-v1': (633, 'a26d0e1cf4cd7ea39dde48cdf50a7eb3f943f1b67085f3cfaf599f6d86b0c2e0'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -152,6 +153,7 @@ CHAIN_ADDITIONS = {
                          'price-rule show', 'price-rule update'},
     'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
     'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
+    'partial-po-v1': {'purchase-order close-lines'},
     'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
                       'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
 }

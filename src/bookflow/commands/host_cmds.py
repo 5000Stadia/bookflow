@@ -276,7 +276,13 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
     from bookflow.core.forward import socket_path
     from bookflow.core.host import Host
     root = Path(data_root)
-    host = Host(root, version=version)
+    # How often the scheduler looks for due work (R111). An operator may slow it down; tests that drive it
+    # themselves through Host.schedule_now set it high so a live test host never races them.
+    try:
+        schedule_check = float(os.environ.get("BOOKFLOW_SCHEDULE_CHECK_SECONDS", "60"))
+    except ValueError:
+        schedule_check = 60.0
+    host = Host(root, version=version, schedule_check_seconds=max(1.0, schedule_check))
     try:
         host.start()
     except BaseException as e:
