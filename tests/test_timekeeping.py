@@ -88,6 +88,26 @@ def test_a_timesheet_round_trips_to_time_entries_bills_once_and_locks(client, cr
             row(crew, week('6', '7.5')),
             row(crew, week(None, None, '2'), customer=crew['smith'], billable=False, notes=None)])
     assert locked.value.code == 'E_WORK_DEPENDENCY'
+    assert 'not drop below' in locked.value.details['problem']
+    # More hours in the billed cell become a new, unbilled entry; the unbilled one stays editable.
+    grown = write(client, 'timesheet save', employee='Dana Fitter', week=MONDAY, rows=[
+        row(crew, week('9', '7.5')),
+        row(crew, week(None, None, '2'), customer=crew['smith'], billable=False, notes=None)])
+    assert [(c['date'], c['action'], c['hours']) for c in grown['changes']] == [('2026-01-12', 'create', '1')]
+    cell = grown['rows'][0]['cells'][0]
+    assert len(cell['entries']) == 2 and cell['hours'] == '9' and cell['billed_hours'] == '8' and cell['locked']
+    trimmed = write(client, 'timesheet save', employee='Dana Fitter', week=MONDAY, rows=[
+        row(crew, week('8.5', '7.5')),
+        row(crew, week(None, None, '2'), customer=crew['smith'], billable=False, notes=None)])
+    assert [(c['action'], c['hours']) for c in trimmed['changes']] == [('update', '0.5')]
+    with pytest.raises(BookflowError) as below:
+        write(client, 'timesheet save', employee='Dana Fitter', week=MONDAY, rows=[
+            row(crew, week('7.5', '7.5')),
+            row(crew, week(None, None, '2'), customer=crew['smith'], billable=False, notes=None)])
+    assert below.value.code == 'E_WORK_DEPENDENCY'
+    write(client, 'timesheet save', employee='Dana Fitter', week=MONDAY, rows=[
+        row(crew, week('8', '7.5')),
+        row(crew, week(None, None, '2'), customer=crew['smith'], billable=False, notes=None)])
     # Unbilled cells still change: Tuesday corrected, the Smith row withdrawn.
     changed = write(client, 'timesheet save', employee='Dana Fitter', week=MONDAY, rows=[row(crew, week('8', '6.25'))])
     assert sorted((c['date'], c['action'], c['hours']) for c in changed['changes']) == [
@@ -123,9 +143,30 @@ def test_copy_last_week_fills_rows_without_hours_and_sheets_refuse_impossible_da
                                                                                          row(crew, week('2'))])
     assert twice.value.code == 'E_VALIDATION'
 
-    # The work week follows the preference.
+    # The work week follows the preference, and a sheet read under the old week start is stale.
+    before = read(client, 'timesheet show', employee='Dana Fitter', week=MONDAY)
     write(client, 'timesheet set-preferences', week_start='sunday')
     assert read(client, 'timesheet show', employee='Dana Fitter', week=MONDAY)['week_start'] == '2026-01-11'
+    with pytest.raises(BookflowError) as stale:
+        write(client, 'timesheet save', employee='Dana Fitter', week=MONDAY, expected_sheet_version=before['sheet_version'],
+              rows=[row(crew, week('8'))])
+    assert stale.value.code == 'E_VERSION_CONFLICT'
+
+    # Weeks at the ends of the calendar are refused by name, not crashed on.
+    for command, day in (('timesheet show', '9999-12-31'), ('timesheet copy-last', '0001-01-01')):
+        with pytest.raises(BookflowError) as edge:
+            read(client, command, employee='Dana Fitter', week=day)
+        assert edge.value.code == 'E_VALIDATION', command
+    write(client, 'timesheet set-preferences', week_start='monday')
+    assert read(client, 'timesheet copy-last', employee='Dana Fitter', week='0001-01-03')['copied_from'] is None
+
+    # A save writes one summary event naming the week and the counts, beside the per-entry events.
+    import sqlite3
+    from pathlib import Path
+    with sqlite3.connect(Path(client.company.show(company=COMPANY)['path']) / 'company.db') as db:
+        summaries = [r[0] for r in db.execute("SELECT summary FROM audit_events WHERE command = 'timesheet save'")]
+    assert summaries[0] == ("saved Dana Fitter's timesheet for the week of 2026-01-12: 12 hours; "
+                            "2 entries created, 0 corrected, 0 withdrawn"), summaries
 
 
 class _Clock:
@@ -227,3 +268,67 @@ def test_the_schedule_warns_of_double_booking_and_reads_by_employee_and_job(clie
     assert cancelled['status'] == 'cancelled'
     assert read(client, 'schedule show', entry=later['id'])['cancel_reason'] == 'Customer postponed'
     assert order['kind'] == 'work_order'
+
+
+def test_a_fall_back_hour_a_deactivated_person_and_an_overlapping_clock(client, crew, monkeypatch):
+    moment = {'at': datetime(2026, 10, 1, tzinfo=timezone.utc)}
+    monkeypatch.setattr(clock, 'now', lambda: moment['at'])
+
+    def at(z):
+        moment['at'] = datetime.fromisoformat(z.replace('Z', '+00:00'))
+    write(client, 'company update', timezone='America/New_York')
+    job = dict(customer=crew['customer'], item=crew['item'])
+
+    # 01:30 EDT to 01:15 EST on the fall-back night is 45 minutes, not nothing.
+    at('2026-11-01T05:30:00Z')
+    write(client, 'clock in', employee='Dana Fitter', **job)
+    at('2026-11-01T06:15:00Z')
+    assert write(client, 'clock out', employee='Dana Fitter')['recorded_hours'] == [{'date': '2026-11-01', 'hours': '0.75'}]
+    # Dave, 22:00 EDT to 06:00 EST across the change: 2 hours before midnight, 7 after (the night has 25 hours).
+    at('2026-11-01T02:00:00Z')
+    write(client, 'clock in', employee='Dave Brazer', **job, at='2026-10-31T22:00')
+    at('2026-11-01T11:00:00Z')
+    assert write(client, 'clock out', employee='Dave Brazer')['recorded_hours'] == [
+        {'date': '2026-10-31', 'hours': '2'}, {'date': '2026-11-01', 'hours': '7'}]
+
+    # Somebody deactivated while clocked in is still clocked out, and their time recorded.
+    at('2026-11-02T14:00:00Z')
+    write(client, 'clock in', employee='Dave Brazer', **job)
+    write(client, 'employee deactivate', employee='Dave Brazer')
+    at('2026-11-02T16:00:00Z')
+    out = write(client, 'clock out', employee='Dave Brazer')
+    assert out['recorded_hours'] == [{'date': '2026-11-02', 'hours': '2'}] and len(out['entries']) == 1
+
+    # A clock started earlier than a closed clock of the same person ended would count that time twice.
+    at('2026-11-03T20:00:00Z')
+    write(client, 'clock in', employee='Dana Fitter', **job, at='2026-11-03T09:00')
+    write(client, 'clock out', employee='Dana Fitter', end='2026-11-03T12:00')
+    with pytest.raises(BookflowError) as overlap:
+        write(client, 'clock in', employee='Dana Fitter', **job, at='2026-11-03T11:00')
+    assert overlap.value.code == 'E_VALIDATION' and 'already clocked' in str(overlap.value.details)
+    assert write(client, 'clock in', employee='Dana Fitter', **job, at='2026-11-03T12:30')['status'] == 'open'
+
+
+def test_an_entry_on_a_work_order_is_not_a_clash_with_it_and_a_month_reads_at_once(client, crew):
+    import time
+    order = write(client, 'work-order create', date='2026-02-01', customer=crew['smith'], title='Repipe',
+                  assignees=['Dana Fitter'], scheduled_start='2026-02-03T14:00:00Z', scheduled_end='2026-02-03T18:00:00Z')
+    local = read(client, 'schedule calendar', employee='Dana Fitter', view='day', date='2026-02-03')['days'][0]['items']
+    starts, ends = local[0]['starts'], local[0]['ends']
+    on_it = write(client, 'schedule create', employee='Dana Fitter', work_order=order['number'], starts=starts, ends=ends)
+    assert on_it['conflicts'] == [] and on_it['customer_id'] == crew['smith']
+    day = read(client, 'schedule calendar', employee='Dana Fitter', view='day', date='2026-02-03')
+    assert day['conflicts'] == 0 and len(day['days'][0]['items']) == 2
+
+    # A month of 200 work orders and 200 entries reads in one pass.
+    for n in range(200):
+        d = f'2026-03-{n % 28 + 1:02d}'
+        write(client, 'work-order create', date='2026-03-01', customer=crew['customer'], title=f'Visit {n}',
+              assignees=['Dave Brazer'], scheduled_start=f'{d}T{14 + n % 3}:00:00Z', scheduled_end=f'{d}T{15 + n % 3}:00:00Z')
+        write(client, 'schedule create', employee='Dana Fitter', customer=crew['customer'],
+              starts=f'{d}T{8 + n % 8:02d}:00', ends=f'{d}T{9 + n % 8:02d}:00')
+    began = time.perf_counter()
+    month = read(client, 'schedule calendar', view='month', date='2026-03-15')
+    took = time.perf_counter() - began
+    print(f'month calendar, 200 work orders and 200 entries: {took:.2f}s')
+    assert sum(len(d['items']) for d in month['days']) >= 400 and took < 20

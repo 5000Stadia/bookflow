@@ -62,8 +62,9 @@ timesheet_save = _write(
     'timesheet save', "Save one person's week: the whole sheet, each row a customer:job, service item, class,"
     ' billable, notes and seven daily hours. Each row and day with hours is one time entry, created, corrected or'
     ' withdrawn so the entries match the sheet exactly; a cell whose hours did not move writes nothing, so saving'
-    ' the same sheet twice changes nothing. Hours a posted sale carries are locked and a change to them is refused'
-    ' with E_WORK_DEPENDENCY. A row left out withdraws its time. Posts nothing. Example: 8 hours on the Smith job'
+    ' the same sheet twice changes nothing. Hours a posted sale carries stay billed: lowering a cell below them is'
+    ' refused (E_WORK_DEPENDENCY); more hours in a billed cell become a new entry. A row left out'
+    ' withdraws its time. An agent may save any employee\'s sheet, as its principal could. Posts nothing. Example: 8 hours on the Smith job'
     ' yesterday is one row with 8 in that day.',
     m.TimesheetSaveInput, m.TimesheetWriteOutput, plan_timesheet_save, timesheets.apply_save,
     errors=[*_WRITE_ERRORS, 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY', 'E_REASON_REQUIRED'])
@@ -101,8 +102,9 @@ def plan_clock_link(inp, ctx, s) -> Plan:
     return timekeeping.plan_link(s, ctx, inp)
 
 
-_AGENT = (' An agent clocks only the person it acts for, on their instruction: its principal must be the'
-          " employee's linked login (`clock link`).")
+_AGENT = (' Live clocking is the one act an agent may do only for the person it acts for, on their instruction:'
+          " its principal must be the employee's linked login (`clock link`). Recording anyone's time after the fact"
+          ' is `timesheet save`, open to an agent as to its principal.')
 clock_in = _write(
     'clock in', 'Start the clock for a person: now, or at a stated time today. Optionally the customer:job, service'
     ' item, class, billable and notes; they may be given at clock-out instead. One clock per person; it shows on'

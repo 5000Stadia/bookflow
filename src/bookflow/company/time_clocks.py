@@ -120,6 +120,10 @@ def plan_in(s, ctx, inp) -> Plan:
     start = tk.parse_moment(s, inp.at, 'at') if inp.at else now
     if start > now + clock_slack():
         raise tk.invalid('at', 'a clock cannot start in the future')
+    overlap = _overlapping(s, person['id'], start)
+    if overlap:
+        raise tk.invalid('at', f"{person['name']} was already clocked from {tk.local_text(s, overlap['clock_in_at'])} "
+                         f"to {tk.local_text(s, overlap['clock_out_at'])}; a new clock starts after that")
     if now - start > timedelta(minutes=tk.preferences(s)['max_shift_minutes']):
         raise tk.invalid('at', 'that is longer ago than the maximum shift; enter the time with `timesheet save` '
                          'or `time-activity create` instead')
@@ -130,6 +134,15 @@ def plan_in(s, ctx, inp) -> Plan:
     new = _references(s, inp, base)
     new['billable'] = bool(inp.billable)
     return Plan(output(s, new, cls=ClockWriteOutput), dict(row=new))
+
+
+def _overlapping(s, employee_id: str, start: datetime) -> dict[str, Any] | None:
+    """A closed clock of the person's that ran past ``start``: a new clock would count that time twice."""
+    t = c.time_clocks
+    found = s.company.conn.execute(sa.select(t).where(
+        t.c.employee_id == employee_id, t.c.status == 'closed', t.c.clock_out_at > tk.iso(start))
+        .order_by(t.c.clock_out_at.desc()).limit(1)).mappings().first()
+    return dict(found) if found else None
 
 
 def clock_slack():
@@ -201,7 +214,7 @@ def plan_out(s, ctx, inp) -> Plan:
     entry_ctx = tk.entry_ctx(ctx, _reason(person))
     warnings = []
     for values in writes:
-        planned = tk.entry_write(s, entry_ctx, 'create', values, apply=False)
+        planned = tk.entry_write(s, entry_ctx, 'create', values, apply=False, inactive_employee=person['id'])
         warnings += [w for w in (getattr(planned.preview, 'warnings', None) or []) if w not in warnings]
     if not writes:
         warnings.append('the rounded time is zero, so no time entry is recorded')
@@ -215,7 +228,7 @@ def apply_out(plan: Plan, ctx, s) -> Applied:
     entry_ctx = tk.entry_ctx(ctx, _reason(person))
     touched, ids = [], []
     for values in writes:
-        written = tk.entry_write(s, entry_ctx, 'create', values, apply=True)
+        written = tk.entry_write(s, entry_ctx, 'create', values, apply=True, inactive_employee=person['id'])
         touched.extend(written.touched)
         ids.append(written.output.id)
     new['entries'] = json.dumps(ids)

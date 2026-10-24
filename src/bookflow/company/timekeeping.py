@@ -207,8 +207,11 @@ def week_of(s, day: str | None) -> list[str]:
     """The seven dates of the work week holding ``day`` (today by default)."""
     start = WEEK_DAYS.index(preferences(s)['week_start'])
     anchor = date.fromisoformat(day) if day else today(s)
-    first = anchor - timedelta(days=(anchor.weekday() - start) % 7)
-    return [(first + timedelta(days=n)).isoformat() for n in range(7)]
+    try:
+        first = anchor - timedelta(days=(anchor.weekday() - start) % 7)
+        return [(first + timedelta(days=n)).isoformat() for n in range(7)]
+    except OverflowError:
+        raise invalid('week', 'that week runs outside the years the calendar supports') from None
 
 
 def round_segment(seconds: int, rounding_minutes: int) -> int:
@@ -228,18 +231,21 @@ def round_segment(seconds: int, rounding_minutes: int) -> int:
 
 
 def day_segments(s, start: datetime, end: datetime) -> list[tuple[str, int]]:
-    """(local date, seconds) for each company-local day a stretch touches, split at midnight."""
+    """(local date, seconds) for each company-local day a stretch touches, split at local midnight.
+
+    Worked in UTC instants: two aware times in the same zone compare by wall clock in Python, which
+    gets the repeated hour of a fall-back night wrong (01:30 EDT is after 01:15 EST).
+    """
     tz = zone(s)
+    cursor, finish = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
     segments = []
-    cursor = start.astimezone(tz)
-    finish = end.astimezone(tz)
     while cursor < finish:
-        midnight = datetime.combine(cursor.date() + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+        day = cursor.astimezone(tz).date()
+        midnight = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
         stop = min(midnight, finish)
-        segments.append((cursor.date().isoformat(),
-                         int((stop.astimezone(timezone.utc) - cursor.astimezone(timezone.utc)).total_seconds())))
+        segments.append((day.isoformat(), int((stop - cursor).total_seconds())))
         cursor = stop
-    return [(day, seconds) for day, seconds in segments if seconds > 0]
+    return [(d, seconds) for d, seconds in segments if seconds > 0]
 
 
 # ---------------------------------------------------------------------------- people
@@ -284,8 +290,10 @@ def target_employee(s, ctx, selector: str | None, *, active: bool = False) -> di
 def require_own_instruction(s, ctx, employee_row: dict[str, Any], command: str) -> None:
     """An agent clocks a person in or out only on that person's own instruction.
 
-    Its principal -- the person it acts for -- must be the employee's linked login. A person may
-    clock anyone, as the anchor lets anyone enter anyone's time.
+    Live clocking records attendance as it happens, so its principal -- the person it acts for --
+    must be the employee's linked login. Recording time after the fact (`timesheet save`,
+    `time-activity create`) and scheduling are open to an agent for any employee, as they are to its
+    principal at the standard role. A person may clock anyone, as the anchor lets anyone enter anyone's time.
     """
     if s.actor is None or s.actor.kind == 'human':
         return
@@ -293,11 +301,11 @@ def require_own_instruction(s, ctx, employee_row: dict[str, Any], command: str) 
         return
     raise BookflowError('E_PERMISSION', message=(
         f"An agent clocks a person in or out only on that person's own instruction, and {employee_row['name']} "
-        "is not the person you act for."), details={
+        "is not the person you act for. Recording their time after the fact (`timesheet save`) is allowed."), details={
         'capability': 'customer-work', 'reason': 'own_instruction_only', 'command': command,
         'rule': "an agent clocks only its principal's own employee record",
-        'next_step': ('Ask the person to clock in themselves, or a person to link your principal\'s login to '
-                      'their employee record with `clock link`.')})
+        'next_step': ('Ask the person to clock in themselves, record the hours with `timesheet save`, or ask a '
+                      'person to link your principal\'s login to their employee record with `clock link`.')})
 
 
 def _hub_user(s, text: str) -> dict[str, Any]:
@@ -313,6 +321,13 @@ def _hub_user(s, text: str) -> dict[str, Any]:
                                                            'suggestions': []})
     if found['kind'] != 'human':
         raise invalid('user', 'link a person\'s login; an agent acts for its principal')
+    company = getattr(s, 'company_row', None) or {}
+    m = h.memberships
+    member = hub.conn.execute(sa.select(m.c.id).where(m.c.user_id == found['id'], m.c.revoked_at.is_(None), sa.or_(
+        sa.and_(m.c.scope_type == 'company', m.c.scope_id == company.get('id')),
+        sa.and_(m.c.scope_type == 'organization', m.c.scope_id == company.get('organization_id')))).limit(1)).scalar()
+    if not member:
+        raise invalid('user', 'that login is not a member of this company')
     return dict(found)
 
 
@@ -409,12 +424,21 @@ def entry_ctx(ctx, default_reason: str):
     return ctx.model_copy(update={'reason': default_reason})
 
 
-def entry_write(s, ctx, operation: str, values: dict[str, Any], *, apply: bool):
-    """Plan, and when asked write, one time entry exactly as `time-activity` does."""
+def entry_write(s, ctx, operation: str, values: dict[str, Any], *, apply: bool, inactive_employee: str | None = None):
+    """Plan, and when asked write, one time entry exactly as `time-activity` does.
+
+    ``inactive_employee`` lets a clock that started while its person was active record their time
+    although they were deactivated meanwhile.
+    """
     from bookflow.company import time_tracking, work
     from bookflow.company.work_models import TimeActivityCreateInput, TimeActivityUpdateInput, TimeActivityVoidInput
     model = dict(create=TimeActivityCreateInput, update=TimeActivityUpdateInput, void=TimeActivityVoidInput)[operation]
-    plan = time_tracking.prepare(s, ctx, model(**values), operation)
-    if not apply:
-        return plan
-    return work.apply(plan, ctx, s)
+    token = work.INACTIVE_ASSIGNEES_OK.set(frozenset({inactive_employee})) if inactive_employee else None
+    try:
+        plan = time_tracking.prepare(s, ctx, model(**values), operation)
+        if not apply:
+            return plan
+        return work.apply(plan, ctx, s)
+    finally:
+        if token is not None:
+            work.INACTIVE_ASSIGNEES_OK.reset(token)

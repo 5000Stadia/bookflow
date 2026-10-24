@@ -72,7 +72,8 @@ class TimesheetCell(_Strict):
     date: str
     hours: str | None
     entries: list[str]
-    locked: bool
+    locked: bool = Field(description='Some of these hours are billed: the cell may grow, but not drop below billed_hours.')
+    billed_hours: str | None = None
     lock_note: str | None = None
 
 

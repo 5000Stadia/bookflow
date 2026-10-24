@@ -76,35 +76,60 @@ def _overlap(a_start, a_end, b_start, b_end) -> bool:
     return a_start < b_end and b_start < a_end
 
 
+class Bookings:
+    """Every schedule entry and scheduled work order touching a span of days, loaded once.
+
+    A calendar asks for each item's double-bookings; reading the period once and answering in memory
+    keeps a month of hundreds of entries and work orders to two reads, not two per item.
+    """
+
+    def __init__(self, s, date_from: str, date_to: str):
+        t = c.schedule_entries
+        stop = (date.fromisoformat(date_to) + timedelta(days=1)).isoformat()
+        self.entries = [dict(r) for r in s.company.conn.execute(sa.select(t).where(
+            t.c.status == 'scheduled', t.c.starts_at < stop, t.c.ends_at >= date_from)).mappings()]
+        self.work_orders = work_orders(s, date_from, date_to)
+        self.customers = tk.names(s, c.customers, [r['customer_id'] for r in self.entries])
+
+    def conflicts(self, employee_id: str, starts: str, ends: str, *, own_id: str | None = None,
+                  own_work_order: str | None = None) -> list[ScheduleConflict]:
+        found = []
+        for r in self.entries:
+            if (r['employee_id'] != employee_id or r['id'] == own_id
+                    or (own_work_order and r['work_document_id'] == own_work_order)
+                    or not (r['starts_at'] < ends and r['ends_at'] > starts)):
+                continue
+            found.append(ScheduleConflict(kind='schedule', id=r['id'], label=self.customers.get(r['customer_id'], ''),
+                                          starts=r['starts_at'], ends=r['ends_at']))
+        for wo in self.work_orders:
+            if wo['id'] == own_work_order or employee_id not in [e for e, _ in wo['employees']]:
+                continue
+            if _overlap(starts, ends, wo['starts'], wo['ends']):
+                found.append(ScheduleConflict(kind='work_order', id=wo['id'], label=f"Work order {wo['number']}",
+                                              starts=wo['starts'], ends=wo['ends']))
+        return found
+
+
 def conflicts(s, employee_id: str, starts: str, ends: str, *, own_id: str | None = None,
               own_work_order: str | None = None) -> list[ScheduleConflict]:
-    t = c.schedule_entries
+    """One booking's double-bookings: an entry of the same work order is the same visit, not a clash."""
+    return Bookings(s, starts[:10], ends[:10]).conflicts(employee_id, starts, ends, own_id=own_id,
+                                                         own_work_order=own_work_order)
+
+
+def output(s, r: dict[str, Any], *, cls=ScheduleEntryOutput, with_conflicts=True, bookings: Bookings | None = None,
+           names: dict | None = None, **extra) -> ScheduleEntryOutput:
+    names = names if names is not None else dict(
+        customers=tk.names(s, c.customers, [r['customer_id']]), employees=tk.names(s, c.employees, [r['employee_id']], 'name'),
+        orders=tk.names(s, c.work_documents, [r['work_document_id']], 'number'))
     found = []
-    for r in s.company.conn.execute(sa.select(t).where(
-            t.c.employee_id == employee_id, t.c.status == 'scheduled', t.c.starts_at < ends,
-            t.c.ends_at > starts)).mappings():
-        if r['id'] != own_id:
-            names = tk.names(s, c.customers, [r['customer_id']])
-            found.append(ScheduleConflict(kind='schedule', id=r['id'], label=names.get(r['customer_id'], ''),
-                                          starts=r['starts_at'], ends=r['ends_at']))
-    for wo in work_orders(s, starts[:10], ends[:10]):
-        if wo['id'] == own_work_order or employee_id not in [e for e, _ in wo['employees']]:
-            continue
-        if _overlap(starts, ends, wo['starts'], wo['ends']):
-            found.append(ScheduleConflict(kind='work_order', id=wo['id'], label=f"Work order {wo['number']}",
-                                          starts=wo['starts'], ends=wo['ends']))
-    return found
-
-
-def output(s, r: dict[str, Any], *, cls=ScheduleEntryOutput, with_conflicts=True, **extra) -> ScheduleEntryOutput:
-    customer = tk.names(s, c.customers, [r['customer_id']])
-    person = tk.names(s, c.employees, [r['employee_id']], 'name')
-    number = tk.names(s, c.work_documents, [r['work_document_id']], 'number')
-    found = conflicts(s, r['employee_id'], r['starts_at'], r['ends_at'], own_id=r['id'],
-                      own_work_order=r['work_document_id']) if with_conflicts and r['status'] == 'scheduled' else []
-    return cls(id=r['id'], version=r['version'], employee_id=r['employee_id'], employee_name=person.get(r['employee_id']),
-               customer_id=r['customer_id'], customer_name=customer.get(r['customer_id'], ''),
-               work_order_id=r['work_document_id'], work_order_number=number.get(r['work_document_id']),
+    if with_conflicts and r['status'] == 'scheduled':
+        found = (bookings or Bookings(s, r['starts_at'][:10], r['ends_at'][:10])).conflicts(
+            r['employee_id'], r['starts_at'], r['ends_at'], own_id=r['id'], own_work_order=r['work_document_id'])
+    return cls(id=r['id'], version=r['version'], employee_id=r['employee_id'],
+               employee_name=names['employees'].get(r['employee_id']),
+               customer_id=r['customer_id'], customer_name=names['customers'].get(r['customer_id'], ''),
+               work_order_id=r['work_document_id'], work_order_number=names['orders'].get(r['work_document_id']),
                starts=r['starts_at'], ends=r['ends_at'], notes=r['notes'], status=r['status'],
                cancel_reason=r['cancel_reason'], conflicts=found, **extra)
 
@@ -216,15 +241,23 @@ def calendar(s, ctx, inp) -> ScheduleCalendarOutput:
         query = query.where(t.c.employee_id == person['id'])
     if customer:
         query = query.where(t.c.customer_id == customer['id'])
-    items = [output(s, dict(r)) for r in s.company.conn.execute(query).mappings()]
-    for wo in work_orders(s, first.isoformat(), last.isoformat()):
+    rows = [dict(r) for r in s.company.conn.execute(query).mappings()]
+    orders = work_orders(s, first.isoformat(), last.isoformat())
+    spans = [r['starts_at'][:10] for r in rows] + [w['starts'][:10] for w in orders] + [first.isoformat()]
+    ends = [r['ends_at'][:10] for r in rows] + [w['ends'][:10] for w in orders] + [last.isoformat()]
+    bookings = Bookings(s, min(spans), max(ends))
+    names = dict(customers=tk.names(s, c.customers, [r['customer_id'] for r in rows]),
+                 employees=tk.names(s, c.employees, [r['employee_id'] for r in rows], 'name'),
+                 orders=tk.names(s, c.work_documents, [r['work_document_id'] for r in rows], 'number'))
+    items = [output(s, r, bookings=bookings, names=names) for r in rows]
+    for wo in orders:
         if customer and wo['customer_id'] != customer['id']:
             continue
         people = wo['employees'] or [(None, None)]
         if person:
             people = [p for p in people if p[0] == person['id']]
         for employee_id, employee_name in people:
-            found = conflicts(s, employee_id, wo['starts'], wo['ends'], own_work_order=wo['id']) if employee_id else []
+            found = bookings.conflicts(employee_id, wo['starts'], wo['ends'], own_work_order=wo['id']) if employee_id else []
             items.append(ScheduleEntryOutput(id=wo['id'], kind='work_order', version=0, employee_id=employee_id,
                 employee_name=employee_name, customer_id=wo['customer_id'], customer_name=wo['customer_name'],
                 work_order_id=wo['id'], work_order_number=wo['number'], starts=wo['starts'], ends=wo['ends'],

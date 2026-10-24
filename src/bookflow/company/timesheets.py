@@ -24,6 +24,7 @@ from bookflow.company import schema as c, timekeeping as tk
 from bookflow.company.timekeeping_models import (
     TimesheetCell, TimesheetChange, TimesheetOutput, TimesheetRow, TimesheetWriteOutput,
 )
+from bookflow.core import audit
 from bookflow.core.errors import BookflowError
 from bookflow.core.registry import Applied, Plan
 
@@ -34,8 +35,9 @@ def _key(values: dict[str, Any]) -> tuple:
     return tuple(values[k] for k in KEY)
 
 
-def _version(found: list[dict[str, Any]]) -> str:
-    text = json.dumps([[e['id'], e['version']] for e in sorted(found, key=lambda e: e['id'])])
+def _version(found: list[dict[str, Any]], days: list[str]) -> str:
+    """The week as read: its dates (so a changed work-week start is stale) and every entry's version."""
+    text = json.dumps([days, [[e['id'], e['version']] for e in sorted(found, key=lambda e: e['id'])]])
     return hashlib.sha256(text.encode()).hexdigest()[:32]
 
 
@@ -50,8 +52,10 @@ def _rows_from(found: list[dict[str, Any]], days: list[str], sales: dict[str, li
     return list(rows.values())
 
 
-def _lock_note(labels: list[str]) -> str:
-    return (f"Billed on {', '.join(labels)}: these hours cannot change until that sale is voided or edited.")
+def _lock_note(labels: list[str], billed: int | None = None) -> str:
+    hours = f"{tk.total_text(billed)} hours" if billed else 'These hours'
+    return (f"{hours} billed on {', '.join(labels)}: the cell can grow, but not drop below that, until the sale is"
+            " voided or edited.")
 
 
 def _output(s, person, days, rows, found, sales, *, cls=TimesheetOutput, copied_from=None, **extra):
@@ -62,10 +66,12 @@ def _output(s, person, days, rows, found, sales, *, cls=TimesheetOutput, copied_
             items = r['cells'].get(day, [])
             quantity = sum(e['quantity'] for e in items) if items else r.get('pending', {}).get(day, 0)
             labels = [label for e in items for label in sales.get(e['id'], [])]
+            billed = sum(e['quantity'] for e in items if e['id'] in sales)
             locked = bool(labels)
             row_locked = row_locked or locked
             cells.append(TimesheetCell(date=day, hours=tk.hours_text(quantity), entries=[e['id'] for e in items],
-                                       locked=locked, lock_note=_lock_note(labels) if locked else None))
+                                       locked=locked, billed_hours=tk.hours_text(billed),
+                                       lock_note=_lock_note(labels, billed) if locked else None))
             hours.append(tk.hours_text(quantity))
             total += quantity
             day_totals[n] += quantity
@@ -77,8 +83,8 @@ def _output(s, person, days, rows, found, sales, *, cls=TimesheetOutput, copied_
     return cls(employee_id=person['id'], employee_name=person['name'], week_start=days[0], week_end=days[-1],
                week_start_day=tk.preferences(s)['week_start'], days=days, rows=out_rows,
                day_totals=[tk.total_text(t) for t in day_totals], week_total=tk.total_text(sum(day_totals)),
-               sheet_version=_version(found), copied_from=copied_from,
-               lock_note='Some hours this week are billed and locked; they change only once their sale is voided or edited.'
+               sheet_version=_version(found, days), copied_from=copied_from,
+               lock_note='Some hours this week are billed: a billed cell can take more hours, but not fewer than were billed, until its sale is voided or edited.'
                if locked_any else None, **extra)
 
 
@@ -104,8 +110,12 @@ def copy_last(s, ctx, inp) -> TimesheetOutput:
     person, days, found = _sheet(s, ctx, inp)
     sales = tk.billed(s, [e['id'] for e in found])
     rows = _rows_from(found, days, sales)
-    earlier = tk.entries(s, person['id'], (date.fromisoformat(days[0]) - timedelta(days=366)).isoformat(),
-                         (date.fromisoformat(days[0]) - timedelta(days=1)).isoformat())
+    first = date.fromisoformat(days[0])
+    try:
+        earlier = tk.entries(s, person['id'], (first - timedelta(days=366)).isoformat(),
+                             (first - timedelta(days=1)).isoformat())
+    except OverflowError:
+        earlier = []  # nothing can come before the first supported year
     copied_from = None
     if earlier:
         last_week = tk.week_of(s, earlier[-1]['date'])
@@ -145,10 +155,10 @@ def _resolve_row(s, n: int, given, cache: dict) -> dict[str, Any]:
 def _changes(s, ctx, inp):
     """Every entry write this save makes, worked out against the entries as they stand."""
     person, days, found = _sheet(s, ctx, inp)
-    if inp.expected_sheet_version and inp.expected_sheet_version != _version(found):
+    if inp.expected_sheet_version and inp.expected_sheet_version != _version(found, days):
         raise BookflowError('E_VERSION_CONFLICT', details={
             'record_type': 'timesheet', 'record_id': f"{person['id']}:{days[0]}",
-            'expected_version': inp.expected_sheet_version, 'current_version': _version(found),
+            'expected_version': inp.expected_sheet_version, 'current_version': _version(found, days),
             'problem': 'this week changed since the sheet was read; show it again'})
     sales = tk.billed(s, [e['id'] for e in found])
     cache: dict = {}
@@ -174,13 +184,18 @@ def _changes(s, ctx, inp):
             want = target['hours'][d] if target else 0
             if have == want:
                 continue
-            labels = [label for e in items for label in sales.get(e['id'], [])]
-            label = (target or current)
-            if labels:
+            billed = [e for e in items if e['id'] in sales]
+            open_items = [e for e in items if e['id'] not in sales]
+            floor = sum(e['quantity'] for e in billed)
+            if want < floor:
+                labels = [label for e in billed for label in sales[e['id']]]
+                label = target or current
                 raise BookflowError('E_WORK_DEPENDENCY', details={
-                    'problem': f"{label['customer_name']}, {label['item_name']} on {day}: " + _lock_note(labels),
-                    'date': day, 'time_activities': [e['id'] for e in items], 'sales': labels})
-            plans.extend(_cell_plan(person, day, target or current, items, want - have, target))
+                    'problem': f"{label['customer_name']}, {label['item_name']} on {day}: " + _lock_note(labels, floor),
+                    'date': day, 'time_activities': [e['id'] for e in billed], 'sales': labels})
+            # Billed entries stay as billed; the unbilled ones, or a new entry, carry the rest.
+            delta = (want - floor) - sum(e['quantity'] for e in open_items)
+            plans.extend(_cell_plan(person, day, target or current, open_items, delta, target))
     return person, days, found, sales, wanted, plans
 
 
@@ -212,6 +227,9 @@ def _cell_plan(person, day, row, items, delta, target):
             plans.append(dict(meta, action='update', hours=new, time_activity=entry['id'],
                               values=dict(time_activity=entry['id'], expected_version=entry['version'],
                                           duration=tk.hours_text(new))))
+    if delta > 0:
+        # No unbilled entry could take the hours (each holds at most 24): a new entry carries them.
+        plans.extend(_cell_plan(person, day, row, [], delta, target))
     return plans
 
 
@@ -260,5 +278,10 @@ def apply_save(plan: Plan, ctx, s) -> Applied:
     out = show(s, ctx, inp.model_copy(update={'employee': person['id']}))
     out = TimesheetWriteOutput(**out.model_dump(), changed=bool(plans), changes=plan.preview.changes,
                                warnings=plan.preview.warnings)
-    summary = f"saved {person['name']}'s timesheet for the week of {days[0]}: {len(plans)} time entr{'y' if len(plans) == 1 else 'ies'}"
+    counts = {a: sum(1 for p in plans if p['action'] == a) for a in ('create', 'update', 'void')}
+    summary = (f"saved {person['name']}'s timesheet for the week of {days[0]}: {out.week_total} hours; "
+               f"{counts['create']} entries created, {counts['update']} corrected, {counts['void']} withdrawn")
+    # One event naming the sheet, beside the per-entry events `time-activity` wrote.
+    audit.write_event_to(s.company, ctx, 'timesheet save', summary, [], actor_id=s.actor.id, actor_kind=s.actor.kind,
+                         directive_code=getattr(s, 'directive_code', None))
     return Applied(out, touched, summary, audited=True)

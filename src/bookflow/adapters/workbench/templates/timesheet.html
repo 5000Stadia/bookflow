@@ -29,7 +29,7 @@
 <td data-label="Class"><input class="class-input" name="class_{{ n }}" value="{{ values.get('class_%d' % n, (r.class_name or '') if r else '') }}" {% if ro %}readonly{% endif %} aria-label="Class, row {{ n + 1 }}"></td>
 <td data-label="Billable">{% if r and r.locked %}<input type="hidden" name="billable_{{ n }}" value="{{ 'yes' if r.billable else '' }}">{{ 'yes' if r.billable else 'no' }}{% else %}<input type="checkbox" name="billable_{{ n }}" value="yes" {% if (r.billable if r else True) %}checked{% endif %} {% if not can_write %}disabled{% endif %} aria-label="Billable, row {{ n + 1 }}">{% endif %}</td>
 {% for d in sheet.days %}{% set cell = r.cells[loop.index0] if r else None %}
-<td class="num{% if cell and cell.locked %} locked{% endif %}" data-label="{{ d }}" data-day="{{ d }}">{% if cell and cell.locked %}<span class="hours-value" title="{{ cell.lock_note }}" data-locked-cell>{{ cell.hours }}</span><input type="hidden" name="h_{{ n }}_{{ loop.index0 }}" value="{{ cell.hours }}">{% else %}<input class="hours" name="h_{{ n }}_{{ loop.index0 }}" inputmode="decimal" value="{{ values.get('h_%d_%d' % (n, loop.index0), (cell.hours or '') if cell else '') }}" {% if not can_write %}readonly{% endif %} aria-label="Hours on {{ d }}, row {{ n + 1 }}">{% endif %}</td>{% endfor %}
+<td class="num{% if cell and cell.locked %} locked{% endif %}" data-label="{{ d }}" data-day="{{ d }}"><input class="hours" name="h_{{ n }}_{{ loop.index0 }}" inputmode="decimal" value="{{ values.get('h_%d_%d' % (n, loop.index0), (cell.hours or '') if cell else '') }}" {% if not can_write %}readonly{% endif %} aria-label="Hours on {{ d }}, row {{ n + 1 }}"{% if cell and cell.locked %} title="{{ cell.lock_note }}" data-locked-cell{% endif %}>{% if cell and cell.locked %}<br><small class="muted" data-billed-hours>billed {{ cell.billed_hours }}</small>{% endif %}</td>{% endfor %}
 <td class="num" data-label="Total">{{ r.total if r else '' }}</td>
 </tr>{% endfor %}</tbody>
 <tfoot><tr data-day-totals><td colspan="5" data-label="Totals"><strong>Totals</strong></td>{% for t in sheet.day_totals %}<td class="num" data-label="{{ sheet.days[loop.index0] }}">{{ t }}</td>{% endfor %}<td class="num" data-label="Week" data-week-total><strong>{{ sheet.week_total }}</strong></td></tr></tfoot>
@@ -38,7 +38,7 @@
 <datalist id="ts-items">{% for name in items %}<option value="{{ name }}">{% endfor %}</datalist>
 {% if can_write %}<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Weekly timesheet"></label>
 <div class="actions"><button type="submit" data-timesheet-save>Save timesheet</button></div>
-<p class="muted">Hours are decimal: 7.5 is seven and a half hours. A row emptied withdraws its time; a locked (billed) cell keeps its hours until its sale is voided or edited.</p>{% endif %}
+<p class="muted">Hours are decimal: 7.5 is seven and a half hours. A row emptied withdraws its time. A billed cell can take more hours (they become a new, unbilled entry) but not fewer than were billed, until its sale is voided or edited.</p>{% endif %}
 </form>
 {% elif not error %}<p class="muted">Choose whose week to show.</p>{% endif %}
 </section>{% endblock %}
