@@ -32,7 +32,11 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                            if row.get('type') in ('inventory_part', 'inventory_assembly') and row.get('active', True))
         except BookflowError:
             items = []
+        active = [site['name'] for site in sites if site['active']]
+        default_from = next((site['name'] for site in sites if site['is_default']), active[0] if active else '')
+        default_to = next((name for name in active if name != default_from), default_from)
         return render('inventory_sites.html', request, status_code=status_code, company=company,
+                      default_from=default_from, default_to=default_to,
                       company_id=company['company_id'], sites=sites, stock=stock['rows'], as_of=as_of, chosen=chosen,
                       transfers=transfers, items=items, values=values or {}, result=result, error=error, lines=LINES,
                       can_write=role_allows('inventory-transfer post', company, credential(request)), today=today_iso())

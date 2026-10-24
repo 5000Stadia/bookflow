@@ -39,6 +39,7 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string | yes | no | — | Build date: the components are consumed and the assembly received at their average cost on it.; minimum length 10; maximum length 10 |
 | `memo` | `--memo` | string \| null | no | yes | null | Memo on the build. |
 | `pending` | `--pending` | boolean | no | no | false | Mark the build pending when the components on hand are short of it: nothing is posted, the components are reserved, and `assembly finalize` builds it later. A build that can be built is built; pending applies only to a shortfall. |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the components are taken from and the assembly put at, by id or name; omitted, the default site. |
 
 ### Command and context options
 
@@ -125,6 +126,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `reason` | string \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `history` | array[dict] | no | no | [] | Every revision of the build: version, status, date, quantity, who and when. |
+| `site_id` | string \| null | no | yes | null | Inventory site of the build; null at the default site. |
+| `site_name` | string \| null | no | yes | null | Name of the inventory site the build takes from and puts the assembly at. |
 
 Example JSON output:
 
@@ -151,6 +154,8 @@ Example JSON output:
   "quantity": "value",
   "reason": null,
   "shortfall": false,
+  "site_id": null,
+  "site_name": null,
   "status": "will_build",
   "transaction_id": null,
   "unit_cost": {
@@ -317,6 +322,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `reason` | string \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `history` | array[dict] | no | no | [] | Every revision of the build: version, status, date, quantity, who and when. |
+| `site_id` | string \| null | no | yes | null | Inventory site of the build; null at the default site. |
+| `site_name` | string \| null | no | yes | null | Name of the inventory site the build takes from and puts the assembly at. |
 
 Example JSON output:
 
@@ -343,6 +350,8 @@ Example JSON output:
   "quantity": "value",
   "reason": null,
   "shortfall": false,
+  "site_id": null,
+  "site_name": null,
   "status": "will_build",
   "transaction_id": null,
   "unit_cost": {
@@ -511,6 +520,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `reason` | string \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `history` | array[dict] | no | no | [] | Every revision of the build: version, status, date, quantity, who and when. |
+| `site_id` | string \| null | no | yes | null | Inventory site of the build; null at the default site. |
+| `site_name` | string \| null | no | yes | null | Name of the inventory site the build takes from and puts the assembly at. |
 
 Example JSON output:
 
@@ -537,6 +548,8 @@ Example JSON output:
   "quantity": "value",
   "reason": null,
   "shortfall": false,
+  "site_id": null,
+  "site_name": null,
   "status": "will_build",
   "transaction_id": null,
   "unit_cost": {
@@ -616,6 +629,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `status` | `--status` | literal["pending", "built", "voided", "deleted", "all"] \| null | no | yes | null | Only builds in this state; omitted, every build except deleted ones. `pending` is the Pending Builds report. |
 | `item` | `--item` | string \| null | no | yes | null | Only builds of this assembly item. |
+| `site` | `--site` | string \| null | no | yes | null | Only builds at this inventory site (Pending Builds by Site). |
 | `limit` | `--limit` | integer | no | no | 50 | Most builds to return, newest first.; minimum 1; maximum 200 |
 
 ### Command and context options
@@ -658,6 +672,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].assembly_cost.amount` | string | yes | no | — | — |
 | `rows[].assembly_cost.currency` | string | yes | no | — | — |
 | `rows[].assembly_cost.minor_units` | integer | yes | no | — | — |
+| `rows[].site_name` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `reserved` | object[string, string] | no | no | {} | Component quantities reserved by pending builds, by item id. |
 
@@ -806,6 +821,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `reason` | string \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `history` | array[dict] | no | no | [] | Every revision of the build: version, status, date, quantity, who and when. |
+| `site_id` | string \| null | no | yes | null | Inventory site of the build; null at the default site. |
+| `site_name` | string \| null | no | yes | null | Name of the inventory site the build takes from and puts the assembly at. |
 
 Example JSON output:
 
@@ -832,6 +849,8 @@ Example JSON output:
   "quantity": "value",
   "reason": null,
   "shortfall": false,
+  "site_id": null,
+  "site_name": null,
   "status": "will_build",
   "transaction_id": null,
   "unit_cost": {
@@ -909,6 +928,7 @@ The same example as complete `bookflow_run` arguments:
 | `quantity` | `--quantity` | string \| null | no | yes | null | Quantity of the assembly to build, a positive decimal with at most six places. Omitted, unchanged. |
 | `date` | `--date` | string \| null | no | yes | null | New build date. Omitted, unchanged. |
 | `memo` | `--memo` | string \| null | no | yes | null | New memo. Omitted, unchanged. |
+| `site` | `--site` | string \| null | no | yes | null | New inventory site for the build. Omitted, unchanged. |
 
 ### Command and context options
 
@@ -995,6 +1015,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `reason` | string \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `history` | array[dict] | no | no | [] | Every revision of the build: version, status, date, quantity, who and when. |
+| `site_id` | string \| null | no | yes | null | Inventory site of the build; null at the default site. |
+| `site_name` | string \| null | no | yes | null | Name of the inventory site the build takes from and puts the assembly at. |
 
 Example JSON output:
 
@@ -1021,6 +1043,8 @@ Example JSON output:
   "quantity": "value",
   "reason": null,
   "shortfall": false,
+  "site_id": null,
+  "site_name": null,
   "status": "will_build",
   "transaction_id": null,
   "unit_cost": {
@@ -1188,6 +1212,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `reason` | string \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `history` | array[dict] | no | no | [] | Every revision of the build: version, status, date, quantity, who and when. |
+| `site_id` | string \| null | no | yes | null | Inventory site of the build; null at the default site. |
+| `site_name` | string \| null | no | yes | null | Name of the inventory site the build takes from and puts the assembly at. |
 
 Example JSON output:
 
@@ -1214,6 +1240,8 @@ Example JSON output:
   "quantity": "value",
   "reason": null,
   "shortfall": false,
+  "site_id": null,
+  "site_name": null,
   "status": "will_build",
   "transaction_id": null,
   "unit_cost": {

@@ -294,7 +294,7 @@ def test_migration_places_every_existing_movement_at_main(books):
     with sqlite3.connect(path) as source, sqlite3.connect(copy) as target:
         source.backup(target)
     with sqlite3.connect(copy) as conn:
-        # Back to co0087: the new objects gone, the three columns stripped from the schema text.
+        # Back to co0084: the new objects gone, the three columns stripped from the schema text.
         conn.execute('PRAGMA foreign_keys=OFF')
         for (name,) in conn.execute("SELECT name FROM sqlite_schema WHERE type='trigger' AND sql LIKE '%placement%' "
                                     "OR name LIKE 'inventory_transfer%' AND type='trigger' "
@@ -308,7 +308,7 @@ def test_migration_places_every_existing_movement_at_main(books):
         conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', site_id VARCHAR(26) REFERENCES inventory_sites (id)', '') "
                      "WHERE name IN ('work_lines', 'purchase_order_lines', 'assembly_builds')")
         conn.execute('PRAGMA writable_schema=OFF')
-        conn.execute("UPDATE alembic_version SET version_num='co0087'")
+        conn.execute("UPDATE alembic_version SET version_num='co0084'")
         conn.commit()
     _at(copy, 'co0089')
     with sqlite3.connect(copy) as conn:
@@ -321,3 +321,28 @@ def test_migration_places_every_existing_movement_at_main(books):
         assert conn.execute('SELECT count(*) FROM inventory_placements WHERE reverses_placement_id IS NOT NULL').fetchone() == (1,)
         assert conn.execute("SELECT count(*) FROM sqlite_schema WHERE name='inventory_movements_placed'").fetchone() == (1,)
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_part_of_a_purchase_order_line_with_a_site_is_billed_and_received_there(shop):
+    """A PO line naming Van 1: a partial bill against it and an item receipt against it both place at Van 1,
+    and what is still on order is on order at Van 1."""
+    books, run, widget = shop['books'], shop['run'], shop['widget']
+    po = run('purchase-order post', dict(vendor=books['vendor'], date='2017-04-01',
+                                         lines=[dict(item=widget, quantity='10', rate='2.00', site='Van 1')]),
+             reason='Order for the van')
+    line = run('purchase-order show', dict(purchase_order=po['id']))['line_tracking'][0]
+    run('bill post', dict(purchase_order=po['id'], date='2017-04-02', order_lines=[dict(line='1', quantity='4')]),
+        reason='Vendor billed part')
+    rows = _by_site(books)
+    assert rows[('Widget', 'Van 1')]['quantity_on_hand'] == '4'
+    assert rows[('Widget', 'Van 1')]['quantity_on_order'] == '6'
+    assert rows[('Widget', 'Warehouse')]['quantity_on_hand'] == '20'
+    po = run('purchase-order show', dict(purchase_order=po['id']))
+    run('item-receipt post', dict(vendor=books['vendor'], date='2017-04-03', purchase_order=po['id'],
+                                  purchase_order_version=po['version'],
+                                  items=[dict(item=widget, quantity='2', unit_cost='2.00', order_line_id=line['line_id'])]),
+        reason='Two arrived')
+    rows = _by_site(books)
+    assert rows[('Widget', 'Van 1')]['quantity_on_hand'] == '6'
+    assert rows[('Widget', 'Van 1')]['quantity_on_order'] == '4'
+    _tie_every_date(books)

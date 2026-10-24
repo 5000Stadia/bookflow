@@ -2107,6 +2107,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].markup_percent` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].completed_quantity` | inside `--lines` JSON array | string | no | no | "0" | — |
@@ -4005,6 +4006,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -4049,6 +4051,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -4529,6 +4532,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `purchase_order.receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `purchase_order.receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `purchase_order.receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `purchase_order.line_tracking` | array[object] | no | no | [] | — |
+| `purchase_order.line_tracking[].line_id` | string | yes | no | — | — |
+| `purchase_order.line_tracking[].position` | integer | yes | no | — | — |
+| `purchase_order.line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].description` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `purchase_order.line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `purchase_order.line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `purchase_order.line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].closed` | boolean | yes | no | — | — |
+| `purchase_order.part_bill_ids` | array[string] | no | no | [] | — |
 | `purchase_order.number` | string | yes | no | — | — |
 | `purchase_order.current_revision_id` | string | yes | no | — | — |
 | `purchase_order.status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -4728,8 +4747,10 @@ Example JSON output:
     "dry_run": false,
     "expected_date": null,
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "line_tracking": [],
     "memo": null,
     "number": "value",
+    "part_bill_ids": [],
     "receiving": [],
     "reference": null,
     "revision": {
@@ -5899,6 +5920,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -5943,6 +5965,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].percent` | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -7220,6 +7243,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes off non-taxable sales, so a sale never shows negative tax. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].markup_percent` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].completed_quantity` | inside `--lines` JSON array | string | no | no | "0" | — |

@@ -257,10 +257,44 @@ class PurchaseOrderReceivingOutput(_Input):
     ordered_quantity_microunits: int
     received_quantity_microunits: int
     remaining_quantity_microunits: int
+    site_id: str | None = Field(default=None, description='Inventory site the line is to arrive at; null for the default site.')
+
+
+class PurchaseOrderLineTracking(_Input):
+    """One ordered line's progress: what arrived, what was billed and what is still open.
+
+    An item line with a quantity is measured in quantity (``received_quantity`` counts receipts
+    and bills entered from the order, ``billed_quantity`` those bills and bills entered from the
+    receipts); an amount-only line is measured in money. ``closed`` is the line's Closed box.
+    """
+    line_id: str
+    position: int
+    item_id: str | None
+    account_id: str | None
+    description: str | None
+    measured: Literal['quantity', 'amount']
+    ordered_quantity: str | None
+    received_quantity: str | None
+    billed_quantity: str | None
+    open_quantity: str | None
+    amount_minor_units: int
+    billed_amount_minor_units: int
+    open_amount_minor_units: int | None
+    closed: bool
+
+
+class PurchaseOrderCloseLinesInput(_Input):
+    """Close ordered lines by hand (nothing more is coming), or reopen them with ``reopen``."""
+    purchase_order: _Selector
+    expected_version: _Version | None = None
+    lines: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(min_length=1, max_length=200)
+    reopen: bool = False
 
 
 class PurchaseOrderSummaryOutput(CommonOut):
     receiving: list[PurchaseOrderReceivingOutput] = Field(default_factory=list)
+    line_tracking: list[PurchaseOrderLineTracking] = Field(default_factory=list)
+    part_bill_ids: list[str] = Field(default_factory=list)
     number: str
     current_revision_id: str
     status: Literal['open', 'partly_received', 'closed', 'voided']

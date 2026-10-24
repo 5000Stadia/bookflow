@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}Bill part of purchase order {{ order.number }}{% endblock %}{% block body %}<section id="po-bill-part">
+<nav class="crumbs"><a href="/c/{{ company_id }}/purchase-order">Purchase orders</a> / <a href="/c/{{ company_id }}/purchase-order/{{ order.id }}">{{ order.number }}</a> / Bill or close lines</nav>
+<h1>Bill or close lines · purchase order {{ order.number }}</h1>
+<p>{{ order.vendor_name }} · {{ ui_words(order.status) }} · ordered {{ order.date|longday }} · {{ order.total|amount }} {{ order.currency }}</p>
+{% if notice %}<p class="notice" role="status" data-notice>{{ notice }}{% if bill %} <a href="/c/{{ company_id }}/bill/{{ bill.id }}">Open the bill</a>{% endif %}</p>{% endif %}
+{% if error %}<div class="error" role="alert" data-error><strong>{{ error.code }}</strong> {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<form method="post" class="workspace-card" aria-label="Bill or close lines" data-bill-part>
+<div class="table-wrap"><table class="list-table" data-order-lines><thead><tr><th>No.</th><th>Item / account</th><th class="num">Ordered</th><th class="num">Received</th><th class="num">Billed</th><th class="num">Open</th><th>Bill now</th><th>Closed</th></tr></thead><tbody>
+{% for line in order.line_tracking %}<tr data-line="{{ line.position }}"{% if line.closed %} data-closed{% endif %}>
+<td data-label="No.">{{ line.position }}</td>
+<td data-label="Item / account">{{ line.description or '—' }}</td>
+{% if line.measured == 'quantity' %}<td class="num" data-label="Ordered">{{ line.ordered_quantity }}</td><td class="num" data-label="Received">{{ line.received_quantity }}</td><td class="num" data-label="Billed">{{ line.billed_quantity }}</td><td class="num" data-label="Open" data-open>{{ line.open_quantity }}</td>
+<td data-label="Bill now">{% if not line.closed and line.open_quantity != '0' %}<input name="qty:{{ line.line_id }}" inputmode="decimal" size="6" aria-label="Quantity billed on line {{ line.position }}" placeholder="0" value="{{ values.get('qty:' ~ line.line_id, '') }}">{% else %}—{% endif %}</td>
+{% else %}<td class="num" data-label="Ordered">{{ '%.2f' % (line.amount_minor_units / 100) }}</td><td class="num" data-label="Received">—</td><td class="num" data-label="Billed">{{ '%.2f' % (line.billed_amount_minor_units / 100) }}</td><td class="num" data-label="Open" data-open>{{ '%.2f' % (line.open_amount_minor_units / 100) }}</td>
+<td data-label="Bill now">{% if not line.closed and line.open_amount_minor_units %}<input name="amount:{{ line.line_id }}" inputmode="decimal" size="8" aria-label="Amount billed on line {{ line.position }}" placeholder="0.00" value="{{ values.get('amount:' ~ line.line_id, '') }}">{% else %}—{% endif %}</td>{% endif %}
+<td data-label="Closed"><input type="checkbox" name="close:{{ line.line_id }}" value="1" aria-label="Line {{ line.position }}"> {{ 'Closed' if line.closed else '' }}</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="row"><label for="bp-date">Bill date</label><input id="bp-date" type="date" name="date" value="{{ values.get('date', '') }}"></div>
+<div class="row"><label for="bp-ref">Vendor's invoice number</label><input id="bp-ref" name="supplier_reference" value="{{ values.get('supplier_reference', '') }}"></div>
+<div class="row"><label for="bp-memo">Memo</label><input id="bp-memo" name="memo" value="{{ values.get('memo', '') }}"></div>
+<div class="row"><label for="bp-reason">Reason (shown in the audit trail)</label><input id="bp-reason" name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Vendor billed part of the order"></div>
+<p class="actions"><button type="submit" name="action" value="bill" class="primary-action">Enter bill</button> <button type="submit" name="action" value="close">Close ticked lines</button> <button type="submit" name="action" value="reopen">Reopen ticked lines</button></p>
+</form>
+{% if order.part_bill_ids %}<p>Bills for part of this order: {% for b in order.part_bill_ids %}<a href="/c/{{ company_id }}/bill/{{ b }}">bill {{ loop.index }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</section>{% endblock %}

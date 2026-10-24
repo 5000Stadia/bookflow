@@ -333,7 +333,12 @@ def summary(s, header, rev, conversion=None):
     currency = rev['currency']
     captured = PurchaseOrderProfile.model_validate_json(rev['profile_snapshot'])
     conversion = conversion if conversion is not None else conversion_row(s, header['id'])
-    return dict(header, receiving=order_remaining(s, header, rev), date=rev['date'], vendor_id=rev['vendor_id'], vendor_name=captured.vendor.label,
+    from bookflow.company import purchase_order_billing as order_billing
+    tracking = [order_billing.line_output(state) for state in order_billing.line_states(s, header, rev)]
+    parts = sorted({row['bill_id'] for row in order_billing.active_bill_claims(
+        s, line_ids=[state['line_id'] for state in tracking])})
+    return dict(header, receiving=order_remaining(s, header, rev), line_tracking=tracking,
+                part_bill_ids=parts, date=rev['date'], vendor_id=rev['vendor_id'], vendor_name=captured.vendor.label,
                 expected_date=rev['expected_date'], reference=rev['reference'], memo=rev['memo'],
                 currency=currency, total_minor_units=rev['total_minor_units'],
                 total=Money(rev['total_minor_units'], currency).to_dict(),
@@ -669,8 +674,18 @@ def prepare(s, ctx, inp, operation):
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     resolved, changed_fields, sequence = None, [], None
 
+    if old_header and old_header['status'] != 'voided':
+        # Bills that took part of the order (R153) hold it as receipts do.
+        from bookflow.company.purchase_order_billing import guard_order_change
+        if operation == 'void':
+            guard_order_change(s, old_header, old_revision, 'void')
     if operation != 'void':
         resolved = commercial(s, inp, old_header, old_revision, document_id=header['id'])
+        if old_header and old_header['status'] != 'voided':
+            followed = guard_order_change(s, old_header, old_revision, 'update', resolved)
+            if followed is not None and getattr(inp, 'status', None) is None:
+                resolved['status'] = followed
+                resolved['semantic']['status'] = followed
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
         if old_revision and not changed_fields:
             return unchanged(old_header, old_revision)
@@ -865,8 +880,9 @@ def bill_entry(rev, lines):
         basis = (dict(quantity=format_quantity_micro_units(line['quantity_microunits']),
                       unit_cost={'minor_units': line['rate_minor_units'], 'currency': rev['currency']})
                  if line['quantity_microunits'] is not None else dict(amount=money))
+        site = {'site': line['site_id']} if line.get('site_id') else {}   # where the ordered line arrives (R104)
         items.append(BillItemInput(item=facts.item.id, description=line['description'],
-                                   **basis, **shared))
+                                   **basis, **shared, **site))
     return dict(vendor=profile.vendor.id, expenses=expenses, items=items, memo=rev['memo'],
                 terms=profile.terms.id if profile.terms else None,
                 class_id=profile.class_id.id if profile.class_id else None)

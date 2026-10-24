@@ -907,6 +907,10 @@ EXAMPLES.update({
         f'bookflow purchase-order void {ID} --expected-version 1 --company "Demo Plumbing Co"'
         ' --reason "The vendor cannot supply it" --json',
         {"purchase_order": ID, "expected_version": 1}),
+    "purchase-order close-lines": Example(
+        f'bookflow purchase-order close-lines {ID} --lines \'["1"]\' --company "Demo Plumbing Co"'
+        ' --reason "The rest is never coming" --json',
+        {"purchase_order": ID, "lines": ["1"]}),
     "purchase-order query": Example(
         'bookflow purchase-order query --vendor "Northside Supply" --open-only --limit 25'
         ' --company "Demo Plumbing Co" --json',
@@ -1440,3 +1444,34 @@ EXAMPLES['work-order purchase-order'] = Example(
     + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
     {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
      'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})
+
+# Inventory sites and transfers (R104 increment 1).
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'inventory-site create': Example('bookflow inventory-site create --name "Van 1" --description "Service van"' + _C
+                                     + ' --reason "Track the van stock" --json', {'name': 'Van 1', 'description': 'Service van'}),
+    'inventory-site update': Example('bookflow inventory-site update Main --name Warehouse' + _C
+                                     + ' --reason "Name the default site" --json', {'site': 'Main', 'name': 'Warehouse'}),
+    'inventory-site activate': Example('bookflow inventory-site activate "Van 1"' + _C + ' --reason "Back in service" --json',
+                                       {'site': 'Van 1'}),
+    'inventory-site deactivate': Example('bookflow inventory-site deactivate "Van 1"' + _C + ' --reason "Van sold" --json',
+                                         {'site': 'Van 1'}),
+    'inventory-site show': Example('bookflow inventory-site show "Van 1"' + _C + ' --json', {'site': 'Van 1'}),
+    'inventory-site list': Example('bookflow inventory-site list' + _C + ' --json', {}),
+    'inventory-transfer post': Example(
+        'bookflow inventory-transfer post --from-site "Van 1" --to-site Warehouse'
+        ' --lines \'[{"item":"Widget","quantity":"5"}]\'' + _C + ' --reason "Unloaded 5 widgets from the van" --json',
+        {'from_site': 'Van 1', 'to_site': 'Warehouse', 'lines': [{'item': 'Widget', 'quantity': '5'}]}),
+    'inventory-transfer update': Example(
+        'bookflow inventory-transfer update T-1 --expected-version 1 --lines \'[{"item":"Widget","quantity":"4"}]\''
+        + _C + ' --reason "Only four came off" --json',
+        {'transfer': 'T-1', 'expected_version': 1, 'lines': [{'item': 'Widget', 'quantity': '4'}]}),
+    'inventory-transfer void': Example('bookflow inventory-transfer void T-1 --expected-version 2' + _C
+                                       + ' --reason "Entered twice" --json', {'transfer': 'T-1', 'expected_version': 2}),
+    'inventory-transfer show': Example('bookflow inventory-transfer show T-1' + _C + ' --json', {'transfer': 'T-1'}),
+    'inventory-transfer history': Example('bookflow inventory-transfer history T-1' + _C + ' --json', {'transfer': 'T-1'}),
+    'inventory-transfer query': Example('bookflow inventory-transfer query --site "Van 1" --limit 25' + _C + ' --json',
+                                        {'site': 'Van 1', 'limit': 25}),
+    'report quantity-by-site': Example('bookflow report quantity-by-site --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
+                                       {'as_of': '2026-12-31', 'site': 'Van 1'}),
+})

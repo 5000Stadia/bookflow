@@ -168,11 +168,20 @@ def _order(s, selector, expected, profile, items, old_line_ids):
         if claim['receipt_line_id'] not in old_line_ids:
             key = claim['order_line_id']
             used[key] = used.get(key, 0) + claim['quantity_microunits']
+    # Bills entered from the order received what they billed, and a closed line takes nothing
+    # more (R153): count them here so the refusal is this one, not the capacity trigger's.
+    from bookflow.company.purchase_order_billing import active_bill_claims, closed_lines
+    for claim in active_bill_claims(s, line_ids=list(lines)):
+        key = claim['order_line_id']
+        used[key] = used.get(key, 0) + (claim['quantity_microunits'] or 0)
+    closed = closed_lines(s, list(lines))
     for item in items:
         key = item.get('order_line_id')
         line = lines.get(key)
         if line is None or line['quantity_microunits'] is None:
             raise journals.invalid('items.order_line_id', 'must select a current quantity-bearing ordered item line')
+        if key in closed:
+            _dependency('This ordered line is closed; reopen it with `purchase-order close-lines --reopen` first.', order_line_id=key)
         facts = item['profile']
         if facts.item.id != line['item_id']:
             raise journals.invalid('items.item', 'must match the selected ordered item')
@@ -266,6 +275,9 @@ def prepare(s, ctx, inp, operation):
         order = _order(s, order_id, getattr(inp, 'purchase_order_version', None), profile, items, old_line_ids)
         if order:
             order_id = order[0]['id']
+        for item, landed in zip(items, landed_items):
+            if item.get('site_id'):
+                landed['site_id'] = item['site_id']   # a purchase-order line's site, filled in by _order (R104)
     if not metadata and old and active_bill_claims(s, line_ids=old_line_ids):
         _dependency('Release linked bill claims before changing or voiding this physical receipt.', receipt_id=old['id'])
     at, event = clock.now_iso(), new_id()
@@ -387,9 +399,19 @@ def apply(plan, ctx, s):
             raise BookflowError('E_VERSION_CONFLICT', details={'record_id': old['id']})
     else:
         s.company.conn.execute(c.item_receipts.insert().values(**header))
-    for name, rows in data['pending'].items():
-        if rows:
+    # Releases before claims: a correction gives its old quantity back before claiming the new,
+    # so a receipt updated near the line's capacity is not refused by its own earlier claim.
+    order = sorted(data['pending'], key=lambda name: name == 'purchase_order_receipt_claims')
+    for name in order:
+        rows = data['pending'][name]
+        if not rows:
+            continue
+        try:
             s.company.conn.execute(getattr(c, name).insert(), rows)
+        except sa.exc.DBAPIError as exc:
+            if name != 'purchase_order_receipt_claims' or 'ordered capacity' not in str(exc):
+                raise
+            _dependency('Received quantity exceeds this ordered line’s remaining quantity.')
     if transition:
         n = s.company.conn.execute(c.purchase_orders.update().where(c.purchase_orders.c.id == old_order['id'], c.purchase_orders.c.version == old_order['version']).values(**new_order)).rowcount
         if n != 1:
@@ -400,18 +422,16 @@ def apply(plan, ctx, s):
 
 
 def order_remaining(s, header, rev):
-    lines = orders.saved_lines(s, rev)
-    used = {}
-    for claim in physical_claims(s, order_line_ids=[line['line_id'] for line in lines]):
-        key = claim['order_line_id']
-        used[key] = used.get(key, 0) + claim['quantity_microunits']
-    legacy = orders.conversion_row(s, header['id']) is not None
+    """Each ordered item line still to arrive, read through purchase_order_billing.line_states:
+    receipts, bills that took part of the order and lines closed by hand all count."""
+    from bookflow.company.purchase_order_billing import line_states
     return [dict(order_line_id=line['line_id'], item_id=line['item_id'],
-                 ordered_quantity_microunits=line['quantity_microunits'],
-                 received_quantity_microunits=used.get(line['line_id'], 0),
-                 remaining_quantity_microunits=0 if legacy else line['quantity_microunits'] - used.get(line['line_id'], 0),
+                 ordered_quantity_microunits=line['ordered_quantity_microunits'],
+                 received_quantity_microunits=line['received_quantity_microunits'],
+                 remaining_quantity_microunits=line['open_quantity_microunits'],
                  site_id=line.get('site_id'))
-            for line in lines if line['item_id'] and line['quantity_microunits'] is not None]
+            for line in line_states(s, header, rev)
+            if line['item_id'] and line['ordered_quantity_microunits'] is not None]
 
 
 def _order_transition(s, order_id, pending, provenance):
@@ -423,13 +443,21 @@ def _order_transition(s, order_id, pending, provenance):
     active = physical_claims(s, order_line_ids=[line['line_id'] for line in lines])
     released = {row['claim_id'] for row in pending['purchase_order_receipt_releases']}
     active = [row for row in active if row['id'] not in released] + pending['purchase_order_receipt_claims']
+    from bookflow.company.purchase_order_billing import active_bill_claims, closed_lines
+    billed = active_bill_claims(s, line_ids=[line['line_id'] for line in lines])
+    closed = closed_lines(s, [line['line_id'] for line in lines])
     used = {}
-    for claim in active:
+    for claim in active + billed:
         key = claim['order_line_id']
-        used[key] = used.get(key, 0) + claim['quantity_microunits']
-    complete = all(line['quantity_microunits'] is not None and
-                   used.get(line['line_id'], 0) == line['quantity_microunits'] for line in lines)
-    state = 'closed' if complete else 'partly_received' if active else 'open'
+        used[key] = used.get(key, 0) + (claim['quantity_microunits'] or 0)
+    billed_amount = {}
+    for claim in billed:
+        billed_amount[claim['order_line_id']] = billed_amount.get(claim['order_line_id'], 0) + claim['amount_minor_units']
+    complete = all(line['line_id'] in closed or
+                   (line['quantity_microunits'] is not None and used.get(line['line_id'], 0) == line['quantity_microunits']) or
+                   (line['quantity_microunits'] is None and billed_amount.get(line['line_id'], 0) == line['amount_minor_units'])
+                   for line in lines)
+    state = 'closed' if complete else 'partly_received' if active or billed else 'open'
     created = {k: provenance[k] for k in ('created_at', 'created_by', 'created_via')}
     new_rev = dict(rev, id=new_id(), **created, status=state,
         revision_number=rev['revision_number'] + 1, supersedes_revision_id=rev['id'], audit_event_id=provenance['audit_event_id'])

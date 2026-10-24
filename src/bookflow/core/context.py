@@ -1,6 +1,7 @@
 """The context every command receives. Built only by adapters and the Client."""
 
 from __future__ import annotations
+import functools
 
 import socket
 from enum import StrEnum
@@ -26,6 +27,7 @@ class ActorKind(StrEnum):
     system = "system"
 
 
+@functools.lru_cache(maxsize=1)
 def client_version() -> str:
     """The installed Bookflow release, which a host and a forwarding client must agree on.
 
@@ -33,6 +35,8 @@ def client_version() -> str:
     import name found nothing and fell back to "0" in every install, so every client and every
     host reported the same "0" and the version-mismatch guard in core/forward.py could never
     fire -- an upgraded CLI would forward to a host still running the previous release.
+    Read once per process: the installed release does not change while it runs, and a large
+    deposit created a context per row.
     """
     try:
         return pkg_version("bookflow-core")

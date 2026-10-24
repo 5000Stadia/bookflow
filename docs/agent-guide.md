@@ -934,6 +934,27 @@ BUILD`. `assembly list --status pending` is the pending builds report. Correct a
 `assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
 use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
 
+## Move 5 widgets from the van to the warehouse
+
+Stock lives at inventory sites: a warehouse, a service van, a consignment location. Every company starts
+with one, Main, the default; `inventory-site list` names them. Moving stock between sites is
+`inventory-transfer post`, never `transfer post` (that moves money) and never `inventory adjust`:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "inventory-transfer post", "reason": "Unloaded 5 widgets from the van",
+ "input": {"from_site": "Van 1", "to_site": "Warehouse", "lines": [{"item": "Widget", "quantity": "5"}]}}
+```
+
+A transfer posts nothing: an item has one average cost company-wide, so value and the general ledger
+do not move. The result gives each site's quantity after it and warns, naming the other sites, when the
+van goes below zero. Every stock line (`invoice`, `sales-receipt`, `credit-memo`, `bill`, `check`,
+`card-charge`, `vendor-credit`, `item-receipt`, `inventory adjust`, `assembly build`, sales-order,
+work-order and purchase-order lines) takes `site`; a document may name one `site` for all its lines.
+Leave it out and the line uses the default site; a return goes back where its sale took from, and a
+receipt against a purchase-order line arrives where that line said. `report quantity-by-site` and
+`report stock-status --site` read stock by site.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with
@@ -956,6 +977,33 @@ what it is worth (the refusal prints that figure). `vendor-credit update` with `
 that grid, and one left out keeps its captured rows and the stock they moved; `vendor-credit
 void` puts the stock back at the value it left at. A return dated before later sales recosts
 those sales with their own dated entries, as a backdated bill does.
+
+## The supplier billed part of an order
+
+"The supplier billed us for 4 of the 10 on PO 1007": read the order with `purchase-order show
+1007`; its `line_tracking` gives each line's position, ordered, received, billed and open
+quantity. Enter the bill against the order with only that part:
+`bill post` with `purchase_order` 1007, the bill `date` and `order_lines` [{`line`: "1",
+`quantity`: "4"}] (a line is its position or its `line_id`; leave `quantity` out to take all
+that is open; give `unit_cost` when the vendor charged a different price; an account line takes
+`amount`). The bill is exactly those lines and it receives what it bills. The order stays
+`partly_received` with 6 open, the open purchase orders report shows the rest, and a later bill
+takes the 6. Asking for more than is open is refused with what remains. Goods that came in
+before the bill go through `item-receipt post` against the order, then `bill post` with
+`receipts`. To correct a bill entered this way, void it (its 4 return to the order) and enter it
+again. When the rest is never coming, `purchase-order close-lines 1007 --lines '["1"]'` closes the line
+(`reopen` undoes it); the order closes when every line is received or closed.
+
+## A deposit of a whole month of checks
+
+One deposit holds up to 2,000 rows (receipts plus other money). List what is waiting with
+`deposit sources` page by page (`limit` 200, then `cursor`), and post them in one `deposit post`.
+Read a large deposit back with `deposit show` for its totals and counts and `deposit items` for
+its rows, 200 per page. A deposit of 1,000 checks takes a minute or two to post or void, because
+every receipt's history is checked; run it once and wait for the answer rather than retrying.
+Known limit: reconciling a bank account that holds such a deposit is slow -- its time grows with
+the square of the rows (about 20 minutes for 1,000) -- so expect a long `reconcile mark` and
+`reconcile finish`, and prefer several smaller deposits when the bank lists them separately.
 
 ## A vendor sends a refund check
 

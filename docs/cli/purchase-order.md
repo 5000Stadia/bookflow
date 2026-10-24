@@ -2,6 +2,399 @@
 
 # `purchase-order` commands
 
+## `purchase-order close-lines`
+
+Close ordered lines by hand when the rest of them is never coming (the line's Closed box), or reopen them with `reopen`. Name each line by its `line_id` from `purchase-order show` or its 1-based position. A closed line is no longer on order, takes no further receipts or bills, and drops out of the open purchase orders report; when every line is received or closed the order is closed. Posts nothing. Reversible.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/purchase-order.close-lines` |
+| External binary body | none |
+
+### CLI
+
+`bookflow purchase-order close-lines 01ARZ3NDEKTSV4RRFFQ69G5FAV --lines '["1"]' --company "Demo Plumbing Co" --reason "The rest is never coming" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "purchase-order close-lines", "input": {"purchase_order": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "lines": ["1"]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `purchase_order` | `PURCHASE_ORDER` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+| `lines` | `--lines` | array[string] | yes | no | — | — |
+| `reopen` | `--reopen` | boolean | no | no | false | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/purchase-order.close-lines`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `created_via` | string | yes | no | — | — |
+| `updated_at` | string | yes | no | — | — |
+| `updated_by` | string | yes | no | — | — |
+| `updated_via` | string | yes | no | — | — |
+| `receiving` | array[object] | no | no | [] | — |
+| `receiving[].order_line_id` | string | yes | no | — | — |
+| `receiving[].item_id` | string | yes | no | — | — |
+| `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `line_tracking` | array[object] | no | no | [] | — |
+| `line_tracking[].line_id` | string | yes | no | — | — |
+| `line_tracking[].position` | integer | yes | no | — | — |
+| `line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].description` | string \| null | yes | yes | — | — |
+| `line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `line_tracking[].closed` | boolean | yes | no | — | — |
+| `part_bill_ids` | array[string] | no | no | [] | — |
+| `number` | string | yes | no | — | — |
+| `current_revision_id` | string | yes | no | — | — |
+| `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
+| `voided_at` | string \| null | yes | yes | — | — |
+| `voided_by` | string \| null | yes | yes | — | — |
+| `void_reason` | string \| null | yes | yes | — | — |
+| `date` | string | yes | no | — | — |
+| `vendor_id` | string | yes | no | — | — |
+| `vendor_name` | string | yes | no | — | — |
+| `expected_date` | string \| null | yes | yes | — | — |
+| `reference` | string \| null | yes | yes | — | — |
+| `memo` | string \| null | yes | yes | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `total_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `consumed` | boolean | yes | no | — | — |
+| `bill_id` | string \| null | yes | yes | — | — |
+| `revision` | object | yes | no | — | — |
+| `revision.id` | string | yes | no | — | — |
+| `revision.created_at` | string | yes | no | — | — |
+| `revision.created_by` | string | yes | no | — | — |
+| `revision.created_via` | string | yes | no | — | — |
+| `revision.document_id` | string | yes | no | — | — |
+| `revision.revision_number` | integer | yes | no | — | — |
+| `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `revision.date` | string | yes | no | — | — |
+| `revision.number` | string | yes | no | — | — |
+| `revision.status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
+| `revision.vendor_id` | string | yes | no | — | — |
+| `revision.expected_date` | string \| null | yes | yes | — | — |
+| `revision.ship_to` | string \| null | yes | yes | — | — |
+| `revision.terms_id` | string \| null | yes | yes | — | — |
+| `revision.reference` | string \| null | yes | yes | — | — |
+| `revision.memo` | string \| null | yes | yes | — | — |
+| `revision.class_id` | string \| null | yes | yes | — | — |
+| `revision.total` | object | yes | no | — | — |
+| `revision.total.amount` | string | yes | no | — | — |
+| `revision.total.currency` | string | yes | no | — | — |
+| `revision.total.minor_units` | integer | yes | no | — | — |
+| `revision.total_minor_units` | integer | yes | no | — | — |
+| `revision.currency` | string | yes | no | — | — |
+| `revision.audit_event_id` | string | yes | no | — | — |
+| `revision.line_count` | integer | yes | no | — | — |
+| `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
+| `revision.profile` | object | yes | no | — | — |
+| `revision.profile.vendor` | object | yes | no | — | — |
+| `revision.profile.vendor.id` | string | yes | no | — | — |
+| `revision.profile.vendor.label` | string | yes | no | — | — |
+| `revision.profile.vendor.version` | integer | yes | no | — | — |
+| `revision.profile.vendor.company_name` | string \| null | no | yes | null | — |
+| `revision.profile.vendor.email` | string \| null | no | yes | null | — |
+| `revision.profile.vendor.phone` | string \| null | no | yes | null | — |
+| `revision.profile.vendor.account_number` | string \| null | no | yes | null | — |
+| `revision.profile.expected_date` | string \| null | no | yes | null | — |
+| `revision.profile.ship_to` | string \| null | no | yes | null | — |
+| `revision.profile.terms` | object \| null | no | yes | null | — |
+| `revision.profile.terms.id` | string | yes | no | — | — |
+| `revision.profile.terms.label` | string | yes | no | — | — |
+| `revision.profile.terms.version` | integer | yes | no | — | — |
+| `revision.profile.terms.kind` | literal["standard", "date_driven"] | yes | no | — | — |
+| `revision.profile.terms.due_days` | integer \| null | yes | yes | — | — |
+| `revision.profile.terms.discount_days` | integer \| null | yes | yes | — | — |
+| `revision.profile.terms.due_day_of_month` | integer \| null | yes | yes | — | — |
+| `revision.profile.terms.due_next_month_if_within_days` | integer \| null | yes | yes | — | — |
+| `revision.profile.terms.discount_day_of_month` | integer \| null | yes | yes | — | — |
+| `revision.profile.terms.discount_percent_millionths` | integer \| null | yes | yes | — | — |
+| `revision.profile.reference` | string \| null | no | yes | null | — |
+| `revision.profile.class_id` | object \| null | no | yes | null | — |
+| `revision.profile.class_id.id` | string | yes | no | — | — |
+| `revision.profile.class_id.label` | string | yes | no | — | — |
+| `revision.profile.class_id.version` | integer | yes | no | — | — |
+| `revision.profile.total_minor_units` | integer | yes | no | — | — |
+| `revision.profile.currency` | string | yes | no | — | — |
+| `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines` | array[object] | yes | no | — | — |
+| `revision.lines[].id` | string | yes | no | — | — |
+| `revision.lines[].created_at` | string | yes | no | — | — |
+| `revision.lines[].created_by` | string | yes | no | — | — |
+| `revision.lines[].created_via` | string | yes | no | — | — |
+| `revision.lines[].document_id` | string | yes | no | — | — |
+| `revision.lines[].revision_id` | string | yes | no | — | — |
+| `revision.lines[].line_id` | string | yes | no | — | — |
+| `revision.lines[].position` | integer | yes | no | — | — |
+| `revision.lines[].item_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].account_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].description` | string \| null | yes | yes | — | — |
+| `revision.lines[].quantity` | string \| null | yes | yes | — | — |
+| `revision.lines[].quantity_microunits` | integer \| null | yes | yes | — | — |
+| `revision.lines[].rate` | object \| null | yes | yes | — | — |
+| `revision.lines[].rate.amount` | string | yes | no | — | — |
+| `revision.lines[].rate.currency` | string | yes | no | — | — |
+| `revision.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].amount` | object | yes | no | — | — |
+| `revision.lines[].amount.amount` | string | yes | no | — | — |
+| `revision.lines[].amount.currency` | string | yes | no | — | — |
+| `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].amount_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].currency` | string | yes | no | — | — |
+| `revision.lines[].customer_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].billable` | boolean | yes | no | — | — |
+| `revision.lines[].class_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].line_snapshot` | object | yes | no | — | — |
+| `revision.lines[].line_snapshot.item` | object \| null | no | yes | null | — |
+| `revision.lines[].line_snapshot.item.id` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.label` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.version` | integer | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.type` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.purchase_description` | string \| null | no | yes | null | — |
+| `revision.lines[].line_snapshot.item.account` | object | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.account.id` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.account.name` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].line_snapshot.item.account.type` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.item.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].line_snapshot.account` | object \| null | no | yes | null | — |
+| `revision.lines[].line_snapshot.account.id` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.account.name` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.account.full_name` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
+| `revision.lines[].line_snapshot.account.type` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.lines[].line_snapshot.class_id` | object \| null | no | yes | null | — |
+| `revision.lines[].line_snapshot.class_id.id` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.class_id.label` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.class_id.version` | integer | yes | no | — | — |
+| `revision.lines[].line_snapshot.customer` | object \| null | no | yes | null | — |
+| `revision.lines[].line_snapshot.customer.id` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.customer.label` | string | yes | no | — | — |
+| `revision.lines[].line_snapshot.customer.version` | integer | yes | no | — | — |
+| `revision.lines[].line_snapshot.billable` | boolean | no | no | false | — |
+| `revision.lines[].line_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `conversion` | object \| null | no | yes | null | — |
+| `conversion.id` | string | yes | no | — | — |
+| `conversion.created_at` | string | yes | no | — | — |
+| `conversion.created_by` | string | yes | no | — | — |
+| `conversion.created_via` | string | yes | no | — | — |
+| `conversion.source_document_id` | string | yes | no | — | — |
+| `conversion.source_revision_id` | string | yes | no | — | — |
+| `conversion.source_version` | integer | yes | no | — | — |
+| `conversion.destination_transaction_id` | string | yes | no | — | — |
+| `conversion.destination_revision_id` | string | yes | no | — | — |
+| `conversion.destination_type` | literal["bill"] | yes | no | — | — |
+| `conversion.audit_event_id` | string | yes | no | — | — |
+| `covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `covers[].work_document_id` | string | yes | no | — | — |
+| `covers[].work_kind` | string \| null | yes | yes | — | — |
+| `covers[].work_number` | string \| null | yes | yes | — | — |
+| `covers[].work_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_id` | string | yes | no | — | — |
+| `covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `covers[].expected_date` | string \| null | yes | yes | — | — |
+| `changed` | boolean | no | no | true | — |
+| `changed_fields` | array[string] | no | no | [] | — |
+
+Example JSON output:
+
+```json
+{
+  "bill_id": null,
+  "changed": true,
+  "changed_fields": [],
+  "consumed": false,
+  "conversion": null,
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "created_via": "cli",
+  "currency": "USD",
+  "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "date": "2026-01-01",
+  "dry_run": false,
+  "expected_date": null,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "line_tracking": [],
+  "memo": null,
+  "number": "value",
+  "part_bill_ids": [],
+  "receiving": [],
+  "reference": null,
+  "revision": {
+    "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "class_id": null,
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "value",
+    "created_via": "cli",
+    "currency": "USD",
+    "custom_fields_snapshot": {},
+    "date": "2026-01-01",
+    "document_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "expected_date": null,
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "line_count": 1,
+    "lines": [],
+    "memo": null,
+    "number": "value",
+    "profile": {
+      "class_id": null,
+      "currency": "USD",
+      "expected_date": null,
+      "origins": {},
+      "reference": null,
+      "ship_to": null,
+      "terms": null,
+      "total_minor_units": 1,
+      "vendor": {
+        "account_number": null,
+        "company_name": null,
+        "email": null,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "label": "value",
+        "phone": null,
+        "version": 1
+      }
+    },
+    "reference": null,
+    "revision_number": 1,
+    "ship_to": null,
+    "status": "open",
+    "supersedes_revision_id": null,
+    "terms_id": null,
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "total_minor_units": 1,
+    "vendor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+  },
+  "status": "open",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "total_minor_units": 1,
+  "updated_at": "2026-01-01T00:00:00Z",
+  "updated_by": "value",
+  "updated_via": "cli",
+  "vendor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "vendor_name": "value",
+  "version": 1,
+  "void_reason": null,
+  "voided_at": null,
+  "voided_by": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
+
 ## `purchase-order history`
 
 Page immutable purchase order revisions in revision-number order with the current header, state and version; restart on company audit changes.
@@ -183,6 +576,7 @@ The same example as complete `bookflow_run` arguments:
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the item lines are to arrive at where a line names none; omitted, the default site. |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `vendor` | `--vendor` | string | yes | no | — | minimum length 1 |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -196,6 +590,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_mode` | inside `--lines` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
 
 ### Command and context options
 
@@ -249,6 +644,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `line_tracking` | array[object] | no | no | [] | — |
+| `line_tracking[].line_id` | string | yes | no | — | — |
+| `line_tracking[].position` | integer | yes | no | — | — |
+| `line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].description` | string \| null | yes | yes | — | — |
+| `line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `line_tracking[].closed` | boolean | yes | no | — | — |
+| `part_bill_ids` | array[string] | no | no | [] | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -429,8 +840,10 @@ Example JSON output:
   "dry_run": false,
   "expected_date": null,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "line_tracking": [],
   "memo": null,
   "number": "value",
+  "part_bill_ids": [],
   "receiving": [],
   "reference": null,
   "revision": {
@@ -621,6 +1034,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `items[].receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `items[].receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `items[].line_tracking` | array[object] | no | no | [] | — |
+| `items[].line_tracking[].line_id` | string | yes | no | — | — |
+| `items[].line_tracking[].position` | integer | yes | no | — | — |
+| `items[].line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].description` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `items[].line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `items[].line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `items[].line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `items[].line_tracking[].closed` | boolean | yes | no | — | — |
+| `items[].part_bill_ids` | array[string] | no | no | [] | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].current_revision_id` | string | yes | no | — | — |
 | `items[].status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -760,6 +1189,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `line_tracking` | array[object] | no | no | [] | — |
+| `line_tracking[].line_id` | string | yes | no | — | — |
+| `line_tracking[].position` | integer | yes | no | — | — |
+| `line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].description` | string \| null | yes | yes | — | — |
+| `line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `line_tracking[].closed` | boolean | yes | no | — | — |
+| `part_bill_ids` | array[string] | no | no | [] | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -935,8 +1380,10 @@ Example JSON output:
   "date": "2026-01-01",
   "expected_date": null,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "line_tracking": [],
   "memo": null,
   "number": "value",
+  "part_bill_ids": [],
   "receiving": [],
   "reference": null,
   "revision": {
@@ -1074,6 +1521,7 @@ The same example as complete `bookflow_run` arguments:
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the item lines are to arrive at where a line names none; omitted, the default site. |
 | `purchase_order` | `PURCHASE_ORDER` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
@@ -1090,6 +1538,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_mode` | inside `--lines` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
 
 ### Command and context options
 
@@ -1144,6 +1593,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `line_tracking` | array[object] | no | no | [] | — |
+| `line_tracking[].line_id` | string | yes | no | — | — |
+| `line_tracking[].position` | integer | yes | no | — | — |
+| `line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].description` | string \| null | yes | yes | — | — |
+| `line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `line_tracking[].closed` | boolean | yes | no | — | — |
+| `part_bill_ids` | array[string] | no | no | [] | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -1324,8 +1789,10 @@ Example JSON output:
   "dry_run": false,
   "expected_date": null,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "line_tracking": [],
   "memo": null,
   "number": "value",
+  "part_bill_ids": [],
   "receiving": [],
   "reference": null,
   "revision": {
@@ -1521,6 +1988,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `line_tracking` | array[object] | no | no | [] | — |
+| `line_tracking[].line_id` | string | yes | no | — | — |
+| `line_tracking[].position` | integer | yes | no | — | — |
+| `line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `line_tracking[].description` | string \| null | yes | yes | — | — |
+| `line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `line_tracking[].closed` | boolean | yes | no | — | — |
+| `part_bill_ids` | array[string] | no | no | [] | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -1701,8 +2184,10 @@ Example JSON output:
   "dry_run": false,
   "expected_date": null,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "line_tracking": [],
   "memo": null,
   "number": "value",
+  "part_bill_ids": [],
   "receiving": [],
   "reference": null,
   "revision": {
