@@ -71,3 +71,58 @@ def test_six_places_are_refused(client, shop):
         write(client, 'item create', name='SC Bad', type='service', sales_enabled=True, description='x',
               income_account_id=shop['income'], price='0.000001', sales_tax_code_id=shop['code'])
     assert caught.value.code == 'E_AMOUNT_PRECISION'
+
+
+def test_a_price_level_percent_keeps_a_sub_cent_price_exact(client, shop):
+    write(client, 'company update', enable_price_levels=True)
+    write(client, 'price-level create', name='SC Ten off', kind='fixed_percent', percent='-10')
+    write(client, 'price-level create', name='SC Contract', kind='per_item',
+          items=[dict(item_id=shop['screw']['id'], price='0.0115', adjustment_basis='standard_price')])
+    out = write(client, 'invoice post', date='2026-11-02', customer=shop['customer'], lines=[
+        # 10% off 0.0125 is 0.01125: at the default one-cent increment a sub-cent base keeps five places.
+        dict(item=shop['screw']['id'], quantity='1000', price_level='SC Ten off'),
+        dict(item=shop['screw']['id'], quantity='1000', price_level='SC Contract'),
+        # 10% off the sub-cent 3.459 is 3.1131, kept exact; 10 x 3.1131 = 31.131 -> 31.13.
+        dict(item=shop['fuel']['id'], quantity='10', price_level='SC Ten off')])
+    assert amounts(out['revision']) == [('0.01125', '11.25'), ('0.0115', '11.50'), ('3.1131', '31.13')]
+
+
+def test_a_whole_cent_price_level_still_rounds_to_the_cent(client, shop):
+    write(client, 'company update', enable_price_levels=True)
+    write(client, 'price-level create', name='SC Ten off', kind='fixed_percent', percent='-10')
+    whole = write(client, 'item create', name='SC Whole', type='service', sales_enabled=True, description='Whole',
+                  income_account_id=shop['income'], price='3.46', sales_tax_code_id=shop['code'])
+    out = write(client, 'invoice post', date='2026-11-02', customer=shop['customer'], lines=[
+        dict(item=whole['id'], quantity='10', price_level='SC Ten off')])
+    assert amounts(out['revision']) == [('3.11', '31.10')]
+    assert 'unit_price_fraction' not in out['revision']['lines'][0]
+
+
+def test_a_price_rule_rounds_a_sub_cent_base_to_its_ending(client, shop):
+    write(client, 'price-rule create', name='SC Fuel markup', items=['SC Fuel'], direction='up', value='10',
+          rounding='x.99')
+    out = write(client, 'invoice post', date='2026-11-02', customer=shop['customer'],
+                lines=[dict(item=shop['fuel']['id'], quantity='12.5')])
+    # 10% over 3.459 is 3.8049, rounded up to the next .99 ending: 3.99; 12.5 x 3.99 = 49.875 -> 49.88.
+    assert amounts(out['revision']) == [('3.99', '49.88')]
+    captured = out['revision']['lines'][0]['item_snapshot']['pricing_rule']
+    assert (captured['base_minor_units'], captured['base_fraction'], captured['price_minor_units']) == (346, -100, 399)
+    write(client, 'price-rule create', name='SC Screw cent', items=['SC Screw'], direction='down', value='10')
+    out = write(client, 'invoice post', date='2026-11-02', customer=shop['customer'],
+                lines=[dict(item=shop['screw']['id'], quantity='1000')])
+    # A cent-rounding rule's price is whole cents: 10% off 0.0125 = 0.01125 -> 0.01.
+    assert amounts(out['revision']) == [('0.01', '10.00')]
+
+
+def test_a_unit_of_measure_converts_a_sub_cent_price_exactly(client, shop):
+    write(client, 'company update', units_of_measure_mode='multiple_related_units')
+    units = write(client, 'unit-of-measure create', name='SC Count', units=[
+        dict(name='Each', abbreviation='ea', is_base=True, base_factor='1'),
+        dict(name='Case', abbreviation='cs', is_base=False, base_factor='12')])
+    fitting = write(client, 'item create', name='SC Fitting', type='service', sales_enabled=True, description='Fitting',
+                    income_account_id=shop['income'], price='0.0325', sales_tax_code_id=shop['code'],
+                    unit_of_measure_set_id=units['id'])
+    out = write(client, 'invoice post', date='2026-11-02', customer=shop['customer'], lines=[
+        dict(item=fitting['id'], quantity='2', unit='cs'), dict(item=fitting['id'], quantity='7', unit='ea')])
+    # A case of 12 at 0.0325 each is 0.39 per case; 2 cases 0.78. Seven each at 0.0325 = 0.2275 -> 0.23.
+    assert amounts(out['revision']) == [('0.39', '0.78'), ('0.0325', '0.23')]

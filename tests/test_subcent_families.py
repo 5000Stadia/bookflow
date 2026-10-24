@@ -206,3 +206,21 @@ def test_a_memorized_invoice_enters_exactly(shop):
     entered = shop['run']('memorized enter', dict(memorized=made['id'], date='2017-03-06'), reason='Enter it')
     invoice = shop['run']('invoice show', {'invoice': entered['entered'][0]['transaction_id']})
     assert priced(invoice['revision']['lines'], 'unit_price', 'net') == EXPECTED
+
+
+def test_a_sub_cent_bill_cost_flows_exactly_into_the_average_and_cogs(shop):
+    """1,000 bought at 0.0125 is 12.50 of stock and 3 at 0.0333 is 0.10 (0.0999); 400 sold carry
+    400 x 12.60 / 1,003 = 5.0249 -> 5.02 of cost, and 7.58 stays on the shelf. A cost read as the
+    rounded cent would give 10.03 of stock and 4.00 of cost."""
+    from tests.test_bill_item_lines import _inventory_asset, _net
+    run, asset = shop['run'], _inventory_asset(shop)
+    run('bill post', dict(vendor=shop['vendor'], date='2017-03-03', items=[
+        dict(item=shop['stock_screw'], quantity='1000', unit_cost='0.0125')]), reason='Buy screws')
+    run('bill post', dict(vendor=shop['vendor'], date='2017-03-04', items=[
+        dict(item=shop['stock_screw'], quantity='3', unit_cost='0.0333')]), reason='Three more')  # 0.0999 -> 0.10
+    sold = run('invoice post', dict(customer=shop['customer'], date='2017-03-05', lines=[
+        dict(item=shop['stock_screw'], quantity='400')]), reason='Sell screws')
+    assert priced(sold['revision']['lines'], 'unit_price', 'net') == [('0.0125', '5.00')]
+    net = _net(shop)
+    # Average after both receipts: 12.60 / 1003; 400 of them cost 400 x 12.60 / 1003 = 5.0249 -> 5.02.
+    assert net[shop['cogs']] == 502 and net[asset] == 1260 - 502
