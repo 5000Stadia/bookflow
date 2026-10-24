@@ -390,7 +390,12 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 elif rate is not None:
                     basis, basis_rate = 'average', rate
                 elif row.get('fallback_unit_cost_minor_units') is not None:
-                    basis, basis_rate = 'purchase_cost', (int(row['fallback_unit_cost_minor_units']), MICRO)
+                    # R150: the exact captured cost (minor units plus its fraction, in thousandths),
+                    # so the shortfall's provisional is rounded once at its total. An old row has
+                    # no fraction and gives exactly the ratio it always did.
+                    basis, basis_rate = 'purchase_cost', (
+                        int(row['fallback_unit_cost_minor_units']) * 1000 + int(row.get('fallback_unit_cost_fraction') or 0),
+                        MICRO * 1000)
                 else:
                     basis, basis_rate = 'none', None
                 provisional = 0 if basis_rate is None else round_ratio_half_even(

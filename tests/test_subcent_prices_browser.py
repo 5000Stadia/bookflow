@@ -51,3 +51,25 @@ def test_a_sub_cent_rate_typed_in_the_invoice_window_posts_exactly(register_brow
         ('3.459', '43.24'), ('0.0125', '12.50')]
     assert saved['total']['amount'] == '55.74'
     _contained(b, width)
+
+
+def test_a_sub_cent_cost_allocates_live_in_the_check_window(register_browser):
+    """The check window's live allocation reads a unit cost at the cost's own scale: 1,000 at
+    0.0125 allocates 12.50 rather than asking to resolve the calculation."""
+    env, b = register_browser, register_browser.browser
+    b.viewport(1280, 900)
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/check/post')
+    b.wait_for('!!document.querySelector("[data-generated-form]")')
+    _fill(b, 'f:amount', '12.50')
+    b.evaluate('document.querySelector("[data-collection-path=items] > [data-collection-add]").click()')
+    b.wait_for('!!document.querySelector("[data-collection-path=items] [name$=\\":unit_cost\\"]")')
+    b.evaluate('''(() => {
+      const row = document.querySelector("[data-collection-path=items] [data-collection-item]");
+      for (const [field, value] of [["quantity", "1000"], ["unit_cost", "0.0125"]]) {
+        const e = row.querySelector(`[name$=":${field}"]`);
+        e.value = value; e.dispatchEvent(new Event("input", {bubbles: true}));
+      }})()''')
+    status = 'document.querySelector("[data-purchase-allocation]").textContent'
+    b.wait_for(f'{status}.includes("Allocated")')
+    text = b.evaluate(status)
+    assert 'Allocated 12.5' in text and 'Remaining 0' in text, text

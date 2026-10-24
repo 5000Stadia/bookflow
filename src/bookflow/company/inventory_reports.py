@@ -24,6 +24,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
+from bookflow.core import unit_price
 from bookflow.company import inventory, ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
 from bookflow.core.errors import BookflowError
@@ -200,7 +201,8 @@ def _shared(row, currency):
     return dict(item_id=row["id"], item_name=row["full_name"], item_type=row["type"],
                 description=row["description"], active=bool(row["active"]),
                 quantity_on_hand=_quantity(quantity),
-                average_cost=money(_average(value, quantity), currency),
+                # R150: an average is a unit cost, shown to the price scale (five places in USD).
+                average_cost=MoneyOutput(**unit_price.to_dict(unit_price.average(value, quantity), currency)),
                 asset_value=money(value, currency))
 
 

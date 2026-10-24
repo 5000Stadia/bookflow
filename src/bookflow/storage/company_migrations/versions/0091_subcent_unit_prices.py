@@ -4,7 +4,8 @@ Each stored unit price or cost gains a nullable ``<prefix>_fraction`` column: th
 remainder, in thousandths of a minor unit, beyond the price rounded half to even into
 ``<prefix>_minor_units``. NULL is the true value for every existing row (every price before
 this revision is whole minor units), so nothing is rebuilt or backfilled and old rows read
-byte-identical. DDL below is frozen: this migration never imports current application metadata.
+byte-identical. An issue's captured fallback cost gains one too, so a short sale's provisional cost
+is rounded once at its total. DDL below is frozen: this migration never imports current application metadata.
 """
 from alembic import op
 
@@ -24,6 +25,7 @@ FRACTIONS = (
     ('purchase_item_lines', 'unit_cost_fraction'),
     ('vendor_credit_item_lines', 'unit_cost_fraction'),
     ('purchase_order_lines', 'rate_fraction'),
+    ('inventory_movements', 'fallback_unit_cost_fraction'),
 )
 COLUMNS = tuple(
     f"ALTER TABLE {table} ADD COLUMN {name} BIGINT CONSTRAINT ck_{name} CHECK ({name} IS NULL OR "

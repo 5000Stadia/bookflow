@@ -28,7 +28,9 @@
           if (amount) value = exact(amount);
           else if (items && cost) {
             const quantity = exact(control(row, 'quantity')?.value || '1', 6);
-            const unit = exact(cost);
+            // A unit cost carries the cost control's own scale (R150: three places past the cent).
+            const costScale = window.bookflowMath.context(control(row, 'unit_cost')).scale;
+            const unit = exact(cost, Number.isInteger(costScale) ? costScale : scale);
             // Purchase extension uses half-even at the currency precision, like shared math.
             value = window.bookflowMath.evaluate(`(${quantity})*(${unit})`, scale).value;
           } else throw Error('Enter amounts/costs, or preview to resolve item defaults.');

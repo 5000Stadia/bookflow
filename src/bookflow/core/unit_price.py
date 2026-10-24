@@ -166,6 +166,13 @@ def parse(value: Any, currency: str, field: str = "unit_price", *, signed: bool 
     raise _invalid(field, "use exact home-currency money")
 
 
+def average(value_minor_units: int, quantity_microunits: int) -> int:
+    """Value over quantity per one whole unit, in price units, rounded once (a display average)."""
+    if quantity_microunits <= 0:
+        return 0
+    return round_ratio_half_even(value_minor_units * 1_000_000 * SCALE, quantity_microunits)
+
+
 def extension(quantity_microunits: int, price_units: int) -> int:
     """quantity x unit price in minor units, rounded once, half to even."""
     return round_ratio_half_even(quantity_microunits * price_units, 1_000_000 * SCALE)

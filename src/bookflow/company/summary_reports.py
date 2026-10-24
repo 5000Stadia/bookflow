@@ -78,6 +78,7 @@ report refuses to print figures that do not.
 """
 from __future__ import annotations
 
+from bookflow.core import unit_price
 from bookflow.company.party_merges import survivor_sql
 from bookflow.company.cash_report_view import reporting_connection
 
@@ -656,10 +657,10 @@ def sales_by_item(inp: SalesByItemInput, s, *, principal_id=None) -> SalesByItem
             amount = money(int(row["income"]), currency)
             quantity, complete = int(row["quantity"]), not row["unknown_quantity"]
             text, coefficient = _percent(amount.minor_units, grand)
-            # Income over quantity, rounded once to the cent for reading. It is derived
-            # from the two exact figures printed beside it and nothing sums it, so it
-            # is a display of this row rather than an amount the books carry.
-            average = (money(round_ratio_half_even(amount.minor_units * 10 ** 6, quantity), currency)
+            # Income over quantity, rounded once to the price scale (R150: five places in USD)
+            # for reading. It is derived from the two exact figures printed beside it and
+            # nothing sums it, so it is a display of this row rather than an amount the books carry.
+            average = (MoneyOutput(**unit_price.to_dict(unit_price.average(amount.minor_units, quantity), currency))
                        if quantity and complete and state.metadata.basis == "accrual" else None)
             rows.append(SalesByItemRow(
                 item_id=row["item_id"], current_item_label=row["full_name"],

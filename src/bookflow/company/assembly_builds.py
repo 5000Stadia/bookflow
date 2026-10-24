@@ -200,7 +200,7 @@ def replay_items(s, working, load, refuse):
                 sequence=0, currency=receipt['currency'], asset_account_id=receipt['asset_account_id'],
                 offset_account_id=receipt['offset_account_id'], class_id=receipt['class_id'],
                 corrects_movement_id=receipt['id'], reverses_movement_id=None, returns_movement_id=None,
-                filled_by_movement_id=None, fallback_unit_cost_minor_units=None)
+                filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None)
             load(receipt['item_id']).append(partner)
             partners[target['id']] = partner
             waiting.add(receipt['item_id'])
@@ -301,16 +301,18 @@ def capture(s, item, currency):
             captured.append(dict(item_id=component['id'], kind='stock', quantity_microunits=per,
                                  account_id=component['asset_account_id']))
         else:
-            cost = component.get('cost_minor_units')
-            usable = cost is not None and component.get('cost_currency') == currency and int(cost) > 0 \
+            # R150: the exact cost, so 0.004 is a cost (rounded alone it would be 0 cents).
+            cost = unit_price.row_units(component, 'cost')
+            usable = cost is not None and component.get('cost_currency') == currency and cost > 0 \
                 and component.get('expense_account_id') is not None
+            minor, fraction = unit_price.split(cost) if usable else (0, None)
             row = dict(item_id=component['id'], kind='cost', quantity_microunits=per,
-                       unit_cost_minor_units=int(cost) if usable else 0,
+                       unit_cost_minor_units=minor,
                        account_id=component.get('expense_account_id') if usable else None)
-            if usable and component.get('cost_fraction'):
-                row['unit_cost_fraction'] = int(component['cost_fraction'])  # R150: only when sub-cent
+            if fraction:
+                row['unit_cost_fraction'] = fraction  # only when sub-cent, so whole-cent captures keep their shape
             captured.append(row)
-    if not any(row['kind'] == 'stock' or row['unit_cost_minor_units'] for row in captured):
+    if not any(row['kind'] == 'stock' or unit_price.row_units(row, 'unit_cost') for row in captured):
         raise _invalid('item', 'this assembly has no components with stock or a cost to build it from; '
                                'add its bill of materials with `item update --members`')
     return captured

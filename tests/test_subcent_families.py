@@ -7,6 +7,8 @@ item receipt to bill, a memorized invoice entered) must re-validate and leave bo
 unchanged. A reader of the rounded integer column alone would make the first line 1,000 x 0.01 =
 10.00, so this is what proves every reader goes through the exact price.
 """
+import json
+
 import pytest
 
 from tests.test_bill_item_lines import books  # noqa: F401  (fixture)
@@ -224,3 +226,146 @@ def test_a_sub_cent_bill_cost_flows_exactly_into_the_average_and_cogs(shop):
     net = _net(shop)
     # Average after both receipts: 12.60 / 1003; 400 of them cost 400 x 12.60 / 1003 = 5.0249 -> 5.02.
     assert net[shop['cogs']] == 502 and net[asset] == 1260 - 502
+
+
+def _item_update(shop, item, **fields):
+    current = shop['run']('item show', dict(item=item))
+    return shop['run']('item update', dict(item=item, expected_version=current['version'], **fields), reason='Reprice')
+
+
+def test_an_item_update_below_the_cent_is_a_change(shop):
+    """2.50 -> 2.5025 and 0.0125 -> 0.0149 keep their cents, so only the fraction moves; the edit
+    must still save, bump the version and name the field, alone or beside another field."""
+    run, c, co = shop['run'], shop['client'], shop['company']
+    whole = c.item.create(company=co, name='SC Whole', type='non_inventory_part', sales_enabled=True, description='Whole',
+                          price='2.50', cost='1.25', income_account_id=shop['income'], purchase_enabled=True,
+                          purchase_description='Whole', expense_account_id=shop['supplies'])
+    before = run('item show', dict(item=whole['id']))
+    out = _item_update(shop, whole['id'], price='2.5025', cost='1.2525')
+    after = run('item show', dict(item=whole['id']))
+    assert (after['price']['amount'], after['cost']['amount']) == ('2.5025', '1.2525')
+    assert after['version'] == before['version'] + 1 and set(out['changed_fields']) >= {'price', 'cost'}
+    out = _item_update(shop, shop['screw'], price='0.0149')
+    assert run('item show', dict(item=shop['screw']))['price']['amount'] == '0.0149'
+    assert 'price' in out['changed_fields']
+    out = _item_update(shop, shop['fuel'], price='3.4591', description='Diesel')
+    assert set(out['changed_fields']) >= {'price', 'description'}
+    listed = c.run('audit list', dict(record_id=shop['fuel'], limit=5), company=co)['items'][0]
+    entry = c.run('audit show', dict(event=listed['id']), company=co)['entries'][0]
+    # The audit records the exact before and after; no raw fraction column leaks into it.
+    assert (entry['before']['price']['amount'], entry['after']['price']['amount']) == ('3.459', '3.4591')
+    assert entry['after']['description'] == 'Diesel'
+    assert not [key for key in entry['before'] if key.endswith('_fraction')]
+
+
+def test_an_assembly_counts_a_component_cost_below_half_a_cent(shop):
+    """A kit of 1,000 bolts from stock at 0.0125, 1,000 packing at 0.0125 and 1,000 labels at
+    0.004 costs 12.50 + 12.50 + 4.00 = 29.00; a label rounded alone to 0 cents would make it 25.00.
+    A kit whose only cost is below half a cent is still buildable: 1,000 labels are 4.00."""
+    from tests.test_assembly_builds import _buy, _kit, _part
+    c, co = shop['client'], shop['company']
+    cost_item = lambda name, cost: c.item.create(  # noqa: E731
+        company=co, name=name, type='non_inventory_part', description=name, price='0.02', cost=cost,
+        income_account_id=shop['income'], purchase_enabled=True, purchase_description=name,
+        expense_account_id=shop['supplies'])['id']
+    packing, label = cost_item('SC Packing', '0.0125'), cost_item('SC Label', '0.004')
+    bolt = _part(shop, 'SC Bolt', '0.0125')
+    _buy(shop, bolt, '5000', '0.0125', '2017-03-01')
+    kit = _kit(shop, [(bolt, '1000'), (packing, '1000'), (label, '1000')])
+    built = shop['run']('assembly build', dict(item=kit, quantity='1', date='2017-03-10'), reason='Build')
+    assert built['assembly_cost']['amount'] == '29.00'
+    labels = _kit(shop, [(label, '1000')], name='SC Label pack')
+    built = shop['run']('assembly build', dict(item=labels, quantity='1', date='2017-03-10'), reason='Build')
+    assert built['assembly_cost']['amount'] == '4.00'
+
+
+def test_the_invoice_window_keeps_a_sub_cent_price_basis(shop):
+    from bookflow.adapters.workbench import sales
+    shop['run']('company update', dict(enable_price_levels=True), reason='Levels')
+    shop['run']('price-level create', dict(name='SC Ten off', kind='fixed_percent', percent='-10'), reason='Level')
+    sold = shop['run']('invoice post', dict(customer=shop['customer'], date='2017-03-05', lines=[
+        dict(item=shop['screw'], quantity='1000', price_level='SC Ten off', price_basis_amount='0.0333')]), reason='Sell')
+    shown = shop['run']('invoice show', {'invoice': sold['id']})
+    assert sales.editable_values(shown)['lines'][0]['price_basis_amount'] == '0.0333'
+
+
+def test_averages_show_at_the_price_scale(shop):
+    """1,000 at 0.0125 bought and sold: every average reads 0.0125, not 0.01."""
+    run = shop['run']
+    run('bill post', dict(vendor=shop['vendor'], date='2017-03-03', items=[
+        dict(item=shop['stock_screw'], quantity='1000', unit_cost='0.0125')]), reason='Buy')
+    run('invoice post', dict(customer=shop['customer'], date='2017-03-05', lines=[
+        dict(item=shop['screw'], quantity='1000')]), reason='Sell')
+    period = dict(date_from='2017-01-01', date_to='2017-12-31', limit=50)
+    row = lambda rows, item: next(r for r in rows if r['item_id'] == item)  # noqa: E731
+    assert row(run('report sales-by-item', period)['rows'], shop['screw'])['average_price']['amount'] == '0.0125'
+    assert row(run('report purchases-by-item', period)['rows'], shop['stock_screw'])['average_cost']['amount'] == '0.0125'
+    valuation = run('report inventory-valuation', dict(as_of='2017-12-31', limit=50))['rows']
+    assert row(valuation, shop['stock_screw'])['average_cost']['amount'] == '0.0125'
+    assert run('item show', dict(item=shop['stock_screw']))['average_cost']['amount'] == '0.0125'
+
+
+def test_a_purchase_order_rate_takes_the_price_scale_and_an_exchange_rate_does_not():
+    from tests.test_numeric_entry_metadata import children, descriptors
+    price = {'currency': 'company', 'extra_places': 3}
+    assert children('purchase-order post', 'lines')['rate']['math'] == price
+    assert descriptors('time-activity create')['rate']['math'] == price
+    assert descriptors('journal post')['rate']['math'] == {'scale': 18}
+
+
+def _short_item(shop, name, cost):
+    return shop['client'].item.create(company=shop['company'], name=name, type='inventory_part', description=name,
+                                      price='0.02', purchase_description=name, cost=cost,
+                                      cogs_account_id=shop['cogs'], income_account_id=shop['income'])['id']
+
+
+@pytest.mark.parametrize('cost, provisional', [('0.0125', 1250), ('0.004', 400)])
+def test_a_short_sale_takes_its_provisional_cost_exactly(shop, cost, provisional):
+    """Selling 1,000 never stocked at a 0.0125 purchase cost carries 12.50 of provisional cost, and
+    at 0.004 it carries 4.00 with no 'no purchase cost' warning: the exact unit cost times the
+    shortfall, rounded once. Read as whole cents per unit they would be 10.00 and 0.00."""
+    from tests.test_negative_stock import _bill, _net, _ties
+    item = _short_item(shop, 'SC Short', cost)
+    sold = shop['run']('invoice post', dict(customer=shop['customer'], date='2017-03-05',
+                                            lines=[dict(item=item, quantity='1000')]), reason='Sell short')
+    assert not [w for w in sold.get('warnings', []) if 'no purchase cost' in w]
+    assert _net(shop, shop['cogs']) == provisional
+    _bill(shop, item, '2017-03-06', '1000', cost)
+    assert _net(shop, shop['cogs']) == provisional  # the true-up at the receipt moves nothing
+    _ties(shop)
+
+
+def test_an_old_style_fallback_row_replays_exactly_as_before(shop):
+    """A whole-cent fallback stores no fraction, and a row with no fraction column at all (as every
+    movement written before co0091) gives the provisional the old formula gave."""
+    from bookflow.company import inventory_costing
+    from bookflow.core.exact import round_ratio_half_even
+    from tests.test_negative_stock import _db, _net
+    item = _short_item(shop, 'SC Whole short', '1.80')
+    shop['run']('invoice post', dict(customer=shop['customer'], date='2017-03-05',
+                                     lines=[dict(item=item, quantity='3.5')]), reason='Sell short')
+    assert _net(shop, shop['cogs']) == 630
+    with _db(shop) as db:
+        db.row_factory = __import__('sqlite3').Row
+        rows = [dict(row) for row in db.execute('SELECT * FROM inventory_movements WHERE item_id=?', (item,))]
+    issue = next(row for row in rows if row['kind'] == 'issue')
+    assert issue['fallback_unit_cost_minor_units'] == 180 and issue['fallback_unit_cost_fraction'] is None
+    old = [{k: v for k, v in row.items() if k != 'fallback_unit_cost_fraction'} for row in rows]
+    assert inventory_costing.replay(old).targets == inventory_costing.replay(rows).targets
+    assert inventory_costing.replay(old).targets[issue['id']] == -round_ratio_half_even(180 * 3_500_000, 1_000_000)
+
+
+def test_a_price_level_and_a_vendor_cost_change_below_the_cent(shop):
+    run = shop['run']
+    run('company update', dict(enable_price_levels=True), reason='Levels')
+    level = run('price-level create', dict(name='SC Contract', kind='per_item', items=[
+        dict(item_id=shop['screw'], price='0.0115', adjustment_basis='standard_price')]), reason='Level')
+    shown = run('price-level show', dict(price_level=level['id']))
+    run('price-level update', dict(price_level=level['id'], expected_version=shown['version'], items=[
+        dict(item_id=shop['screw'], price='0.0124', adjustment_basis='standard_price')]), reason='Level')
+    after = run('price-level show', dict(price_level=level['id']))
+    assert [row['price']['amount'] for row in after['items'] if row['active']] == ['0.0124']
+    _item_update(shop, shop['screw'], vendor_profiles=[dict(vendor_id=shop['vendor'], preferred_rank=1, purchase_cost='0.0115')])
+    _item_update(shop, shop['screw'], vendor_profiles=[dict(vendor_id=shop['vendor'], preferred_rank=1, purchase_cost='0.0124')])
+    profiles = run('item show', dict(item=shop['screw']))['vendor_profiles']
+    assert [row['purchase_cost']['amount'] for row in profiles if row['active']] == ['0.0124']

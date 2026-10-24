@@ -1321,7 +1321,9 @@ def plan_item_update(
         "name": ("name", "full_name"), "parent_id": ("parent_id", "full_name"),
         "type": ("type",), "sales_enabled": ("sales_enabled",),
         "purchase_enabled": ("purchase_enabled",), "preferred_vendor_id": ("preferred_vendor_id",),
-        **{field: (f"{field}_minor_units", f"{field}_currency") for field in _MONEY_FIELDS},
+        **{field: (f"{field}_minor_units", f"{field}_currency")
+           # R150: a price or cost may change only below the cent.
+           + ((f"{field}_fraction",) if field in _PRICE_FIELDS else ()) for field in _MONEY_FIELDS},
         **{field: (column,) for field, column in _PERCENT_FIELDS.items()},
         **{field: (column,) for field, column in _QUANTITY_FIELDS.items()},
     }
@@ -1878,7 +1880,7 @@ def project_item(
                            else _stock(db, [owner_id]).get(owner_id, (0, 0)))
     else:
         quantity, value = 0, 0
-    average = 0 if quantity <= 0 else round_ratio_half_even(value * 10 ** 6, quantity)
+    average = unit_price.average(value, quantity)  # R150: price units, shown to the price scale
     committed = on_order = builds = 0
     deducts = deducts_builds = True
     if stocked:
@@ -1926,7 +1928,7 @@ def project_item(
         quantity_committed=format_quantity_micro_units(committed),
         quantity_on_order=format_quantity_micro_units(on_order),
         quantity_pending_build=format_quantity_micro_units(builds),
-        average_cost=MoneyOutput(**Money(average, currency).to_dict()) if stocked else zero_money,
+        average_cost=MoneyOutput(**unit_price.to_dict(average, currency)) if stocked else zero_money,
         inventory_value=MoneyOutput(**Money(value, currency).to_dict()) if stocked else zero_money,
         inventory_values_available=stocked,
         bill_of_material_cost=_bom_cost(db, members, cache) if owner["type"] == "inventory_assembly" else None,
@@ -1942,12 +1944,16 @@ def aggregate_snapshot(
 ) -> dict[str, Any]:
     logical = dict(owner)
     for field in _MONEY_FIELDS:
+        # R150: a price or cost is recorded exactly (its fraction folded into the amount text);
+        # a whole-cent one reads exactly as it always did, with no fraction key.
         logical[field] = (
             None if logical.get(f"{field}_minor_units") is None
-            else Money(int(logical[f"{field}_minor_units"]), str(logical[f"{field}_currency"])).to_dict()
+            else unit_price.to_dict(unit_price.join(int(logical[f"{field}_minor_units"]), logical.get(f"{field}_fraction")),
+                                    str(logical[f"{field}_currency"]))
         )
         logical.pop(f"{field}_minor_units", None)
         logical.pop(f"{field}_currency", None)
+        logical.pop(f"{field}_fraction", None)
     for field, column in _PERCENT_FIELDS.items():
         logical[field] = None if logical.get(column) is None else format_percentage_millionths(logical[column])
         logical.pop(column, None)

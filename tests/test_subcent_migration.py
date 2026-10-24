@@ -97,3 +97,8 @@ def test_whole_cent_books_read_byte_identical_after_the_upgrade(books):  # noqa:
     edited = run('invoice update', dict(invoice=docs['invoice'][1], expected_version=invoice['version'],
                                         memo='After the upgrade'), reason='Memo')
     assert [line['net'] for line in edited['revision']['lines']] == [line['net'] for line in invoice['revision']['lines']]
+    # A whole-cent price raised below the cent after the upgrade is a real change: saved, versioned, exact.
+    before = run('item show', {'item': item})
+    run('item update', dict(item=item, expected_version=before['version'], price='12.5025'), reason='Reprice')
+    after = run('item show', {'item': item})
+    assert after['price']['amount'] == '12.5025' and after['version'] == before['version'] + 1
