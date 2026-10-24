@@ -1572,3 +1572,11 @@ EXAMPLES.update({
     'check print-alignment': Example('bookflow check print-alignment --account Checking --offset-x-hundredths 5'
                                      ' --company "Demo Plumbing Co"', {'account': 'Checking', 'offset_x_hundredths': 5}),
 })
+# R104 increment 3: barcodes. A scanned code also works as `item` on any line, with no command at all.
+EXAMPLES.update({
+    'barcode lookup': Example('bookflow barcode lookup --code 0012345678905 --company "Demo Plumbing Co" --json',
+                              {'code': '0012345678905'}),
+    'barcode generate': Example('bookflow barcode generate --items \'["Brass Shutoff Valve","Copper Coupling"]\''
+                                ' --reason "Label the parts shelf" --company "Demo Plumbing Co" --json',
+                                {'items': ['Brass Shutoff Valve', 'Copper Coupling']}),
+})

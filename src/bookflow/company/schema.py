@@ -1217,3 +1217,6 @@ from bookflow.company.accountant_review_schema import define_tables as _define_a
 globals().update(_define_accountant_review_tables(metadata, _column, _table, _common))
 from bookflow.company.check_print_schema import define_tables as _define_check_print_tables
 globals().update(_define_check_print_tables(metadata, _column, _table, _common))
+# Barcodes (co0094, R104 increment 3): a scanned code finds its item or bin by index.
+sa.Index("ix_items_barcode", items.c.barcode)
+sa.Index("ix_inventory_bins_barcode", inventory_bins.c.barcode)
