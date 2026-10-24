@@ -727,6 +727,8 @@ def _check(s, ctx, change, copy, mapped, pending=frozenset()):
                 return 'the note is empty'
         elif kind == 'review_mark':
             from bookflow.commands.review_cmds import _current
+            if change.get('transaction_id') in pending or change.get('transaction_id') in mapped:
+                return None  # a mark on an entry made in the copy comes in with that entry
             _, doc, flags, _ = _current(s, change['transaction_id'])
             if doc['revision_id'] != change.get('revision_id'):
                 return 'the entry has changed since the accountant reviewed it'
@@ -914,7 +916,7 @@ def _apply_other(s, ctx, ch, copy, mapped, who_id):
         return 'note', row['id'], Touched('note', row['id'], 'create', None, 1, row, db='company')
     if ch['kind'] == 'review_mark':
         from bookflow.commands.review_cmds import _current
-        identity, doc, flags, _ = _current(s, ch['transaction_id'])
+        identity, doc, flags, _ = _current(s, mapped.get(ch['transaction_id'], ch['transaction_id']))
         snapshot = {'transaction_id': identity, 'revision_id': doc['revision_id'], 'flags': flags, 'note': ch.get('note'),
                     'by': 'external_accountant'}
         return 'transaction', identity, Touched(review.REVIEW_RECORD, identity, 'review', None, None, snapshot, db='company')

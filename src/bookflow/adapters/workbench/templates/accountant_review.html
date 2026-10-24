@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% block title %}Accountant review{% endblock %}{% block body %}<section id="accountant-review">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/company">Company</a> / Accountant review</nav>
+<h1>Accountant review</h1>
+{% set cur = status.current %}
+<p class="muted">Give your accountant a copy of the books to review and adjust on their own machine, then take their changes back. Bookflow sends nothing anywhere: you hand the file over yourself.</p>
+{% if result %}<div role="status" class="notice" data-accountant-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+
+<section class="workspace-card" aria-label="Accountant's copy" data-accountant-copy>
+<h2>Accountant's copy</h2>
+{% if status.restricted_to %}
+<p data-copy-side="accountant">These books are an <strong>accountant's copy</strong>. They take adjusting entries, reclassifications, review marks and notes dated on or before <strong>{{ status.restricted_to }}</strong>. When you are done, write the change file and send it to the owner.</p>
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant"><label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
+<div class="actions"><button type="submit" name="action" value="changes" data-write-changes>Write the change file</button></div></form>{% endif %}
+{% elif cur %}
+<p data-copy-side="owner">A copy is <strong>out</strong> with dividing date <strong>{{ cur.dividing_date }}</strong> ({{ cur.file_name }}, made {{ cur.created_at[:10] }} by {{ cur.created_by_name }}). Until its changes come back, these books refuse changes dated on or before that date, account edits and list merges.</p>
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant">
+<label>Reason (needed to cancel) <input name="ctx:reason" placeholder="Accountant sent a list instead"></label>
+<div class="actions"><button type="submit" name="action" value="cancel" data-cancel-copy>Cancel the copy (remove restrictions)</button></div></form>{% endif %}
+{% else %}
+<p data-no-copy>No copy is out.</p>
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant">
+<label>Dividing date <input type="date" name="through" required></label>
+<label>Reason <input name="ctx:reason" placeholder="Year-end review"></label>
+<p class="muted">Your accountant works on or before the dividing date; you keep working after it.</p>
+<div class="actions"><button type="submit" name="action" value="export" data-export-copy>Make the accountant's copy</button></div></form>{% endif %}
+{% endif %}
+{% if status.history %}<details><summary>Earlier copies</summary><ul>{% for h in status.history %}<li>{{ h.dividing_date }}: {{ h.status }}{% if h.close_reason %} ({{ h.close_reason }}){% endif %}</li>{% endfor %}</ul></details>{% endif %}
+</section>
+
+{% if not status.restricted_to and can_admin %}
+<section class="workspace-card" aria-label="Import accountant's changes" data-import-changes>
+<h2>Import the accountant's changes</h2>
+<form method="post" action="/c/{{ company_id }}/accountant">
+<label>Change file (full path on this machine) <input name="file" value="{{ file }}" size="60" required></label>
+<div class="actions"><button type="submit" name="action" value="preview" data-preview-changes>Preview</button></div>
+{% if preview %}
+<p data-preview-counts>{{ preview.accountant_name or 'The accountant' }} sent {{ preview.changes|length }} changes through {{ preview.dividing_date }}: {{ preview.counts.new }} new, {{ preview.counts.imported }} already imported, {{ preview.counts.refused }} refused.</p>
+<div class="table-wrap"><table class="list-table" data-change-list><thead><tr><th>Take</th><th>Change</th><th>Lines</th><th>Reason</th><th>State</th></tr></thead><tbody>
+{% for ch in preview.changes %}<tr data-change="{{ ch.key }}">
+<td data-label="Take">{% if ch.state == 'new' %}<input type="checkbox" name="change:{{ ch.key }}" checked aria-label="Take {{ ch.summary }}">{% endif %}</td>
+<td data-label="Change">{{ ch.summary }}{% if ch.by_name %}<br><span class="muted">by {{ ch.by_name }}</span>{% endif %}</td>
+<td data-label="Lines">{% for l in ch.lines %}{{ l.account_name or l.account_id }} {{ l.side }} {{ l.amount }}<br>{% endfor %}</td>
+<td data-label="Reason">{{ ch.reason or '' }}</td>
+<td data-label="State">{{ ch.state }}{% if ch.problem %}: {{ ch.problem }}{% endif %}</td>
+</tr>{% endfor %}</tbody></table></div>
+{% if preview.counts.new %}<label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
+<div class="actions"><button type="submit" name="action" value="import" data-import>Import the ticked changes</button></div>
+<p class="muted">Each change is posted as the accountant, and the audit trail names the copy and the reason. Importing is a person's step.</p>{% endif %}
+{% endif %}
+</form>
+</section>
+{% endif %}
+
+<section class="workspace-card" aria-label="Review checklist" data-review-checklist>
+<h2>Review checklist through {{ checklist.as_of }}</h2>
+<form method="get" action="/c/{{ company_id }}/accountant"><label>Through <input type="date" name="as_of" value="{{ as_of }}"></label> <button type="submit">Show</button></form>
+<ul class="checklist">{% for item in checklist['items'] %}<li data-check="{{ item.key }}">{{ '✓' if item.done else '○' }} <strong>{{ item.title }}</strong>: {{ item.detail }}</li>{% endfor %}</ul>
+{% if checklist.entries_to_review %}<p><a href="/c/{{ company_id }}/report/entries-to-review?as_of={{ checklist.as_of }}">Open the entries to review</a></p>{% endif %}
+<p class="muted">Changes an accountant made: {{ checklist.accountant_changes }} (<code>report accountant-changes</code>).</p>
+{% if accountants %}<p>External accountants: {% for a in accountants %}{{ a.display_name or a.username }} (through {{ a.through }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</section>
+</section>{% endblock %}

@@ -209,9 +209,17 @@ ORDER_INVOICING_COMMANDS = frozenset(('sales-order invoice', 'sales-order billin
 # again, and orders spares for a work order through all four surfaces over identical demo copies.
 SHORTFALL_COMMANDS = frozenset(('sales-order purchase-order', 'work-order purchase-order'))
 
+# R121: accountant review. Its witness designates and removes an external accountant, exports an accountant's
+# copy, works in it, writes and imports the change file, reads the checklist and report, and cancels a second copy.
+ACCOUNTANT_REVIEW_COMMANDS = frozenset((
+    'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify', 'accountant remove',
+    'accountant reviewed-through', 'accountant-copy cancel', 'accountant-copy changes', 'accountant-copy export',
+    'accountant-copy import', 'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
+    'report accountant-review'))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = ACCOUNTANT_REVIEW_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -749,6 +757,7 @@ def execution_map():
     from tests.test_pricing_rule_surfaces import COMMANDS as PRICING_RULE_SURFACE_COMMANDS
     from tests.test_order_invoicing_surfaces import COMMANDS as ORDER_INVOICING_SURFACE_COMMANDS
     from tests.test_shortfall_surfaces import COMMANDS as SHORTFALL_SURFACE_COMMANDS
+    from tests.test_accountant_review_surfaces import COMMANDS as ACCOUNTANT_REVIEW_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -835,6 +844,7 @@ def execution_map():
                    'tests/test_pricing_rule_surfaces.py::test_the_same_price_rules_through_python_cli_http_and_mcp' if cmd.name in PRICING_RULE_SURFACE_COMMANDS else  # all four
                    'tests/test_order_invoicing_surfaces.py::test_the_same_order_invoice_through_python_cli_http_and_mcp' if cmd.name in ORDER_INVOICING_SURFACE_COMMANDS else  # all four
                    'tests/test_shortfall_surfaces.py::test_the_same_shortfall_purchase_through_python_cli_http_and_mcp' if cmd.name in SHORTFALL_SURFACE_COMMANDS else  # all four
+                   'tests/test_accountant_review_surfaces.py::test_the_same_accountant_review_through_python_cli_http_and_mcp' if cmd.name in ACCOUNTANT_REVIEW_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
