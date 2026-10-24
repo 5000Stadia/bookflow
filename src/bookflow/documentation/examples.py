@@ -1522,6 +1522,7 @@ EXAMPLES.update({
                                         {'site': 'Van 1', 'limit': 25}),
     'report quantity-by-site': Example('bookflow report quantity-by-site --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
                                        {'as_of': '2026-12-31', 'site': 'Van 1'}),
+})
 # Accountant review (R121): the external accountant, the accountant's copy and what comes back, the checklist.
 _ACCT_CO = ' --company "Demo Plumbing Co" --json'
 _CHANGES = '/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json'
