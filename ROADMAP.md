@@ -163,7 +163,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R181 Pick, pack and ship: picking lists, packing slips and shipments recorded apart from invoicing, so a warehouse can ship before it bills (Kabe 2026-10-22: after R104).
-- [~] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
+- [x] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
