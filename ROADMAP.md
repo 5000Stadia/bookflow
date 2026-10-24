@@ -192,6 +192,6 @@ review cb5fcd7 (gate g96052d).
 - [x] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment
-- [~] R153 Very large deposits (over 200 rows) and billing part of a purchase order
+- [x] R153 Very large deposits (over 200 rows) and billing part of a purchase order
 - [x] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions
