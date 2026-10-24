@@ -229,7 +229,9 @@ class OrderSide:
             # After the status revision: the capacity trigger reads the order's current lines.
             try:
                 s.company.conn.execute(c.purchase_order_bill_claims.insert(), self.claims)
-            except sa.exc.IntegrityError as exc:
+            except sa.exc.DBAPIError as exc:
+                if 'remains on the ordered line' not in str(exc):
+                    raise
                 raise _invalid('order_lines', 'more than remains open on the ordered line') from exc
 
 
@@ -486,3 +488,91 @@ def close_lines_apply(plan, ctx, s):
     view = orders.output(s, current, orders.revision(s, current)).model_dump()
     return Applied(PurchaseOrderWriteOutput(**view, changed=True, warnings=warnings,
                                             changed_fields=['lines.closed']), touched, summary, audited=True)
+
+
+# ---------------------------------------------------------------- changing an order bills hold
+
+
+def guard_order_change(s, header, rev, operation, resolved=None):
+    """Refuse an order change that would strand what bills took from it; return the new status.
+
+    A void is refused while any bill holds part of the order (void the bills first, as a
+    receipt must be). An update may not drop or re-item a line a bill took from, nor cut it
+    below what was billed. When bills hold parts or lines are closed, the updated order's
+    status follows its new lines unless the caller set one. ``None`` when nothing holds it.
+    """
+    lines = {line['line_id']: line for line in line_states(s, header, rev)}
+    held = {key: st for key, st in lines.items() if st['billed_amount_minor_units'] or st['closed']}
+    if not held:
+        return None
+    billed = {key: st for key, st in held.items() if st['billed_amount_minor_units']}
+    if operation == 'void':
+        if billed:
+            raise BookflowError('E_WORK_DEPENDENCY', details={
+                'purchase_order_id': header['id'],
+                'bill_ids': sorted({row['bill_id'] for row in active_bill_claims(s, line_ids=list(billed))}),
+                'problem': 'bills took part of this purchase order',
+                'next': 'Void those bills first (their parts return to the order), then void the order.'})
+        return None
+    new = {line['line_id']: line for line in resolved['lines'] if line['line_id']}
+    states = []
+    for key, st in lines.items():
+        line = new.get(key)
+        if key in billed:
+            if line is None:
+                raise _invalid('lines', f'line {st["position"]} was billed in part; it cannot be removed')
+            item = line['profile'].item.id if line['profile'].item else None
+            if item != st['item_id']:
+                raise _invalid('lines', f'line {st["position"]} was billed in part; its item cannot change')
+            if st['measured'] == 'quantity':
+                if line['quantity_microunits'] is None or line['quantity_microunits'] < st['received_quantity_microunits']:
+                    raise _invalid('lines', (f'line {st["position"]} cannot be cut below the '
+                                   f'{format_quantity_micro_units(st["received_quantity_microunits"])} already received or billed'))
+            elif line['quantity_microunits'] is not None or line['amount_minor_units'] < st['billed_amount_minor_units']:
+                raise _invalid('lines', f'line {st["position"]} cannot be cut below the {st["billed_amount_minor_units"]} minor units already billed')
+    for line in resolved['lines']:
+        st = lines.get(line['line_id'])
+        done_quantity = st['received_quantity_microunits'] if st else 0
+        done_amount = st['billed_amount_minor_units'] if st else 0
+        closed = bool(st and st['closed'])
+        if line['quantity_microunits'] is not None:
+            done = closed or done_quantity >= line['quantity_microunits']
+        else:
+            done = closed or (done_amount > 0 and done_amount >= line['amount_minor_units'])
+        states.append(dict(done=done, active=bool(st and st['active'])))
+    return order_status(states)
+
+
+def remaining_selection(s, inp):
+    """A whole-order ``bill post`` on an order already billed in part, as the parts still open.
+
+    Unchanged when the bill names no order, when no bill holds part of it and no line is closed
+    (the whole-order conversion stands), or when receipts hold it (that path refuses on its own).
+    """
+    from bookflow.company import purchase_orders as orders
+    from bookflow.company.bill_models import OrderLineSelection
+    from bookflow.company.receiving import physical_claims
+    if getattr(inp, 'purchase_order', None) is None or getattr(inp, 'receipts', None) is not None:
+        return inp
+    header = orders.resolve(s, inp.purchase_order)
+    if header['status'] == 'voided' or orders.conversion_row(s, header['id']) is not None:
+        return inp
+    rev = orders.revision(s, header)
+    states = line_states(s, header, rev)
+    if not any(st['billed_amount_minor_units'] or st['closed'] for st in states):
+        return inp
+    if physical_claims(s, order_line_ids=[st['line_id'] for st in states]):
+        return inp
+    if inp.expenses is not None or inp.items is not None:
+        raise BookflowError('E_WORK_DEPENDENCY', details={
+            'purchase_order_id': header['id'],
+            'problem': 'bills already took part of this purchase order',
+            'next': 'Name the parts this bill takes with order_lines, or leave the lines out to bill what is still open.'})
+    selections = [OrderLineSelection(line=st['line_id']) for st in states
+                  if not st['closed'] and (st['open_quantity_microunits'] or st['open_amount_minor_units'])]
+    if not selections:
+        raise BookflowError('E_WORK_DEPENDENCY', details={
+            'purchase_order_id': header['id'],
+            'problem': 'nothing is still open on this purchase order: every line is billed, received or closed',
+            'next': 'Reopen a line with `purchase-order close-lines --reopen`, or void a bill to return its part.'})
+    return inp.model_copy(update={'order_lines': selections})

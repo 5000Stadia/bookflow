@@ -1147,6 +1147,10 @@ def _stock_entries(pending, profile):
 def prepare(s, ctx, inp, operation):
     from bookflow.company import purchase_order_billing as order_billing
     partial = None
+    if operation == 'post' and getattr(inp, 'order_lines', None) is None:
+        # A whole-order bill on an order bills already took part of (or with lines closed) bills
+        # only what is still open on each line, as the anchor does (R153).
+        inp = order_billing.remaining_selection(s, inp)
     if operation == 'post' and getattr(inp, 'order_lines', None) is not None:
         # Part of an order: the order stays open for the rest (purchase_order_billing).
         partial, entry = order_billing.source(s, inp)

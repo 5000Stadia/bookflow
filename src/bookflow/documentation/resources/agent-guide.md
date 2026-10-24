@@ -831,6 +831,9 @@ One deposit holds up to 2,000 rows (receipts plus other money). List what is wai
 Read a large deposit back with `deposit show` for its totals and counts and `deposit items` for
 its rows, 200 per page. A deposit of 1,000 checks takes a minute or two to post or void, because
 every receipt's history is checked; run it once and wait for the answer rather than retrying.
+Known limit: reconciling a bank account that holds such a deposit is slow -- its time grows with
+the square of the rows (about 20 minutes for 1,000) -- so expect a long `reconcile mark` and
+`reconcile finish`, and prefer several smaller deposits when the bank lists them separately.
 
 ## A vendor sends a refund check
 

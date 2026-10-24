@@ -56,14 +56,19 @@ def candidates(s,inp:SourceFilter,*,binding=None,ctx=None):
         if error.code!='E_PERMISSION':raise
         each=True
     claims=deposit_dependencies.active_claims(s,[h['id'] for h in headers])
-    # Read the receipts that can still be listed in bounded batches, not one by one.
-    graphs={} if each else deposit_sources.graph_many(s,[h['id'] for h in headers
-        if not (claims.get(h['id']) and claims[h['id']]['transaction_id']!=inp.for_deposit)])
-    try:uf=deposit_sources.undeposited_funds(s) if graphs else None
+    # Read the receipts that can still be listed in batches of 200, not one by one, and hold
+    # only one batch's graphs at a time.
+    listable=[h['id'] for h in headers if not (claims.get(h['id']) and claims[h['id']]['transaction_id']!=inp.for_deposit)]
+    try:uf=deposit_sources.undeposited_funds(s) if listable and not each else None
     except BookflowError as error:
         if error.code!='E_DEPOSIT_SOURCE_INELIGIBLE':raise
-        graphs,uf={},None   # each read below answers ineligible on its own, as before
+        uf=None   # each read below answers ineligible on its own, as before
+    batch_of={identity:index//200 for index,identity in enumerate(listable)} if uf is not None else {}
+    graphs,loaded_batch={},None
     for header in headers:
+        batch=batch_of.get(header['id'])
+        if batch is not None and batch!=loaded_batch:
+            graphs=deposit_sources.graph_many(s,listable[batch*200:(batch+1)*200]);loaded_batch=batch
         if each:
             try:admit(s,ctx,binding,sources=(header['id'],))
             except BookflowError as error:

@@ -239,8 +239,15 @@ def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, ma
     from bookflow.company.deposit_coordinate_models import SourceResult
     # Read every receipt in bounded batches, inline or drafted alike: one at a time, each read
     # re-ran the whole authority check, which dominated a deposit of a month of checks.
-    current_claims=dependencies.active_claims(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)])
-    current_sources=deposit_sources.load_many(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)])
+    # A refusal falls back to reading row by row, so the row reported first and its code are
+    # exactly those base reported (an inline stale version before a later unknown id). A draft
+    # pin was always read in one batch.
+    try:
+        current_claims=dependencies.active_claims(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)])
+        current_sources=deposit_sources.load_many(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)])
+    except BookflowError:
+        if doc.pin is not None:raise
+        current_claims=current_sources=None
     for index,value in enumerate(doc.sources):
         from bookflow.company.deposit_coordinate_models import SourceResult
         if isinstance(value, SourceResult):

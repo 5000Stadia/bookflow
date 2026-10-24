@@ -143,3 +143,93 @@ def test_closing_a_line_by_hand_and_reopening_it(books):
     reopened = run('purchase-order close-lines', dict(purchase_order=po['id'], lines=['1'], reopen=True), reason='Supplier found them')
     assert reopened['status'] == 'partly_received' and reopened['line_tracking'][0]['open_quantity'] == '4'
     assert _open_report(books) == {po['number']: 4000}
+
+
+def test_a_whole_order_bill_after_a_partial_one_bills_only_what_is_open(books):
+    run = books['run']; item = _inventory_part(books); asset = _inventory_asset(books)
+    po = _order(books, item)
+    _bill(books, po, dict(line='1', quantity='4'))
+    rest = run('bill post', dict(purchase_order=po['id'], date='2017-01-12'), reason='Whole order bill')
+    assert rest['total']['minor_units'] == 6000
+    shown, line = _line(books, po)
+    assert shown['status'] == 'closed' and line['billed_quantity'] == '10'
+    assert _net(books) == {asset: 10000, books['payable']: -10000}
+    with pytest.raises(BookflowError) as nothing:
+        run('bill post', dict(purchase_order=po['id'], date='2017-01-13'), reason='Again')
+    assert nothing.value.code == 'E_WORK_DEPENDENCY' and 'nothing is still open' in str(nothing.value.details)
+
+
+def test_a_whole_order_bill_after_closing_every_line_is_refused(books):
+    run = books['run']; item = _inventory_part(books)
+    po = _order(books, item)
+    _bill(books, po, dict(line='1', quantity='4'))
+    run('purchase-order close-lines', dict(purchase_order=po['id'], lines=['1']), reason='No more coming')
+    with pytest.raises(BookflowError) as refused:
+        run('bill post', dict(purchase_order=po['id'], date='2017-01-12'), reason='Whole order bill')
+    assert refused.value.code == 'E_WORK_DEPENDENCY'
+    with pytest.raises(BookflowError) as written:
+        run('bill post', dict(purchase_order=po['id'], date='2017-01-12',
+                              items=[dict(item=item, quantity='6', unit_cost='10.00')]), reason='Own lines')
+    assert written.value.code == 'E_WORK_DEPENDENCY'
+
+
+def test_updating_or_voiding_an_order_respects_what_bills_took(books):
+    run = books['run']; item = _inventory_part(books)
+    po = _order(books, item)
+    line_id = po['revision']['lines'][0]['line_id']
+    four = _bill(books, po, dict(line='1', quantity='4'))
+
+    def update(quantity):
+        version = run('purchase-order show', dict(purchase_order=po['id']))['version']
+        return run('purchase-order update', dict(purchase_order=po['id'], expected_version=version,
+                   lines=[dict(line_id=line_id, item=item, quantity=quantity, rate='10.00')]), reason='Change')
+    with pytest.raises(BookflowError) as cut:
+        update('2')
+    assert cut.value.code == 'E_VALIDATION' and 'already received or billed' in str(cut.value.details)
+    assert update('4')['status'] == 'closed'                 # cut to exactly what was billed: done
+    raised = update('20')
+    assert raised['status'] == 'partly_received' and _line(books, po)[1]['open_quantity'] == '16'
+    with pytest.raises(BookflowError) as dropped:
+        version = run('purchase-order show', dict(purchase_order=po['id']))['version']
+        run('purchase-order update', dict(purchase_order=po['id'], expected_version=version,
+            lines=[dict(item=item, quantity='5', rate='10.00')]), reason='Replace the line')
+    assert dropped.value.code == 'E_VALIDATION'
+
+    with pytest.raises(BookflowError) as held:
+        run('purchase-order void', dict(purchase_order=po['id']), reason='Withdraw')
+    assert held.value.code == 'E_WORK_DEPENDENCY' and four['id'] in str(held.value.details)
+    run('bill void', dict(bill=four['id']), reason='Billed in error')
+    assert run('purchase-order void', dict(purchase_order=po['id']), reason='Withdraw')['status'] == 'voided'
+
+
+def test_receiving_counts_bills_and_closed_lines_and_a_receipt_update_near_capacity(books):
+    run = books['run']; item = _inventory_part(books)
+    po = _order(books, item)
+    line_id = po['revision']['lines'][0]['line_id']
+    _bill(books, po, dict(line='1', quantity='4'))
+
+    def receive(quantity):
+        version = run('purchase-order show', dict(purchase_order=po['id']))['version']
+        return run('item-receipt post', dict(date='2017-01-05', vendor=books['vendor'], purchase_order=po['id'],
+            purchase_order_version=version, items=[dict(item=item, order_line_id=line_id, quantity=quantity, unit_cost='10.00')]),
+            reason='Receive')
+    with pytest.raises(BookflowError) as over:
+        receive('7')                                          # four already arrived with the bill
+    assert over.value.code == 'E_WORK_DEPENDENCY'
+    receipt = receive('3')
+    # Correcting the receipt at the line's capacity gives its old quantity back before claiming.
+    fixed = run('item-receipt update', dict(receipt=receipt['id'], expected_version=receipt['version'],
+        purchase_order_version=run('purchase-order show', dict(purchase_order=po['id']))['version'],
+        items=[dict(line_id=receipt['items'][0]['line_id'], item=item, order_line_id=line_id, quantity='6', unit_cost='10.00')]),
+        reason='Six arrived, not three')
+    assert fixed['items'][0]['quantity_microunits'] == 6000000
+    assert _line(books, po)[1]['open_quantity'] == '0'
+
+    other = _order(books, item)
+    run('purchase-order close-lines', dict(purchase_order=other['id'], lines=['1']), reason='Never coming')
+    with pytest.raises(BookflowError) as closed:
+        run('item-receipt post', dict(date='2017-01-05', vendor=books['vendor'], purchase_order=other['id'],
+            purchase_order_version=run('purchase-order show', dict(purchase_order=other['id']))['version'],
+            items=[dict(item=item, order_line_id=other['revision']['lines'][0]['line_id'], quantity='1', unit_cost='10.00')]),
+            reason='Receive')
+    assert closed.value.code == 'E_WORK_DEPENDENCY'

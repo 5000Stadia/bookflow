@@ -156,10 +156,13 @@ def validate_current_sources(effect,s,*,replacing_deposit=None):
     journals.open_dates(s, [effect.intent.date])
     from bookflow.company import deposit_dependencies
     identities=[row.source.transaction_id for row in effect.intent.sources]
-    loaded=deposit_sources.load_many(s,identities)
+    try:
+        loaded=deposit_sources.load_many(s,identities)
+    except BookflowError:
+        loaded=None   # row by row, so the first bad row in order is the one reported, as before
     claims=deposit_dependencies.active_claims(s,identities)
     for row in effect.intent.sources:
-        actual=loaded[row.source.transaction_id]
+        actual=loaded[row.source.transaction_id] if loaded is not None else deposit_sources.load(s,row.source.transaction_id)
         if actual.model_dump(mode='json') != row.source.model_dump(mode='json'):
             raise BookflowError('E_PREVIEW_STALE', details={'reason':'deposit_source'})
         claimed=claims.get(actual.transaction_id)

@@ -662,8 +662,18 @@ def prepare(s, ctx, inp, operation):
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     resolved, changed_fields, sequence = None, [], None
 
+    if old_header and old_header['status'] != 'voided':
+        # Bills that took part of the order (R153) hold it as receipts do.
+        from bookflow.company.purchase_order_billing import guard_order_change
+        if operation == 'void':
+            guard_order_change(s, old_header, old_revision, 'void')
     if operation != 'void':
         resolved = commercial(s, inp, old_header, old_revision, document_id=header['id'])
+        if old_header and old_header['status'] != 'voided':
+            followed = guard_order_change(s, old_header, old_revision, 'update', resolved)
+            if followed is not None and getattr(inp, 'status', None) is None:
+                resolved['status'] = followed
+                resolved['semantic']['status'] = followed
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
         if old_revision and not changed_fields:
             return unchanged(old_header, old_revision)

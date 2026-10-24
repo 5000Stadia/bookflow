@@ -168,11 +168,20 @@ def _order(s, selector, expected, profile, items, old_line_ids):
         if claim['receipt_line_id'] not in old_line_ids:
             key = claim['order_line_id']
             used[key] = used.get(key, 0) + claim['quantity_microunits']
+    # Bills entered from the order received what they billed, and a closed line takes nothing
+    # more (R153): count them here so the refusal is this one, not the capacity trigger's.
+    from bookflow.company.purchase_order_billing import active_bill_claims, closed_lines
+    for claim in active_bill_claims(s, line_ids=list(lines)):
+        key = claim['order_line_id']
+        used[key] = used.get(key, 0) + (claim['quantity_microunits'] or 0)
+    closed = closed_lines(s, list(lines))
     for item in items:
         key = item.get('order_line_id')
         line = lines.get(key)
         if line is None or line['quantity_microunits'] is None:
             raise journals.invalid('items.order_line_id', 'must select a current quantity-bearing ordered item line')
+        if key in closed:
+            _dependency('This ordered line is closed; reopen it with `purchase-order close-lines --reopen` first.', order_line_id=key)
         facts = item['profile']
         if facts.item.id != line['item_id']:
             raise journals.invalid('items.item', 'must match the selected ordered item')
@@ -381,9 +390,19 @@ def apply(plan, ctx, s):
             raise BookflowError('E_VERSION_CONFLICT', details={'record_id': old['id']})
     else:
         s.company.conn.execute(c.item_receipts.insert().values(**header))
-    for name, rows in data['pending'].items():
-        if rows:
+    # Releases before claims: a correction gives its old quantity back before claiming the new,
+    # so a receipt updated near the line's capacity is not refused by its own earlier claim.
+    order = sorted(data['pending'], key=lambda name: name == 'purchase_order_receipt_claims')
+    for name in order:
+        rows = data['pending'][name]
+        if not rows:
+            continue
+        try:
             s.company.conn.execute(getattr(c, name).insert(), rows)
+        except sa.exc.DBAPIError as exc:
+            if name != 'purchase_order_receipt_claims' or 'ordered capacity' not in str(exc):
+                raise
+            _dependency('Received quantity exceeds this ordered line’s remaining quantity.')
     if transition:
         n = s.company.conn.execute(c.purchase_orders.update().where(c.purchase_orders.c.id == old_order['id'], c.purchase_orders.c.version == old_order['version']).values(**new_order)).rowcount
         if n != 1:
