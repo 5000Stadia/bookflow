@@ -1209,5 +1209,7 @@ from bookflow.company.pricing_rule_schema import define_tables as _define_pricin
 globals().update(_define_pricing_rule_tables(metadata, _column, _table, _common))
 from bookflow.company.purchase_order_billing_schema import define_tables as _define_po_billing_tables
 globals().update(_define_po_billing_tables(metadata, _column, _table))
+from bookflow.company.timekeeping_schema import define_tables as _define_timekeeping_tables
+globals().update(_define_timekeeping_tables(metadata, _column, _table, _common))
 from bookflow.company.accountant_review_schema import define_tables as _define_accountant_review_tables
 globals().update(_define_accountant_review_tables(metadata, _column, _table, _common))

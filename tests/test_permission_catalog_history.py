@@ -74,7 +74,8 @@ ACCEPTED = {
     'order-invoicing-v1': (619, '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531'),
     'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
-    'accountant-review-v1': (636, 'e8a947164aa8855bb78ea56e44b737f3936f6710a64098bbbd44cbbda88d2183'),
+    'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
+    'accountant-review-v1': (651, 'd286722e0bf4f133b66cac34a2f562be53de33515d479d5a9808846aff6097c4'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -154,6 +155,9 @@ CHAIN_ADDITIONS = {
     'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
     'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
     'partial-po-v1': {'purchase-order close-lines'},
+    'timesheets-v1': {'clock cancel', 'clock in', 'clock link', 'clock out', 'clock status', 'schedule calendar',
+                      'schedule cancel', 'schedule create', 'schedule show', 'schedule update', 'timesheet copy-last',
+                      'timesheet preferences', 'timesheet save', 'timesheet set-preferences', 'timesheet show'},
     'accountant-review-v1': {'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify',
                              'accountant remove', 'accountant reviewed-through', 'accountant-copy cancel',
                              'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',

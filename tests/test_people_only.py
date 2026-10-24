@@ -37,13 +37,14 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # collections-v1 adds none: moving a customer's credit between jobs is bookkeeping.
     # pricing-rules-v1 adds none: price rules are bookkeeping setup, as price levels are.
     # order-invoicing-v1 adds none, nor does shortfall-po-v1, nor partial-po-v1.
+    # timesheets-v1 adds `clock link`: saying which login is which employee is what lets an agent clock a person in.
     # accountant-review-v1 adds designating and removing an external accountant, cancelling an accountant's copy
     # and importing an accountant's changes: who may change the books, and what comes into them, is the owner's call.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
         'item convert',
-        'account merge', 'account unmerge', 'item merge', 'item unmerge',
+        'account merge', 'account unmerge', 'item merge', 'item unmerge', 'clock link',
         'accountant add', 'accountant remove', 'accountant-copy cancel', 'accountant-copy import'}
 
     # Every write at the identity capabilities is people-only; the one exception lets an

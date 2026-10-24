@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}{{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}{% endblock %}{% block body %}<section id="assembly-builds">
+{% extends "base.html" %}{% block title %}{{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}{% endblock %}{% block body %}<section id="assembly-builds" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / {{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}</nav>
 <h1>{{ 'Pending builds' if status == 'pending' else 'Assembly builds' }}</h1>
 <p><a href="/c/{{ company_id }}/assembly/build">Build assemblies</a> · {% if status == 'pending' %}<a href="/c/{{ company_id }}/assembly/builds">All builds</a>{% else %}<a href="/c/{{ company_id }}/assembly/builds?status=pending">Pending builds</a>{% endif %}</p>
@@ -10,7 +10,7 @@
 <td data-label="Assembly">{{ row.item_name }}</td><td data-label="Quantity">{{ row.quantity }}</td>
 <td data-label="Status">{{ row.status }}</td><td data-label="Cost">{{ display_money(row.assembly_cost) if row.assembly_cost else '' }}</td>
 <td data-label="Memo">{{ row.memo or '' }}</td>
-{% if can_write %}<td data-label="Actions"><form method="post" action="/c/{{ company_id }}/assembly/builds" class="inline-actions">
+{% if can_write %}<td data-label="Actions"><form method="post" action="/c/{{ company_id }}/assembly/builds" class="inline-actions" hx-post="/c/{{ company_id }}/assembly/builds" hx-target="#assembly-builds" hx-select="#assembly-builds" hx-swap="outerHTML">
 <input type="hidden" name="build" value="{{ row.build_id }}"><input type="hidden" name="status" value="{{ status }}">
 <input name="ctx:reason" placeholder="Reason" aria-label="Reason for {{ row.item_name }}" size="12">
 {% if row.status == 'pending' %}<button type="submit" name="action" value="finalize">Finalize</button>{% endif %}
