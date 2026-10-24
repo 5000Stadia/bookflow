@@ -201,52 +201,28 @@ def check_dates(s, dates) -> None:
 
 # ------------------------------------------------------------------ designations
 
-def designated_in_scope(s, user_ids, scope_type, scope_id):
-    """Names of the companies in a membership scope where any of these users is a designated external accountant.
-
-    Read from each company's own books, read-only: the hub membership commands ask it, since a designation lives
-    in the company and a membership in the hub."""
-    from bookflow.hub import schema as h
-    ids = [x for x in user_ids if x]
-    if not ids or s.hub is None:
-        return []
-    c_ = h.companies
-    where = c_.c.id == scope_id if scope_type == 'company' else c_.c.organization_id == scope_id
-    names = []
-    for row in s.hub.conn.execute(sa.select(c_.c.display_name, c_.c.path).where(where)).mappings():
-        path = s.abs_path(row['path']) / 'company.db'
-        if not path.exists():
-            continue
-        try:
-            with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as db:
-                hit = db.execute('SELECT 1 FROM accountant_designations WHERE active=1 AND user_id IN (SELECT value FROM json_each(?))',
-                                 (json.dumps(ids),)).fetchone()
-        except sqlite3.Error:
-            continue  # books from before co0088 hold no designation
-        if hit:
-            names.append(row['display_name'])
-    return names
-
-
 def guard_membership_change(s, command, user, scope, role=None, grants=None):
-    """Called by `membership grant` and `membership revoke`.
+    """Called by `membership grant` and `membership revoke`, reading only the hub's mirror (hub/company_accountants.py).
 
-    A designated external accountant cannot change memberships where they are designated, nor can an agent for
-    them; and while someone is designated, their access there can be granted only at standard, with no extra
-    grants, so they never come to hold admin acts the designation does not see."""
+    Refused: any change where a company in the scope cannot be vouched for; a designated external accountant (or an
+    agent for them) changing anyone's access where they are designated; and, while someone is designated, granting
+    them anything but standard with no extra capabilities."""
+    from bookflow.hub import company_accountants as mirror
     acting = [s.actor.id if s.actor else None, getattr(getattr(s, '_permission_context', None), 'on_behalf_of', None)]
-    where = designated_in_scope(s, acting, scope.scope_type, scope.scope_id)
+    where, unverified = mirror.scope_check(s, acting, scope.scope_type, scope.scope_id)
+    if unverified:
+        mirror.require_verified(s, scope.scope_type, scope.scope_id, command)
     if where:
         raise BookflowError('E_PERMISSION', message=(
             f"As the external accountant of {', '.join(where)} you cannot change who has access there."),
             details={'reason': 'external_accountant', 'command': command, 'companies': where})
     if command != 'membership grant' or (role == 'standard' and not grants):
         return
-    where = designated_in_scope(s, [user['id']], scope.scope_type, scope.scope_id)
+    where, _ = mirror.scope_check(s, [user['id']], scope.scope_type, scope.scope_id)
     if where:
         raise BookflowError('E_VALIDATION', message=(
-            f"{user['username']} is the external accountant of {', '.join(where)}, who holds standard access and no more. "
-            'End the accountant designation first (`accountant remove`), then change their access.'),
+            f"{user['username']} is the external accountant of {', '.join(where)}, who holds standard access with no extra "
+            'capabilities. End the accountant designation first (`accountant remove`), then change their access.'),
             details={'fields': [{'field': 'role', 'problem': 'the user is a designated external accountant here'}],
                      'reason': 'external_accountant', 'companies': where,
                      'next_step': f"accountant remove {user['username']}"})
@@ -275,6 +251,18 @@ def _member_role(s, user_id):
     return max(rows, key=lambda r: ROLE_RANK.get(r, -1)) if rows else None
 
 
+def _member_grants(s, user_id):
+    from bookflow.hub import schema as h
+    ms = h.memberships
+    out = []
+    for raw in s.hub.conn.execute(sa.select(ms.c.grants).where(
+            ms.c.user_id == user_id, ms.c.revoked_at.is_(None), sa.or_(
+                sa.and_(ms.c.scope_type == 'company', ms.c.scope_id == s.company_row['id']),
+                sa.and_(ms.c.scope_type == 'organization', ms.c.scope_id == s.company_row['organization_id'])))).scalars():
+        out += json.loads(raw) if raw else []
+    return sorted(set(out))
+
+
 def _accountant_out(s, row):
     from bookflow.company.info import principal_names
     names = {}
@@ -296,6 +284,10 @@ def plan_add(s, ctx, inp) -> Plan:
                        'An installation administrator can do anything here, so cannot be held to an external accountant\'s terms. '
                        'Give the accountant their own user without installation administration.', reason='hub_admin')
     role = _member_role(s, user['id'])
+    if role == 'standard' and _member_grants(s, user['id']):
+        raise _invalid('user', 'holds extra capability grants', f"{user['username']} holds standard access plus extra capabilities "
+                       f"({', '.join(_member_grants(s, user['id']))}); an external accountant holds standard and nothing more. "
+                       'Clear the grants (`membership grant` with grants []), then designate them.', reason='extra_grants')
     if role != 'standard':
         raise _invalid('user', 'must hold the standard role on this company, no more and no less',
                        'An external accountant holds standard access to this company and no admin, as the anchor\'s External '
@@ -326,9 +318,10 @@ def apply_add(plan, ctx, s) -> Applied:
         s.company.conn.execute(t.update().where(t.c.id == d['row']['id']).values(**d['row']))
     else:
         s.company.conn.execute(t.insert().values(**d['row']))
+    from bookflow.hub import company_accountants as mirror
     return Applied(plan.preview, [Touched('accountant_designation', d['row']['id'], 'update' if d['old'] else 'create',
                                           d['old']['version'] if d['old'] else None, d['row']['version'], d['row'], d['old'],
-                                          db='company')],
+                                          db='company'), *mirror.converge(s)],
                    f"made {d['user']['display_name']} the external accountant through {d['row']['through_date']}")
 
 
@@ -348,8 +341,9 @@ def apply_remove(plan, ctx, s) -> Applied:
         return Applied(plan.preview, [], 'no change')
     t = c.accountant_designations
     s.company.conn.execute(t.update().where(t.c.id == d['row']['id']).values(**d['row']))
+    from bookflow.hub import company_accountants as mirror
     return Applied(plan.preview, [Touched('accountant_designation', d['row']['id'], 'deactivate', d['old']['version'],
-                                          d['row']['version'], d['row'], d['old'], db='company')],
+                                          d['row']['version'], d['row'], d['old'], db='company'), *mirror.converge(s)],
                    f"ended {plan.preview.display_name or plan.preview.user_id}'s external accountant access")
 
 

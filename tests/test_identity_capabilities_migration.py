@@ -32,9 +32,10 @@ CUSTOM = ("owner", "custom-extension", "owner")
 
 
 def _without_generation(schema):
-    # hub0014 added the generation; hub0015 added the append-only audit triggers.
+    # hub0014 added the generation; hub0015 added the append-only audit triggers; hub0016 the accountant mirror.
     return [x for x in schema if 'authority_generation' not in x['name'] and not (
-        x['type'] == 'trigger' and x['table'] in ('audit_events', 'audit_entries'))]
+        x['type'] == 'trigger' and x['table'] in ('audit_events', 'audit_entries')) and not (
+        x['name'].startswith(('company_accountant', 'ix_company_accountants')))]
 
 
 def _rows(conn):
@@ -78,7 +79,7 @@ def test_populated_hub0012_upgrade_seeds_identity_rows_and_preserves_everything_
         assert before_rows == tuple(sorted((*_previous_seed(), CUSTOM)))
 
         assert migrate_to_head(db, "hub", backups) == ("hub0012", HEADS["hub"])
-        # hub0013 itself adds no schema; hub0014's authority generation and hub0015's audit triggers are the only additions.
+        # hub0013 itself adds no schema; hub0014's authority generation, hub0015's audit triggers and hub0016's accountant mirror are the only additions.
         assert _without_generation(_normalized_schema(db.raw)) == before_schema
         # Every pre-existing row survives verbatim, including the locally added one.
         assert set(before_rows) <= set(_rows(db.raw))

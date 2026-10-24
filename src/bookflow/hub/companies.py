@@ -34,6 +34,9 @@ def register(s: Session, *, company_id: str, organization_id: str, display_name:
            "schema_revision": schema_revision, "is_demo": is_demo, **common(s.actor.id, via)}
     s.hub.conn.execute(h.companies.insert().values(**row))
     touched = [Touched("company", company_id, "create", None, 1, row)]
+    # Restored or attached books may already name an external accountant (R121).
+    from bookflow.hub import company_accountants
+    company_accountants.register(s, company_id, s.abs_path(rel_path))
     if owner_membership or administrator_id is not None:
         m = {"id": new_id(), "user_id": administrator_id or s.actor.id, "scope_type": "company", "scope_id": company_id, "role": "admin" if administrator_id else "owner",
              "granted_by": s.actor.id, "granted_at": now_iso(), "revoked_at": None}

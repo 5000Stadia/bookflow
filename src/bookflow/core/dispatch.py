@@ -920,17 +920,20 @@ def _repair_projection(s: Session, ctx: Context) -> list:
     if s.company is None or s.company_row is None or s.dry_run:
         return []
     from bookflow.company.info import read_info
+    from bookflow.hub import company_accountants
+    # The hub's mirror of the external-accountant designations converges here too (R121).
+    mirrored = company_accountants.converge(s)
     info = read_info(s.company)
     row = s.company_row
     changes = {k: info[k] for k in ("legal_name", "home_currency") if info.get(k) != row.get(k)}
     if not changes:
-        return []
+        return mirrored
     if not s.hub.write_transaction:
         s.hub.raw.execute("BEGIN IMMEDIATE")
     from bookflow.hub import companies as co
     new, t = co.update(s, row, ctx.interface.value, **changes)
     s.company_row = new
-    return [t]
+    return [*mirrored, t]
 
 
 def _upsert_principals(s: Session, ctx: Context) -> None:

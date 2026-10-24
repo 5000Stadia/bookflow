@@ -30,7 +30,7 @@ accountant_add = command(
                  'reviewed-through`) and notes, all dated on or before `through`, the end of the review period. Everything else '
                  'they try is refused, and every change is attributed to them. The user must be a person holding the standard role '
                  "on the company (no admin, as the anchor's External Accountant). Run again to move the period end. A person's step: an agent is refused."),
-    input_model=m.AccountantAddInput, output_model=m.AccountantWriteOutput, writes={'company'}, required_role='admin',
+    input_model=m.AccountantAddInput, output_model=m.AccountantWriteOutput, writes={'company', 'hub'}, truth='hub', required_role='admin',
     capability='company', accepts_idempotency_key=True, positional=['user'],
     error_codes=['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PERMISSION'])
 
@@ -46,7 +46,7 @@ accountant_add.applier(lambda plan, ctx, s: acct.apply_add(plan, ctx, s))
 accountant_remove = command(
     'accountant remove', scope='company',
     description="End a member's external accountant designation; their membership is unchanged. A person's step.",
-    input_model=m.AccountantUserInput, output_model=m.AccountantWriteOutput, writes={'company'}, required_role='admin',
+    input_model=m.AccountantUserInput, output_model=m.AccountantWriteOutput, writes={'company', 'hub'}, truth='company', required_role='admin',
     capability='company', accepts_idempotency_key=True, positional=['user'],
     error_codes=['E_RECORD_NOT_FOUND', 'E_PERMISSION'])
 

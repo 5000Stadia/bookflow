@@ -256,3 +256,26 @@ authority_generation = _table(
     sa.CheckConstraint("generation >= 1", name="ck_authority_generation_generation"),
     description="Private authority generation. Triggers on users, organizations, companies, memberships, agent_principals, agent_authority, role_capabilities and permission_state advance it in the writing transaction.",
 )
+
+
+# R121: who is a company's external accountant, mirrored from each company's books (`accountant_designations`) so
+# the membership commands can hold a designated accountant to standard access with one indexed read.
+company_accountants = _table(
+    "company_accountants",
+    _column("company_id", sa.String(26), "Company whose books designate this user its external accountant.", primary_key=True),
+    _column("user_id", sa.String(26), "The designated external accountant.", primary_key=True),
+    _column("through_date", sa.String(10), "End of their review period, YYYY-MM-DD, as the company records it.", nullable=False),
+    _column("designated_at", sa.String(32), "When the company's designation was last written.", nullable=False),
+    sa.Index("ix_company_accountants_user", "user_id", "company_id"),
+    description="Active external-accountant designations, mirrored from each company's books in the same operation that writes them.",
+)
+
+company_accountant_sync = _table(
+    "company_accountant_sync",
+    _column("company_id", sa.String(26), "Company whose designations this row vouches for.", primary_key=True),
+    _column("state", sa.String(12), "verified: company_accountants matches the company's books; unverified: the books could not be read, so membership changes there are refused.", nullable=False),
+    _column("checked_at", sa.String(32), "When the company's books were last compared.", nullable=False),
+    _column("problem", sa.String(200), "Why the books could not be read; null when verified.", nullable=True),
+    sa.CheckConstraint("state IN ('verified','unverified')", name="ck_company_accountant_sync_state"),
+    description="Whether company_accountants is known to match each company's own designations.",
+)
