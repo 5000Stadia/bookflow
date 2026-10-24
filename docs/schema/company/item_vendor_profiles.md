@@ -17,6 +17,7 @@ Database: `company`.
 | `vendor_item_name` | VARCHAR(200) | yes | — | — | — | — | Vendor-specific item name; null when not recorded. |
 | `purchase_cost_minor_units` | BIGINT | yes | — | — | — | — | Vendor purchase cost as signed integer minor units; null with its currency. |
 | `purchase_cost_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for vendor purchase cost; null with its amount. |
+| `purchase_cost_fraction` | BIGINT | yes | — | — | — | — | Vendor purchase cost beyond its rounded minor units, in signed thousandths of a minor unit (price = purchase_cost_minor_units + fraction/1000); null when the price is whole minor units. |
 | `minimum_quantity_microunits` | BIGINT | yes | — | — | — | — | Nonnegative vendor minimum quantity in micro-units; null when unset. |
 | `lead_time_days` | INTEGER | yes | — | — | — | — | Nonnegative vendor lead time in days; null when unset. |
 | `manufacturer_part_number` | VARCHAR(128) | yes | — | — | — | — | Vendor-specific manufacturer part number; null when unset. |

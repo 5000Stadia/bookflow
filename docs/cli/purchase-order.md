@@ -203,6 +203,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate.currency` | string | yes | no | — | — |
 | `revision.lines[].rate.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].rate_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].amount` | object | yes | no | — | — |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
@@ -754,6 +755,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate.currency` | string | yes | no | — | — |
 | `revision.lines[].rate.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].rate_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].amount` | object | yes | no | — | — |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
@@ -1299,6 +1301,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate.currency` | string | yes | no | — | — |
 | `revision.lines[].rate.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].rate_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].amount` | object | yes | no | — | — |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
@@ -1701,6 +1704,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate.currency` | string | yes | no | — | — |
 | `revision.lines[].rate.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].rate_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].amount` | object | yes | no | — | — |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
@@ -2096,6 +2100,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].rate.currency` | string | yes | no | — | — |
 | `revision.lines[].rate.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].rate_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].amount` | object | yes | no | — | — |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |

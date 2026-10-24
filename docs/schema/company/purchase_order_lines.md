@@ -21,6 +21,7 @@ Database: `company`.
 | `description` | VARCHAR(2000) | yes | — | — | — | — | Entered line description; null when blank. |
 | `quantity_microunits` | BIGINT | yes | — | — | — | — | Ordered quantity in millionths; null when the line is an amount alone. |
 | `rate_minor_units` | BIGINT | yes | — | — | — | — | Home-currency unit cost; null when the line is an amount alone. |
+| `rate_fraction` | BIGINT | yes | — | — | — | — | Unit cost beyond its rounded minor units, in signed thousandths of a minor unit (price = rate_minor_units + fraction/1000); null when the price is whole minor units. |
 | `amount_minor_units` | BIGINT | no | — | — | — | — | Positive home-currency amount ordered on this line. |
 | `customer_id` | VARCHAR(26) | yes | — | — | — | customers.id | Customer or job this cost is attributed to; null when unattributed. |
 | `billable` | BOOLEAN | no | — | — | — | — | Whether this cost is marked to be passed on to the named customer. |

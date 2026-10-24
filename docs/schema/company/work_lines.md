@@ -24,7 +24,9 @@ Database: `company`.
 | `net_minor_units` | BIGINT | no | — | — | — | — | Exact home-currency net amount. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Exact home-currency tax amount. |
 | `gross_minor_units` | BIGINT | no | — | — | — | — | Exact home-currency gross amount. |
+| `unit_price_fraction` | BIGINT | yes | — | — | — | — | Unit price beyond its rounded minor units, in signed thousandths of a minor unit (price = unit_price_minor_units + fraction/1000); null when the price is whole minor units. |
 | `estimated_unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Estimated selected-unit cost; null when unknown. |
+| `estimated_unit_cost_fraction` | BIGINT | yes | — | — | — | — | Estimated unit cost beyond its rounded minor units, in signed thousandths of a minor unit (price = estimated_unit_cost_minor_units + fraction/1000); null when the price is whole minor units. |
 | `estimated_cost_minor_units` | BIGINT | yes | — | — | — | — | Extended estimated cost; null when unknown. |
 | `pricing_basis` | VARCHAR(16) | no | — | — | — | — | Authoritative catalog, manual, markup or amount price mode. |
 | `markup_percent_millionths` | BIGINT | yes | — | — | — | — | Signed markup percentage in millionths. |

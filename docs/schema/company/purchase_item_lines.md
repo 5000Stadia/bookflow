@@ -18,6 +18,7 @@ Database: `company`.
 | `account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Account debited by this line, captured from the item's own purchase account. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Positive quantity bought, in millionths of one unit. |
 | `unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Home-currency cost of one unit; null when the amount was entered outright. |
+| `unit_cost_fraction` | BIGINT | yes | — | — | — | — | Unit cost beyond its rounded minor units, in signed thousandths of a minor unit (price = unit_cost_minor_units + fraction/1000); null when the price is whole minor units. |
 | `amount_minor_units` | BIGINT | no | — | — | — | — | Nonnegative home-currency amount debited to the account. |
 | `customer_id` | VARCHAR(26) | yes | — | — | — | customers.id | Customer or job this cost is attributed to; null when unattributed. |
 | `billable` | BOOLEAN | no | — | — | — | — | Whether this cost is marked for rebilling to the named customer or job. |

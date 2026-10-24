@@ -1670,7 +1670,7 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # ledger_schema.TRANSACTION_TYPES, which gained sales_tax_adjustment.
 # R110: Effect, LifecycleOutput, CoordinateOutput and Manifest rehashed for SalesLineProfile.pricing_rule.
 # R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
-CODECS = {'CoordinateOutput': 'a98afdebdb54d19581ec1277218619e105f3f7747590347b4ad2788d2663a4db', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+CODECS = {'CoordinateOutput': '6dff64ef2ddd1d75ad357d24d586297d11eabde07df56f2adcba339313a568dc', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',
