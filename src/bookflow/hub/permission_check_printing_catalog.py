@@ -1,4 +1,4 @@
-"""Add Print Checks without rewriting any accepted descriptor (chained on inventory-sites-v1).
+"""Add Print Checks without rewriting any accepted descriptor (chained on accountant-review-v1).
 
 R152. `check print`, `check print-setup` and the three people-only acts are `ledger.post`
 `standard`, as `check post` is; `check print-queue`, `check print-run`, `check print-pdf` and
@@ -12,11 +12,11 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_inventory_sites_catalog as previous, permission_catalog as c
+from . import permission_accountant_review_catalog as previous, permission_catalog as c
 from . import permission_human_admin_catalog as human_admin
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '9b2865b4f0399060c13a34fbaada62a264070e5b'
+SOURCE_COMMIT = 'bab793df5a2e7c616a7d9c01edd66aaa814804bf'
 _OWNER = 'bookflow.commands.check_print_cmds.{}|src/bookflow/commands/check_print_cmds.py'
 _ADDED = (
     ('check print', 'ledger.post', 'standard', 'plan_print'),

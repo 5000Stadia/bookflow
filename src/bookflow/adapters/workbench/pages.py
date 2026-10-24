@@ -768,6 +768,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import pricing_rule_pages as PricingRulePages
     PricingRulePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R121: the accountant's copy (export, preview, import, cancel) and the period review checklist.
+    from bookflow.adapters.workbench import accountant_pages as AccountantPages
+    AccountantPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R109: the Set Up Budgets grid, Memorize on any report, and opening a memorized report.
     from bookflow.adapters.workbench import budget_pages as BudgetPages
     BudgetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)

@@ -30,6 +30,8 @@ ACT_SUBJECTS = {
     'check reprint': 'Reprinting a check',
     'item merge': 'Merging items', 'item unmerge': 'Undoing an item merge',
     'clock link': "Linking a person's login to an employee",
+    'accountant add': 'Making someone the external accountant', 'accountant remove': 'Ending an external accountant designation',
+    'accountant-copy cancel': "Cancelling an accountant's copy", 'accountant-copy import': "Importing an accountant's changes",
 }
 
 

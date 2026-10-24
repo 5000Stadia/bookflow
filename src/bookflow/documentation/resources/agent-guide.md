@@ -659,6 +659,31 @@ company preference picks the lowest price (the default) or the first rule by `pr
 `unit_price` overrides it. Saved documents never change when a rule does; end a deal early with
 `price-rule deactivate`.
 
+## Handing the books to the outside accountant
+
+An agent can prepare the accountant's hand-off but never accepts an import: designating an external
+accountant (`accountant add`), cancelling a copy and `accountant-copy import` are a person's steps.
+
+Before a review, read `report accountant-review` (as_of the period end): entries to review, what waits in
+the Uncategorized accounts, bank and card accounts not reconciled through the date, open receivables,
+payables and undeposited funds, and the accountant's reviewed-through mark. Tell the owner what is open.
+
+When the owner asks for an accountant's copy (for the designated external accountant; the copy's changes come
+back as theirs), `accountant-copy export` with the dividing date writes an
+archive and a small manifest into the company folder's exports/; Bookflow sends it nowhere, so tell the
+owner the file name to hand over. While it is out, a posting dated on or before the dividing date, an
+account edit or a list merge is refused (E_PERIOD_CLOSED with `reason` accountant_copy_out, or E_PERMISSION):
+date the work after the dividing date, or wait. `accountant-copy status` says whether a copy is out.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "accountant-copy export", "reason": "Q3 review by our accountant", "input": {"through": "2026-09-30"}}
+```
+
+When the accountant's change file arrives, `accountant-copy preview` (its full path) lists each change as
+new, imported or refused, and why; show that to the owner and let them import. Each imported change is
+posted as the accountant, and `report accountant-changes` lists everything an accountant changed.
+
 ## How are we doing against budget?
 
 A budget is a named plan for one fiscal year: an amount per account per month, entered positive for
