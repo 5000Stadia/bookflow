@@ -582,7 +582,9 @@ Hours worked are time entries, and a person's week is a timesheet: one row per c
 item, class, billable and notes, seven daily hours. `timesheet save` takes the whole week and writes one
 time entry per row per day with hours, so read the week first (`timesheet show`) and save it back with
 the new hours added; saving the same sheet twice changes nothing. "My" is the person you act for: leave
-`employee` out and their linked employee is used (a person links it once with `clock link`).
+`employee` out and their linked employee is used (a person links it once with `clock link`). You may
+record time and schedule entries for any employee, as the person you act for could -- typing up
+everyone's paper timesheets is ordinary work; name the employee.
 
 <!-- bookflow-example: illustrative -->
 ```json
@@ -593,12 +595,14 @@ the new hours added; saving the same sheet twice changes nothing. "My" is the pe
 ```
 
 The hours list starts on the company's first work day (`timesheet preferences`; Monday by default).
-Hours already billed are locked: changing them is refused with `E_WORK_DEPENDENCY` until the invoice is
-voided or edited. Bill time as always with `time-activity invoice`; `report unbilled-costs` lists it.
+Hours already billed stay billed: a billed cell can take more hours (they become a new, unbilled entry),
+but lowering it below what was billed is refused with `E_WORK_DEPENDENCY` until the invoice is voided or
+edited. Bill time as always with `time-activity invoice`; `report unbilled-costs` lists it.
 
-Clocking: `clock in` and `clock out` record time as it happens (rounded per the preference, split at
-midnight). You may clock in or out only the person you act for, on their instruction; anyone else is
-refused. A clock left on past the maximum shift is closed only with the `end` time the person stopped.
+Clocking: `clock in` and `clock out` record attendance as it happens (rounded per the preference, split
+at midnight). That is the one exception: you may clock in or out only the person you act for (their login
+linked to their employee record), on their instruction; clocking anyone else is refused -- record their
+hours with `timesheet save` instead. A clock left on past the maximum shift is closed only with the `end` time the person stopped.
 
 ## Who is where: "what's Dave doing tomorrow?"
 

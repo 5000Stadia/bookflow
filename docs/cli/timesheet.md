@@ -83,7 +83,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].cells[].date` | string | yes | no | — | — |
 | `rows[].cells[].hours` | string \| null | yes | yes | — | — |
 | `rows[].cells[].entries` | array[string] | yes | no | — | — |
-| `rows[].cells[].locked` | boolean | yes | no | — | — |
+| `rows[].cells[].locked` | boolean | yes | no | — | Some of these hours are billed: the cell may grow, but not drop below billed_hours. |
+| `rows[].cells[].billed_hours` | string \| null | no | yes | null | — |
 | `rows[].cells[].lock_note` | string \| null | no | yes | null | — |
 | `rows[].locked` | boolean | yes | no | — | — |
 | `day_totals` | array[string] | yes | no | — | — |
@@ -244,7 +245,7 @@ Example JSON output:
 
 ## `timesheet save`
 
-Save one person's week: the whole sheet, each row a customer:job, service item, class, billable, notes and seven daily hours. Each row and day with hours is one time entry, created, corrected or withdrawn so the entries match the sheet exactly; a cell whose hours did not move writes nothing, so saving the same sheet twice changes nothing. Hours a posted sale carries are locked and a change to them is refused with E_WORK_DEPENDENCY. A row left out withdraws its time. Posts nothing. Example: 8 hours on the Smith job yesterday is one row with 8 in that day.
+Save one person's week: the whole sheet, each row a customer:job, service item, class, billable, notes and seven daily hours. Each row and day with hours is one time entry, created, corrected or withdrawn so the entries match the sheet exactly; a cell whose hours did not move writes nothing, so saving the same sheet twice changes nothing. Hours a posted sale carries stay billed: lowering a cell below them is refused (E_WORK_DEPENDENCY); more hours in a billed cell become a new entry. A row left out withdraws its time. An agent may save any employee's sheet, as its principal could. Posts nothing. Example: 8 hours on the Smith job yesterday is one row with 8 in that day.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -342,7 +343,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].cells[].date` | string | yes | no | — | — |
 | `rows[].cells[].hours` | string \| null | yes | yes | — | — |
 | `rows[].cells[].entries` | array[string] | yes | no | — | — |
-| `rows[].cells[].locked` | boolean | yes | no | — | — |
+| `rows[].cells[].locked` | boolean | yes | no | — | Some of these hours are billed: the cell may grow, but not drop below billed_hours. |
+| `rows[].cells[].billed_hours` | string \| null | no | yes | null | — |
 | `rows[].cells[].lock_note` | string \| null | no | yes | null | — |
 | `rows[].locked` | boolean | yes | no | — | — |
 | `day_totals` | array[string] | yes | no | — | — |
@@ -618,7 +620,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].cells[].date` | string | yes | no | — | — |
 | `rows[].cells[].hours` | string \| null | yes | yes | — | — |
 | `rows[].cells[].entries` | array[string] | yes | no | — | — |
-| `rows[].cells[].locked` | boolean | yes | no | — | — |
+| `rows[].cells[].locked` | boolean | yes | no | — | Some of these hours are billed: the cell may grow, but not drop below billed_hours. |
+| `rows[].cells[].billed_hours` | string \| null | no | yes | null | — |
 | `rows[].cells[].lock_note` | string \| null | no | yes | null | — |
 | `rows[].locked` | boolean | yes | no | — | — |
 | `day_totals` | array[string] | yes | no | — | — |

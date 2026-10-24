@@ -4,7 +4,7 @@
 
 ## `clock cancel`
 
-Throw away a running clock started by mistake, with a reason. Records no time; the clock stays readable. An agent clocks only the person it acts for, on their instruction: its principal must be the employee's linked login (`clock link`).
+Throw away a running clock started by mistake, with a reason. Records no time; the clock stays readable. Live clocking is the one act an agent may do only for the person it acts for, on their instruction: its principal must be the employee's linked login (`clock link`). Recording anyone's time after the fact is `timesheet save`, open to an agent as to its principal.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -161,7 +161,7 @@ Example JSON output:
 
 ## `clock in`
 
-Start the clock for a person: now, or at a stated time today. Optionally the customer:job, service item, class, billable and notes; they may be given at clock-out instead. One clock per person; it shows on the home page while it runs. Records nothing yet. An agent clocks only the person it acts for, on their instruction: its principal must be the employee's linked login (`clock link`).
+Start the clock for a person: now, or at a stated time today. Optionally the customer:job, service item, class, billable and notes; they may be given at clock-out instead. One clock per person; it shows on the home page while it runs. Records nothing yet. Live clocking is the one act an agent may do only for the person it acts for, on their instruction: its principal must be the employee's linked login (`clock link`). Recording anyone's time after the fact is `timesheet save`, open to an agent as to its principal.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -446,7 +446,7 @@ Example JSON output:
 
 ## `clock out`
 
-Stop a person's clock and record the time: one time entry per company-local day (a night shift is split at midnight), rounded per the company preference to exact hours. Needs a customer:job and service item from clock-in or here. A clock that ran past the maximum shift was probably forgotten: give the end time the person stopped. An agent clocks only the person it acts for, on their instruction: its principal must be the employee's linked login (`clock link`).
+Stop a person's clock and record the time: one time entry per company-local day (a night shift is split at midnight), rounded per the company preference to exact hours. Needs a customer:job and service item from clock-in or here. A clock that ran past the maximum shift was probably forgotten: give the end time the person stopped. Live clocking is the one act an agent may do only for the person it acts for, on their instruction: its principal must be the employee's linked login (`clock link`). Recording anyone's time after the fact is `timesheet save`, open to an agent as to its principal.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
