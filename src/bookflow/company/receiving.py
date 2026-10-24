@@ -429,7 +429,7 @@ def order_remaining(s, header, rev):
                  ordered_quantity_microunits=line['ordered_quantity_microunits'],
                  received_quantity_microunits=line['received_quantity_microunits'],
                  remaining_quantity_microunits=line['open_quantity_microunits'],
-                 site_id=line.get('site_id'))
+                 **({'site_id': line['site_id']} if line.get('site_id') else {}))
             for line in line_states(s, header, rev)
             if line['item_id'] and line['ordered_quantity_microunits'] is not None]
 

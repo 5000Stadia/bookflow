@@ -290,7 +290,12 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3423 -> 3430 (R153), measured per command: bill post's optional order_lines adds 6 (its null
     # branch, quantity's, unit_cost's and amount's null and money-object branches), and purchase-order
     # close-lines adds 1 (expected_version's null branch). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3430
+    # 3430 -> 3506 (R104 increment 1): the thirteen inventory-site, inventory-transfer and quantity-by-site
+    # commands, plus the null branch of the optional `site` now on every stock-moving line and header (sales and
+    # work lines, credit-memo lines, bill item lines shared by checks, card charges, vendor credits and receipts,
+    # purchase-order lines and headers, inventory adjust, assembly build and update, item update's site_settings,
+    # and the stock reports' site filter). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3506
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
