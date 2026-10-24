@@ -376,3 +376,39 @@ def apply_site_settings(s, rows):
             touched.append(Touched('item_site_setting', after['id'], 'update', before['version'], after['version'],
                                    after, before, db='company'))
     return touched
+
+
+# ---------------------------------------------------------------- a revision's lines and their sites
+
+def revision_line_sites(s, revision_id):
+    """``{line identity: site}`` where one stored revision's stock lines placed their units.
+
+    Read off that revision's own receipt, issue and vendor-return movements (retired or not), so a
+    revision's site never changes after it is written. A line split over several places reads as the
+    place holding most of it.
+    """
+    if not revision_id:
+        return {}
+    rows = s.company.conn.execute(sa.text(
+        "SELECT d.line_id, p.site_id, abs(p.quantity_microunits) AS q FROM inventory_movements m "
+        "JOIN document_lines d ON d.id = m.document_line_id "
+        "JOIN inventory_placements p ON p.movement_id = m.id "
+        "WHERE m.revision_id = :revision AND m.kind IN ('receipt', 'issue', 'vendor_return')"),
+        {'revision': revision_id}).fetchall()
+    best = {}
+    for line_id, site, quantity in rows:
+        if line_id not in best or int(quantity) > best[line_id][1]:
+            best[line_id] = (site, int(quantity))
+    return {line_id: site for line_id, (site, _) in best.items()}
+
+
+def semantic_site(s, site_id, *, default=None):
+    """The site a line's "has anything changed" comparison carries: none at the default site.
+
+    So a company that never names a site compares, and fingerprints, exactly as before sites existed,
+    and a line moved between sites is a change.
+    """
+    if not site_id:
+        return None
+    default = default or default_site_id(s)
+    return None if site_id == default else site_id

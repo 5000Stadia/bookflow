@@ -96,6 +96,7 @@ def protect_sale(s, inp, old, old_revision, resolved):
             from copy import deepcopy
             value=deepcopy(value)
             value.pop('tax_minor_units',None);value.pop('gross_minor_units',None)
+            value.pop('site_id',None)  # where the stock left from is not quoted economics (R104)
             for cell in value.get('taxes',[]):cell.pop('tax_minor_units',None)
             return value
         if economics(new_semantic) != economics(old_semantic):

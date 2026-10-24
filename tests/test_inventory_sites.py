@@ -346,3 +346,117 @@ def test_part_of_a_purchase_order_line_with_a_site_is_billed_and_received_there(
     assert rows[('Widget', 'Van 1')]['quantity_on_hand'] == '6'
     assert rows[('Widget', 'Van 1')]['quantity_on_order'] == '4'
     _tie_every_date(books)
+
+
+def test_a_change_of_site_alone_is_a_change_on_every_document(shop):
+    """Review 1: re-siting a line with nothing else changed reposts it and moves its placements."""
+    books, run, widget = shop['books'], shop['run'], shop['widget']
+    run('inventory-site create', dict(name='Shop'), reason='Counter')
+    run('inventory-transfer post', dict(date='2017-03-02', from_site='Warehouse', to_site='Van 1',
+                                        lines=[dict(item='Widget', quantity='10')]), reason='Load')
+    sale = run('invoice post', dict(customer=books['customer'], date='2017-03-03',
+                                    lines=[dict(item=widget, quantity='4', site='Van 1')]), reason='Sold')
+    line = sale['revision']['lines'][0]['line_id']
+    same = run('invoice update', dict(invoice=sale['id'], expected_version=sale['version'], memo='Note only'),
+               reason='Memo')
+    assert _held(books)[('Widget', 'Van 1')] == '6'                     # a memo edit keeps the line's site
+    moved = run('invoice update', dict(invoice=sale['id'], expected_version=same['version'],
+                                       lines=[dict(line_id=line, item=widget, quantity='4', site='Shop')]), reason='Shop')
+    assert moved['changed'] is True
+    assert _held(books)[('Widget', 'Van 1')] == '10' and _held(books)[('Widget', 'Shop')] == '-4'
+    again = run('invoice update', dict(invoice=sale['id'], expected_version=moved['version'],
+                                       lines=[dict(line_id=line, item=widget, quantity='4', site='Shop')]), reason='Same')
+    assert again['changed'] is False
+
+    bill = run('bill post', dict(vendor=books['vendor'], date='2017-03-04',
+                                 items=[dict(item=widget, quantity='5', unit_cost='2.00', site='Van 1')]), reason='Buy')
+    moved = run('bill update', dict(bill=bill['id'], expected_version=bill['version'], items=[dict(
+        line_id=bill['revision']['items'][0]['line_id'], item=widget, quantity='5', unit_cost='2.00', site='Shop')]),
+        reason='Shop')
+    assert moved['changed'] is True and _held(books)[('Widget', 'Shop')] == '1'
+
+    credit = run('vendor-credit post', dict(vendor=books['vendor'], date='2017-03-05',
+                                            items=[dict(item=widget, quantity='1', unit_cost='2.00', site='Shop')]),
+                 reason='Back')
+    run('vendor-credit update', dict(credit=credit['id'], expected_version=credit['version'], items=[dict(
+        line_id=credit['revision']['items'][0]['line_id'], item=widget, quantity='1', unit_cost='2.00', site='Van 1')]),
+        reason='From the van')
+    assert _held(books)[('Widget', 'Shop')] == '1' and _held(books)[('Widget', 'Van 1')] == '9'
+
+    memo = run('credit-memo post', dict(customer=books['customer'], date='2017-03-06', lines=[dict(
+        source_invoice=sale['id'], source_line=line, quantity='1')]), reason='One back')
+    assert _held(books)[('Widget', 'Shop')] == '2'                      # back where the sale took it from
+    run('credit-memo update', dict(credit_memo=memo['id'], expected_version=memo['version'], lines=[dict(
+        line_id=memo['revision']['lines'][0]['line_id'], source_invoice=sale['id'], source_line=line, quantity='1',
+        site='Van 1')]), reason='Put on the van')
+    assert _held(books)[('Widget', 'Shop')] == '1' and _held(books)[('Widget', 'Van 1')] == '10'
+
+    check = run('check post', dict(account=books['bank'], date='2017-03-07', amount='6.00',
+                                   items=[dict(item=widget, quantity='3', unit_cost='2.00', site='Van 1')]), reason='Cash buy')
+    run('check update', dict(check=check['id'], amount='6.00', items=[dict(
+        line_id=check['document']['items'][0]['line_id'], item=widget, quantity='3', unit_cost='2.00', site='Shop')]),
+        reason='Shop')
+    assert _held(books)[('Widget', 'Shop')] == '4' and _held(books)[('Widget', 'Van 1')] == '10'
+    _tie_every_date(books)
+
+
+def test_two_lines_of_one_item_at_two_sites_keep_their_own_sites(shop):
+    """Review 2: a quantity or price edit that does not restate sites keeps each line where it was."""
+    books, run, widget = shop['books'], shop['run'], shop['widget']
+    run('inventory-transfer post', dict(date='2017-03-02', from_site='Warehouse', to_site='Van 1',
+                                        lines=[dict(item='Widget', quantity='10')]), reason='Load')
+    sale = run('invoice post', dict(customer=books['customer'], date='2017-03-03', lines=[
+        dict(item=widget, quantity='2', site='Warehouse'), dict(item=widget, quantity='3', site='Van 1')]), reason='Two')
+    first, second = (line['line_id'] for line in sale['revision']['lines'])
+    run('invoice update', dict(invoice=sale['id'], expected_version=sale['version'], lines=[
+        dict(line_id=first, item=widget, quantity='1'), dict(line_id=second, item=widget, quantity='3', unit_price='6.00')]),
+        reason='One fewer')
+    assert _held(books) == {('Widget', 'Warehouse'): '9', ('Widget', 'Van 1'): '7'}
+    bill = run('bill post', dict(vendor=books['vendor'], date='2017-03-04', items=[
+        dict(item=widget, quantity='2', unit_cost='2.00', site='Warehouse'),
+        dict(item=widget, quantity='4', unit_cost='2.00', site='Van 1')]), reason='Two sites')
+    a, b = (line['line_id'] for line in bill['revision']['items'])
+    run('bill update', dict(bill=bill['id'], expected_version=bill['version'], items=[
+        dict(line_id=a, item=widget, quantity='2', unit_cost='2.10'), dict(line_id=b, item=widget, quantity='5', unit_cost='2.00')]),
+        reason='Price and quantity')
+    assert _held(books) == {('Widget', 'Warehouse'): '11', ('Widget', 'Van 1'): '12'}
+    run('bill update', dict(bill=bill['id'], expected_version=bill['version'] + 1, memo='Checked'), reason='Memo')
+    assert _held(books) == {('Widget', 'Warehouse'): '11', ('Widget', 'Van 1'): '12'}
+    _tie_every_date(books)
+
+
+def test_inventory_sales_by_site(shop):
+    books, run, widget = shop['books'], shop['run'], shop['widget']
+    run('inventory-transfer post', dict(date='2017-03-02', from_site='Warehouse', to_site='Van 1',
+                                        lines=[dict(item='Widget', quantity='10')]), reason='Load')
+    run('invoice post', dict(customer=books['customer'], date='2017-03-03', lines=[
+        dict(item=widget, quantity='3', unit_price='5.00', site='Van 1'),
+        dict(item=widget, quantity='2', unit_price='5.00', site='Warehouse')]), reason='Sold')
+    voided = run('invoice post', dict(customer=books['customer'], date='2017-03-04', lines=[
+        dict(item=widget, quantity='1', unit_price='5.00', site='Van 1')]), reason='Sold')
+    run('invoice void', dict(invoice=voided['id'], expected_version=voided['version']), reason='Cancelled')
+    period = dict(date_from='2017-01-01', date_to='2017-12-31', basis='accrual')
+    van = run('report sales-by-item', dict(period, site='Van 1'))['rows']
+    assert [(r['display_item_label'], r['quantity'], r['income']['amount'], r['site_name']) for r in van] == \
+        [('Widget', '3', '15.00', 'Van 1')]
+    house = run('report sales-by-item', dict(period, site='Warehouse'))['rows']
+    assert [(r['quantity'], r['income']['amount']) for r in house] == [('2', '10.00')]
+    company = run('report sales-by-item', period)['rows']
+    widget_row = next(r for r in company if r['item_id'] == widget)
+    assert widget_row['quantity'] == '5' and 'site_name' not in widget_row
+
+
+def test_a_site_with_open_purchase_order_lines_cannot_be_deactivated(shop):
+    books, run, widget = shop['books'], shop['run'], shop['widget']
+    run('inventory-site create', dict(name='Van 2'), reason='Second van')
+    po = run('purchase-order post', dict(vendor=books['vendor'], date='2017-04-01', number='PO-77',
+                                         lines=[dict(item=widget, quantity='4', rate='2.00', site='Van 2')]), reason='Order')
+    with pytest.raises(BookflowError) as refused:
+        run('inventory-site deactivate', dict(site='Van 2'), reason='Sold the van')
+    assert refused.value.code == 'E_RECORD_IN_USE'
+    assert 'Van 2' in refused.value.message and 'PO-77' in refused.value.message
+    assert refused.value.details['site'] == 'Van 2'
+    run('bill post', dict(purchase_order=po['id'], date='2017-04-02', order_lines=[dict(line='1')]), reason='All came')
+    run('inventory-transfer post', dict(date='2017-04-03', from_site='Van 2', to_site='Warehouse',
+                                        lines=[dict(item='Widget', quantity='4')]), reason='Unload')
+    assert run('inventory-site deactivate', dict(site='Van 2'), reason='Sold the van')['active'] is False

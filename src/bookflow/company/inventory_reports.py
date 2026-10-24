@@ -40,7 +40,9 @@ class StockInput(StrictModel):
     cursor: str | None = Field(default=None, max_length=4096)
     site: str | None = Field(default=None, max_length=200, description=(
         "Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock "
-        "status) what is committed, on order and available there. Omitted, the whole company, as before."))
+        "status) what is committed, on order and available there. Omitted, the whole company, as before. A site's "
+        "value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); "
+        "order lines naming no site are committed at no site (Unassigned in report quantity-by-site)."))
 
     _as_of = field_validator("as_of")(iso_date)
 

@@ -390,6 +390,19 @@ def _line_semantic(line):
         'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)} | {'profile': profile.model_dump()}
 
 
+def saved_sites(s, revision):
+    """``{line identity: site}`` for a stored revision's stocked lines away from the default site (R104)."""
+    from bookflow.company import placements
+    found = {key: placements.semantic_site(s, site) for key, site in placements.revision_line_sites(s, revision['id']).items()}
+    return {key: site for key, site in found.items() if site}
+
+
+def resolved_sites(lines):
+    """The same for resolved lines that keep an identity; compared beside the semantic, never inside it,
+    because the stored sales rows do not carry a site (placements do)."""
+    return {line['line_id']: line['site_semantic'] for line in lines if line.get('line_id') and line.get('site_semantic')}
+
+
 def _saved_semantic(s, revision):
     profile = profile_row(s, revision)
     lines = []
@@ -511,6 +524,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     seen, lines = set(), []
     from bookflow.company import placements
     header_site = placements.site_id_for(s, getattr(inp, 'site', None))
+    prior_sites = placements.revision_line_sites(s, old_revision['id']) if old_revision else {}
     for line, group in expand_groups(s, entered):
         key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
         if key is not None and (key not in prior or key in seen):
@@ -529,9 +543,10 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         resolved['line_id'] = key
         # The inventory site a stocked line takes from or gives back to (R104): the line's, else the sale's.
         site = (placements.site_id_for(s, line.site, field='lines.site') if getattr(line, 'site', None) is not None
-                else header_site)
-        if site:
+                else header_site or (prior_sites.get(key) if key else None))
+        if site and resolved['profile'].item_type in inventory.TRACKED_TYPES:
             resolved['site_id'] = site
+            resolved['site_semantic'] = placements.semantic_site(s, site)
         lines.append(resolved)
         warnings.extend(w for w in line_warnings if w not in warnings)
     if len(lines) > 200:
@@ -551,7 +566,9 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     semantic = dict(date=date, number=number, memo=memo, issuer=issuer, profile=tax_facts.semantic_profile(profile),
         lines=[_line_semantic(line) for line in lines], custom_fields=_custom_semantic(custom_plan.snapshot))
     fingerprint = hashlib.sha256(json_text(dict(company_id=info['id'], type=document_type,
-        version=old_header['version'] if old_header else 0, content=semantic, tax_attribution=attribution.model_dump(mode='json'))).encode()).hexdigest()
+        version=old_header['version'] if old_header else 0, content=semantic, tax_attribution=attribution.model_dump(mode='json'),
+        # Where stocked lines take from, only when some line is away from the default site (R104).
+        **({'sites': [line.get('site_semantic') for line in lines]} if any(line.get('site_semantic') for line in lines) else {}))).encode()).hexdigest()
     if (inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint
             and not (document_type == 'invoice' and getattr(inp, 'operation_key', None))):
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
@@ -768,6 +785,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         warnings += resolved['warnings']
         fingerprint = resolved['fingerprint']
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
+        if old_revision and saved_sites(s, old_revision) != resolved_sites(resolved['lines']):
+            changed_fields.append('lines.site')   # a line moved to another inventory site (R104)
         if old_revision and not changed_fields and not resolved['custom_plan'].changed:
             return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
                 revision=revision_output(s, old_revision), facts_fingerprint=fingerprint, changed=False, warnings=warnings),
@@ -898,7 +917,7 @@ def _stock_entries(pending, lines=None):
             key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
             kind='issue', quantity_microunits=line['base_quantity_microunits'],
             asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
-            class_id=envelope['class_id'], site_id=sites.get(envelope['position'])))
+            class_id=envelope['class_id'], site_id=sites.get(envelope['position']), line_identity=envelope['line_id']))
     return entries
 
 

@@ -692,6 +692,27 @@ customer got water heater WH-1?", "what should we count this week?"), does each 
 attempt. One more run starts on a phone, where a person scans a count, and an agent posts that day's
 jobs at night; the van ends as counted.
 
+## As built: increment 1
+
+- **Value by site ignores sites below zero.** An item's value is shared by quantity over the sites holding
+  a positive quantity, in name order, with `endpoint_share`; a site below zero shows no value (its units are
+  owed, not held), and an item no site holds any of shows its whole value at the default site. The sites
+  still add up exactly to the item, and Valuation by Site to the account.
+- **Order lines naming no site commit as Unassigned.** `report quantity-by-site` prints them on an
+  Unassigned row per item; they are not committed at any site, so `report stock-status --site` does not
+  deduct them, while the company figures (the sites plus Unassigned) are unchanged.
+- **A line keeps its site.** A correction that does not restate a line's site keeps the site that line
+  identity had, and a change of site alone is a change (the document is reposted and its placements move).
+  The "has anything changed" comparisons carry a line's site only when it is not the default site, so a
+  company that never names one compares and fingerprints exactly as before.
+- **Sites and transfers use the `item` capability** (standard to write, member to read) rather than a new
+  `inventory` capability.
+- **A site with open purchase-order lines to arrive at it cannot be deactivated**; the refusal names the
+  site and the lines, as it does for stock still held there.
+- **Inventory Sales by Site** (`report sales-by-item --site`) lists stocked item lines by the site their
+  stock left; discounts and other adjusting lines are not split by site.
+- Transfer lines are in base units; moving between bins of one site waits for bins (increment 5).
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

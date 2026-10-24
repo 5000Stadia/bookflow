@@ -88,6 +88,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import sqlalchemy as sa
+
 from bookflow.company import assembly_builds, inventory, item_conversions, journals, placements, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
@@ -123,6 +125,7 @@ class Entry:
     value_minor_units: int | None = None   # a bought receipt and a vendor return state it; the rest ask costing
     returns_movement_id: str | None = None # the issue this receipt gives back, on a return
     site_id: str | None = None             # the inventory site the line names (else its document's); None defaults
+    line_identity: str | None = None       # the entered line's stable identity, to keep its site across revisions
 
 
 def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
@@ -273,12 +276,20 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     change = Change()
     # Where the units go (R104): a line's stated site, else the issue a return gives back, else where
     # the revision being replaced put the same item, else the default site.
-    prior_sites = {}
+    # Keyed by the entered line's stable identity, so two lines of one item at two sites keep their
+    # own; a line with no identity (a build's) falls back to where the same item was.
+    prior_sites, prior_item_sites = {}, {}
     if reversing:
         stored_places = placements.movement_placements(s, [row['id'] for row in reversing])
+        identities = dict(s.company.conn.execute(sa.select(c.document_lines.c.id, c.document_lines.c.line_id).where(
+            c.document_lines.c.id.in_([row['document_line_id'] for row in reversing]))).all())
         for row in reversing:
-            for place in stored_places.get(row['id'], ()):
-                prior_sites.setdefault(row['item_id'], place['site_id'])
+            places = sorted(stored_places.get(row['id'], ()), key=lambda p: -abs(int(p['quantity_microunits'])))
+            if places:
+                identity = identities.get(row['document_line_id'])
+                if identity:
+                    prior_sites.setdefault(identity, places[0]['site_id'])
+                prior_item_sites.setdefault(row['item_id'], places[0]['site_id'])
     for row in reversing:
         values = dict(
             id=new_id(), item_id=row['item_id'], kind='reversal',
@@ -329,8 +340,9 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                     'A stock return names an issue this ledger cannot value it against.'))
             values['value_minor_units'] = computed
         site = (entry.site_id
+                or (prior_sites.get(entry.line_identity) if entry.line_identity else None)
                 or (placements.site_of_movement(s, entry.returns_movement_id) if entry.returns_movement_id else None)
-                or prior_sites.get(entry.item_id))
+                or (prior_item_sites.get(entry.item_id) if entry.line_identity is None else None))
         if site is not None:
             change.sites[identity] = site
         history.append(values)

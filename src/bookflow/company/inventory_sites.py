@@ -145,10 +145,35 @@ def plan_site_active(s, ctx, inp, active: bool) -> Plan:
                 + (f' and {len(names) - 10} more' if len(names) > 10 else '')
                 + '. Transfer it to another site with `inventory-transfer post` first.'),
                 details={'record_type': 'inventory_site', 'record_id': old['id'], 'items': names})
+        incoming = _open_order_lines(s, old['id'])
+        if incoming:
+            listed = ', '.join(f"{number} line {position} ({quantity} {item})" for number, position, quantity, item in incoming[:10])
+            raise BookflowError('E_RECORD_IN_USE', message=(
+                f'"{old["name"]}" is where open purchase-order lines are to arrive: {listed}'
+                + (f' and {len(incoming) - 10} more' if len(incoming) > 10 else '')
+                + '. Receive or close those lines, or point them at another site, first.'),
+                details={'record_type': 'inventory_site', 'record_id': old['id'], 'site': old['name'],
+                         'purchase_order_lines': [dict(number=n, position=p, open_quantity=q, item=i)
+                                                  for n, p, q, i in incoming]})
     changed = bool(old['active']) != active
     new = _bumped(dict(old, active=active), s, ctx) if changed else dict(old)
     return Plan(site_output(s, new, cls=SiteWriteOutput, changed=changed),
                 dict(row=new, before=old if changed else None, changed=changed, previous_default=None))
+
+
+def _open_order_lines(s, site_id):
+    """Open purchase-order lines still to arrive at a site: ``[(number, position, open quantity, item)]``."""
+    from bookflow.company import purchase_orders as orders
+    from bookflow.company.purchase_order_billing import line_states
+    t = c.purchase_orders
+    out = []
+    for header in s.company.conn.execute(sa.select(t).where(t.c.status.in_(('open', 'partly_received')))).mappings():
+        rev = orders.revision(s, dict(header))
+        for state in line_states(s, dict(header), rev):
+            if state.get('site_id') == site_id and (state['open_quantity_microunits'] or 0) > 0:
+                out.append((header['number'], state['position'], _q(state['open_quantity_microunits']),
+                            inventory.item_name(s, state['item_id'])))
+    return out
 
 
 def apply_site(plan: Plan, ctx, s) -> Applied:

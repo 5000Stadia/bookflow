@@ -162,9 +162,10 @@ quantity_by_site_report = command(
     'report quantity-by-site', scope='company', required_role='member', capability='reports',
     description="Quantity on Hand by Site, as of as_of: each inventory item at each site with what is on hand there, "
                 'committed there by open sales-order and work-order lines naming that site, reserved there by pending '
-                'builds, available and on order to arrive there, and its share of the item\'s value. Lines naming no '
-                'site commit on an Unassigned row, so the sites plus Unassigned are the company figures report '
-                'stock-status shows. site narrows it to one site. Quantities are read from placements and the report '
+                'builds, available and on order to arrive there, and its share of the item\'s value. Order and '
+                'work-order lines naming no site commit on an Unassigned row (they are deducted at no site), so the '
+                'sites plus Unassigned are the company figures report stock-status shows. Value is shared by quantity '
+                'over the sites holding stock; a site below zero shows no value, and the sites add up to the item. site narrows it to one site. Quantities are read from placements and the report '
                 'refuses when they disagree with the movement ledger (the quantity tie) or when the values disagree '
                 'with the balance sheet (the asset tie). Rows are paged.',
     input_model=_QBS_IN, output_model=_QBS_OUT, writes=set(),
