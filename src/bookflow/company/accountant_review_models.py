@@ -141,6 +141,7 @@ class FileInput(_In):
 
 class CopyImportInput(FileInput):
     changes: list[str] | None = Field(None, max_length=1000, description='Keys of the changes to take (from `accountant-copy preview`); default every new change.')
+    close_copy: bool = Field(False, description='Close the copy even though this import takes none of its changes (all are declined).')
 
 
 class ChangeLine(BaseModel):
@@ -157,7 +158,8 @@ class ChangeOut(BaseModel):
     date: str | None = Field(description='Accounting date (an entry) or reviewed-through date; null for a note.')
     summary: str
     reason: str | None = Field(description="The accountant's reason, as their copy recorded it.")
-    by_name: str | None
+    by_name: str | None = Field(description='The external accountant the copy was made for, from these books: every change is posted as them.')
+    named_in_file_as: str | None = Field(None, description='A different name the file gives for whoever entered it: a label only, never who the change is posted as.')
     lines: list[ChangeLine] = Field(default_factory=list)
     state: Literal['new', 'imported', 'refused'] = Field(description='new: can be taken; imported: already taken (by result_id); refused: cannot be taken, see problem.')
     problem: str | None = None
@@ -168,7 +170,8 @@ class ChangesFileOutput(BaseModel):
     copy_id: str
     company_id: str
     dividing_date: str
-    accountant_name: str | None
+    accountant_name: str | None = Field(description='The external accountant the copy was made for, from these books.')
+    named_in_file_as: str | None = Field(None, description='A different accountant name the file gives: a label only.')
     created_at: str
     changes: list[ChangeOut]
     counts: dict[str, int] = Field(description='Changes by state.')
@@ -182,6 +185,7 @@ class CopyChangesOutput(WriteOutput, ChangesFileOutput):
 
 class CopyImportOutput(WriteOutput, ChangesFileOutput):
     imported: list[str] = Field(description='Keys of the changes taken by this import.')
+    declined: int = Field(0, description='Changes in the file this import leaves out; the copy closes, so they are declined for good.')
     status: str = Field(description="The copy's status after the import.")
 
 
@@ -242,8 +246,10 @@ class AccountantChangeRow(BaseModel):
     at: str
     command: str
     summary: str
-    accountant_user_id: str
+    accountant_user_id: str = Field(description='The external accountant the change was made by or for.')
     accountant_name: str | None
+    agent_id: str | None = Field(None, description='The agent that made the change for the accountant; null when they made it.')
+    agent_name: str | None = None
     reason: str | None
     source_ref: str | None
     from_copy: bool

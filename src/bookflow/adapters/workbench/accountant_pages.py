@@ -57,9 +57,11 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 result = None
             elif action == 'import':
                 chosen = [key[len('change:'):] for key in form if key.startswith('change:')]
-                out = run(request, 'accountant-copy import', {'file': file, 'changes': chosen}, company_id, headers=headers)
-                result = (f"Imported {len(out['imported'])} of the accountant's changes; the copy is {out['status']} and "
-                          'these books take changes on any open date again.')
+                raw = {'file': file, 'changes': chosen, **({'close_copy': True} if form.get('close_copy') else {})}
+                out = run(request, 'accountant-copy import', raw, company_id, headers=headers)
+                result = (f"Imported {len(out['imported'])} of the accountant's changes"
+                          + (f" and declined {out['declined']}" if out['declined'] else '')
+                          + f"; the copy is {out['status']} and these books take changes on any open date again.")
             elif action == 'cancel':
                 out = run(request, 'accountant-copy cancel', {}, company_id, headers=headers)
                 result = f"Cancelled the accountant's copy through {out['dividing_date']}; its change file can no longer be imported."

@@ -65,8 +65,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].at` | string | yes | no | — | — |
 | `rows[].command` | string | yes | no | — | — |
 | `rows[].summary` | string | yes | no | — | — |
-| `rows[].accountant_user_id` | string | yes | no | — | — |
+| `rows[].accountant_user_id` | string | yes | no | — | The external accountant the change was made by or for. |
 | `rows[].accountant_name` | string \| null | yes | yes | — | — |
+| `rows[].agent_id` | string \| null | no | yes | null | The agent that made the change for the accountant; null when they made it. |
+| `rows[].agent_name` | string \| null | no | yes | null | — |
 | `rows[].reason` | string \| null | yes | yes | — | — |
 | `rows[].source_ref` | string \| null | yes | yes | — | — |
 | `rows[].from_copy` | boolean | yes | no | — | — |

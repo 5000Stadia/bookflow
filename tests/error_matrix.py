@@ -2238,6 +2238,6 @@ MATRIX['accountant-copy status'] = {}
 MATRIX['accountant-copy cancel'] = {'E_RECORD_NOT_FOUND': 'no copy is out', 'E_REASON_REQUIRED': 'no reason given'} | _ACCT_PERSON | _ACCT_TAIL
 MATRIX['accountant-copy changes'] = {'E_PERMISSION': "these books are not an accountant's copy", 'E_IO': 'the change file could not be written'} | _ACCT_TAIL
 MATRIX['accountant-copy preview'] = {'E_VALIDATION': "no such file, not a change file, another company's, an unknown copy, tampered, its copy cancelled or returned, or its key not in these books"}
-MATRIX['accountant-copy import'] = _ACCT_JOURNAL | {'E_VALIDATION': "the file is refused (see preview), or a chosen change is unknown or cannot be taken"} | _ACCT_PERSON | _ACCT_TAIL
+MATRIX['accountant-copy import'] = _ACCT_JOURNAL | {'E_VALIDATION': "the file is refused (see preview), a chosen change is unknown or cannot be taken, or it takes nothing without close_copy"} | _ACCT_PERSON | _ACCT_TAIL
 MATRIX['report accountant-review'] = {'E_VALIDATION': 'as_of is not a date'}
 MATRIX['report accountant-changes'] = {}

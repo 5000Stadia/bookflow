@@ -113,14 +113,16 @@ def test_the_external_accountant_writes_only_adjustments_dated_in_their_period(r
 def _copy(root, client, books, through=THROUGH):
     """Export, and open the copy as the accountant would on their own Bookflow: restored as a separate company."""
     company = read(client, 'company show')['company_id']
-    make_actor(root, 'copy-cpa', hub_admin=True, company_role=(company, 'standard'))
+    make_actor(root, 'copy-cpa', company_role=(company, 'standard'))
+    # The accountant's own Bookflow, standing in for their machine: here, an installation administrator of the same root.
+    make_actor(root, 'acct-desk', hub_admin=True)
     # The copy is for the designated accountant: everything it sends back is posted as them.
     refused(lambda: write(client, 'accountant-copy export', through=through), 'E_VALIDATION')
     write(client, 'accountant add', user='copy-cpa', through=through)
     out = write(client, 'accountant-copy export', through=through)
     assert out['status'] == 'out' and out['path'].endswith('.bookflow-backup') and out['manifest_file']
     assert out['accountant_name'] == 'Copy-Cpa'
-    cpa = as_user(root, 'copy-cpa')
+    cpa = as_user(root, 'acct-desk')
     copy = cpa.run('company restore', {'archive': out['path'], 'as_copy': True, 'name': 'AR Accountant copy'},
                    reason='Accountant copy')
     return cpa, copy['company_id']
@@ -163,7 +165,7 @@ def test_the_copy_round_trip_brings_back_only_the_accountants_changes_attributed
     assert balance(client, books['repairs'])['amount'] == '200.00'
     events = read(client, 'audit list', limit=50)['items']
     imported = [e for e in events if e['command'] == 'accountant-copy import' and (e.get('source_ref') or '').startswith('accountant-copy:')]
-    assert len(imported) == 4 and {e['reason'] for e in imported} >= {'Repairs booked to office'}
+    assert len(imported) == 4 and 'Repairs booked to office (entered in the copy as Acct-Desk)' in {e['reason'] for e in imported}
     by_copy = read(client, 'report accountant-changes')
     assert by_copy['reclassifications'] == 1 and all(r['from_copy'] for r in by_copy['rows'])
     assert {r['accountant_name'] for r in by_copy['rows']} == {'Copy-Cpa'}  # posted as the accountant, not the owner
@@ -254,8 +256,13 @@ def test_an_agent_acting_for_the_accountant_is_held_to_the_accountants_terms(roo
     assert refused(lambda: run('journal void', {'journal': books['spend']}), 'E_PERMISSION').details['reason'] == 'external_accountant'
     # Inside the terms it works, and the report counts it as the accountant's.
     run('journal post', line('2026-09-29', '3.00'))
+    run('note add', {'record_type': 'transaction', 'record_id': books['spend'], 'body': 'Agent: part of this is repairs.'})
+    owner_note = write(client, 'note add', record_type='transaction', record_id=books['spend'], body="Owner's note.")['note']
+    refused(lambda: run('note edit', {'note': owner_note['id'], 'expected_version': owner_note['version'], 'body': 'x'}), 'E_PERMISSION')
     assert refused(lambda: run('accountant reviewed-through', {'through': THROUGH}), 'E_PERMISSION').details['reason'] == 'person_only'
-    assert read(client, 'report accountant-changes')['journal_entries'] == 1
+    report = read(client, 'report accountant-changes')
+    assert report['journal_entries'] == 1 and report['notes'] == 1
+    assert {(r['accountant_name'], r['agent_name']) for r in report['rows']} == {('Outside-Cpa', 'cpa-agent')}
 
 
 def test_the_change_file_cannot_name_who_made_a_change(root, client, books, tmp_path):
@@ -280,6 +287,9 @@ def test_the_change_file_cannot_name_who_made_a_change(root, client, books, tmp_
     body['mac'] = hmac.new(bytes.fromhex(key), canonical, hashlib.sha256).hexdigest()
     forged = tmp_path / 'forged.json'
     forged.write_text(json.dumps(body))
+    seen = read(client, 'accountant-copy preview', file=str(forged))
+    assert seen['accountant_name'] == 'Copy-Cpa' and seen['named_in_file_as'] == 'TOTALLY THE OWNER'
+    assert seen['changes'][0]['by_name'] == 'Copy-Cpa' and seen['changes'][0]['named_in_file_as'] == 'TOTALLY THE OWNER'
     taken = write(client, 'accountant-copy import', file=str(forged), reason='Q3')
     tx = taken['imported'][0]
     with sqlite3.connect(owner_db) as db:
@@ -312,3 +322,47 @@ def test_no_backup_carries_the_copy_key_and_a_returned_copy_is_closed(root, clie
     with sqlite3.connect(owner_db) as db:
         assert {r[0] for r in db.execute('SELECT mac_key FROM accountant_copies')} == {'0' * 64}  # wiped on return
     assert refused(lambda: read(client, 'accountant-copy preview', file=path), 'E_VALIDATION').details['reason'] == 'returned'
+
+
+def test_a_designated_accountant_stays_at_standard_and_changes_no_ones_access(root, client, books):
+    company = read(client, 'company show')['company_id']
+    make_actor(root, 'outside-cpa', company_role=(company, 'standard'))
+    make_actor(root, 'root-cpa', hub_admin=True, company_role=(company, 'standard'))
+    make_actor(root, 'friend')
+    assert refused(lambda: write(client, 'accountant add', user='root-cpa', through=THROUGH),
+                   'E_VALIDATION').details['reason'] == 'hub_admin'
+    write(client, 'accountant add', user='outside-cpa', through=THROUGH)
+    grant = lambda who, actor=client, role='admin': actor.run('membership grant', {'user': who, 'company': company, 'role': role},  # noqa: E731
+                                                              reason='access')
+    raised = refused(lambda: grant('outside-cpa'), 'E_VALIDATION')
+    assert raised.details['reason'] == 'external_accountant' and 'accountant remove' in raised.message
+    # The accountant administers no one's access there, whatever they hold.
+    cpa = as_user(root, 'outside-cpa')
+    refused(lambda: grant('friend', cpa), 'E_PERMISSION')
+    write(client, 'accountant remove', user='outside-cpa')
+    assert grant('outside-cpa')['role'] == 'admin'
+
+
+def test_the_accountant_edits_only_their_own_notes(root, client, books):
+    company = read(client, 'company show')['company_id']
+    make_actor(root, 'outside-cpa', company_role=(company, 'standard'))
+    write(client, 'accountant add', user='outside-cpa', through=THROUGH)
+    cpa = as_user(root, 'outside-cpa')
+    theirs = write(client, 'note add', record_type='transaction', record_id=books['spend'], body="Owner's note.")['note']
+    mine = write(cpa, 'note add', record_type='transaction', record_id=books['spend'], body='Accountant note.')['note']
+    assert refused(lambda: write(cpa, 'note edit', note=theirs['id'], expected_version=theirs['version'], body='Rewritten'),
+                   'E_PERMISSION').details['reason'] == 'external_accountant'
+    assert write(cpa, 'note edit', note=mine['id'], expected_version=mine['version'], body='Accountant note, fixed.')['note']['body'] \
+        == 'Accountant note, fixed.'
+
+
+def test_an_import_that_takes_nothing_needs_close_copy(root, client, books):
+    cpa, copy = _copy(root, client, books)
+    je(cpa, '2026-09-29', books['repairs'], books['accrued'], '80.00', company=copy, memo='Accrue')
+    je(cpa, '2026-09-28', books['repairs'], books['accrued'], '5.00', company=copy, memo='Small')
+    path = write(cpa, 'accountant-copy changes', company=copy)['path']
+    nothing = refused(lambda: write(client, 'accountant-copy import', file=path, changes=[]), 'E_VALIDATION')
+    assert nothing.details['reason'] == 'nothing_taken' and nothing.details['declined'] == 2 and '2 would be declined' in nothing.message
+    assert read(client, 'accountant-copy status')['current']['status'] == 'out'
+    closed = write(client, 'accountant-copy import', file=path, changes=[], close_copy=True)
+    assert closed['imported'] == [] and closed['declined'] == 2 and closed['status'] == 'returned'

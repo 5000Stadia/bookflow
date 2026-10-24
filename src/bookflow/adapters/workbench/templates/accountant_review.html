@@ -36,16 +36,17 @@
 <label>Change file (full path on this machine) <input name="file" value="{{ file }}" size="60" required></label>
 <div class="actions"><button type="submit" name="action" value="preview" data-preview-changes>Preview</button></div>
 {% if preview %}
-<p data-preview-counts>{{ preview.accountant_name or 'The accountant' }} sent {{ preview.changes|length }} changes through {{ preview.dividing_date }}: {{ preview.counts.new }} new, {{ preview.counts.imported }} already imported, {{ preview.counts.refused }} refused.</p>
+<p data-preview-counts>{{ preview.accountant_name or 'The accountant' }}{% if preview.named_in_file_as %} <span class="muted" data-file-label>(named in the file as: {{ preview.named_in_file_as }})</span>{% endif %} sent {{ preview.changes|length }} changes through {{ preview.dividing_date }}: {{ preview.counts.new }} new, {{ preview.counts.imported }} already imported, {{ preview.counts.refused }} refused.</p>
 <div class="table-wrap"><table class="list-table" data-change-list><thead><tr><th>Take</th><th>Change</th><th>Lines</th><th>Reason</th><th>State</th></tr></thead><tbody>
 {% for ch in preview.changes %}<tr data-change="{{ ch.key }}">
 <td data-label="Take">{% if ch.state == 'new' %}<input type="checkbox" name="change:{{ ch.key }}" checked aria-label="Take {{ ch.summary }}">{% endif %}</td>
-<td data-label="Change">{{ ch.summary }}{% if ch.by_name %}<br><span class="muted">by {{ ch.by_name }}</span>{% endif %}</td>
+<td data-label="Change">{{ ch.summary }}{% if ch.by_name %}<br><span class="muted">posted as {{ ch.by_name }}</span>{% endif %}{% if ch.named_in_file_as %}<br><span class="muted" data-file-label>named in the file as: {{ ch.named_in_file_as }}</span>{% endif %}</td>
 <td data-label="Lines">{% for l in ch.lines %}{{ l.account_name or l.account_id }} {{ l.side }} {{ l.amount }}<br>{% endfor %}</td>
 <td data-label="Reason">{{ ch.reason or '' }}</td>
 <td data-label="State">{{ ch.state }}{% if ch.problem %}: {{ ch.problem }}{% endif %}</td>
 </tr>{% endfor %}</tbody></table></div>
 {% if preview.counts.new %}<label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
+<label><input type="checkbox" name="close_copy" value="1" data-close-copy> Close the copy even if nothing is ticked (every change is declined)</label>
 <div class="actions"><button type="submit" name="action" value="import" data-import>Import the ticked changes</button></div>
 <p class="muted">Each change is posted as the accountant the copy was made for, and the audit trail names the copy and the reason. Importing closes the copy: changes left unticked are declined. Importing is a person's step.</p>{% endif %}
 {% endif %}

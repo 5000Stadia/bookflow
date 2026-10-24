@@ -140,6 +140,11 @@ def admit(s, cmd, inp) -> None:
             raise _refuse(f"As this company's external accountant you can post adjusting entries and reclassifications dated "
                           f"on or before {mine['through_date']}, mark review items and add notes; `{cmd.name}` is not one of those.",
                           'external_accountant', cmd.name, through=mine['through_date'])
+        if cmd.name == 'note edit':
+            note = _one(s, 'SELECT author_id FROM notes WHERE id=:n', n=_note_id(s, inp))
+            if note is None or note['author_id'] not in _acting_ids(s):
+                raise _refuse('As the external accountant you can correct only the notes you wrote; add a note instead.',
+                              'external_accountant', cmd.name)
         if cmd.name in _OWN_ENTRY:
             journal = _journal_id(s, inp)
             first = _one(s, """SELECT r.created_by FROM transaction_revisions r WHERE r.transaction_id=:t
@@ -147,6 +152,11 @@ def admit(s, cmd, inp) -> None:
             if first is None or first['created_by'] not in _acting_ids(s):
                 raise _refuse('As the external accountant you can correct or void only the entries you made; post an adjusting '
                               'entry instead.', 'external_accountant', cmd.name)
+
+
+def _note_id(s, inp):
+    from bookflow.company import records
+    return records.resolve(s, 'note', inp.note)
 
 
 def _journal_id(s, inp):
@@ -191,12 +201,63 @@ def check_dates(s, dates) -> None:
 
 # ------------------------------------------------------------------ designations
 
+def designated_in_scope(s, user_ids, scope_type, scope_id):
+    """Names of the companies in a membership scope where any of these users is a designated external accountant.
+
+    Read from each company's own books, read-only: the hub membership commands ask it, since a designation lives
+    in the company and a membership in the hub."""
+    from bookflow.hub import schema as h
+    ids = [x for x in user_ids if x]
+    if not ids or s.hub is None:
+        return []
+    c_ = h.companies
+    where = c_.c.id == scope_id if scope_type == 'company' else c_.c.organization_id == scope_id
+    names = []
+    for row in s.hub.conn.execute(sa.select(c_.c.display_name, c_.c.path).where(where)).mappings():
+        path = s.abs_path(row['path']) / 'company.db'
+        if not path.exists():
+            continue
+        try:
+            with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as db:
+                hit = db.execute('SELECT 1 FROM accountant_designations WHERE active=1 AND user_id IN (SELECT value FROM json_each(?))',
+                                 (json.dumps(ids),)).fetchone()
+        except sqlite3.Error:
+            continue  # books from before co0088 hold no designation
+        if hit:
+            names.append(row['display_name'])
+    return names
+
+
+def guard_membership_change(s, command, user, scope, role=None, grants=None):
+    """Called by `membership grant` and `membership revoke`.
+
+    A designated external accountant cannot change memberships where they are designated, nor can an agent for
+    them; and while someone is designated, their access there can be granted only at standard, with no extra
+    grants, so they never come to hold admin acts the designation does not see."""
+    acting = [s.actor.id if s.actor else None, getattr(getattr(s, '_permission_context', None), 'on_behalf_of', None)]
+    where = designated_in_scope(s, acting, scope.scope_type, scope.scope_id)
+    if where:
+        raise BookflowError('E_PERMISSION', message=(
+            f"As the external accountant of {', '.join(where)} you cannot change who has access there."),
+            details={'reason': 'external_accountant', 'command': command, 'companies': where})
+    if command != 'membership grant' or (role == 'standard' and not grants):
+        return
+    where = designated_in_scope(s, [user['id']], scope.scope_type, scope.scope_id)
+    if where:
+        raise BookflowError('E_VALIDATION', message=(
+            f"{user['username']} is the external accountant of {', '.join(where)}, who holds standard access and no more. "
+            'End the accountant designation first (`accountant remove`), then change their access.'),
+            details={'fields': [{'field': 'role', 'problem': 'the user is a designated external accountant here'}],
+                     'reason': 'external_accountant', 'companies': where,
+                     'next_step': f"accountant remove {user['username']}"})
+
+
 def _user(s, selector):
     from bookflow.hub import schema as h
     from bookflow.core.ids import is_ulid, normalize_ulid
     u = h.users
     key = normalize_ulid(selector) if is_ulid(selector) else None
-    row = s.hub.conn.execute(sa.select(u.c.id, u.c.kind, u.c.username, u.c.display_name, u.c.active).where(
+    row = s.hub.conn.execute(sa.select(u.c.id, u.c.kind, u.c.username, u.c.display_name, u.c.active, u.c.hub_admin).where(
         sa.or_(u.c.id == key, u.c.username == selector))).mappings().first()
     if row is None:
         raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'user', 'selector': selector})
@@ -230,6 +291,10 @@ def plan_add(s, ctx, inp) -> Plan:
     user = _user(s, inp.user)
     if user['kind'] != 'human' or not user['active']:
         raise _invalid('user', 'must be an active person', 'An external accountant is a person; an agent cannot be one.')
+    if user.get('hub_admin'):
+        raise _invalid('user', 'is an installation administrator',
+                       'An installation administrator can do anything here, so cannot be held to an external accountant\'s terms. '
+                       'Give the accountant their own user without installation administration.', reason='hub_admin')
     role = _member_role(s, user['id'])
     if role != 'standard':
         raise _invalid('user', 'must hold the standard role on this company, no more and no less',
@@ -671,7 +736,7 @@ def plan_changes(s, ctx) -> Plan:
                 accountant={'user_id': s.actor.id, 'username': s.actor.username, 'name': s.actor.display_name},
                 changes=changes)
     signed = dict(body, mac=_sign(copy['mac_key'], body))
-    view = _view(s, signed, {}, copy_side=True)
+    view = _view(s, signed, {}, s.actor.display_name)
     from bookflow.storage.paths import derive_folder_name
     stamp = datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%S')
     name = f"{derive_folder_name(s.company_row['display_name'])} accountant changes {stamp}.json"
@@ -817,7 +882,9 @@ def _summary(change, names):
     return 'unknown change'
 
 
-def _view(s, body, states, *, copy_side=False):
+def _view(s, body, states, accountant_name):
+    """What a change file holds, for a person to read. The accountant is named from these books' own record of the
+    copy; names the file gives are the copy holder's to write, so they appear only as labelled annotations."""
     ids = {x.get('account_id') for ch in body['changes'] for x in (ch.get('lines') or []) if isinstance(x, dict)}
     names = _account_names(s, ids)
     out = []
@@ -825,14 +892,22 @@ def _view(s, body, states, *, copy_side=False):
         state, problem, result = states.get(ch.get('key'), ('new', None, None))
         out.append(m.ChangeOut(
             key=str(ch.get('key')), kind=ch.get('kind') if ch.get('kind') in m.ChangeOut.model_fields['kind'].annotation.__args__ else 'note',
-            date=ch.get('date'), summary=_summary(ch, names), reason=ch.get('reason'), by_name=(ch.get('by') or {}).get('name'),
+            date=ch.get('date'), summary=_summary(ch, names), reason=ch.get('reason'), by_name=accountant_name,
+            named_in_file_as=_label((ch.get('by') or {}).get('name'), accountant_name),
             lines=[m.ChangeLine(account_id=x['account_id'], account_name=names.get(x['account_id']), side=x['side'],
                                 amount=x['amount'], description=x.get('description')) for x in ch.get('lines') or []],
             state=state, problem=problem, result_id=result))
     counts = {k: sum(1 for x in out if x.state == k) for k in ('new', 'imported', 'refused')}
     return dict(copy_id=body['copy_id'], company_id=body['company_id'], dividing_date=body['dividing_date'],
-                accountant_name=(body.get('accountant') or {}).get('name'), created_at=body.get('created_at') or '',
+                accountant_name=accountant_name,
+                named_in_file_as=_label((body.get('accountant') or {}).get('name'), accountant_name),
+                created_at=str(body.get('created_at') or ''),
                 changes=out, counts=counts)
+
+
+def _label(name, accountant_name):
+    name = str(name)[:120] if name else None
+    return name if name and name != accountant_name else None
 
 
 def _states(s, ctx, body, copy):
@@ -857,12 +932,11 @@ def _states(s, ctx, body, copy):
 
 def preview(s, ctx, inp) -> m.ChangesFileOutput:
     body, copy = read_changes(s, inp.file)
-    return m.ChangesFileOutput(**_view(s, body, _states(s, ctx, body, copy)))
+    return m.ChangesFileOutput(**_view(s, body, _states(s, ctx, body, copy), _copy_accountant_identity(s, copy)[1]))
 
 
 def plan_import(s, ctx, inp) -> Plan:
     body, copy = read_changes(s, inp.file)
-    _copy_accountant_identity(s, copy)
     states = _states(s, ctx, body, copy)
     keys = [ch.get('key') for ch in body['changes']]
     if inp.changes is not None:
@@ -874,11 +948,17 @@ def plan_import(s, ctx, inp) -> Plan:
             raise _invalid('changes', f"cannot be taken: {', '.join(refused[:5])}", 'Some chosen changes cannot be taken; '
                            '`accountant-copy preview` says why.', refused={k: states[k][1] for k in refused})
     chosen = [k for k in (inp.changes if inp.changes is not None else keys) if states.get(k, ('',))[0] == 'new']
-    view = _view(s, body, states)
+    view = _view(s, body, states, _copy_accountant_identity(s, copy)[1])
+    declined = sum(1 for ch in body['changes'] if states.get(ch.get('key'), ('',))[0] != 'imported') - len(chosen)
+    if not chosen and not inp.close_copy:
+        raise _invalid('changes', 'takes none of the changes',
+                       f"This import takes none of the file's changes, and importing closes the copy: all {declined} would be "
+                       'declined for good. Choose changes to take, or say close_copy true to close the copy taking nothing '
+                       '(or cancel it).', reason='nothing_taken', declined=declined)
     # Importing brings the copy back, closes it and lifts its restrictions, as the anchor's import does; changes
     # left out are declined, and the copy's key is wiped so no file for it verifies again.
     new_status = 'returned' if copy['status'] == 'out' else copy['status']
-    out = m.CopyImportOutput(**view, imported=chosen, status=new_status)
+    out = m.CopyImportOutput(**view, imported=chosen, status=new_status, declined=declined)
     return Plan(out, dict(body=body, copy=copy, chosen=chosen, status=new_status))
 
 
@@ -1020,16 +1100,24 @@ def changes_report(s, inp) -> m.AccountantChangesOutput:
     where = """FROM audit_events e WHERE (e.actor_id IN (SELECT value FROM json_each(:ids))
                OR e.on_behalf_of IN (SELECT value FROM json_each(:ids))) AND e.command IN (SELECT value FROM json_each(:cmds))"""
     count = _one(s, f'SELECT COUNT(*) AS n {where}', **params)['n']
-    events = _all(s, f'SELECT e.id, e.at, e.command, e.summary, e.actor_id, e.reason, e.source_ref {where} ORDER BY e.seq DESC LIMIT :lim',
+    events = _all(s, f'SELECT e.id, e.at, e.command, e.summary, e.actor_id, e.actor_kind, e.on_behalf_of, e.reason, e.source_ref {where} ORDER BY e.seq DESC LIMIT :lim',
                   lim=inp.limit, **params)
     entries = {}
     for x in _all(s, """SELECT event_id, record_type, record_id FROM audit_entries WHERE event_id IN (SELECT value FROM json_each(:ev))
                         AND record_type IN ('transaction', 'note', 'transaction_review', 'accountant_review_mark', 'accountant_adjustment')""",
                   ev=json.dumps([e['id'] for e in events])):
         entries.setdefault(x['event_id'], []).append(f"{x['record_type']}:{x['record_id']}")
-    names = principal_names(s.company, ids)
-    rows = [m.AccountantChangeRow(at=e['at'], command=e['command'], summary=e['summary'], accountant_user_id=e['actor_id'],
-                                  accountant_name=names.get(e['actor_id']), reason=e['reason'], source_ref=e['source_ref'],
+    names = principal_names(s.company, ids | {e['actor_id'] for e in events if e['actor_id']})
+
+    def who(e):
+        """(accountant, agent): an agent's change is the accountant's it acted for, naming the agent too."""
+        if e['actor_kind'] != 'human' and e['on_behalf_of'] in ids:
+            return e['on_behalf_of'], e['actor_id']
+        return e['actor_id'], None
+
+    rows = [m.AccountantChangeRow(at=e['at'], command=e['command'], summary=e['summary'], accountant_user_id=who(e)[0],
+                                  accountant_name=names.get(who(e)[0]), agent_id=who(e)[1], agent_name=names.get(who(e)[1]),
+                                  reason=e['reason'], source_ref=e['source_ref'],
                                   from_copy=(e['source_ref'] or '').startswith('accountant-copy:'),
                                   records=entries.get(e['id'], [])) for e in events]
     kinds = _one(s, f"""SELECT
@@ -1038,9 +1126,11 @@ def changes_report(s, inp) -> m.AccountantChangesOutput:
           JOIN audit_events e ON e.id=r.audit_event_id WHERE t.type='journal_entry'
           AND (e.actor_id IN (SELECT value FROM json_each(:ids)) OR e.on_behalf_of IN (SELECT value FROM json_each(:ids))))) AS journals,
         (SELECT COUNT(*) FROM accountant_adjustments WHERE kind='reclassification') AS reclass,
-        (SELECT COUNT(*) FROM notes WHERE author_id IN (SELECT value FROM json_each(:ids))) AS notes,
+        (SELECT COUNT(DISTINCT ae.record_id) FROM audit_entries ae JOIN audit_events e ON e.id=ae.event_id
+          WHERE ae.record_type='note' AND ae.action='create' AND (e.actor_id IN (SELECT value FROM json_each(:ids))
+          OR e.on_behalf_of IN (SELECT value FROM json_each(:ids)))) AS notes,
         (SELECT COUNT(*) FROM audit_entries ae JOIN audit_events e ON e.id=ae.event_id WHERE ae.record_type='transaction_review'
-          AND e.actor_id IN (SELECT value FROM json_each(:ids))) AS marks""", ids=params['ids'])
+          AND (e.actor_id IN (SELECT value FROM json_each(:ids)) OR e.on_behalf_of IN (SELECT value FROM json_each(:ids)))) AS marks""", ids=params['ids'])
     return m.AccountantChangesOutput(count=count, rows=rows, journal_entries=kinds['journals'], reclassifications=kinds['reclass'],
                                      notes=kinds['notes'], review_marks=kinds['marks'])
 

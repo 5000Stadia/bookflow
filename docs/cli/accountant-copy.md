@@ -209,7 +209,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `copy_id` | string | yes | no | — | — |
 | `company_id` | string | yes | no | — | — |
 | `dividing_date` | string | yes | no | — | — |
-| `accountant_name` | string \| null | yes | yes | — | — |
+| `accountant_name` | string \| null | yes | yes | — | The external accountant the copy was made for, from these books. |
+| `named_in_file_as` | string \| null | no | yes | null | A different accountant name the file gives: a label only. |
 | `created_at` | string | yes | no | — | — |
 | `changes` | array[object] | yes | no | — | — |
 | `changes[].key` | string | yes | no | — | Stable key of the change in its file. |
@@ -217,7 +218,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changes[].date` | string \| null | yes | yes | — | Accounting date (an entry) or reviewed-through date; null for a note. |
 | `changes[].summary` | string | yes | no | — | — |
 | `changes[].reason` | string \| null | yes | yes | — | The accountant's reason, as their copy recorded it. |
-| `changes[].by_name` | string \| null | yes | yes | — | — |
+| `changes[].by_name` | string \| null | yes | yes | — | The external accountant the copy was made for, from these books: every change is posted as them. |
+| `changes[].named_in_file_as` | string \| null | no | yes | null | A different name the file gives for whoever entered it: a label only, never who the change is posted as. |
 | `changes[].lines` | array[object] | no | no | [] | — |
 | `changes[].lines[].account_id` | string | yes | no | — | — |
 | `changes[].lines[].account_name` | string \| null | yes | yes | — | — |
@@ -247,6 +249,7 @@ Example JSON output:
   "dividing_date": "2026-01-01",
   "dry_run": false,
   "file_name": "value",
+  "named_in_file_as": null,
   "path": null,
   "skipped": [],
   "warnings": []
@@ -459,6 +462,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `file` | `FILE` | string | yes | no | — | Full path of the accountant's change file on the machine running Bookflow.; minimum length 1; maximum length 4096 |
 | `changes` | `--changes` | array[string] \| null | no | yes | null | Keys of the changes to take (from `accountant-copy preview`); default every new change. |
+| `close_copy` | `--close-copy` | boolean | no | no | false | Close the copy even though this import takes none of its changes (all are declined). |
 
 ### Command and context options
 
@@ -497,7 +501,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `copy_id` | string | yes | no | — | — |
 | `company_id` | string | yes | no | — | — |
 | `dividing_date` | string | yes | no | — | — |
-| `accountant_name` | string \| null | yes | yes | — | — |
+| `accountant_name` | string \| null | yes | yes | — | The external accountant the copy was made for, from these books. |
+| `named_in_file_as` | string \| null | no | yes | null | A different accountant name the file gives: a label only. |
 | `created_at` | string | yes | no | — | — |
 | `changes` | array[object] | yes | no | — | — |
 | `changes[].key` | string | yes | no | — | Stable key of the change in its file. |
@@ -505,7 +510,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changes[].date` | string \| null | yes | yes | — | Accounting date (an entry) or reviewed-through date; null for a note. |
 | `changes[].summary` | string | yes | no | — | — |
 | `changes[].reason` | string \| null | yes | yes | — | The accountant's reason, as their copy recorded it. |
-| `changes[].by_name` | string \| null | yes | yes | — | — |
+| `changes[].by_name` | string \| null | yes | yes | — | The external accountant the copy was made for, from these books: every change is posted as them. |
+| `changes[].named_in_file_as` | string \| null | no | yes | null | A different name the file gives for whoever entered it: a label only, never who the change is posted as. |
 | `changes[].lines` | array[object] | no | no | [] | — |
 | `changes[].lines[].account_id` | string | yes | no | — | — |
 | `changes[].lines[].account_name` | string \| null | yes | yes | — | — |
@@ -519,6 +525,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `imported` | array[string] | yes | no | — | Keys of the changes taken by this import. |
+| `declined` | integer | no | no | 0 | Changes in the file this import leaves out; the copy closes, so they are declined for good. |
 | `status` | string | yes | no | — | The copy's status after the import. |
 
 Example JSON output:
@@ -531,9 +538,11 @@ Example JSON output:
   "copy_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "counts": {},
   "created_at": "2026-01-01T00:00:00Z",
+  "declined": 0,
   "dividing_date": "2026-01-01",
   "dry_run": false,
   "imported": [],
+  "named_in_file_as": null,
   "status": "value",
   "warnings": []
 }
@@ -636,7 +645,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `copy_id` | string | yes | no | — | — |
 | `company_id` | string | yes | no | — | — |
 | `dividing_date` | string | yes | no | — | — |
-| `accountant_name` | string \| null | yes | yes | — | — |
+| `accountant_name` | string \| null | yes | yes | — | The external accountant the copy was made for, from these books. |
+| `named_in_file_as` | string \| null | no | yes | null | A different accountant name the file gives: a label only. |
 | `created_at` | string | yes | no | — | — |
 | `changes` | array[object] | yes | no | — | — |
 | `changes[].key` | string | yes | no | — | Stable key of the change in its file. |
@@ -644,7 +654,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changes[].date` | string \| null | yes | yes | — | Accounting date (an entry) or reviewed-through date; null for a note. |
 | `changes[].summary` | string | yes | no | — | — |
 | `changes[].reason` | string \| null | yes | yes | — | The accountant's reason, as their copy recorded it. |
-| `changes[].by_name` | string \| null | yes | yes | — | — |
+| `changes[].by_name` | string \| null | yes | yes | — | The external accountant the copy was made for, from these books: every change is posted as them. |
+| `changes[].named_in_file_as` | string \| null | no | yes | null | A different name the file gives for whoever entered it: a label only, never who the change is posted as. |
 | `changes[].lines` | array[object] | no | no | [] | — |
 | `changes[].lines[].account_id` | string | yes | no | — | — |
 | `changes[].lines[].account_name` | string \| null | yes | yes | — | — |
@@ -666,7 +677,8 @@ Example JSON output:
   "copy_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "counts": {},
   "created_at": "2026-01-01T00:00:00Z",
-  "dividing_date": "2026-01-01"
+  "dividing_date": "2026-01-01",
+  "named_in_file_as": null
 }
 ```
 
