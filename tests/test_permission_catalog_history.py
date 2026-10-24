@@ -75,6 +75,7 @@ ACCEPTED = {
     'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
     'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
+    'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -157,6 +158,11 @@ CHAIN_ADDITIONS = {
     'timesheets-v1': {'clock cancel', 'clock in', 'clock link', 'clock out', 'clock status', 'schedule calendar',
                       'schedule cancel', 'schedule create', 'schedule show', 'schedule update', 'timesheet copy-last',
                       'timesheet preferences', 'timesheet save', 'timesheet set-preferences', 'timesheet show'},
+    'inventory-sites-v1': {'inventory-site activate', 'inventory-site create', 'inventory-site deactivate',
+                           'inventory-site list', 'inventory-site show', 'inventory-site update',
+                           'inventory-transfer history', 'inventory-transfer post', 'inventory-transfer query',
+                           'inventory-transfer show', 'inventory-transfer update', 'inventory-transfer void',
+                           'report quantity-by-site'},
 }
 
 _ANCESTOR_EDIT = """

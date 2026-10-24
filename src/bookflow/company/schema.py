@@ -1211,3 +1211,5 @@ from bookflow.company.purchase_order_billing_schema import define_tables as _def
 globals().update(_define_po_billing_tables(metadata, _column, _table))
 from bookflow.company.timekeeping_schema import define_tables as _define_timekeeping_tables
 globals().update(_define_timekeeping_tables(metadata, _column, _table, _common))
+from bookflow.company.inventory_site_schema import define_tables as _define_inventory_site_tables
+globals().update(_define_inventory_site_tables(metadata, _column, _table, _common))

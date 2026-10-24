@@ -319,10 +319,13 @@ def _stock_entries(s, lines, *, date):
         if date < issue['effective_date']:
             raise _invalid('date', 'a return cannot be dated before the sale it returns; '
                                    f"this line was sold on {issue['effective_date']}")
-        entries.append(inventory_effects.return_entry(
+        entry = inventory_effects.return_entry(
             facts, key=line['envelope']['id'],
             quantity_microunits=line['base_quantity_microunits'],
-            issue_id=issue['id'], class_id=line['envelope']['class_id']))
+            issue_id=issue['id'], class_id=line['envelope']['class_id'])
+        entry.site_id = line.get('site_id')
+        entry.line_identity = line['envelope'].get('line_id')
+        entries.append(entry)
     return entries
 
 
@@ -381,6 +384,9 @@ def commercial(s, inp, *, document_id, pending, previous=None):
             pending['credit_source_claims'].extend(resolved['claim_rows'])
             resolved['tax_ordinal'] = None
             resolved['line_id'] = line_id
+            if entered.site is not None:
+                from bookflow.company import placements
+                resolved['site_id'] = placements.site_id_for(s, entered.site, field='lines.site')
             lines.append(resolved)
         else:
             supplied = {name: getattr(entered, name) for name in entered.model_fields_set
@@ -408,6 +414,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                 resolved['claim_rows'] = []
                 lines.append(resolved)
                 warnings.extend(w for w in line_warnings if w not in warnings)
+    place_lines(s, lines, old_revision if previous else None)
     attribution = None
     ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line.get('line_id') for line in lines])
     if retained:
@@ -466,7 +473,24 @@ def _line_semantic(line):
     values['profile'] = line['profile'].model_dump()
     values['source'] = line['source']
     values['intervals'] = [list(interval) for interval in line['intervals']]
+    if line.get('site_semantic'):
+        values['site_id'] = line['site_semantic']
     return values
+
+
+def place_lines(s, lines, old_revision):
+    """Each returned stocked line's inventory site (R104): its own, else what the same line had. A line
+    naming neither goes back where its sale took from (``inventory_effects.plan``)."""
+    from bookflow.company import inventory, placements
+    prior = placements.revision_line_sites(s, old_revision['id']) if old_revision else {}
+    for line in lines:
+        if line['profile'].item_type not in inventory.TRACKED_TYPES:
+            continue
+        site = line.get('site_id') or (prior.get(line['line_id']) if line.get('line_id') else None)
+        if site:
+            line['site_id'] = site
+            line['site_semantic'] = placements.semantic_site(s, site)
+    return lines
 
 
 def _posting_accounts_active(s, resolved):

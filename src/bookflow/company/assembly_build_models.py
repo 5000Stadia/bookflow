@@ -24,6 +24,7 @@ class AssemblyBuildInput(_Strict):
     pending: bool = Field(False, description='Mark the build pending when the components on hand are short of it: '
                                              'nothing is posted, the components are reserved, and `assembly finalize` builds it later. '
                                              'A build that can be built is built; pending applies only to a shortfall.')
+    site: _Selector | None = Field(None, description='Inventory site the components are taken from and the assembly put at, by id or name; omitted, the default site.')
 
 
 class AssemblyBuildSelectInput(_Strict):
@@ -35,6 +36,7 @@ class AssemblyBuildUpdateInput(AssemblyBuildSelectInput):
     quantity: str | None = Field(None, min_length=1, max_length=40, description=_QUANTITY + ' Omitted, unchanged.')
     date: _Date | None = Field(None, description='New build date. Omitted, unchanged.')
     memo: str | None = Field(None, max_length=2000, description='New memo. Omitted, unchanged.')
+    site: _Selector | None = Field(None, description='New inventory site for the build. Omitted, unchanged.')
 
 
 class AssemblyBuildVoidInput(AssemblyBuildSelectInput):
@@ -49,6 +51,7 @@ class AssemblyBuildListInput(_Strict):
     status: Literal['pending', 'built', 'voided', 'deleted', 'all'] | None = Field(
         None, description='Only builds in this state; omitted, every build except deleted ones. `pending` is the Pending Builds report.')
     item: _Selector | None = Field(None, description='Only builds of this assembly item.')
+    site: _Selector | None = Field(None, description='Only builds at this inventory site (Pending Builds by Site).')
     limit: int = Field(50, ge=1, le=200, description='Most builds to return, newest first.')
 
 
@@ -97,6 +100,8 @@ class AssemblyBuildOutput(_Strict):
     reason: str | None = None
     warnings: list[str] = Field(default_factory=list)
     history: list[dict] = Field(default_factory=list, description='Every revision of the build: version, status, date, quantity, who and when.')
+    site_id: str | None = Field(None, description='Inventory site of the build; null at the default site.')
+    site_name: str | None = Field(None, description='Name of the inventory site the build takes from and puts the assembly at.')
 
 
 class AssemblyBuildListRow(_Strict):
@@ -110,6 +115,7 @@ class AssemblyBuildListRow(_Strict):
     quantity: str
     memo: str | None
     assembly_cost: MoneyOutput | None
+    site_name: str | None = None
 
 
 class AssemblyBuildListOutput(_Strict):

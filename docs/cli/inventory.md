@@ -41,6 +41,7 @@ The same example as complete `bookflow_run` arguments:
 | `value_change` | `--value-change` | string \| object \| null | no | yes | null | Signed change in the asset value of this item. Required with a quantity increase, forbidden with a decrease, and on its own it is a write-up or write-down that moves no quantity. |
 | `negative_value` | `--negative-value` | boolean | no | no | false | Set with value_change to write the asset value down rather than up. Money is entered as a positive amount everywhere in Bookflow; this says which way it moves. |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Class captured on both posting lines. |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the quantity change is at, by id or name; omitted, the default site. |
 | `memo` | `--memo` | string \| null | no | yes | null | Why the stock was adjusted. |
 | `number` | `--number` | string \| null | no | yes | null | Document number; omit to take the next journal number. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. |
