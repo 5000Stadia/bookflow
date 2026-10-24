@@ -560,6 +560,8 @@ SECTIONS: tuple[Section, ...] = (
             Action("Pending builds", READ, ("assembly list",), "/assembly/builds?status=pending"),
             _report("Inventory valuation summary", "inventory-valuation"),
             _report("Inventory stock status by item", "stock-status"),
+            Action("Sites and transfers", READ, ("inventory-site list",), "/inventory/sites"),
+            _report("Quantity on hand by site", "quantity-by-site"),
             _report("Open sales orders", "open-sales-orders"),
             _report("Sales by item", "sales-by-item"),
         ),

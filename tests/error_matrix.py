@@ -2244,6 +2244,43 @@ MATRIX['schedule update'] = MATRIX['schedule create'] | {'E_VERSION_CONFLICT': '
 MATRIX['schedule cancel'] = {'E_RECORD_NOT_FOUND': 'unknown entry', 'E_VERSION_CONFLICT': 'stale expected_version'} | _TIME_TAIL
 MATRIX['schedule show'] = {'E_RECORD_NOT_FOUND': 'unknown entry'}
 MATRIX['schedule calendar'] = {'E_RECORD_NOT_FOUND': 'unknown employee or customer', 'E_VALIDATION': 'not a date'}
+# Inventory sites and transfers (R104 increment 1).
+_SITE_COMMON = {
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'context directive does not exist',
+    'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
+}
+MATRIX['inventory-site create'] = {'E_VALIDATION': 'a blank name', 'E_NAME_TAKEN': 'another site has the name', **_SITE_COMMON}
+for _verb in ('update', 'activate', 'deactivate'):
+    MATRIX[f'inventory-site {_verb}'] = {
+        'E_VALIDATION': 'the default site deactivated, or an inactive site made the default',
+        'E_RECORD_NOT_FOUND': 'site absent from selected company',
+        'E_NAME_TAKEN': 'another site has the name',
+        'E_VERSION_CONFLICT': 'the site changed since expected_version',
+        **_SITE_COMMON}
+MATRIX['inventory-site deactivate']['E_RECORD_IN_USE'] = 'the site still holds stock'
+MATRIX['inventory-site show'] = {'E_RECORD_NOT_FOUND': 'site absent from selected company', 'E_VALIDATION': 'an unknown site name'}
+MATRIX['inventory-site list'] = {}
+for _verb in ('post', 'update', 'void'):
+    MATRIX[f'inventory-transfer {_verb}'] = {
+        'E_VALIDATION': 'an unknown site (the sites are listed), the same site twice, or a non-stock item',
+        'E_RECORD_NOT_FOUND': 'transfer or item absent from selected company',
+        'E_INACTIVE_REFERENCE': 'an inactive site or item',
+        'E_VALUE_RANGE': 'a quantity beyond supported bounds',
+        'E_PERIOD_CLOSED': 'a date on or before the closing date',
+        'E_DUPLICATE_NUMBER': 'the transfer number is already used',
+        **_SITE_COMMON}
+MATRIX['inventory-transfer update']['E_VERSION_CONFLICT'] = 'the transfer changed since expected_version'
+MATRIX['inventory-transfer void']['E_VERSION_CONFLICT'] = 'the transfer changed since expected_version'
+MATRIX['inventory-transfer void']['E_REASON_REQUIRED'] = 'no reason given'
+for _verb in ('show', 'history'):
+    MATRIX[f'inventory-transfer {_verb}'] = {'E_RECORD_NOT_FOUND': 'transfer absent from selected company'}
+MATRIX['inventory-transfer query'] = {'E_RECORD_NOT_FOUND': 'item absent from selected company', 'E_VALIDATION': 'an unknown site name'}
+MATRIX['report quantity-by-site'] = {
+    'E_QUERY_STALE': 'the books changed between pages',
+    'E_VALUE_RANGE': 'a limit beyond supported bounds',
+    'E_VALIDATION': 'an unknown site name',
+}
 # Accountant review (R121).
 _ACCT_TAIL = {'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
 _ACCT_KEY = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input'}

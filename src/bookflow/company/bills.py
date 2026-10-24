@@ -520,7 +520,10 @@ def _item_line(s, line, header_class, currency, index, noun='bill'):
     # The purchase description is the item's own words unless the row overrode them; it is
     # stored on the envelope, exactly where an expense row's memo is stored.
     memo = line.description if line.description is not None else row['purchase_description']
-    return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile)
+    from bookflow.company import placements
+    site_id = placements.site_id_for(s, getattr(line, 'site', None), field=field + '.site')
+    return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile,
+                **({'site_id': site_id} if site_id else {}))
 
 
 # ---------------------------------------------------------------- supplier reference
@@ -870,13 +873,35 @@ def _custom_semantic(snapshot):
 
 def _line_semantic(line):
     return {'line_id': line['line_id'], 'family': line['family'], 'memo': line['memo'],
-            'amount_minor_units': line['amount_minor_units'], 'profile': line['profile'].model_dump()}
+            'amount_minor_units': line['amount_minor_units'], 'profile': line['profile'].model_dump(),
+            **({'site_id': line['site_semantic']} if line.get('site_semantic') else {})}
+
+
+def place_item_lines(s, lines, header_site, old_revision):
+    """Give each stocked item line its inventory site (R104): its own, else the document's, else what the
+    same line identity had. ``site_semantic`` is what the "has anything changed" comparison reads."""
+    from bookflow.company import placements
+    prior = placements.revision_line_sites(s, old_revision['id']) if old_revision else {}
+    for line in lines:
+        if line.get('family') != 'item' or line['profile'].item_type not in inventory.TRACKED_TYPES:
+            continue
+        site = line.get('site_id') or header_site or prior.get(line['line_id'])
+        if site:
+            line['site_id'] = site
+            line['site_semantic'] = placements.semantic_site(s, site)
+    return lines
+
+
+def saved_line_sites(s, revision):
+    from bookflow.company import placements
+    return {key: placements.semantic_site(s, site) for key, site in placements.revision_line_sites(s, revision['id']).items()}
 
 
 def _saved_semantic(s, revision):
     profile = profile_row(s, revision)
+    sites = saved_line_sites(s, revision)
     lines = [_line_semantic(dict(line, profile=LINE_FACTS[line['family']].model_validate_json(
-        line['line_snapshot']))) for line in saved_lines(s, revision)]
+        line['line_snapshot']), site_semantic=sites.get(line['line_id']))) for line in saved_lines(s, revision)]
     return dict(date=revision['date'], number=revision['number'], memo=revision['memo'],
                 issuer=json.loads(revision['issuer_snapshot']),
                 profile=BillProfile.model_validate_json(profile['profile_snapshot']).model_dump(),
@@ -1020,6 +1045,8 @@ def commercial(s, inp, old_header, old_revision, *, document_id, received=None):
         grids[family] = resolved_lines
     # Expenses first, then items: the order of the two tabs on the document itself.
     lines = grids['expense'] + grids['item']
+    if received is None:
+        place_item_lines(s, grids['item'], _header_site(s, inp), old_revision)
 
     expense_total = checked_sum((line['amount_minor_units'] for line in grids['expense']), 'expenses.total')
     item_total = checked_sum((line['amount_minor_units'] for line in grids['item']), 'items.total')
@@ -1122,7 +1149,12 @@ def _from_order(s, inp, operation):
         and (key not in supplied or getattr(inp, key) is None)})
 
 
-def _stock_entries(pending, profile):
+def _header_site(s, inp):
+    from bookflow.company import placements
+    return placements.site_id_for(s, getattr(inp, 'site', None))
+
+
+def _stock_entries(pending, profile, lines=None, header_site=None):
     """The item lines that move stock, in the shape the inventory ledger takes them.
 
     The family a line belongs to is read off the captured facts rather than off the item
@@ -1130,6 +1162,7 @@ def _stock_entries(pending, profile):
     afterwards must not change which lines a stored revision moved.
     """
     items = {row['document_line_id']: row for row in pending['purchase_item_lines']}
+    sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -1140,6 +1173,8 @@ def _stock_entries(pending, profile):
             facts, key=envelope['id'], amount=line['amount_minor_units'],
             offset_account_id=profile.ap_account.id, class_id=envelope['class_id'])
         if entry is not None:
+            entry.site_id = sites.get(envelope['position']) or header_site   # R104
+            entry.line_identity = envelope['line_id']
             entries.append(entry)
     return entries
 
@@ -1278,7 +1313,8 @@ def prepare(s, ctx, inp, operation):
     # here -- negative stock on any earlier date, a closed period any delta would land in --
     # leaves nothing behind, because nothing has been written.
     stock = inventory_effects.plan(
-        s, entries=[] if operation == 'void' or received else _stock_entries(pending, resolved['profile']),
+        s, entries=[] if operation == 'void' or received else _stock_entries(
+            pending, resolved['profile'], resolved['lines'], _header_site(s, inp)),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'], field='items')
     inventory_effects.open_dates(s, stock)

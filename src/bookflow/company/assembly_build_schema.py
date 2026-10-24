@@ -37,6 +37,7 @@ def define_tables(metadata, C, T):
         C('created_by', sa.String(26), 'Company principal that wrote this revision.', nullable=False),
         C('created_via', sa.String(16), 'Interface this revision was written through.', nullable=False),
         C('audit_event_id', sa.String(26), 'Audit event that committed this revision.', sa.ForeignKey('audit_events.id'), nullable=False),
+        C('site_id', sa.String(26), 'Inventory site the build takes its components from and puts the assembly at; null at the default site.', sa.ForeignKey('inventory_sites.id'), nullable=True),
         sa.UniqueConstraint('build_id', 'revision_number', name='uq_assembly_build_revision'),
         sa.CheckConstraint("status IN ('pending','built','voided','deleted')", name='ck_assembly_build_status'),
         sa.CheckConstraint("typeof(quantity_microunits) = 'integer' AND quantity_microunits > 0", name='ck_assembly_build_quantity'),

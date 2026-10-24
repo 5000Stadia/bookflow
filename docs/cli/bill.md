@@ -794,6 +794,7 @@ The same example as complete `bookflow_run` arguments:
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
@@ -826,6 +827,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 
 ### Command and context options
 
@@ -2280,6 +2282,7 @@ The same example as complete `bookflow_run` arguments:
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
@@ -2309,6 +2312,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 
 ### Command and context options
 

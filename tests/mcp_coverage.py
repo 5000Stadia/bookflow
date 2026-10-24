@@ -221,6 +221,13 @@ ACCOUNTANT_REVIEW_COMMANDS = frozenset((
     'accountant-copy import', 'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
     'report accountant-review'))
 
+# R104 increment 1: inventory sites, transfers and Quantity on Hand by Site. Its witness runs the first shared
+# scenario (sites, a retried transfer, a correction and a void) through all four surfaces over identical demo copies.
+INVENTORY_SITE_COMMANDS = frozenset(('inventory-site activate', 'inventory-site create', 'inventory-site deactivate',
+    'inventory-site list', 'inventory-site show', 'inventory-site update', 'inventory-transfer history',
+    'inventory-transfer post', 'inventory-transfer query', 'inventory-transfer show', 'inventory-transfer update',
+    'inventory-transfer void', 'report quantity-by-site'))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
 # R106: timekeeping. Its witness sets the preferences, saves, shows and copies a weekly timesheet, clocks a person
@@ -231,7 +238,7 @@ TIMEKEEPING_COMMANDS = frozenset(('clock cancel', 'clock in', 'clock link', 'clo
                                   'schedule update', 'timesheet copy-last', 'timesheet preferences', 'timesheet save',
                                   'timesheet set-preferences', 'timesheet show'))
 
-FROZEN_COMMANDS = ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -771,6 +778,7 @@ def execution_map():
     from tests.test_order_invoicing_surfaces import COMMANDS as ORDER_INVOICING_SURFACE_COMMANDS
     from tests.test_shortfall_surfaces import COMMANDS as SHORTFALL_SURFACE_COMMANDS
     from tests.test_purchase_order_partial_surfaces import COMMANDS as PARTIAL_PO_SURFACE_COMMANDS
+    from tests.test_inventory_site_surfaces import COMMANDS as INVENTORY_SITE_SURFACE_COMMANDS
     from tests.test_accountant_review_surfaces import COMMANDS as ACCOUNTANT_REVIEW_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
@@ -860,6 +868,7 @@ def execution_map():
                    'tests/test_order_invoicing_surfaces.py::test_the_same_order_invoice_through_python_cli_http_and_mcp' if cmd.name in ORDER_INVOICING_SURFACE_COMMANDS else  # all four
                    'tests/test_shortfall_surfaces.py::test_the_same_shortfall_purchase_through_python_cli_http_and_mcp' if cmd.name in SHORTFALL_SURFACE_COMMANDS else  # all four
                    'tests/test_purchase_order_partial_surfaces.py::test_the_same_partial_order_billing_through_python_cli_http_and_mcp' if cmd.name in PARTIAL_PO_SURFACE_COMMANDS else  # all four
+                   'tests/test_inventory_site_surfaces.py::test_the_same_sites_and_transfers_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_SITE_SURFACE_COMMANDS else  # all four
                    'tests/test_accountant_review_surfaces.py::test_the_same_accountant_review_through_python_cli_http_and_mcp' if cmd.name in ACCOUNTANT_REVIEW_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else

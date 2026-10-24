@@ -75,7 +75,8 @@ ACCEPTED = {
     'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
     'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
-    'accountant-review-v1': (651, 'd286722e0bf4f133b66cac34a2f562be53de33515d479d5a9808846aff6097c4'),
+    'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
+    'accountant-review-v1': (664, '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -158,6 +159,11 @@ CHAIN_ADDITIONS = {
     'timesheets-v1': {'clock cancel', 'clock in', 'clock link', 'clock out', 'clock status', 'schedule calendar',
                       'schedule cancel', 'schedule create', 'schedule show', 'schedule update', 'timesheet copy-last',
                       'timesheet preferences', 'timesheet save', 'timesheet set-preferences', 'timesheet show'},
+    'inventory-sites-v1': {'inventory-site activate', 'inventory-site create', 'inventory-site deactivate',
+                           'inventory-site list', 'inventory-site show', 'inventory-site update',
+                           'inventory-transfer history', 'inventory-transfer post', 'inventory-transfer query',
+                           'inventory-transfer show', 'inventory-transfer update', 'inventory-transfer void',
+                           'report quantity-by-site'},
     'accountant-review-v1': {'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify',
                              'accountant remove', 'accountant reviewed-through', 'accountant-copy cancel',
                              'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',

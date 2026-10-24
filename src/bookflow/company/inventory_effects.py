@@ -88,7 +88,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from bookflow.company import assembly_builds, inventory, item_conversions, journals, schema as c
+import sqlalchemy as sa
+
+from bookflow.company import assembly_builds, inventory, item_conversions, journals, placements, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_schema import INPUT_KINDS
@@ -122,6 +124,8 @@ class Entry:
     class_id: str | None = None
     value_minor_units: int | None = None   # a bought receipt and a vendor return state it; the rest ask costing
     returns_movement_id: str | None = None # the issue this receipt gives back, on a return
+    site_id: str | None = None             # the inventory site the line names (else its document's); None defaults
+    line_identity: str | None = None       # the entered line's stable identity, to keep its site across revisions
 
 
 def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
@@ -216,6 +220,8 @@ class Change:
     corrections: list = field(default_factory=list)    # one per affected earlier date
     costs: dict = field(default_factory=dict)          # entry key -> signed value minor units
     warnings: list = field(default_factory=list)       # sales this leaves below zero
+    placements: list = field(default_factory=list)     # where its own movements' units are (R104)
+    sites: dict = field(default_factory=dict)          # movement id -> site, for its own movements
 
     @property
     def moves_stock(self):
@@ -268,6 +274,22 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                                       quantity_field=field, value_field=field)
 
     change = Change()
+    # Where the units go (R104): a line's stated site, else the issue a return gives back, else where
+    # the revision being replaced put the same item, else the default site.
+    # Keyed by the entered line's stable identity, so two lines of one item at two sites keep their
+    # own; a line with no identity (a build's) falls back to where the same item was.
+    prior_sites, prior_item_sites = {}, {}
+    if reversing:
+        stored_places = placements.movement_placements(s, [row['id'] for row in reversing])
+        identities = dict(s.company.conn.execute(sa.select(c.document_lines.c.id, c.document_lines.c.line_id).where(
+            c.document_lines.c.id.in_([row['document_line_id'] for row in reversing]))).all())
+        for row in reversing:
+            places = sorted(stored_places.get(row['id'], ()), key=lambda p: -abs(int(p['quantity_microunits'])))
+            if places:
+                identity = identities.get(row['document_line_id'])
+                if identity:
+                    prior_sites.setdefault(identity, places[0]['site_id'])
+                prior_item_sites.setdefault(row['item_id'], places[0]['site_id'])
     for row in reversing:
         values = dict(
             id=new_id(), item_id=row['item_id'], kind='reversal',
@@ -317,6 +339,12 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 raise BookflowError('E_INTERNAL', message=(
                     'A stock return names an issue this ledger cannot value it against.'))
             values['value_minor_units'] = computed
+        site = (entry.site_id
+                or (prior_sites.get(entry.line_identity) if entry.line_identity else None)
+                or (placements.site_of_movement(s, entry.returns_movement_id) if entry.returns_movement_id else None)
+                or (prior_item_sites.get(entry.item_id) if entry.line_identity is None else None))
+        if site is not None:
+            change.sites[identity] = site
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']
@@ -403,6 +431,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
         change.corrections.append(Correction(
             affected, 'Provisional cost true-up' if true_up else 'Weighted-average cost correction',
             lines, movements))
+    change.placements = placements.for_movements(s, [movement.values for movement in change.movements], change.sites)
+    change.warnings.extend(placements.warnings(s, change.placements, names))
     return change
 
 
@@ -499,6 +529,7 @@ def write_corrections(s, ctx, change, *, command_name, created_at=None):
         applied = journals.persist_prepared(
             fresh, ctx, s, command_name=command_name,
             extra=(('inventory_documents', 'inventory_document', 'transaction_id', [marker]),
+                   placements.extra(placements.placements_for_rows(s, rows)),
                    ('inventory_movements', 'inventory_movement', 'id', rows)),
             noun='inventory cost correction')
         touched.extend(applied.touched)
@@ -518,11 +549,17 @@ def write_movements(s, ctx, change, *, command_name, summary, created_at):
                        created_via=ctx.interface.value, audit_event_id=event)
     if not rows:
         return []
-    touched = [Touched('inventory_movement', row['id'], 'create', None, 1, row, db='company')
-               for row in rows]
+    # Placed first: the database refuses a movement whose placements, already written, do not sum
+    # to its quantity (R104).
+    placed = placements.placements_for_rows(s, rows, change.sites, change.placements)
+    touched = [Touched('inventory_placement', row['id'], 'create', None, 1, row, db='company')
+               for row in placed]
+    touched += [Touched('inventory_movement', row['id'], 'create', None, 1, row, db='company')
+                for row in rows]
     audit.write_event_to(s.company, ctx, command_name, summary, touched, actor_id=s.actor.id,
                          actor_kind=s.actor.kind,
                          directive_code=getattr(s, 'directive_code', None), event_id=event)
+    placements.insert(s, placed)
     s.company.conn.execute(c.inventory_movements.insert(), rows)
     return touched
 

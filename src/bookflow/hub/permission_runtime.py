@@ -149,7 +149,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.SHORTFALL_PO_POLICY_VERSION: 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374',
     c.PARTIAL_PO_POLICY_VERSION: '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb',
     c.TIMESHEETS_POLICY_VERSION: '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357',
-    c.ACCOUNTANT_REVIEW_POLICY_VERSION: 'd286722e0bf4f133b66cac34a2f562be53de33515d479d5a9808846aff6097c4',
+    c.INVENTORY_SITES_POLICY_VERSION: '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529',
+    c.ACCOUNTANT_REVIEW_POLICY_VERSION: '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -274,6 +275,7 @@ def known_catalog(version):
     from . import permission_shortfall_po_catalog
     from . import permission_partial_po_catalog
     from . import permission_timesheets_catalog
+    from . import permission_inventory_sites_catalog
     from . import permission_accountant_review_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -325,6 +327,7 @@ def known_catalog(version):
         c.SHORTFALL_PO_POLICY_VERSION: permission_shortfall_po_catalog,
         c.PARTIAL_PO_POLICY_VERSION: permission_partial_po_catalog,
         c.TIMESHEETS_POLICY_VERSION: permission_timesheets_catalog,
+        c.INVENTORY_SITES_POLICY_VERSION: permission_inventory_sites_catalog,
         c.ACCOUNTANT_REVIEW_POLICY_VERSION: permission_accountant_review_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
