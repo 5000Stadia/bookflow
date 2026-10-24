@@ -26,15 +26,17 @@ the books (a closed period, an inactive account) makes a blocked occurrence and 
 author. Blocked occurrences are never retried by the scheduler: a person runs `memorized retry`
 or `memorized skip`.
 
-*Who scheduled it.* A group's schedule, mode and status can be set by someone other than its
-members' authors, so whoever last set them is recorded (``scheduled_group_authority``, with an
-agent's epoch) and must pass the same checks as the author. When the setter is someone else, the
-author's own right must still admit the entry, and the entry is made *as the setter* -- an agent
-setter's entries are that agent's writes, on its review list -- with a reason naming both
-("...; memorized by A, scheduled by B"). A deactivated or suspended setter blocks the entry and an
-administrator gets the to-do. A template's own schedule is part of its revision, so its author is
-its setter. A slot older than the default catch-up window, let in because an administrator widened
-``scheduler_catch_up_days``, says who widened it in its reason.
+*One person decides both.* An occurrence is entered unattended only when the author of the
+revision it replays is the same principal who set the schedule that brings it due -- the same
+person, or the same agent acting for the same person. A template's schedule is part of its
+revision, so its author always set it; a group's schedule, mode and status are recorded with
+whoever set them (``scheduled_group_authority``, with an agent's epoch). When the two differ --
+content added to someone else's scheduled group, a group switched on or re-timed by someone else,
+a group whose schedule was set before this upgrade (who set it is unknown) -- the occurrence waits
+for a person exactly as a reminder does (``scheduled_holds``, shown on Reminders with both names)
+and posts only when a person enters it, as that person. A slot let in by a widening of
+``scheduler_catch_up_days`` (whatever its size) names who widened it in its reason, and waits for a
+person when that widening was an agent's or anyone's but the slot's author's.
 
 *How it is recorded.* The posting is the author's write: its audit event names the author as the
 actor (an agent stays an agent, so `report entries-to-review` and `audit list --actor/--principal`
@@ -165,8 +167,8 @@ def group_setter(s, occurrence):
         return None
     row = s.company.conn.execute(sa.select(c.scheduled_group_authority).where(
         c.scheduled_group_authority.c.group_id == group['id'])).mappings().first()
-    if row is None:   # set before this upgrade: its last editor, with nothing recorded about an agent's epoch
-        return group['updated_by'], None, _NOT_RECORDED, group
+    if row is None:   # set before this upgrade: who set it is unknown, so nobody's decision can be assumed
+        return None, None, _NOT_RECORDED, group
     return row['set_by'], row['principal_id'], row['authority_epoch'], group
 
 
@@ -181,14 +183,39 @@ def _name(s, user_id):
     return (row[0] or row[1]) if row else 'someone'
 
 
+def _hold(s, occurrence, author, principal, widened) -> str | None:
+    """Why this occurrence must wait for a person rather than be entered unattended, or None.
+
+    It is entered unattended only when one principal decided both what it posts and when: the
+    author of the revision it replays (an agent counted together with the person it acted for)
+    also set the schedule that brings it due. Content added to someone else's scheduled group, a
+    group switched on or re-timed by someone else, or a slot let in by a catch-up window someone
+    else (or any agent) widened, waits for a person, as a reminder does, and posts only when a
+    person enters it -- as that person.
+    """
+    setter = group_setter(s, occurrence)
+    if setter is not None:
+        set_by, set_principal, set_saved, group = setter
+        if set_by is None:
+            return "schedule set before this upgrade; open the group and save its schedule to let it run"
+        if (set_by, set_principal) != (author, principal):
+            return (f"memorized by {_name(s, author)}, scheduled by {_name(s, set_by)}; "
+                    "waiting for a person to enter it")
+        why, _ = _cannot_act(s, set_by, set_principal, set_saved, what="set this group's schedule")
+        if why is not None:
+            return f"whoever set its group's schedule, {why}; waiting for a person to enter it"
+    if widened and occurrence['slot_date'] < widened['before'] and (
+            widened['kind'] == 'agent' or widened['by_id'] != author):
+        return (f"catch-up widened to {widened['days']} days by {widened['by']}, not by its author; "
+                "waiting for a person to enter it")
+    return None
+
+
 def _enter(s, occurrence, as_of, widened=None):
-    """Enter one claimed occurrence with the authority of its revision's author -- and, when someone
-    else set the schedule of the group driving it, with that setter's authority too, as the setter."""
+    """Enter one claimed occurrence as the author of the revision it replays, with that author's
+    full authority (the ordinary authorization, input checks and plan) -- or say why it waits."""
     from bookflow.company import memorized as service, memorized_entry
-    from bookflow.core import registry
     from bookflow.core.context import ActorKind
-    from bookflow.core.dispatch import authorize
-    from bookflow.core.errors import BookflowError
     recovered = memorized_entry._recover(s, occurrence)
     if recovered is not None:
         return {'occurrence': occurrence, 'output': recovered['output'], 'recovered': recovered['source']}
@@ -199,41 +226,24 @@ def _enter(s, occurrence, as_of, widened=None):
         return {'occurrence': occurrence, 'error': _blocked(
             'E_PERMISSION', f"Not entered: the author of this memorized transaction, {why}, so it no longer "
                             "carries anyone's authority. A person must review it.", reason='author_inactive')}
+    held = _hold(s, occurrence, author, principal, widened)
+    if held is not None:
+        return {'occurrence': occurrence, 'hold': held}
     frequency = template['frequency']
-    actor, actor_principal, actor_epoch = author, principal, epoch
     setter = group_setter(s, occurrence)
-    note = ''
     if setter is not None:
-        set_by, set_principal, set_saved, group = setter
-        frequency = group['frequency']
-        if set_by != author:
-            why, set_epoch = _cannot_act(s, set_by, set_principal, set_saved, what="set this group's schedule")
-            if why is not None:
-                return {'occurrence': occurrence, 'error': _blocked(
-                    'E_PERMISSION', f"Not entered: whoever set the schedule of its group, {why}. A person must "
-                                    "review it.", reason='setter_inactive')}
-            # The author's own right must still admit the entry, though it is the setter who enters it.
-            _act_as(s, author, principal, epoch)
-            check = context().model_copy(update={'actor_id': author, 'actor_kind': ActorKind(s.actor.kind),
-                                                 'on_behalf_of': principal, 'reason': 'scheduled entry check'})
-            try:
-                authorize(registry.get(occurrence['command']), check, s, dry_run=True)
-            except BookflowError as error:
-                return {'occurrence': occurrence, 'error': _blocked(
-                    'E_PERMISSION', f"Not entered: its author, {_name(s, author)}, may no longer make it "
-                                    f"({error.code}).", reason='author_not_permitted')}
-            actor, actor_principal, actor_epoch = set_by, set_principal, set_epoch
-            note = f'; memorized by {_name(s, author)}, scheduled by {_name(s, set_by)}'
-    _act_as(s, actor, actor_principal, actor_epoch)
-    ctx = context().model_copy(update={'actor_id': actor, 'actor_kind': ActorKind(s.actor.kind),
-                                       'on_behalf_of': actor_principal})
+        frequency = setter[3]['frequency']
+    note = ''
     if widened and occurrence['slot_date'] < widened['before']:
-        note += f"; catch-up widened to {widened['days']} days by {widened['by']}"
+        note = f"; catch-up widened to {widened['days']} days by {widened['by']}"
+    _act_as(s, author, principal, epoch)
+    ctx = context().model_copy(update={'actor_id': author, 'actor_kind': ActorKind(s.actor.kind),
+                                       'on_behalf_of': principal})
     reason = f"On schedule: {template['name']} ({frequency.replace('_', ' ')}) for {occurrence['slot_date']}{note}"
     result = memorized_entry._enter_one(s, ctx, occurrence, reason=reason)
     error = result.get('error')
     if error is not None and error.code == 'E_COMPANY_NOT_FOUND':
-        result['error'] = _blocked('E_PERMISSION', f'Not entered: {_name(s, actor)}, whose authority it runs on, '
+        result['error'] = _blocked('E_PERMISSION', f'Not entered: its author, {_name(s, author)}, '
                                                    'is no longer a member of this company.', reason='author_not_member')
     return result
 
@@ -244,19 +254,38 @@ def _revision_saved_or_missing(s, revision_id):
     return _NOT_RECORDED if row is None else row[0]
 
 
-def _widened(s, catch_up):
-    """Who widened the catch-up window past the default, and to what, for the reason of what it lets in."""
+def _widened(s, catch_up, as_of):
+    """The latest change to the catch-up window, when it widened it: by whom, as what, from what.
+
+    Read from the company audit trail, where every `company update` records the change. Whatever the
+    size, a widening lets in the slots older than the window it replaced (a value left empty counts
+    as the default year); those entries name it in their reason, and wait for a person when the
+    widening was an agent's or anyone's but their author's.
+    """
     from bookflow.core.audit import decode_snapshot
-    if catch_up is None or catch_up <= DEFAULT_CATCH_UP_DAYS:
+    if catch_up is None:
         return None
     e, n = c.audit_events, c.audit_entries
-    for actor_id, before, after in s.company.conn.execute(
-            sa.select(e.c.actor_id, n.c.before, n.c.after).join(n, n.c.event_id == e.c.id)
-            .where(e.c.command == 'company update').order_by(e.c.seq.desc())):
-        old, new = decode_snapshot(before) or {}, decode_snapshot(after) or {}
-        if 'scheduler_catch_up_days' in new and old.get('scheduler_catch_up_days') != new['scheduler_catch_up_days']:
-            return {'days': catch_up, 'by': _name(s, actor_id)}
-    return {'days': catch_up, 'by': 'an administrator'}
+    # Each `company update` keeps the company row as it stood after it: the change is the newest event
+    # whose value differs from the one before it.
+    seen = []
+    for actor_id, kind, at, after in s.company.conn.execute(
+            sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after).join(n, n.c.event_id == e.c.id)
+            .where(e.c.command == 'company update', n.c.record_type == 'company_info').order_by(e.c.seq.desc())):
+        new = decode_snapshot(after) or {}
+        if 'scheduler_catch_up_days' in new:
+            seen.append((actor_id, kind, at, new['scheduler_catch_up_days']))
+    for index, (actor_id, kind, at, value) in enumerate(seen):
+        previous = seen[index + 1][3] if index + 1 < len(seen) else None
+        if value != previous:
+            if value != catch_up:
+                return None
+            previous = DEFAULT_CATCH_UP_DAYS if previous is None else previous
+            if catch_up <= previous:
+                return None
+            return {'days': catch_up, 'by': _name(s, actor_id), 'by_id': actor_id, 'kind': kind, 'at': at,
+                    'before': (date.fromisoformat(as_of) - timedelta(days=previous)).isoformat()}
+    return None
 
 
 def _mode(s, item):
@@ -302,18 +331,19 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     from bookflow.core.ids import new_id
     info = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).mappings().one()
     catch_up = info['scheduler_catch_up_days']
-    widened = _widened(s, catch_up)
-    if widened is not None:
-        widened['before'] = (date.fromisoformat(as_of) - timedelta(days=DEFAULT_CATCH_UP_DAYS)).isoformat()
+    widened = _widened(s, catch_up, as_of)
     if catch_up is None:
         catch_up = DEFAULT_CATCH_UP_DAYS
     cutoff = (date.fromisoformat(as_of) - timedelta(days=catch_up)).isoformat()
     summary = {'entered': 0, 'blocked': 0, 'waiting': 0, 'left_for_a_person': 0}
 
+    held = {row[0] for row in s.company.conn.execute(sa.select(c.scheduled_holds.c.occurrence_id))}
+
     def keep_waiting(occurrence, mode):
-        # Only waiting slots this run will enter: a reminder slot, one older than the catch-up
-        # window, or one already blocked is on the Reminders list and must never crowd out the rest.
-        return mode == 'enter_automatically' and occurrence['slot_date'] >= cutoff
+        # Only waiting slots this run will enter: a reminder slot, one older than the catch-up window,
+        # one held for a person, or one already blocked is on the Reminders list and must never crowd
+        # out the rest.
+        return mode == 'enter_automatically' and occurrence['slot_date'] >= cutoff and occurrence['id'] not in held
 
     found = memorized_entry._due_work(s, SimpleNamespace(as_of=as_of, limit=10 * SLOTS_PER_TICK, memorized=None),
                                       as_of, keep_waiting=keep_waiting)
@@ -345,14 +375,18 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             if s.company.write_transaction:
                 s.company.raw.rollback()
             raise
-        results = []
+        results, holds = [], []
         for occurrence in claimed:
             if occurrence['_enter']:
-                results.append(_enter(s, occurrence, as_of, widened))
+                outcome = _enter(s, occurrence, as_of, widened)
+                (holds if 'hold' in outcome else results).append(outcome)
         _act_as(s, system_id)
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
             rows, _ = memorized_entry._record(s, ctx, PROCESS, claimed, results)
+            if holds:
+                _write_holds(s, ctx, holds)
+                summary['held'] = len(holds)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
             if s.company.write_transaction:
@@ -365,6 +399,21 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
         elif row['status'] == 'pending':
             summary['waiting'] += 1
     return summary
+
+
+def _write_holds(s, ctx, holds):
+    """Record, once each, the slots that wait for a person and why (shown on Reminders)."""
+    from bookflow.core.audit import write_event_to
+    from bookflow.core.clock import now_iso
+    from bookflow.core.ids import new_id
+    from bookflow.core.registry import Touched
+    at, rows = now_iso(), []
+    for hold in holds:
+        rows.append(dict(occurrence_id=hold['occurrence']['id'], reason=hold['hold'][:400], created_at=at))
+    s.company.conn.execute(c.scheduled_holds.insert(), rows)
+    write_event_to(s.company, ctx, PROCESS, f'{len(rows)} automatic entr{"y waits" if len(rows) == 1 else "ies wait"} for a person',
+                   [Touched('scheduled_hold', row['occurrence_id'], 'create', None, 1, row, db='company') for row in rows],
+                   actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
 
 
 def _active_admin(s) -> str | None:

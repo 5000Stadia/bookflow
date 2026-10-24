@@ -199,6 +199,8 @@ class MemorizedReminder(BaseModel):
     mode: str
     error_code: str | None
     error_message: str | None
+    waiting_reason: str | None = Field(None, description='Why the scheduler left an automatic entry for a person, '
+                                                         'e.g. "memorized by helper, scheduled by k".')
 
 
 class InvoiceReminder(BaseModel):

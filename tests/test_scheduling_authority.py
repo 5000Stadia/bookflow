@@ -261,34 +261,126 @@ def _agent_turns_on_the_admins_group(books):
     return admin, agent
 
 
-def test_R3_a_group_switched_on_by_a_since_deactivated_agent_posts_nothing(books):
+def test_R3_X3_a_group_switched_on_by_a_since_deactivated_agent_posts_nothing(books):
     admin, agent = _agent_turns_on_the_admins_group(books)
     books.client.run('agent deactivate', {'agent': 'helper'})
     out = tick(books, '2026-01-31')
-    assert out['memorized']['entered'] == 0 and out['memorized']['blocked'] == 3, out
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 3, out
     assert bill_totals(books) == []
-    blocked = occurrences(books, 'Draw')
-    assert all('set the schedule of its group' in o['error_message'] for o in blocked)
-    assert todo_for(books, blocked[0]['id'])['assignee_id'] == admin
 
 
-def test_R3_a_group_switched_on_by_an_agent_posts_as_that_agents_write_naming_both(books):
+def test_X2_X3_someone_elses_schedule_never_posts_unattended_and_names_both(books):
     admin, agent = _agent_turns_on_the_admins_group(books)
     out = tick(books, '2026-01-31')
-    assert out['memorized']['entered'] == 3, out
-    rows = audit_rows(books, 'bill post')
-    assert {(r['actor_id'], r['actor_kind'], r['on_behalf_of']) for r in rows} == {(agent, 'agent', admin)}
-    assert all('memorized by' in r['reason'] and 'scheduled by' in r['reason'] for r in rows)
-    assert len(books.run('audit list', {'actor': 'helper', 'command': 'bill post', 'limit': 10})['items']) == 3
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 3, out
+    assert bill_totals(books) == [] and audit_rows(books, 'bill post') == []
+    due = [r for r in books.run('reminders', {'as_of': '2026-01-31'})['memorized_due'] if r['template_name'] == 'Draw']
+    assert len(due) == 3 and all(r['waiting_reason'].startswith('memorized by ') and 'scheduled by' in r['waiting_reason']
+                                 and 'helper' in r['waiting_reason'].lower() for r in due)
+    entered = books.run('memorized process', {'as_of': '2026-01-31'}, reason='The owner enters them by hand')
+    assert entered['entered_count'] == 3
+    assert {(r['actor_id'], r['actor_kind']) for r in audit_rows(books, 'bill post')} == {(admin, 'human')}
 
 
-def test_R3_widening_catch_up_names_who_widened_it_on_what_it_lets_in(books):
+def test_X2_an_agents_content_in_a_persons_group_never_posts_in_the_persons_name(books):
+    admin = admin_id(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    books.run('memorized-group create', {'name': 'Month end', 'frequency': 'monthly', 'start_date': '2026-01-31',
+                                         'mode': 'enter_automatically'}, reason='Admin schedules month end')
+    run_as(books, 'helperlogin', 'memorized create', {'name': 'Agent extra', 'command': 'bill post',
+                                                      'payload': tools('9999.00'), 'group': 'Month end',
+                                                      'group_ordinal': 1}, on_behalf_of=admin, reason='Agent adds a member')
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 1, out
+    assert bill_totals(books) == []
+
+
+def test_X4_a_group_scheduled_before_the_upgrade_waits_until_its_schedule_is_saved(books):
+    books.run('memorized-group create', {'name': 'Month end', 'frequency': 'monthly', 'start_date': '2026-01-31',
+                                         'mode': 'enter_automatically'}, reason='group')
+    books.run('memorized create', {'name': 'Tools', 'command': 'bill post', 'payload': tools('4.00'),
+                                   'group': 'Month end', 'group_ordinal': 1}, reason='member')
+    with company_db(books) as db:
+        db.execute('DELETE FROM scheduled_group_authority')         # as a group saved before co0085
+    group = books.run('memorized-group show', {'memorized_group': 'Month end'})
+    books.run('memorized-group update', {'memorized_group': 'Month end', 'expected_version': group['version'],
+                                         'name': 'Month-end run'}, reason='A rename records no setter')
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['held'] == 1 and bill_totals(books) == [], out
+    [due] = books.run('reminders', {'as_of': '2026-01-31'})['memorized_due']
+    assert due['waiting_reason'] == 'schedule set before this upgrade; open the group and save its schedule to let it run'
+    group = books.run('memorized-group show', {'memorized_group': 'Month-end run'})
+    books.run('memorized-group update', {'memorized_group': 'Month-end run', 'expected_version': group['version'],
+                                         'mode': 'enter_automatically', 'days_in_advance': 0, 'frequency': 'monthly',
+                                         'start_date': '2026-02-28'}, reason='Save its schedule')
+    assert tick(books, '2026-02-28')['memorized']['entered'] == 1
+    assert bill_totals(books) == [400]
+
+
+def test_R3_X5_widening_catch_up_names_who_widened_it_on_what_it_lets_in(books):
     books.run('company update', {'scheduler_catch_up_days': 1000}, reason='Let the old ones in')
     memorize(books, start_date='2024-06-30')
     tick(books, '2026-01-31')
     rows = audit_rows(books, 'bill post')
     old = [r for r in rows if 'catch-up widened to 1000 days by' in r['reason']]
     assert old and len(old) < len(rows)
+
+
+def test_X5_a_catch_up_widened_by_someone_else_holds_the_extra_slots(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'olga', company_role=(books.company, 'admin'))
+    as_user(root, 'olga').run('company update', {'scheduler_catch_up_days': 1000}, company=books.company)
+    memorize(books, start_date='2024-06-30')            # the installer's own template
+    with host(books) as running:
+        for minute in range(3):
+            out = running.schedule_now(now=at('2026-01-31').replace(minute=minute))[books.company]['memorized']
+    held = [o for o in occurrences(books) if o['status'] == 'pending']
+    entered = [o for o in occurrences(books) if o['status'] == 'entered']
+    assert held and entered and max(o['slot_date'] for o in held) < '2025-01-31' <= min(o['slot_date'] for o in entered)
+    due = books.run('reminders', {'as_of': '2026-01-31'})['memorized_due']
+    assert any('catch-up widened to 1000 days by Olga' in (r['waiting_reason'] or '') for r in due)
+
+
+def test_X6_a_preview_names_the_revision_and_its_author_and_a_later_edit_is_stale(books):
+    memorize(books, mode='remind')
+    show = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    books.run('memorized update', {'memorized': show['id'], 'expected_version': show['version'], 'mode': 'enter_automatically'},
+              reason='Enter it')
+    preview = books.run('memorized process', {'as_of': '2026-01-31'}, reason='Look first', dry_run=True)
+    [row] = preview['entered']
+    current = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    assert row['revision_id'] == current['current_revision_id'] and row['replays_author_id'] == admin_id(books)
+    assert row['replays_author']
+    books.run('memorized update', {'memorized': current['id'], 'expected_version': current['version'],
+                                   'payload': tools('9999.00')}, reason='Someone edits it in between')
+    with pytest.raises(BookflowError) as stale:
+        books.run('memorized process', {'as_of': '2026-01-31', 'expected_facts_fingerprint': preview['facts_fingerprint']},
+                  reason='Enter what I previewed')
+    assert stale.value.code == 'E_PREVIEW_STALE'
+    assert bill_totals(books) == []
+
+
+def test_X6_a_retry_preview_names_the_revision_that_will_post_and_refuses_a_stale_apply(books):
+    memorize(books)
+    books.run('company update', {'closing_date': '2026-01-31'}, reason='Close January')
+    out = books.run('memorized process', {'as_of': '2026-01-31'}, reason='It will block')
+    occurrence = out['blocked'][0]
+    books.run('company update', {'closing_date': None}, reason='Reopen')
+    show = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    books.run('memorized update', {'memorized': show['id'], 'expected_version': show['version'],
+                                   'payload': tools('10.00')}, reason='Correct it')
+    preview = books.run('memorized retry', {'occurrence': occurrence['id'], 'expected_version': occurrence['version']},
+                        reason='Look first', dry_run=True)
+    edited = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    assert preview['occurrence']['revision_id'] == edited['current_revision_id'] != occurrence['revision_id']
+    assert preview['occurrence']['replays_author_id'] == admin_id(books)
+    books.run('memorized update', {'memorized': edited['id'], 'expected_version': edited['version'],
+                                   'payload': tools('20.00')}, reason='Edited again')
+    with pytest.raises(BookflowError) as stale:
+        books.run('memorized retry', {'occurrence': occurrence['id'], 'expected_version': occurrence['version'],
+                                      'expected_facts_fingerprint': preview['facts_fingerprint']}, reason='Retry')
+    assert stale.value.code == 'E_PREVIEW_STALE' and bill_totals(books) == []
 
 
 def test_R2a_a_retry_after_the_admin_resaves_posts_the_resaved_content(books):

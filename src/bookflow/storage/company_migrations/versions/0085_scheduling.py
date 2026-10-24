@@ -5,7 +5,8 @@ scheduler still enters (null: all of them, as the anchor does), and the overdue 
 days overdue (null: notices off), weekly or monthly, a minimum overdue balance, and whether a
 notice is a statement or a short letter. Three new tables: ``todos`` (to-do notes assigned to a
 person or an agent), ``scheduled_revision_authority`` (the authority an agent held when it saved a memorized
-revision), ``scheduled_group_authority`` (who last set each memorized group's schedule) and ``overdue_notices`` (the queue of generated notices, one per customer and
+revision), ``scheduled_group_authority`` (who last set each memorized group's schedule), ``scheduled_holds``
+(automatic entries left for a person) and ``overdue_notices`` (the queue of generated notices, one per customer and
 notice period). Additive: nothing existing changes. DDL below is frozen: this migration never
 imports current application metadata.
 """
@@ -20,6 +21,7 @@ DDL = (
     "\nCREATE TABLE overdue_notices (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tcustomer_id VARCHAR(26) NOT NULL, \n\tperiod_key VARCHAR(10) NOT NULL, \n\tas_of VARCHAR(10) NOT NULL, \n\ttemplate VARCHAR(12) NOT NULL, \n\tstatement_from VARCHAR(10) NOT NULL, \n\toverdue_minor_units BIGINT NOT NULL, \n\tbalance_minor_units BIGINT NOT NULL, \n\tcurrency VARCHAR(3) NOT NULL, \n\toldest_due_date VARCHAR(10) NOT NULL, \n\tdays_overdue INTEGER NOT NULL, \n\tdocuments TEXT NOT NULL, \n\tstatus VARCHAR(10) NOT NULL, \n\tsent_at VARCHAR(32), \n\tsent_by VARCHAR(26), \n\tsent_method VARCHAR(16), \n\tdismissed_reason VARCHAR(280), \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_overdue_notice_period UNIQUE (customer_id, period_key), \n\tCONSTRAINT ck_overdue_notice_dates CHECK (length(period_key) = 10 AND length(as_of) = 10 AND length(statement_from) = 10 AND length(oldest_due_date) = 10), \n\tCONSTRAINT ck_overdue_notice_template CHECK (template IN ('statement', 'letter')), \n\tCONSTRAINT ck_overdue_notice_status CHECK (status IN ('ready', 'sent', 'dismissed')), \n\tCONSTRAINT ck_overdue_notice_sent_method CHECK (sent_method IS NULL OR sent_method IN ('print', 'email', 'other')), \n\tCONSTRAINT ck_overdue_notice_sent CHECK ((status = 'sent') = (sent_at IS NOT NULL)), \n\tCONSTRAINT ck_overdue_notice_overdue CHECK (typeof(overdue_minor_units) = 'integer' AND overdue_minor_units > 0), \n\tCONSTRAINT ck_overdue_notice_balance CHECK (typeof(balance_minor_units) = 'integer'), \n\tCONSTRAINT ck_overdue_notice_days CHECK (days_overdue >= 1), \n\tCONSTRAINT ck_overdue_notice_documents CHECK (json_valid(documents) AND json_type(documents) = 'array'), \n\tFOREIGN KEY(customer_id) REFERENCES customers (id)\n)\n\n",
     '\nCREATE TABLE scheduled_revision_authority (\n\trevision_id VARCHAR(26) NOT NULL, \n\tagent_id VARCHAR(26) NOT NULL, \n\tprincipal_id VARCHAR(26), \n\tauthority_epoch INTEGER, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tPRIMARY KEY (revision_id)\n)\n\n',
     '\nCREATE TABLE scheduled_group_authority (\n\tgroup_id VARCHAR(26) NOT NULL, \n\tset_by VARCHAR(26) NOT NULL, \n\tprincipal_id VARCHAR(26), \n\tauthority_epoch INTEGER, \n\tset_at VARCHAR(32) NOT NULL, \n\tPRIMARY KEY (group_id)\n)\n\n',
+    '\nCREATE TABLE scheduled_holds (\n\toccurrence_id VARCHAR(26) NOT NULL, \n\treason VARCHAR(400) NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tPRIMARY KEY (occurrence_id)\n)\n\n',
 )
 INDEXES = (
     'CREATE INDEX ix_todos_assignee_status_due ON todos (assignee_id, status, due_date)',
@@ -27,7 +29,7 @@ INDEXES = (
     'CREATE UNIQUE INDEX ux_todos_source_ref ON todos (source_ref) WHERE source_ref IS NOT NULL',
     'CREATE INDEX ix_overdue_notices_status_as_of ON overdue_notices (status, as_of)',
 )
-RESERVED = {'todos', 'overdue_notices', 'scheduled_revision_authority', 'scheduled_group_authority'}
+RESERVED = {'todos', 'overdue_notices', 'scheduled_revision_authority', 'scheduled_group_authority', 'scheduled_holds'}
 COLUMNS = ('scheduler_catch_up_days', 'overdue_notice_days', 'overdue_notice_frequency', 'overdue_notice_minimum',
            'overdue_notice_template')
 

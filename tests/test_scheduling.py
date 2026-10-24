@@ -206,17 +206,23 @@ def test_A_a_group_member_runs_on_its_own_authors_authority_not_the_groups(books
     assert blocked['status'] == 'blocked' and todo_for(books, blocked['id'])['assignee_id'] == admin_id(books)
 
 
-def test_B_a_group_member_whose_author_lost_the_capability_is_blocked(books):
+def test_B_content_added_to_someone_elses_scheduled_group_waits_for_a_person(books):
     bob, as_bob = member(books, 'bob')
     _admin_group_with_bobs_member(books, as_bob)
-    books.client.run('membership grant', {'user': 'bob', 'company': books.company, 'role': 'standard',
-                                          'denies': ['ledger.post'], 'expected_version': 1})
     out = tick(books, '2026-01-31')
-    assert out['memorized']['entered'] == 1 and out['memorized']['blocked'] == 1, out
-    [blocked] = occurrences(books, 'Bob extra')
-    assert blocked['error_code'] == 'E_PERMISSION'
-    assert amounts(books) == [180000]
-    assert todo_for(books, blocked['id'])['assignee_id'] == admin_id(books)
+    assert out['memorized']['entered'] == 1 and out['memorized']['held'] == 1, out
+    assert amounts(books) == [180000], "Bob's 9,999 never posts under the admin's schedule"
+    [held] = occurrences(books, 'Bob extra')
+    assert held['status'] == 'pending'
+    due = books.run('reminders', {'as_of': '2026-01-31'})['memorized_due']
+    [row] = [r for r in due if r['template_name'] == 'Bob extra']
+    assert row['waiting_reason'].startswith('memorized by Bob, scheduled by ')
+    before = len(events(books))
+    tick(books, '2026-02-01')
+    assert len(events(books)) == before, 'a held slot is not touched again'
+    entered = books.run('memorized process', {'as_of': '2026-01-31'}, reason='The owner enters it by hand')
+    assert entered['entered_count'] == 1 and sorted(amounts(books)) == [180000, 999900]
+    assert actors(books, 'bill post') == {admin_id(books)}
 
 
 def test_C_a_waiting_slot_replays_the_current_revision_as_its_authors_write(books):
@@ -473,7 +479,7 @@ def test_co0085_is_exactly_the_current_metadata_and_a_fresh_company_reaches_it(t
     from bookflow.storage.engine import open_database
     from bookflow.storage.migrate import HEADS, migrate_to_head
     m = importlib.import_module('bookflow.storage.company_migrations.versions.0085_scheduling')
-    tables = ('todos', 'overdue_notices', 'scheduled_revision_authority', 'scheduled_group_authority')
+    tables = ('todos', 'overdue_notices', 'scheduled_revision_authority', 'scheduled_group_authority', 'scheduled_holds')
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())) for name in tables)
     indexes = tuple(str(CreateIndex(index).compile(dialect=dialect())) for name in tables
                     for index in sorted(c.metadata.tables[name].indexes, key=lambda index: index.name))

@@ -77,10 +77,16 @@ def prepare_entry(s, ctx, inp, verb):
                 f"is {row['status']}; only a pending or blocked occurrence can be retried or skipped"}]})
         data['occurrence'] = row
         template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == row['template_id'])
-        preview = service._occurrence_out(dict(row, version=row['version'] + 1,
-                                               status='skipped' if verb == 'skip' else row['status']),
-                                          template['name'])
-        return Plan(OccurrenceWriteOutput(occurrence=preview, dry_run=s.dry_run), data)
+        replays = row['revision_id'] if verb == 'skip' or _recover(s, row) is not None else template['current_revision_id']
+        preview = _with_author(s, service._occurrence_out(dict(row, version=row['version'] + 1, revision_id=replays,
+                                                               status='skipped' if verb == 'skip' else row['status']),
+                                                          template['name']))
+        fingerprint = None
+        if verb == 'retry':
+            fingerprint = _fingerprint({row['template_id']: template['current_revision_id']})
+            _check_fingerprint(inp, fingerprint)
+            data['revisions'] = {row['template_id']: template['current_revision_id']}
+        return Plan(OccurrenceWriteOutput(occurrence=preview, facts_fingerprint=fingerprint, dry_run=s.dry_run), data)
 
     plan_rows: list[dict[str, Any]] = []
     if verb == 'enter':
@@ -106,8 +112,46 @@ def prepare_entry(s, ctx, inp, verb):
     else:  # process
         plan_rows = _due_work(s, inp, as_of)
     data['work'] = plan_rows
+    revisions = {item['template']['id']: item['template']['current_revision_id'] for item in plan_rows if item['enter']}
+    data['revisions'] = revisions
     preview = _entry_preview(s, plan_rows, as_of)
+    preview.facts_fingerprint = _fingerprint(revisions)
+    if verb == 'process':
+        _check_fingerprint(inp, preview.facts_fingerprint)
     return Plan(preview, data)
+
+
+def _fingerprint(revisions):
+    """Which revision of each template a run will post: what a preview promised and an apply must keep."""
+    import hashlib
+    return hashlib.sha256(json.dumps(sorted(revisions.items())).encode()).hexdigest()
+
+
+def _check_fingerprint(inp, current):
+    expected = getattr(inp, 'expected_facts_fingerprint', None)
+    if expected is not None and expected != current:
+        raise BookflowError('E_PREVIEW_STALE', details={'reason': 'memorized_revision', 'current_facts_fingerprint': current})
+
+
+def _still_current(s, revisions):
+    """At apply: a template edited since the plan was made would post something nobody previewed."""
+    for template_id, revision_id in (revisions or {}).items():
+        now = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == template_id)
+        if now is None or now['current_revision_id'] != revision_id:
+            raise BookflowError('E_PREVIEW_STALE', details={'reason': 'memorized_revision',
+                                                            'current_facts_fingerprint': None})
+
+
+def _with_author(s, out):
+    """Name who saved the revision an entry posts, so a preview says whose content it is."""
+    author = s.company.conn.execute(
+        sa.select(c.memorized_transaction_revisions.c.created_by, c.principals.c.display_name)
+        .select_from(c.memorized_transaction_revisions)
+        .outerjoin(c.principals, c.principals.c.user_id == c.memorized_transaction_revisions.c.created_by)
+        .where(c.memorized_transaction_revisions.c.id == out['revision_id'])).first()
+    if author is not None:
+        out['replays_author_id'], out['replays_author'] = author[0], author[1]
+    return out
 
 
 def _due_work(s, inp, as_of, keep_waiting=None):
@@ -199,7 +243,9 @@ def _entry_preview(s, work, as_of):
             'attempt_count': waiting.get('attempt_count', 0) + (1 if item['enter'] else 0),
             'group_run_id': waiting.get('group_run_id'), 'group_ordinal': item['group_ordinal'],
         }
-        (entered if item['enter'] else pending).append(service._occurrence_out(row, template['name']))
+        if item['enter'] and not (waiting and _recover(s, waiting) is not None):
+            row['revision_id'] = template['current_revision_id']   # what will post: the template as it is now
+        (entered if item['enter'] else pending).append(_with_author(s, service._occurrence_out(row, template['name'])))
     return MemorizedEntryOutput(as_of=as_of, entered=entered, pending=pending, blocked=[],
                                 entered_count=len(entered), pending_count=len(pending),
                                 blocked_count=0, dry_run=s.dry_run)
@@ -224,6 +270,7 @@ def apply_entry(plan, ctx, s):
                 s.commits.commit(s.company, 'memorized.enter')
                 return Applied(out, [], f"skipped the {row['slot_date']} entry of {template['name']}",
                                finalized=True, audited=True)
+            _still_current(s, data.get('revisions'))
             claimed = _claim(s, ctx, data, name)
             rebase(s, ctx, claimed, name)
             s.commits.commit(s.company, 'memorized.enter')
@@ -541,7 +588,7 @@ def _entry_output(s, verb, as_of, rows, acted, data):
     """What this run did, never what the template holds: a rerun that entered nothing says so."""
     from bookflow.company.memorized_models import MemorizedEntryOutput, OccurrenceWriteOutput
     names = {row['id']: row['name'] for row in service._rows(s, c.memorized_transactions)}
-    projected = [service._occurrence_out(row, names.get(row['template_id'])) for row in rows]
+    projected = [_with_author(s, service._occurrence_out(row, names.get(row['template_id']))) for row in rows]
     if verb == 'retry':
         return OccurrenceWriteOutput(occurrence=projected[0])
     entered = [row for row in projected if row['status'] == 'entered' and row['id'] in acted]

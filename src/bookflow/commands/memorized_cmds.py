@@ -63,6 +63,9 @@ _PROCESS = (
     ' fails becomes a blocked occurrence carrying its reason, at its own date, which `memorized'
     ' retry` runs again and `memorized skip` sets aside; one failure never stops the template'
     ' or any other template. Document numbers are allocated only by an entry that succeeds.'
+    ' A slot that has not posted enters the template as it is now; the preview (dry run) names, for each entry,'
+    ' the revision that will post and who saved it, and its facts_fingerprint sent back as'
+    ' expected_facts_fingerprint refuses the run with E_PREVIEW_STALE if a template changed in between.'
 )
 
 _ENTER = (
@@ -150,16 +153,16 @@ ERRORS = {
     'memorized create': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND'],
     'memorized update': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'],
     'memorized delete': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION'],
-    'memorized enter': ['E_RECORD_NOT_FOUND', 'E_VALIDATION'],
-    'memorized process': ['E_RECORD_NOT_FOUND', 'E_VALIDATION'],
-    'memorized retry': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION'],
+    'memorized enter': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PREVIEW_STALE'],
+    'memorized process': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PREVIEW_STALE'],
+    'memorized retry': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_PREVIEW_STALE'],
     'memorized skip': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION'],
     'memorized show': ['E_RECORD_NOT_FOUND', 'E_VALIDATION'],
     'memorized list': ['E_VALIDATION'],
     'memorized-group create': ['E_VALIDATION', 'E_NAME_TAKEN'],
     'memorized-group update': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'],
     'memorized-group delete': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_ACTIVE_DEPENDENTS', 'E_VALIDATION'],
-    'memorized-group enter': ['E_RECORD_NOT_FOUND', 'E_VALIDATION'],
+    'memorized-group enter': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PREVIEW_STALE'],
     'memorized-group show': ['E_RECORD_NOT_FOUND', 'E_VALIDATION'],
     'memorized-group list': ['E_VALIDATION'],
 }

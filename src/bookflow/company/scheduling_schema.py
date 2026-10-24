@@ -105,5 +105,13 @@ def define_tables(metadata, C, T, common):
         description="Who last set each memorized group's schedule and mode: the scheduler enters a member only while both "
                     "the member's author and this setter may, and records the setter on the posting.")
 
+    holds = T('scheduled_holds',
+        C('occurrence_id', sa.String(26), 'Memorized occurrence the scheduler would not enter unattended.', primary_key=True),
+        C('reason', sa.String(400), 'Why it waits for a person: who memorized it and who scheduled it, a schedule set before '
+                                    'the upgrade, or a catch-up window someone else widened.', nullable=False),
+        C('created_at', sa.String(32), 'UTC time the scheduler set it aside.', nullable=False),
+        description='Automatic memorized entries the scheduler leaves for a person: entered unattended only when one '
+                    'principal decided both their content and their schedule.')
+
     return {'todos': todos, 'overdue_notices': notices, 'scheduled_revision_authority': authority,
-            'scheduled_group_authority': group_authority}
+            'scheduled_group_authority': group_authority, 'scheduled_holds': holds}

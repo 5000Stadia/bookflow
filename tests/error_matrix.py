@@ -2244,3 +2244,6 @@ _NOTICE_WRITE = {
 MATRIX['notice mark-sent'] = dict(_NOTICE_WRITE)
 MATRIX['notice dismiss'] = dict(_NOTICE_WRITE)
 MATRIX['reminders'] = {'E_VALIDATION': 'a malformed as_of date'}
+# R111 review X6: a person's entry names the revision it will post; a template changed since the preview is refused.
+for _name in ('memorized enter', 'memorized process', 'memorized retry', 'memorized-group enter'):
+    MATRIX[_name]['E_PREVIEW_STALE'] = 'a template was changed after the preview that named the revision to post'

@@ -31,6 +31,7 @@ def _memorized(s, as_of, limit):
     rows = s.company.conn.execute(sa.select(o).where(
         sa.or_(o.c.status == 'blocked', sa.and_(o.c.status == 'pending', o.c.due_date <= as_of)))
         .order_by(o.c.slot_date, o.c.id)).mappings().all()
+    holds = {r[0]: r[1] for r in s.company.conn.execute(sa.select(c.scheduled_holds.c.occurrence_id, c.scheduled_holds.c.reason))}
     for row in rows:
         template = templates.get(row['template_id'])
         if template is None or template['status'] == 'deleted':
@@ -38,7 +39,8 @@ def _memorized(s, as_of, limit):
         item = dict(template_id=template['id'], template_name=template['name'], occurrence_id=row['id'],
                     slot_date=row['slot_date'], due_date=row['due_date'],
                     state='blocked' if row['status'] == 'blocked' else 'due', mode=template['mode'],
-                    error_code=row['error_code'], error_message=row['error_message'])
+                    error_code=row['error_code'], error_message=row['error_message'],
+                    waiting_reason=holds.get(row['id']))
         (failed if row['status'] == 'blocked' else due).append(item)
     # Slots the schedule says are due that no run has listed yet: a reminder's, or an automatic one
     # that fell due while no host was running ("due, not yet entered"). Groups carry their members.
