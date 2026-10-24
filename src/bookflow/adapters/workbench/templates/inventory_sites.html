@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% block title %}Sites and transfers{% endblock %}{% block body %}<section id="inventory-sites">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Sites and transfers</nav>
+<h1>Sites and transfers</h1>
+<p class="actions"><a href="/c/{{ company_id }}/report/quantity-by-site">Quantity on hand by site</a> <a href="/c/{{ company_id }}/report/stock-status">Stock status</a></p>
+{% if result %}<div role="status" class="notice" data-site-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<section class="workspace-card" aria-label="Stock by site">
+<h2>Stock by site</h2>
+<form method="get" action="/c/{{ company_id }}/inventory/sites" class="filters">
+<label>Site <select name="site"><option value="">All sites</option>{% for s in sites if s.active %}<option value="{{ s.name }}" {% if chosen == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>As of <input type="date" name="as_of" value="{{ as_of }}"></label>
+<button type="submit">Show</button>
+</form>
+{% if stock %}<div class="table-wrap"><table class="list-table" data-site-stock><thead><tr><th>Item</th><th>Site</th><th>On hand</th><th>Committed</th><th>Available</th><th>On order</th><th>Value</th></tr></thead><tbody>
+{% for r in stock %}<tr><td data-label="Item">{{ r.item_name }}</td><td data-label="Site">{{ r.site_name }}</td><td data-label="On hand">{{ r.quantity_on_hand }}</td><td data-label="Committed">{{ r.quantity_committed }}</td><td data-label="Available">{{ r.quantity_available }}</td><td data-label="On order">{{ r.quantity_on_order }}</td><td data-label="Value">{{ display_money(r.asset_value) }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p>No stock is held on {{ as_of }}.</p>{% endif %}
+</section>
+{% if can_write %}
+<form method="post" action="/c/{{ company_id }}/inventory/sites">
+<section class="workspace-card" aria-label="Transfer inventory" data-transfer-form>
+<h2>Transfer inventory</h2>
+<p>Moves quantity between sites. Nothing is posted: an item has one cost company-wide.</p>
+<label>From site <select name="from_site" required>{% for s in sites if s.active %}<option value="{{ s.name }}" {% if values.get('from_site') == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>To site <select name="to_site" required>{% for s in sites if s.active %}<option value="{{ s.name }}" {% if values.get('to_site') == s.name or (not values.get('to_site') and not s.is_default and loop.index == 1) %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>Date <input type="date" name="date" value="{{ values.get('date', today) }}"></label>
+<div class="table-wrap"><table class="list-table" data-transfer-lines><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody>
+{% for n in range(lines) %}<tr><td data-label="Item"><input name="item_{{ n }}" list="site-items" value="{{ values.get('item_' ~ n, '') }}" aria-label="Item {{ n + 1 }}"></td><td data-label="Quantity"><input name="quantity_{{ n }}" inputmode="decimal" size="8" value="{{ values.get('quantity_' ~ n, '') }}" aria-label="Quantity {{ n + 1 }}"></td></tr>{% endfor %}
+</tbody></table></div>
+<datalist id="site-items">{% for name in items %}<option value="{{ name }}">{% endfor %}</datalist>
+<label>Memo <input name="memo" value="{{ values.get('memo', '') }}"></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Load the van"></label>
+<div class="actions"><button type="submit" name="action" value="transfer" data-transfer-save>Transfer</button></div>
+</section>
+</form>
+{% endif %}
+<section class="workspace-card" aria-label="Transfers">
+<h2>Transfers</h2>
+{% if transfers %}<form method="post" action="/c/{{ company_id }}/inventory/sites"><div class="table-wrap"><table class="list-table" data-transfer-list><thead><tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th>Lines</th><th>Status</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
+{% for t in transfers %}<tr><td data-label="Number">{{ t.number }}</td><td data-label="Date">{{ t.date }}</td><td data-label="From">{{ t.from_site_name }}</td><td data-label="To">{{ t.to_site_name }}</td><td data-label="Lines">{% for l in t.lines %}{{ l.quantity }} {{ l.item_name }}{% if not loop.last %}, {% endif %}{% endfor %}</td><td data-label="Status">{{ t.status }}</td>{% if can_write %}<td>{% if t.status == 'posted' %}<button type="submit" name="action" value="void:{{ t.number }}:{{ t.version }}" aria-label="Void transfer {{ t.number }}">Void</button>{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+{% if can_write %}<label>Reason for a void <input name="ctx:reason" placeholder="Entered in error"></label>{% endif %}
+</form>{% else %}<p>No transfers yet.</p>{% endif %}
+</section>
+<section class="workspace-card" aria-label="Sites">
+<h2>Sites</h2>
+<div class="table-wrap"><table class="list-table" data-site-list><thead><tr><th>Site</th><th>Description</th><th>Items held</th><th>Default</th><th>Active</th></tr></thead><tbody>
+{% for s in sites %}<tr><td data-label="Site"><a href="/c/{{ company_id }}/inventory/sites?site={{ s.name|urlencode }}">{{ s.name }}</a></td><td data-label="Description">{{ s.description or '' }}</td><td data-label="Items held">{{ s.item_count }}</td><td data-label="Default">{{ 'yes' if s.is_default else '' }}</td><td data-label="Active">{{ 'yes' if s.active else 'no' }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if can_write %}<form method="post" action="/c/{{ company_id }}/inventory/sites" data-site-form>
+<label>New site <input name="site_name" placeholder="Van 2"></label>
+<label>Description <input name="site_description"></label>
+<label>Reason <input name="ctx:reason" placeholder="A new van"></label>
+<div class="actions"><button type="submit" name="action" value="site">Add site</button></div>
+</form>{% endif %}
+</section>
+</section>{% endblock %}

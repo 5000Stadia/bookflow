@@ -60,7 +60,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +9 price rules (R110): price-rule create/update/activate/deactivate/show/list/preview, preferences, set-preferences.
     # +2 sales-order invoice and sales-order billing (R101 increment 4).
     # +2 sales-order purchase-order and work-order purchase-order (R101 increment 5).
-    assert len(rows) == 623
+    # +13 inventory-site, inventory-transfer and report quantity-by-site (R104 increment 1).
+    assert len(rows) == 636
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
