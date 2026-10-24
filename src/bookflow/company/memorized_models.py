@@ -90,6 +90,9 @@ class MemorizedListInput(_Input):
 class MemorizedEnterInput(_Input):
     memorized: _Selector
     date: _Date | None = None
+    expected_facts_fingerprint: Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')] | None = Field(
+        None, description='The facts_fingerprint of the preview: the revision that will post. A template changed '
+                          'since is refused with E_PREVIEW_STALE.')
 
 
 _Fingerprint = Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')]
@@ -157,6 +160,10 @@ class MemorizedGroupListInput(_Input):
 class MemorizedGroupEnterInput(_Input):
     memorized_group: _Selector
     date: _Date | None = None
+    expected_facts_fingerprint: Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')] | None = Field(
+        None, description='The facts_fingerprint of the preview: which revision of each member will post. A member '
+                          'changed since is refused with E_PREVIEW_STALE; required when a waiting slot would post a '
+                          'newer revision than the one it was listed with.')
 
 
 # ---------------------------------------------------------------- outputs

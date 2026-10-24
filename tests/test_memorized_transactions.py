@@ -283,8 +283,10 @@ def test_a_retry_enters_the_template_as_it_is_now_and_says_so(books):
     books.run('account activate', {'account': account['id'], 'expected_version': account['version'] + 1},
               reason='Reopen the account')
 
-    retried = books.run('memorized retry', {'occurrence': occurrence['id'],
-                                            'expected_version': occurrence['version']}, reason='Try again')
+    preview = books.run('memorized retry', {'occurrence': occurrence['id'], 'expected_version': occurrence['version']},
+                        reason='Look first', dry_run=True)
+    retried = books.run('memorized retry', {'occurrence': occurrence['id'], 'expected_version': occurrence['version'],
+                                            'expected_facts_fingerprint': preview['facts_fingerprint']}, reason='Try again')
     assert retried['occurrence']['status'] == 'entered'
     current = books.run('memorized show', {'memorized': 'Monthly office rent'})['current_revision_id']
     assert retried['occurrence']['revision_id'] == current != captured

@@ -397,7 +397,13 @@ def test_R2a_a_retry_after_the_admin_resaves_posts_the_resaved_content(books):
     show = books.run('memorized show', {'memorized': 'Mallory tools'})
     books.run('memorized update', {'memorized': 'Mallory tools', 'expected_version': show['version'],
                                    'payload': tools('10.00')}, reason='Re-save, corrected')
-    books.run('memorized retry', {'occurrence': occ['id'], 'expected_version': occ['version']}, reason='As the to-do says')
+    with pytest.raises(BookflowError) as unseen:
+        books.run('memorized retry', {'occurrence': occ['id'], 'expected_version': occ['version']}, reason='Unseen')
+    assert unseen.value.code == 'E_VALIDATION'   # it would post the newer version: preview first
+    seen = books.run('memorized retry', {'occurrence': occ['id'], 'expected_version': occ['version']},
+                     reason='Look', dry_run=True)
+    books.run('memorized retry', {'occurrence': occ['id'], 'expected_version': occ['version'],
+                                  'expected_facts_fingerprint': seen['facts_fingerprint']}, reason='As the to-do says')
     assert bill_totals(books) == [1000]
 
 
@@ -413,7 +419,9 @@ def test_R2b_a_persons_process_posts_the_current_content_as_the_scheduler_does(b
     show = books.run('memorized show', {'memorized': 'Mallory tools'})
     books.run('memorized update', {'memorized': 'Mallory tools', 'expected_version': show['version'],
                                    'payload': tools('10.00')}, reason='Admin corrects the amount')
-    books.run('memorized process', {'as_of': '2026-03-31'}, reason='Admin enters the missed ones')
+    seen = books.run('memorized process', {'as_of': '2026-03-31'}, reason='Look', dry_run=True)
+    books.run('memorized process', {'as_of': '2026-03-31', 'expected_facts_fingerprint': seen['facts_fingerprint']},
+              reason='Admin enters the missed ones')
     assert sorted(bill_totals(books)) == [1000, 1000, 999900]
     with company_db(books) as db:
         assert db.execute("SELECT count(*) FROM audit_events WHERE summary LIKE '%as it is now%'").fetchone()[0] >= 1

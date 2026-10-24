@@ -92,7 +92,7 @@ def _plan_serve(inp: ServeInput, ctx: Context, s: Session) -> Plan:  # never cal
 
 
 serve_cmd = command("serve", scope="hub",
-                    description="Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted.",
+                    description="Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted. While it runs, the host's scheduler enters due automatic memorized transactions, assigns to-dos and prepares overdue notices; it looks for due work every BOOKFLOW_SCHEDULE_CHECK_SECONDS seconds (environment variable; default 60, at least 1).",
                     input_model=ServeInput, output_model=ServeOutput,
                     bootstrap=True, local_only=True,
                     error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING"],

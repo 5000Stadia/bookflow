@@ -120,7 +120,7 @@ def test_X5_a_widening_by_another_principal_leaves_the_slots_it_lets_in_waiting(
     out = tick(books, '2026-04-01')
     assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 2, out
     due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
-    assert all('catch-up widened to 300 days by Olga' in r['waiting_reason'] for r in due) and len(due) == 2
+    assert all('widened since by Olga (300 days), not by its author' in r['waiting_reason'] for r in due) and len(due) == 2
 
 
 def test_X5_a_widening_by_the_author_lets_them_in_and_names_it_whatever_its_size(books):
@@ -130,7 +130,8 @@ def test_X5_a_widening_by_the_author_lets_them_in_and_names_it_whatever_its_size
     books.run('company update', {'scheduler_catch_up_days': 300}, reason='Admin widens catch-up')
     assert tick(books, '2026-04-01')['memorized']['entered'] == 2
     late = [r for r in audit_rows(books, 'bill post') if '2026-01-31' in r['reason'] or '2026-02-28' in r['reason']]
-    assert len(late) == 2 and all('catch-up widened to 300 days by' in r['reason'] for r in late)
+    assert len(late) == 2 and all('catch-up widened since it was left under 10 days by' in r['reason'] and '(300 days)' in r['reason']
+                               for r in late)
 
 
 def test_X6_the_retry_preview_names_the_revision_that_posts(books):
@@ -196,3 +197,153 @@ def test_X7_the_review_to_do_goes_to_an_organization_owner(books):
     tick(books, '2026-01-31')
     with sqlite3.connect(folder / 'company.db') as db:
         assert [row[0] for row in db.execute('SELECT assignee_id FROM todos')] == [olga]
+
+
+# ---------------------------------------------------------------- fourth review (Z1-Z3, Z6)
+
+def _mallorys_held_bill(books):
+    """Mallory's bill in the admin's scheduled group: held for a person by the scheduler."""
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    group(books)
+    as_user(root, 'mallory').run('memorized create', {'name': 'Mallory tools', 'command': 'bill post',
+                                                      'payload': tools('9999.00'), 'group': 'Month end',
+                                                      'group_ordinal': 1}, company=books.company)
+    tick(books, '2026-01-31')
+    [occ] = occurrences(books, 'Mallory tools')
+    return occ
+
+
+def test_Z1_an_agent_can_neither_enter_nor_skip_a_slot_held_for_a_person(books):
+    admin = admin_id(books)
+    occ = _mallorys_held_bill(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    for name, body in (('memorized retry', {'occurrence': occ['id'], 'expected_version': occ['version']}),
+                       ('memorized skip', {'occurrence': occ['id'], 'expected_version': occ['version']}),
+                       ('memorized-group enter', {'memorized_group': 'Month end', 'date': '2026-01-31'})):
+        with pytest.raises(BookflowError) as refused:
+            run_as(books, 'helperlogin', name, body, on_behalf_of=admin, reason='Agent tries')
+        assert refused.value.code == 'E_PERMISSION' and refused.value.details['reason'] == 'held_for_a_person', name
+    out = run_as(books, 'helperlogin', 'memorized process', {'as_of': '2026-01-31'}, on_behalf_of=admin, reason='Agent runs')
+    assert out['entered_count'] == 0 and any('held for a person' in w for w in out['warnings'])
+    assert bill_totals(books) == []
+    assert [r['template_name'] for r in waiting(books, 'Mallory tools')] == ['Mallory tools']
+
+
+def test_Z1_a_person_entering_or_skipping_a_held_slot_releases_the_hold_on_the_record(books):
+    occ = _mallorys_held_bill(books)
+    books.run('memorized skip', {'occurrence': occ['id'], 'expected_version': occ['version']}, reason='Not this month')
+    with company_db(books) as db:
+        assert db.execute('SELECT count(*) FROM scheduled_holds').fetchone()[0] == 0
+        [summary] = db.execute("SELECT summary FROM audit_events WHERE summary LIKE '%held for a person'").fetchall()[-1:]
+    assert 'skipped 1 entry held for a person' in summary[0]
+
+
+def test_Z6_enter_and_group_enter_take_a_fingerprint_and_a_superseded_slot_needs_one(books):
+    memorize(books, name='Solo', mode='remind')
+    preview = books.run('memorized enter', {'memorized': 'Solo', 'date': '2026-01-15'}, reason='Look', dry_run=True)
+    show = books.run('memorized show', {'memorized': 'Solo'})
+    books.run('memorized update', {'memorized': show['id'], 'expected_version': show['version'], 'payload': tools('3.00')},
+              reason='Edit')
+    with pytest.raises(BookflowError) as stale:
+        books.run('memorized enter', {'memorized': 'Solo', 'date': '2026-01-15',
+                                      'expected_facts_fingerprint': preview['facts_fingerprint']}, reason='Enter')
+    assert stale.value.code == 'E_PREVIEW_STALE'
+    occ = _mallorys_held_bill(books)
+    show = books.run('memorized show', {'memorized': 'Mallory tools'})
+    books.run('memorized update', {'memorized': show['id'], 'expected_version': show['version'], 'payload': tools('7.00')},
+              reason='The admin corrects it')
+    with pytest.raises(BookflowError) as unseen:
+        books.run('memorized-group enter', {'memorized_group': 'Month end', 'date': '2026-01-31'}, reason='Enter unseen')
+    assert unseen.value.code == 'E_VALIDATION'
+    seen = books.run('memorized-group enter', {'memorized_group': 'Month end', 'date': '2026-01-31'}, reason='Look',
+                     dry_run=True)
+    done = books.run('memorized-group enter', {'memorized_group': 'Month end', 'date': '2026-01-31',
+                                               'expected_facts_fingerprint': seen['facts_fingerprint']}, reason='Enter')
+    assert done['entered_count'] == 1 and bill_totals(books) == [700]
+    assert occ['id'] == done['entered'][0]['id']
+
+
+def test_Z6_the_workbench_process_form_carries_the_previews_fingerprint():
+    from pathlib import Path as P
+    pages = P(__file__).resolve().parents[1] / 'src/bookflow/adapters/workbench'
+    assert "'memorized process', 'memorized retry', 'memorized enter', 'memorized-group enter'" in (pages / 'pages.py').read_text()
+    assert '{% if fingerprint_form %}<input type="hidden" name="f:expected_facts_fingerprint"' in \
+        (pages / 'templates/form.html').read_text()
+
+
+def test_Z2_a_narrowing_after_an_agents_widening_still_names_and_honours_it(books):
+    admin = admin_id(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    memorize(books)
+    tick(books, '2026-03-31')                          # 01-31 and 02-28 left for a person under 10 days
+    with pytest.raises(BookflowError):
+        run_as(books, 'helperlogin', 'company update', {'scheduler_catch_up_days': 300}, on_behalf_of=admin, reason='widen')
+    from tests.conftest import as_user, make_actor
+    make_actor(Path(books.root), 'olga', company_role=(books.company, 'admin'))
+    as_user(Path(books.root), 'olga').run('company update', {'scheduler_catch_up_days': 300}, company=books.company)
+    books.run('company update', {'scheduler_catch_up_days': 200}, reason='The admin narrows it')
+    out = tick(books, '2026-04-01')
+    # The admin set the current window: the slots enter, naming every widening since they were left.
+    assert out['memorized']['entered'] == 2, out
+    late = [r for r in audit_rows(books, 'bill post') if '2026-01-31' in r['reason'] or '2026-02-28' in r['reason']]
+    assert len(late) == 2 and all('widened since it was left under 10 days by Olga (300 days)' in r['reason'] for r in late)
+
+
+def test_Z2_slots_stay_held_naming_each_widener_when_the_author_set_neither(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'olga', company_role=(books.company, 'admin'))
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    memorize(books)
+    tick(books, '2026-03-31')
+    as_user(root, 'olga').run('company update', {'scheduler_catch_up_days': 300}, company=books.company)
+    as_user(root, 'olga').run('company update', {'scheduler_catch_up_days': 200}, company=books.company)
+    out = tick(books, '2026-04-01')
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 2, out
+    due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
+    assert len(due) == 2 and all('widened since by Olga (300 days)' in r['waiting_reason'] for r in due)
+
+
+def test_Z3_re_anchoring_a_group_with_a_held_slot_keeps_one_hold_and_the_tick_runs(books):
+    occ = _mallorys_held_bill(books)
+    shown = books.run('memorized-group show', {'memorized_group': 'Month end'})
+    books.run('memorized-group update', {'memorized_group': 'Month end', 'expected_version': shown['version'],
+                                         'start_date': '2026-01-31'}, reason='Re-anchor')
+    out = tick(books, '2026-02-01')
+    assert 'error' not in out['memorized'], out
+    with company_db(books) as db:
+        assert db.execute('SELECT count(*) FROM scheduled_holds WHERE occurrence_id = ?', (occ['id'],)).fetchone()[0] == 1
+
+
+def test_Z3_a_failed_company_tick_is_reported_plainly(books, monkeypatch):
+    from bookflow.company import scheduler
+    memorize(books)
+
+    def broken(*args, **kwargs):
+        import sqlite3 as driver
+        raise driver.IntegrityError('UNIQUE constraint failed')
+    monkeypatch.setattr(scheduler, 'enter_due', broken)
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['error'] == 'E_INTERNAL' and 'host log' in out['memorized']['message']
+
+
+def test_an_agent_is_named_with_the_person_it_acted_for(books):
+    admin = admin_id(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    group(books)
+    run_as(books, 'helperlogin', 'memorized create', {'name': 'Mixed', 'command': 'bill post', 'payload': tools('2.00'),
+                                                      'group': 'Month end', 'group_ordinal': 1},
+           on_behalf_of=admin, reason='For the admin')
+    tick(books, '2026-01-31')
+    [row] = waiting(books, 'Mixed')
+    memorized_by = row['waiting_reason'].split(', scheduled by')[0]
+    assert memorized_by.lower().startswith('memorized by helper for ') and memorized_by.split(' for ')[1], row
+
+
+def test_the_scheduler_interval_is_documented():
+    from bookflow.core import registry
+    registry.load_all()
+    assert 'BOOKFLOW_SCHEDULE_CHECK_SECONDS' in registry.get('serve').description

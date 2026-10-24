@@ -2179,7 +2179,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for leaf in described:
                 if leaf['path'] in labels:
                     leaf['label'] = labels[leaf['path']]
-        if sales_form:
+        # A memorized entry posts the template as it is now: its form carries the preview's fingerprint, as sales forms do (R111).
+        fingerprint_form = sales_form or cmd.name in ('memorized process', 'memorized retry', 'memorized enter', 'memorized-group enter')
+        if fingerprint_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
@@ -2425,7 +2427,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'),
                           resolve=result_names(request, company_id, authorized_company))
                           if not cmd.is_write and not preview and noun != 'report' and not billing else None,
-                      sales_form=sales_form, sales_scope=cred.token_id,
+                      sales_form=sales_form, fingerprint_form=fingerprint_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
                       deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else

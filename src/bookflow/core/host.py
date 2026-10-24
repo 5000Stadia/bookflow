@@ -774,8 +774,8 @@ class Host:
                 if notices:
                     self._notices_checked[row["id"]] = now
             except Exception as e:  # noqa: BLE001 - one company failing never stops the others or the host
-                log.warning("scheduler for %s failed: %s", row["id"], e)
-                done[row["id"]] = {"error": getattr(e, "code", type(e).__name__)}
+                log.warning("scheduler for %s failed: %s", row["id"], e, exc_info=True)
+                done[row["id"]] = scheduler._failure(e)
             finally:
                 s.close_company(release=False)
         self._after_write()

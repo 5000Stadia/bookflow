@@ -76,8 +76,11 @@ def prepare_entry(s, ctx, inp, verb):
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'occurrence', 'problem':
                 f"is {row['status']}; only a pending or blocked occurrence can be retried or skipped"}]})
         data['occurrence'] = row
+        _refuse_held_for_agents(s, [row['id']], verb)
         template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == row['template_id'])
         replays = row['revision_id'] if verb == 'skip' or _recover(s, row) is not None else template['current_revision_id']
+        if verb == 'retry' and replays != row['revision_id']:
+            _require_preview(s, inp, [row])
         preview = _with_author(s, service._occurrence_out(dict(row, version=row['version'] + 1, revision_id=replays,
                                                                status='skipped' if verb == 'skip' else row['status']),
                                                           template['name']))
@@ -110,15 +113,72 @@ def prepare_entry(s, ctx, inp, verb):
                               'advance': False, 'group': group, 'group_run': group['id'],
                               'group_ordinal': member['group_ordinal'] or ordinal})
     else:  # process
-        plan_rows = _due_work(s, inp, as_of)
+        held = held_reasons(s)
+        agent = s.actor.kind != 'human'
+        plan_rows = _due_work(s, inp, as_of,
+                              keep_waiting=(lambda occurrence, mode: occurrence['id'] not in held) if agent else None)
+        if agent and held:
+            data['warnings'].append(f'{len(held)} waiting entr{"y is" if len(held) == 1 else "ies are"} held for a person '
+                                    'and left out: only a person may enter or skip them.')
+    if verb == 'group-enter':
+        existing = [_existing(s, item['template']['id'], item['slot']) for item in plan_rows]
+        _refuse_held_for_agents(s, [row['id'] for row in existing if row is not None], verb)
+        for item, row in zip(plan_rows, existing):
+            if row is not None and row['status'] in ('pending', 'blocked'):
+                item['occurrence_seen'] = row
+    waiting = [item.get('occurrence') or item.get('occurrence_seen') for item in plan_rows if item['enter']]
+    _require_preview(s, inp, [row for row in waiting if row is not None
+                              and row['revision_id'] != _current_revision(s, row['template_id'])
+                              and _recover(s, row) is None])
     data['work'] = plan_rows
     revisions = {item['template']['id']: item['template']['current_revision_id'] for item in plan_rows if item['enter']}
     data['revisions'] = revisions
     preview = _entry_preview(s, plan_rows, as_of)
     preview.facts_fingerprint = _fingerprint(revisions)
-    if verb == 'process':
-        _check_fingerprint(inp, preview.facts_fingerprint)
+    _check_fingerprint(inp, preview.facts_fingerprint)
+    preview.warnings = list(data['warnings'])
     return Plan(preview, data)
+
+
+def held_reasons(s) -> dict[str, str]:
+    """Waiting occurrences the scheduler left for a person, and why."""
+    return {row[0]: row[1] for row in s.company.conn.execute(
+        sa.select(c.scheduled_holds.c.occurrence_id, c.scheduled_holds.c.reason))}
+
+
+def _refuse_held_for_agents(s, occurrence_ids, verb):
+    """A slot held for a person is entered or skipped by a person: never by an agent, on any path."""
+    if s.actor.kind == 'human' or not occurrence_ids:
+        return
+    held = held_reasons(s)
+    for occurrence_id in occurrence_ids:
+        if occurrence_id in held:
+            raise BookflowError('E_PERMISSION', message=(
+                f"This memorized entry waits for a person ({held[occurrence_id]}). Only a person may "
+                f"{'skip' if verb == 'skip' else 'enter'} it."),
+                details={'reason': 'held_for_a_person', 'occurrence': occurrence_id})
+
+
+def _existing(s, template_id, slot):
+    return service._one(s, c.memorized_occurrences, c.memorized_occurrences.c.template_id == template_id,
+                        c.memorized_occurrences.c.slot_date == slot, c.memorized_occurrences.c.origin == 'scheduled')
+
+
+def _current_revision(s, template_id):
+    return s.company.conn.execute(sa.select(c.memorized_transactions.c.current_revision_id).where(
+        c.memorized_transactions.c.id == template_id)).scalar_one_or_none()
+
+
+def _require_preview(s, inp, superseded):
+    """A slot that would post a newer revision than it was listed with is entered only from a preview of it."""
+    if not superseded or s.dry_run or getattr(inp, 'expected_facts_fingerprint', None) is not None:
+        return
+    raise BookflowError('E_VALIDATION', message=(
+        'The memorized transaction changed after this slot was listed, so it would post the newer version. '
+        'Preview it first (dry run) and send back its facts_fingerprint as expected_facts_fingerprint.'),
+        details={'fields': [{'field': 'expected_facts_fingerprint',
+                             'problem': 'required: a template changed after its slot was listed'}],
+                 'occurrences': [row['id'] for row in superseded]})
 
 
 def _fingerprint(revisions):
@@ -313,7 +373,23 @@ def _write_skip(s, ctx, row, command_name):
     s.company.conn.execute(c.memorized_occurrences.update().where(c.memorized_occurrences.c.id == row['id'])
         .values(status='skipped', error_code=None, error_message=None, version=after['version'],
                 updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value))
+    release_holds(s, ctx, command_name, [row['id']], 'skipped')
     return after
+
+
+def release_holds(s, ctx, command_name, occurrence_ids, how):
+    """A person entered or skipped slots the scheduler held for one: the holds go, on the record, naming them."""
+    holds = [dict(r) for r in s.company.conn.execute(sa.select(c.scheduled_holds).where(
+        c.scheduled_holds.c.occurrence_id.in_(list(occurrence_ids)))).mappings()] if occurrence_ids else []
+    if not holds:
+        return
+    write_event_to(s.company, ctx, command_name,
+                   f"{s.actor.display_name or s.actor.username} {how} {len(holds)} entr{'y' if len(holds) == 1 else 'ies'} "
+                   'held for a person', [Touched('scheduled_hold', h['occurrence_id'], 'delete', 1, None, None, h, db='company')
+                                         for h in holds],
+                   actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code, event_id=new_id())
+    s.company.conn.execute(c.scheduled_holds.delete().where(
+        c.scheduled_holds.c.occurrence_id.in_([h['occurrence_id'] for h in holds])))
 
 
 def _claim(s, ctx, data, command_name):
@@ -566,6 +642,8 @@ def _record(s, ctx, command_name, claimed, results):
     for record_id, values in updates:
         s.company.conn.execute(c.memorized_occurrences.update()
             .where(c.memorized_occurrences.c.id == record_id).values(**values))
+    release_holds(s, ctx, command_name, [record_id for record_id, values in updates if values['status'] == 'entered'],
+                  'entered')
     return rows, acted
 
 

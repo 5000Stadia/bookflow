@@ -110,6 +110,9 @@ def define_tables(metadata, C, T, common):
         C('reason', sa.String(400), 'Why it waits for a person: who memorized it and who scheduled it, a schedule set before '
                                     'the upgrade, or a catch-up window someone else widened.', nullable=False),
         C('created_at', sa.String(32), 'UTC time the scheduler set it aside.', nullable=False),
+        C('catch_up_window', sa.Integer, 'The catch-up window, in days, it was left for a person under; null when held for '
+                                         'another reason. A later run enters it only if its author set the current window '
+                                         'or every widening since.', nullable=True),
         description='Automatic memorized entries the scheduler leaves for a person: entered unattended only when one '
                     'principal decided both their content and their schedule.')
 

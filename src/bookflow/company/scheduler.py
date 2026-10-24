@@ -183,6 +183,11 @@ def _name(s, user_id):
     return (row[0] or row[1]) if row else 'someone'
 
 
+def _who(s, user_id, principal):
+    """A name, and for an agent the person it acted for: "helper for Paula"."""
+    return f'{_name(s, user_id)} for {_name(s, principal)}' if principal else _name(s, user_id)
+
+
 def _hold(s, occurrence, author, principal, widened) -> str | None:
     """Why this occurrence must wait for a person rather than be entered unattended, or None.
 
@@ -199,7 +204,7 @@ def _hold(s, occurrence, author, principal, widened) -> str | None:
         if set_by is None:
             return "schedule set before this upgrade; open the group and save its schedule to let it run"
         if (set_by, set_principal) != (author, principal):
-            return (f"memorized by {_name(s, author)}, scheduled by {_name(s, set_by)}; "
+            return (f"memorized by {_who(s, author, principal)}, scheduled by {_who(s, set_by, set_principal)}; "
                     "waiting for a person to enter it")
         why, _ = _cannot_act(s, set_by, set_principal, set_saved, what="set this group's schedule")
         if why is not None:
@@ -211,7 +216,7 @@ def _hold(s, occurrence, author, principal, widened) -> str | None:
     return None
 
 
-def _enter(s, occurrence, as_of, widened=None):
+def _enter(s, occurrence, as_of, widened=None, released=None):
     """Enter one claimed occurrence as the author of the revision it replays, with that author's
     full authority (the ordinary authorization, input checks and plan) -- or say why it waits."""
     from bookflow.company import memorized as service, memorized_entry
@@ -234,7 +239,9 @@ def _enter(s, occurrence, as_of, widened=None):
     if setter is not None:
         frequency = setter[3]['frequency']
     note = ''
-    if widened and occurrence['slot_date'] < widened['before']:
+    if released:
+        note = f'; {released}'
+    elif widened and occurrence['slot_date'] < widened['before']:
         note = f"; catch-up widened to {widened['days']} days by {widened['by']}"
     _act_as(s, author, principal, epoch)
     ctx = context().model_copy(update={'actor_id': author, 'actor_kind': ActorKind(s.actor.kind),
@@ -336,6 +343,12 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
         catch_up = DEFAULT_CATCH_UP_DAYS
     cutoff = (date.fromisoformat(as_of) - timedelta(days=catch_up)).isoformat()
     summary = {'entered': 0, 'blocked': 0, 'waiting': 0, 'left_for_a_person': 0}
+    _act_as(s, system_id)
+    ctx = context().model_copy(update={'actor_id': system_id, 'actor_kind': ActorKind.system,
+                                       'reason': f'On schedule: memorized transactions due by {as_of}'})
+    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of)
+    if kept:
+        summary['held'] = kept
 
     held = {row[0] for row in s.company.conn.execute(sa.select(c.scheduled_holds.c.occurrence_id))}
 
@@ -347,17 +360,17 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
 
     found = memorized_entry._due_work(s, SimpleNamespace(as_of=as_of, limit=10 * SLOTS_PER_TICK, memorized=None),
                                       as_of, keep_waiting=keep_waiting)
+    left = set()
     for item in found:
         if item['enter'] and item['slot'] < cutoff:
             item['enter'] = False
+            if item.get('occurrence') is None:
+                left.add((item['template']['id'], item['slot']))
     work = _batch(found)
     summary['left_for_a_person'] = sum(1 for item in work if not item['enter'] and item.get('occurrence') is None
                                        and _mode(s, item) == 'enter_automatically')
     if not work:
         return summary
-    _act_as(s, system_id)
-    ctx = context().model_copy(update={'actor_id': system_id, 'actor_kind': ActorKind.system,
-                                       'reason': f'On schedule: memorized transactions due by {as_of}'})
     data = {'verb': 'process', 'as_of': as_of, 'warnings': [], 'work': work}
     with s.commits.operation('memorized.enter', s.hub, s.company):
         s.company.raw.execute('BEGIN IMMEDIATE')
@@ -367,7 +380,7 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             for occurrence in claimed:
                 # A blocked slot waits for a person (`memorized retry`); the scheduler never tries it again,
                 # even when the same slot comes round in a group run.
-                if occurrence['status'] == 'blocked':
+                if occurrence['status'] == 'blocked' or occurrence['id'] in held:
                     occurrence['_enter'] = False
             memorized_entry.rebase(s, ctx, claimed, PROCESS)
             s.commits.commit(s.company, 'memorized.enter')
@@ -375,18 +388,24 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             if s.company.write_transaction:
                 s.company.raw.rollback()
             raise
-        results, holds = [], []
+        results, holds, window = [], [], []
         for occurrence in claimed:
             if occurrence['_enter']:
-                outcome = _enter(s, occurrence, as_of, widened)
+                outcome = _enter(s, occurrence, as_of, widened, released.get(occurrence['id']))
                 (holds if 'hold' in outcome else results).append(outcome)
+            elif (occurrence['status'] == 'pending' and (occurrence['template_id'], occurrence['slot_date']) in left
+                  and occurrence['id'] not in held):
+                window.append({'occurrence': occurrence,
+                               'hold': f'older than the {catch_up}-day catch-up window; waiting for a person to enter it',
+                               'window': catch_up})
         _act_as(s, system_id)
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
             rows, _ = memorized_entry._record(s, ctx, PROCESS, claimed, results)
+            if holds or window:
+                _write_holds(s, ctx, holds + window)
             if holds:
-                _write_holds(s, ctx, holds)
-                summary['held'] = len(holds)
+                summary['held'] = summary.get('held', 0) + len(holds)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
             if s.company.write_transaction:
@@ -402,18 +421,109 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
 
 
 def _write_holds(s, ctx, holds):
-    """Record, once each, the slots that wait for a person and why (shown on Reminders)."""
+    """Record the slots that wait for a person and why (shown on Reminders) -- once each: a slot already
+    held (a group re-anchored onto it, say) keeps the hold it has."""
     from bookflow.core.audit import write_event_to
     from bookflow.core.clock import now_iso
     from bookflow.core.ids import new_id
     from bookflow.core.registry import Touched
-    at, rows = now_iso(), []
+    already = {row[0] for row in s.company.conn.execute(sa.select(c.scheduled_holds.c.occurrence_id).where(
+        c.scheduled_holds.c.occurrence_id.in_([h['occurrence']['id'] for h in holds])))}
+    at, rows = now_iso(), {}
     for hold in holds:
-        rows.append(dict(occurrence_id=hold['occurrence']['id'], reason=hold['hold'][:400], created_at=at))
+        key = hold['occurrence']['id']
+        if key not in already and key not in rows:
+            rows[key] = dict(occurrence_id=key, reason=hold['hold'][:400], created_at=at,
+                             catch_up_window=hold.get('window'))
+    if not rows:
+        return
+    rows = list(rows.values())
     s.company.conn.execute(c.scheduled_holds.insert(), rows)
     write_event_to(s.company, ctx, PROCESS, f'{len(rows)} automatic entr{"y waits" if len(rows) == 1 else "ies wait"} for a person',
                    [Touched('scheduled_hold', row['occurrence_id'], 'create', None, 1, row, db='company') for row in rows],
                    actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
+
+
+def _window_changes(s, since):
+    """Every change to the catch-up window after ``since``, oldest first: (actor, kind, value, at)."""
+    from bookflow.core.audit import decode_snapshot
+    e, n = c.audit_events, c.audit_entries
+    values = []
+    for actor_id, kind, at, after in s.company.conn.execute(
+            sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after).join(n, n.c.event_id == e.c.id)
+            .where(e.c.command == 'company update', n.c.record_type == 'company_info').order_by(e.c.seq)):
+        new = decode_snapshot(after) or {}
+        if 'scheduler_catch_up_days' in new:
+            values.append((actor_id, kind, new['scheduler_catch_up_days'], at))
+    changes, previous = [], None
+    for index, (actor_id, kind, value, at) in enumerate(values):
+        if index == 0 or value != previous:
+            if at > since:
+                changes.append((actor_id, kind, value, at))
+        previous = value
+    return changes
+
+
+def _reconsider_window_holds(s, ctx, cutoff, as_of):
+    """Slots left for a person under a narrower catch-up window that the current window now reaches.
+
+    One enters unattended only if its author set the current window, or made every widening since
+    the window it was left under; it then names those widenings in its reason. Otherwise it stays
+    held, naming each widener since. Returns ({occurrence: note}, how many stay held).
+    """
+    from bookflow.core.audit import write_event_to
+    from bookflow.core.ids import new_id
+    from bookflow.core.registry import Touched
+    h, o, t = c.scheduled_holds, c.memorized_occurrences, c.memorized_transactions
+    rows = s.company.conn.execute(
+        sa.select(h, o.c.slot_date, t.c.current_revision_id).join(o, o.c.id == h.c.occurrence_id)
+        .join(t, t.c.id == o.c.template_id)
+        .where(h.c.catch_up_window.isnot(None), o.c.status == 'pending', o.c.slot_date >= cutoff)).mappings().all()
+    released, kept, deletes, changes_touched = {}, 0, [], []
+    for row in rows:
+        author, principal = author_of(s, row['current_revision_id'])
+        changes = _window_changes(s, row['created_at'])
+        widenings, last = [], row['catch_up_window']
+        for actor_id, kind, value, at in changes:
+            effective = DEFAULT_CATCH_UP_DAYS if value is None else value
+            if effective > last:
+                widenings.append((actor_id, kind, effective))
+            last = effective
+        if not changes:
+            continue
+        named = ', '.join(f'{_name(s, actor)} ({days} days)' for actor, _, days in widenings) or 'nobody'
+        setter_of_current = changes[-1][0]
+        if setter_of_current == author or (widenings and all(actor == author for actor, _, _ in widenings)):
+            released[row['occurrence_id']] = f'catch-up widened since it was left under {row["catch_up_window"]} days by {named}'
+            deletes.append(row)
+        else:
+            kept += 1
+            reason = (f'left for a person under the {row["catch_up_window"]}-day catch-up window, widened since by '
+                      f'{named}, not by its author; waiting for a person to enter it')[:400]
+            if reason != row['reason']:
+                changes_touched.append((row, reason))
+    if deletes or changes_touched:
+        s.company.raw.execute('BEGIN IMMEDIATE')
+        try:
+            touched = [Touched('scheduled_hold', r['occurrence_id'], 'delete', 1, None, None, dict(r), db='company')
+                       for r in deletes]
+            touched += [Touched('scheduled_hold', r['occurrence_id'], 'update', 1, 1, dict(r, reason=reason), dict(r),
+                                db='company') for r, reason in changes_touched]
+            plain = lambda r: {k: r[k] for k in ('occurrence_id', 'reason', 'created_at', 'catch_up_window')}  # noqa: E731
+            touched = [Touched(x.record_type, x.record_id, x.action, x.version_before, x.version_after,
+                               plain(x.after) if x.after else None, plain(x.before), db='company') for x in touched]
+            write_event_to(s.company, ctx, PROCESS, 'reconsidered entries left under a narrower catch-up window',
+                           touched, actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
+            if deletes:
+                s.company.conn.execute(h.delete().where(h.c.occurrence_id.in_([r['occurrence_id'] for r in deletes])))
+            for r, reason in changes_touched:
+                s.company.conn.execute(h.update().where(h.c.occurrence_id == r['occurrence_id']).values(reason=reason))
+            s.commits.commit(s.company, 'scheduler.write')
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+    return released, kept
 
 
 def _active_admin(s) -> str | None:
@@ -525,6 +635,14 @@ def _ensure_principal(s, system_id: str) -> None:
         raise
 
 
+def _failure(error) -> dict[str, Any]:
+    """A part of a tick that failed, said plainly: a Bookflow code, or E_INTERNAL -- never a driver's raw code."""
+    from bookflow.core.errors import BookflowError
+    if isinstance(error, BookflowError):
+        return {'error': error.code, 'message': error.message}
+    return {'error': 'E_INTERNAL', 'message': 'The scheduler could not finish this part of the run; the host log has the details.'}
+
+
 def run_company(s, system_id: str, now, *, notices: bool = True) -> dict[str, Any]:
     """One scheduler tick for the company open in ``s`` (writable, on the host's writer)."""
     from bookflow.company import notices as notice_queue
@@ -537,7 +655,7 @@ def run_company(s, system_id: str, now, *, notices: bool = True) -> dict[str, An
             out['memorized'] = enter_due(s, system_id, as_of)
         except Exception as error:  # noqa: BLE001 - recorded, never fatal to the host
             log.warning('scheduled memorized entries: %s', error)
-            out['memorized'] = {'error': getattr(error, 'code', type(error).__name__)}
+            out['memorized'] = _failure(error)
         try:
             out['todos_assigned'] = assign_blocked(s, system_id, as_of)
         except Exception as error:  # noqa: BLE001
@@ -552,5 +670,5 @@ def run_company(s, system_id: str, now, *, notices: bool = True) -> dict[str, An
                 'actor_id': system_id, 'reason': 'On schedule: overdue notices'}), as_of)
         except Exception as error:  # noqa: BLE001
             log.warning('scheduled overdue notices: %s', error)
-            out['notices'] = {'error': getattr(error, 'code', type(error).__name__)}
+            out['notices'] = _failure(error)
     return out
