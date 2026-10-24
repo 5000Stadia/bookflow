@@ -21,7 +21,7 @@ from bookflow.core.errors import BookflowError
 
 def _banks(run, request, company_id):
     try:
-        out = run(request, 'account list', {'limit': 500}, company_id)
+        out = run(request, 'account list', {}, company_id)
     except BookflowError:
         return []
     rows = out.get('items') or []

@@ -291,7 +291,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3423 -> 3430 (R153), measured per command: bill post's optional order_lines adds 6 (its null
     # branch, quantity's, unit_cost's and amount's null and money-object branches), and purchase-order
     # close-lines adds 1 (expected_version's null branch). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3430
+    # 3430 -> 3447 (R152, check printing), measured: +17 from the nine check print commands' optional fields
+    # (account, first_number, style, checks, failed_from, failed, new_number, offsets, expected_version null branches)
+    # and to_be_printed on check post, check update and bill pay. No existing variant moved kind; the groups stay.
+    assert sum(len(group["paths"]) for group in mapped)==3447
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

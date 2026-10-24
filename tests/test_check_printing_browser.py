@@ -37,8 +37,9 @@ def _shot(b, name):
 
 
 def _click_and_swap(b, button):
-    b.evaluate('''void (window.__st = [], document.addEventListener('htmx:afterRequest',
-      e => window.__st.push(e.detail.xhr.status)), window.__old = document.querySelector('#print-checks'))''')
+    b.evaluate('''void (window.__st = [], window.__watching || (window.__watching = true,
+      document.addEventListener('htmx:afterRequest', e => window.__st.push(e.detail.xhr.status))),
+      window.__old = document.querySelector('#print-checks'))''')
     b.evaluate(f'document.querySelector({json.dumps(button)}).click()')
     b.wait_for("!window.__old.isConnected && !!document.querySelector('#print-checks')", timeout=30)
     assert b.evaluate('window.__st') == [200], b.evaluate('(document.querySelector("[role=alert]") || {}).innerText')
@@ -73,6 +74,7 @@ def test_a_person_prints_checks_and_answers_did_they_print_ok(register_browser):
     b.navigate(f'{base}/print-checks?account={bank}')
     b.wait_for('!!document.querySelector("[data-print-queue]")')
     assert b.evaluate('document.querySelectorAll("[data-queued] input:checked").length') == 3
+    assert b.evaluate('document.querySelector("[name=account]").value') == bank
     b.evaluate('document.querySelector("[data-first-number]").value = "2201"')
     _shot(b, 'print-checks-queue')
     text = _click_and_swap(b, '[data-print]')
