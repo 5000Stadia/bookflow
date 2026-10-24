@@ -231,7 +231,14 @@ TIMEKEEPING_COMMANDS = frozenset(('clock cancel', 'clock in', 'clock link', 'clo
                                   'schedule update', 'timesheet copy-last', 'timesheet preferences', 'timesheet save',
                                   'timesheet set-preferences', 'timesheet show'))
 
-FROZEN_COMMANDS = TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+# R104 increment 2: physical counts and the worksheet and valuation-detail reports. Its witness counts the van,
+# retries an entry, records the count from its preview, and derives it again after a same-day transfer, through all
+# four surfaces over identical demo copies.
+INVENTORY_COUNT_COMMANDS = frozenset(('inventory-count cancel', 'inventory-count create', 'inventory-count enter',
+    'inventory-count post', 'inventory-count query', 'inventory-count sheet', 'inventory-count show',
+    'inventory-count void', 'report inventory-valuation-detail', 'report physical-inventory-worksheet'))
+
+FROZEN_COMMANDS = INVENTORY_COUNT_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -772,6 +779,7 @@ def execution_map():
     from tests.test_shortfall_surfaces import COMMANDS as SHORTFALL_SURFACE_COMMANDS
     from tests.test_purchase_order_partial_surfaces import COMMANDS as PARTIAL_PO_SURFACE_COMMANDS
     from tests.test_inventory_site_surfaces import COMMANDS as INVENTORY_SITE_SURFACE_COMMANDS
+    from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -861,6 +869,7 @@ def execution_map():
                    'tests/test_shortfall_surfaces.py::test_the_same_shortfall_purchase_through_python_cli_http_and_mcp' if cmd.name in SHORTFALL_SURFACE_COMMANDS else  # all four
                    'tests/test_purchase_order_partial_surfaces.py::test_the_same_partial_order_billing_through_python_cli_http_and_mcp' if cmd.name in PARTIAL_PO_SURFACE_COMMANDS else  # all four
                    'tests/test_inventory_site_surfaces.py::test_the_same_sites_and_transfers_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_SITE_SURFACE_COMMANDS else  # all four
+                   'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

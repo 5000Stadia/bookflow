@@ -1061,7 +1061,7 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             run_in_session(_registry.get("company update"), _registry.get("company update").input_model(**fields), ctx.model_copy(update={"company_id": row["id"]}), s)
         captures: dict[str, dict[str, Any]] = {}
         for index, entry in enumerate(seed.get("commands", []), start=1):
-            unexpected = set(entry) - {"command", "capture", "input", "body_fixture", "reason", "recovery_intent"}
+            unexpected = set(entry) - {"command", "capture", "input", "body_fixture", "reason", "recovery_intent", "dry_run"}
             if unexpected:
                 raise ValueError(
                     f"demo seed command {index} has unknown keys: {sorted(unexpected)}"
@@ -1115,7 +1115,11 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             else:
                 if entry.get("body_fixture") is not None:
                     raise ValueError("a non-transfer demo command cannot have a body fixture")
-                output = run_in_session(cmd, cmd.input_model.model_validate(raw_input), seed_ctx, s)
+                # A preview whose answer a later command needs (a count's preview fingerprint, R104).
+                preview = entry.get("dry_run", False)
+                if not isinstance(preview, bool) or (preview and not cmd.is_write):
+                    raise ValueError(f"demo seed command {index} dry_run applies only to a write, as true or false")
+                output = run_in_session(cmd, cmd.input_model.model_validate(raw_input), seed_ctx, s, dry_run=preview)
             capture = entry.get("capture")
             if capture is not None:
                 if (

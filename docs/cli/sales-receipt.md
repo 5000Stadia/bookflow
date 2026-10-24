@@ -446,6 +446,7 @@ The same example as complete `bookflow_run` arguments:
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
 | `payment_reference` | `--payment-reference` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -1333,6 +1334,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -2803,6 +2805,7 @@ The same example as complete `bookflow_run` arguments:
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
 | `payment_reference` | `--payment-reference` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -3694,6 +3697,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -4997,6 +5001,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |

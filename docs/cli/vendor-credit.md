@@ -872,6 +872,7 @@ The same example as complete `bookflow_run` arguments:
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 
 ### Command and context options
 
@@ -3025,6 +3026,7 @@ The same example as complete `bookflow_run` arguments:
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `vendor` | `--vendor` | string \| null | no | yes | null | Optional guard: the vendor you expect this credit to be from. The correction is refused when it belongs to anyone else. |
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | Optional guard: the Accounts Payable account you expect this credit to be credited against. The correction is refused when it is another one. |
 

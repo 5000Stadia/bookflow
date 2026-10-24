@@ -13,7 +13,8 @@ rebuilding the table, and each is rebuilt once for the increments that follow:
   ``returns_movement_id`` (reserved for FIFO).
 * ``inventory_documents`` admits the kinds ``count`` and ``landed_cost``.
 * ``inventory_placements`` admits the position ``count``: a count's own difference sits between
-  that date's documents placed before it and those stated after.
+  that date's documents placed before it and those stated after. It gains an index on
+  ``sequence``, because what one command wrote is read back by sequence after every company write.
 
 Every view and trigger is dropped and recreated around the rebuild, as co0070 does. DDL below is
 frozen: this migration never imports current application metadata.

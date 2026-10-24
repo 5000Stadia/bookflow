@@ -169,6 +169,28 @@ def test_two_counters_at_once_both_land_and_a_retry_lands_once(van):
         reason='Back shelf', idempotency_key='counter-b-1')
     shown = run('inventory-count show', dict(count='C-1'))
     assert shown['lines'][0]['counted'] == '5' and shown['lines'][0]['entries'] == 2
+    # Two counters at the same moment, each on their own connection, five scans each.
+    import os
+    import threading
+    import bookflow
+    books, errors = van['books'], []
+
+    def counter(name):
+        try:
+            client = bookflow.connect(data_root=os.environ['BOOKFLOW_DATA_ROOT'])
+            for n in range(5):
+                client.run('inventory-count enter', dict(count='C-1', entries=[dict(item='Widget', quantity='1', mode='add')]),
+                           company=books['company'], reason=f'{name} scan', idempotency_key=f'{name}-{n}')
+        except Exception as error:      # noqa: BLE001 - reported below
+            errors.append(error)
+    threads = [threading.Thread(target=counter, args=(name,)) for name in ('front', 'back')]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    shown = run('inventory-count show', dict(count='C-1'))
+    assert shown['lines'][0]['counted'] == '15' and shown['lines'][0]['entries'] == 12
 
 
 def test_a_stale_preview_is_refused(van):
@@ -272,3 +294,24 @@ def test_replay_orders_a_day_before_the_count_then_the_count_then_after():
             dict(id='C', effective_date='2017-01-01', sequence=9, count_position='before'),
             dict(id='D', effective_date='2017-01-01', sequence=1)]
     assert [row['id'] for row in ordered(rows)] == ['D', 'C', 'B', 'A']
+
+
+def test_the_worksheet_and_the_valuation_detail_read_the_count(van):
+    books, run, shrinkage = van['books'], van['run'], van['shrinkage']
+    sheet = run('report physical-inventory-worksheet', dict(as_of='2017-03-03', site='Van 1'))
+    assert [(row['item_name'], row['quantity_on_hand'], row['physical_count']) for row in sheet['rows']] == [
+        ('Elbow', '4', None), ('Valve', '2', None), ('Widget', '5', None)]
+    count = run('inventory-count create', dict(site='Van 1', date='2017-03-03', items=['Valve']), reason='Count')
+    _record(run, count, shrinkage, Valve=3)
+    _jobs(run, books, position='after', Valve=1)
+    detail = run('report inventory-valuation-detail', dict(date_from='2017-03-01', date_to='2017-03-31', item='Valve'))
+    rows = [(row['kind'], row['movement_kind'], row['count_position'], row['quantity_change'],
+             row['value_change']['amount'] if row['value_change'] else None, row['quantity_on_hand'],
+             row['asset_value']['amount']) for row in detail['rows']]
+    # Bought six at 5.00, one found on the count at the 5.00 average, one sold after the count at 5.00.
+    assert rows == [('opening', None, None, None, None, '0', '0.00'),
+                    ('movement', 'receipt', 'before', '6', '30.00', '6', '30.00'),
+                    ('movement', 'found', 'count', '1', '5.00', '7', '35.00'),
+                    ('movement', 'issue', 'after', '-1', '-5.00', '6', '30.00'),
+                    ('closing', None, None, None, None, '6', '30.00')]
+    assert detail['totals']['asset_value']['amount'] == '30.00'

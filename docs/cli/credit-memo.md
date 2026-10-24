@@ -420,6 +420,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `date` | `--date` | string \| null | no | yes | null | Accounting date. Omitted, it is today in the company's timezone. |
 | `customer` | `--customer` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -2258,6 +2259,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `date` | `--date` | string \| null | no | yes | null | — |
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |

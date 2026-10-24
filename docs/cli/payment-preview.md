@@ -75,6 +75,7 @@ The same example as complete `bookflow_run` arguments:
 | `request.input.terms` | `--request-input-terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.due_date` | `--request-input-due-date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.site` | `--request-input-site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `request.input.count_position` | `--request-input-count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `request.input.sales_tax_calculation` | `--request-input-sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `request.input.customer_message` | `--request-input-customer-message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.customer_message_item` | `--request-input-customer-message-item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |

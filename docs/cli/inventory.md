@@ -34,14 +34,24 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `item` | `--item` | string | yes | no | — | Inventory item ID or name whose stock this adjusts.; minimum length 1; maximum length 1000 |
+| `item` | `--item` | string \| null | no | yes | null | Inventory item ID, name or barcode whose stock this adjusts (the one-line form). Omit when giving lines. |
 | `date` | `--date` | string | yes | no | — | Accounting date this adjustment is valued and posted on.; minimum length 10; maximum length 10 |
 | `adjustment_account` | `--adjustment-account` | string | yes | no | — | Account carrying the other side of the value change: shrinkage, cost of goods sold, or the opening-balance equity account for opening stock.; minimum length 1; maximum length 1000 |
-| `quantity_change` | `--quantity-change` | string \| null | no | yes | null | Signed change in quantity on hand, as a decimal string with at most six places. Positive requires value_change; negative takes its value from the weighted average and must not supply one. |
-| `value_change` | `--value-change` | string \| object \| null | no | yes | null | Signed change in the asset value of this item. Required with a quantity increase, forbidden with a decrease, and on its own it is a write-up or write-down that moves no quantity. |
+| `quantity_change` | `--quantity-change` | string \| null | no | yes | null | Signed change in quantity on hand, as a decimal string with at most six places. A positive one with no value_change is valued at the running average (else the last average, else the purchase cost); a negative one takes its value from the weighted average and must not supply one. |
+| `value_change` | `--value-change` | string \| object \| null | no | yes | null | Signed change in the asset value of this item. Optional with a quantity increase, forbidden with a decrease, and on its own it is a write-up or write-down that moves no quantity. |
 | `negative_value` | `--negative-value` | boolean | no | no | false | Set with value_change to write the asset value down rather than up. Money is entered as a positive amount everywhere in Bookflow; this says which way it moves. |
+| `lines[].item` | inside `--lines` JSON array | string | yes | no | — | Inventory item ID, name or barcode whose stock this line adjusts.; minimum length 1; maximum length 1000 |
+| `lines[].quantity_change` | inside `--lines` JSON array | string \| null | no | yes | null | Signed change in quantity at the line's site (the anchor's Qty Difference). Give this or new_quantity, not both. |
+| `lines[].new_quantity` | inside `--lines` JSON array | string \| null | no | yes | null | The quantity at the line's site on the date, as counted (the anchor's New Quantity); the difference is worked out when written. |
+| `lines[].value_change` | inside `--lines` JSON array | string \| object \| null | no | yes | null | Signed change in the item's asset value. Omitted on an increase, the units are valued at the running average. Forbidden with a decrease. |
+| `lines[].new_value` | inside `--lines` JSON array | string \| object \| null | no | yes | null | The item's whole asset value on the date (the anchor's New Value); the change is worked out when written. Forbidden with a decrease. |
+| `lines[].negative_value` | inside `--lines` JSON array | boolean | no | no | false | With value_change: write the value down rather than up. |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site of this line; omitted, the adjustment's site, else the default site. |
+| `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | Class of this line; omitted, the adjustment's class. |
+| `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | Line description on both posting lines. |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Class captured on both posting lines. |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the quantity change is at, by id or name; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] | no | no | "before" | before (the default) or after a physical count of its site on the same date. |
 | `memo` | `--memo` | string \| null | no | yes | null | Why the stock was adjusted. |
 | `number` | `--number` | string \| null | no | yes | null | Document number; omit to take the next journal number. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. |
@@ -260,7 +270,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.inventory_value.minor_units` | integer | yes | no | — | — |
 | `adjustment.asset_account_id` | string | yes | no | — | — |
 | `adjustment.adjustment_account_id` | string | yes | no | — | — |
-| `adjustment.movement_kind` | literal["receipt", "issue", "value", "reversal"] | yes | no | — | — |
+| `adjustment.movement_kind` | literal["receipt", "issue", "value", "found", "reversal"] | yes | no | — | — |
 | `adjustment.corrections` | array[object] | yes | no | — | — |
 | `adjustment.corrections[].item_id` | string | yes | no | — | — |
 | `adjustment.corrections[].item_name` | string | yes | no | — | — |
@@ -273,6 +283,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.corrections[].delta.minor_units` | integer | yes | no | — | — |
 | `adjustment.corrections[].transaction_id` | string | yes | no | — | — |
 | `adjustment.corrections[].number` | string | yes | no | — | — |
+| `adjustment.lines` | array[object] | no | no | [] | Every line of the adjustment, in order; the fields above repeat the first. |
+| `adjustment.lines[].item_id` | string | yes | no | — | — |
+| `adjustment.lines[].item_name` | string | yes | no | — | — |
+| `adjustment.lines[].site_id` | string \| null | no | yes | null | — |
+| `adjustment.lines[].site_name` | string \| null | no | yes | null | — |
+| `adjustment.lines[].quantity_change` | string | yes | no | — | — |
+| `adjustment.lines[].value_change` | object | yes | no | — | — |
+| `adjustment.lines[].value_change.amount` | string | yes | no | — | — |
+| `adjustment.lines[].value_change.currency` | string | yes | no | — | — |
+| `adjustment.lines[].value_change.minor_units` | integer | yes | no | — | — |
+| `adjustment.lines[].movement_kind` | literal["receipt", "issue", "value", "found", "reversal"] | yes | no | — | — |
+| `adjustment.lines[].value_basis` | literal["stated", "average", "purchase_cost", "none"] | yes | no | — | How the value was set: stated by the caller, or for found units the running average, the purchase cost, or nothing. |
+| `adjustment.lines[].quantity_on_hand` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value` | object | yes | no | — | — |
+| `adjustment.lines[].inventory_value.amount` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value.currency` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -297,6 +324,7 @@ Example JSON output:
     "item_name": "value",
     "item_type": "value",
     "kind": "adjustment",
+    "lines": [],
     "movement_kind": "receipt",
     "quantity_change": "value",
     "quantity_on_hand": "value",
@@ -659,7 +687,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.inventory_value.minor_units` | integer | yes | no | — | — |
 | `adjustment.asset_account_id` | string | yes | no | — | — |
 | `adjustment.adjustment_account_id` | string | yes | no | — | — |
-| `adjustment.movement_kind` | literal["receipt", "issue", "value", "reversal"] | yes | no | — | — |
+| `adjustment.movement_kind` | literal["receipt", "issue", "value", "found", "reversal"] | yes | no | — | — |
 | `adjustment.corrections` | array[object] | yes | no | — | — |
 | `adjustment.corrections[].item_id` | string | yes | no | — | — |
 | `adjustment.corrections[].item_name` | string | yes | no | — | — |
@@ -672,6 +700,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.corrections[].delta.minor_units` | integer | yes | no | — | — |
 | `adjustment.corrections[].transaction_id` | string | yes | no | — | — |
 | `adjustment.corrections[].number` | string | yes | no | — | — |
+| `adjustment.lines` | array[object] | no | no | [] | Every line of the adjustment, in order; the fields above repeat the first. |
+| `adjustment.lines[].item_id` | string | yes | no | — | — |
+| `adjustment.lines[].item_name` | string | yes | no | — | — |
+| `adjustment.lines[].site_id` | string \| null | no | yes | null | — |
+| `adjustment.lines[].site_name` | string \| null | no | yes | null | — |
+| `adjustment.lines[].quantity_change` | string | yes | no | — | — |
+| `adjustment.lines[].value_change` | object | yes | no | — | — |
+| `adjustment.lines[].value_change.amount` | string | yes | no | — | — |
+| `adjustment.lines[].value_change.currency` | string | yes | no | — | — |
+| `adjustment.lines[].value_change.minor_units` | integer | yes | no | — | — |
+| `adjustment.lines[].movement_kind` | literal["receipt", "issue", "value", "found", "reversal"] | yes | no | — | — |
+| `adjustment.lines[].value_basis` | literal["stated", "average", "purchase_cost", "none"] | yes | no | — | How the value was set: stated by the caller, or for found units the running average, the purchase cost, or nothing. |
+| `adjustment.lines[].quantity_on_hand` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value` | object | yes | no | — | — |
+| `adjustment.lines[].inventory_value.amount` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value.currency` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -696,6 +741,7 @@ Example JSON output:
     "item_name": "value",
     "item_type": "value",
     "kind": "adjustment",
+    "lines": [],
     "movement_kind": "receipt",
     "quantity_change": "value",
     "quantity_on_hand": "value",
@@ -1061,7 +1107,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.inventory_value.minor_units` | integer | yes | no | — | — |
 | `adjustment.asset_account_id` | string | yes | no | — | — |
 | `adjustment.adjustment_account_id` | string | yes | no | — | — |
-| `adjustment.movement_kind` | literal["receipt", "issue", "value", "reversal"] | yes | no | — | — |
+| `adjustment.movement_kind` | literal["receipt", "issue", "value", "found", "reversal"] | yes | no | — | — |
 | `adjustment.corrections` | array[object] | yes | no | — | — |
 | `adjustment.corrections[].item_id` | string | yes | no | — | — |
 | `adjustment.corrections[].item_name` | string | yes | no | — | — |
@@ -1074,6 +1120,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `adjustment.corrections[].delta.minor_units` | integer | yes | no | — | — |
 | `adjustment.corrections[].transaction_id` | string | yes | no | — | — |
 | `adjustment.corrections[].number` | string | yes | no | — | — |
+| `adjustment.lines` | array[object] | no | no | [] | Every line of the adjustment, in order; the fields above repeat the first. |
+| `adjustment.lines[].item_id` | string | yes | no | — | — |
+| `adjustment.lines[].item_name` | string | yes | no | — | — |
+| `adjustment.lines[].site_id` | string \| null | no | yes | null | — |
+| `adjustment.lines[].site_name` | string \| null | no | yes | null | — |
+| `adjustment.lines[].quantity_change` | string | yes | no | — | — |
+| `adjustment.lines[].value_change` | object | yes | no | — | — |
+| `adjustment.lines[].value_change.amount` | string | yes | no | — | — |
+| `adjustment.lines[].value_change.currency` | string | yes | no | — | — |
+| `adjustment.lines[].value_change.minor_units` | integer | yes | no | — | — |
+| `adjustment.lines[].movement_kind` | literal["receipt", "issue", "value", "found", "reversal"] | yes | no | — | — |
+| `adjustment.lines[].value_basis` | literal["stated", "average", "purchase_cost", "none"] | yes | no | — | How the value was set: stated by the caller, or for found units the running average, the purchase cost, or nothing. |
+| `adjustment.lines[].quantity_on_hand` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value` | object | yes | no | — | — |
+| `adjustment.lines[].inventory_value.amount` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value.currency` | string | yes | no | — | — |
+| `adjustment.lines[].inventory_value.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -1098,6 +1161,7 @@ Example JSON output:
     "item_name": "value",
     "item_type": "value",
     "kind": "adjustment",
+    "lines": [],
     "movement_kind": "receipt",
     "quantity_change": "value",
     "quantity_on_hand": "value",

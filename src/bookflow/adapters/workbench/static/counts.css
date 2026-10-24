@@ -1,0 +1,17 @@
+/* The count screen (R104 increment 2): made for a phone held in one hand in a van. */
+#inventory-count .count-entry { position: sticky; top: 0; z-index: 5; background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #d0d5dd); padding: .5rem 0; display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+#inventory-count .count-entry label { display: flex; flex-direction: column; font-size: .85rem; }
+#inventory-count .count-entry .scan { flex: 1 1 12rem; min-width: 0; }
+#inventory-count .count-entry .scan input { width: 100%; font-size: 1.1rem; padding: .5rem; box-sizing: border-box; }
+#inventory-count .count-entry .qty input { width: 5.5rem; font-size: 1.1rem; padding: .5rem; text-align: right; }
+#inventory-count .count-entry button { font-size: 1.05rem; padding: .55rem 1rem; }
+#inventory-count .count-lines td.num, #inventory-count .count-lines th.num { text-align: right; }
+#inventory-count .count-lines tr.uncounted td { color: var(--muted, #667085); }
+#inventory-count .count-lines tr.short td.diff { color: #b42318; font-weight: 600; }
+#inventory-count .count-lines tr.over td.diff { color: #027a48; font-weight: 600; }
+#inventory-count .count-preview { border-left: 4px solid #f79009; }
+@media (max-width: 600px) {
+  #inventory-count .count-entry { gap: .35rem; }
+  #inventory-count .count-entry .mode { flex-direction: row; gap: .25rem; align-items: center; }
+}

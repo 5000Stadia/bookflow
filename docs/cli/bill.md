@@ -795,6 +795,7 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
@@ -2283,6 +2284,7 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |

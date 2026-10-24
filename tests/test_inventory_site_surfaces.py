@@ -70,8 +70,10 @@ def test_the_same_sites_and_transfers_through_python_cli_http_and_mcp(root, tmp_
         assert r['found']['count'] == 1 and r['site']['stock'][0]['quantity_on_hand'] == '2', surface
         assert 'E_RECORD_IN_USE' in str(r['busy']), surface
         assert r['voided']['status'] == 'voided', surface
-        # The van sample left from Van 1: half a kit is left there.
-        van = [row for row in r['readings'][DEMO_AS_OF] if row[0] == KIT and row[1] == 'Van 1']
-        assert van and van[0][2] == '0.5', surface
+        # The van sample left from Van 1, and the other half kit went back to the warehouse before the
+        # demo's van count (R104 increment 2): none is left there.
+        assert r['readings']['2026-12-03'] and [row for row in r['readings']['2026-12-03']
+                                                if row[0] == KIT and row[1] == 'Van 1'][0][2] == '0.5', surface
+        assert not [row for row in r['readings'][DEMO_AS_OF] if row[0] == KIT and row[1] == 'Van 1'], surface
         shapes.add((repr(r['readings']), r['valuation']))
     assert len(shapes) == 1

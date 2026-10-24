@@ -190,12 +190,12 @@ def _place_label(line):
     return 'unassigned' if line['place_key'] == UNASSIGNED else line['place_key']
 
 
-def line_outputs(s, count, lines, counted, *, show_expected, held=None):
+def line_outputs(s, count, lines, counted, *, show_expected, held=None, pending=()):
     names = _names(s, [line['item_id'] for line in lines])
     if show_expected and held is None:
         held = expected(s, count, [line['item_id'] for line in lines], lines=lines)
     entries = {}
-    for entry in count_entries(s, count['id']):
+    for entry in list(count_entries(s, count['id'])) + list(pending):
         entries[entry['line_id']] = entries.get(entry['line_id'], 0) + 1
     out = []
     for line in lines:
@@ -451,7 +451,8 @@ def _enter(s, ctx, count, inp, *, persist):
             touched_lines.append(line['id'])
     all_lines = lines + new_lines
     counted = counted_by_line(count_entries(s, count['id']) + entries)
-    rendered = {row.line_id: row for row in line_outputs(s, count, all_lines, counted, show_expected=not count['blind'])}
+    rendered = {row.line_id: row for row in line_outputs(s, count, all_lines, counted, show_expected=not count['blind'],
+                                                         pending=entries)}
     output = count_output(s, count, cls=CountEnterOutput, lines=all_lines)
     output = output.model_copy(update={
         'lines': list(rendered.values()),
@@ -932,6 +933,8 @@ def settle_in_command(s, ctx, mark):
         names = _names(s, [item_id for item_id, _, _ in differences])
         site = placements.site_names(s).get(count['site_id'], '')
         for item_id, entry, _ in differences:
+            if entry.desired == entry.live:
+                continue        # restated unchanged with the entry's new revision
             warnings.append(
                 f'Count {count["number"]} of {site} on {count["count_date"]} was derived again: '
                 f'{names.get(item_id, {}).get("full_name", item_id)} now differs by {_q(sum(entry.desired.values()))} '

@@ -1,0 +1,66 @@
+{% extends "base.html" %}{% block title %}Count {{ count.number }}{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['counts.css'] }}"><section id="inventory-count" data-count="{{ count.number }}" data-count-status="{{ count.status }}">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / <a href="/c/{{ company_id }}/inventory/counts">Physical counts</a> / {{ count.number }}</nav>
+<h1>Count {{ count.number }}: {{ count.site_name }}, {{ count.date }}</h1>
+<p>{{ count.status|capitalize }}{% if count.blind %}, blind{% endif %}. {{ count.counted_lines }} of {{ count.counted_lines + count.uncounted_lines }} lines counted.</p>
+{% if result %}<div role="status" class="notice" data-count-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% set url = '/c/' ~ company_id ~ '/inventory/counts/' ~ (count.number|urlencode) %}
+{% if count.status == 'open' and can_enter %}
+<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="count-entry" data-count-entry>
+<label class="scan">Scan or type an item <input name="scan" autofocus autocomplete="off" list="count-items" placeholder="Item name or barcode" value="{{ values.get('scan', '') }}"></label>
+<label class="qty">Quantity <input name="quantity" inputmode="decimal" autocomplete="off" value="{{ values.get('quantity', '') }}" placeholder="1"></label>
+<label class="mode"><input type="checkbox" name="mode" value="add" {% if values.get('mode') == 'add' %}checked{% endif %}> Add to it</label>
+<input type="hidden" name="action" value="enter">
+<button type="submit" data-count-enter>Enter</button>
+<datalist id="count-items">{% for l in count.lines %}<option value="{{ l.item_name }}">{% endfor %}</datalist>
+</form>
+{% endif %}
+<section class="workspace-card" aria-label="Lines">
+<h2>Lines</h2>
+{% set grouped = count.lines|groupby('place') %}
+{% for place, rows in grouped %}{% if grouped|length > 1 %}<h3>{{ place|capitalize }}</h3>{% endif %}
+<div class="table-wrap"><table class="list-table count-lines" data-count-lines><thead><tr><th>Item</th>{% if not count.blind or count.status != 'open' %}<th class="num">Expected</th>{% endif %}<th class="num">Counted</th>{% if not count.blind or count.status != 'open' %}<th class="num">Difference</th>{% endif %}</tr></thead><tbody>
+{% for l in rows %}{% set d = l.difference %}<tr class="{% if l.counted is none %}uncounted{% elif d and d.startswith('-') %}short{% elif d and d != '0' %}over{% endif %}" data-line="{{ l.item_name }}"><td data-label="Item">{{ l.item_name }}{% if l.origin == 'found' %} <small>(found)</small>{% endif %}{% if l.description %}<br><small>{{ l.description }}</small>{% endif %}</td>{% if not count.blind or count.status != 'open' %}<td class="num" data-label="Expected">{{ l.expected if l.expected is not none else '' }}</td>{% endif %}<td class="num" data-label="Counted">{{ l.counted if l.counted is not none else '' }}</td>{% if not count.blind or count.status != 'open' %}<td class="num diff" data-label="Difference">{{ d if d is not none else '' }}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>{% endfor %}
+</section>
+{% if preview %}
+<section class="workspace-card count-preview" aria-label="Post preview" data-count-preview>
+<h2>Post preview</h2>
+<p>Recording fixes what was counted. These differences post at {{ count.date }}, after that day's paperwork placed before the count; total {{ preview.total_value.amount }}.</p>
+<div class="table-wrap"><table class="list-table" data-count-differences><thead><tr><th>Item</th><th class="num">Expected</th><th class="num">Counted</th><th class="num">Difference</th><th class="num">Value</th></tr></thead><tbody>
+{% for d in preview.differences %}<tr><td data-label="Item">{{ d.item_name }}</td><td class="num" data-label="Expected">{{ d.expected }}</td><td class="num" data-label="Counted">{{ d.counted }}</td><td class="num" data-label="Difference">{{ d.difference }}</td><td class="num" data-label="Value">{{ d.value.amount }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if preview.after_counting_began %}<p>Entered after counting began and dated {{ count.date }}:</p><ul>{% for doc in preview.after_counting_began %}<li>{{ doc.kind|replace('_', ' ') }} {{ doc.number or '' }}: {{ doc.position }} the count</li>{% endfor %}</ul>{% endif %}
+{% for w in preview.warnings %}<p class="warning">{{ w }}</p>{% endfor %}
+<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML">
+<input type="hidden" name="expected_version" value="{{ count.version }}">
+<input type="hidden" name="adjustment_account" value="{{ values.get('adjustment_account', '') }}">
+<input type="hidden" name="preview_fingerprint" value="{{ preview.preview_fingerprint }}">
+<input type="hidden" name="ctx:reason" value="{{ values.get('ctx:reason', '') }}">
+<div class="actions"><button type="submit" name="action" value="post" data-count-confirm>Record count</button></div>
+</form>
+</section>
+{% endif %}
+{% if count.status == 'open' and can_post and not preview %}
+<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Post the count" data-count-post>
+<h2>Post</h2>
+<label>Adjustment account <input name="adjustment_account" list="count-accounts" value="{{ values.get('adjustment_account', '') }}" placeholder="Inventory Shrinkage"></label>
+<datalist id="count-accounts">{% for a in accounts %}<option value="{{ a }}">{% endfor %}</datalist>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Van count"></label>
+<input type="hidden" name="expected_version" value="{{ count.version }}">
+<div class="actions"><button type="submit" name="action" value="preview" data-count-preview-open>Post</button> <button type="submit" name="action" value="cancel" class="secondary">Cancel count</button></div>
+</section>
+</form>
+{% endif %}
+{% if count.status == 'recorded' and can_post %}
+<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Void the count">
+{% if count.documents %}<p>Posted in journal entry {% for d in count.documents %}{{ d.number }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+<label>Reason <input name="ctx:reason" placeholder="Miscounted"></label>
+<input type="hidden" name="expected_version" value="{{ count.version }}">
+<div class="actions"><button type="submit" name="action" value="void" class="secondary">Void count</button></div>
+</section>
+</form>
+{% endif %}
+</section>{% endblock %}

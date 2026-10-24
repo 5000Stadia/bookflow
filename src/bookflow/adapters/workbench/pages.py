@@ -601,7 +601,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "counts.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -760,6 +760,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import inventory_site_pages as InventorySitePages
     InventorySitePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                              role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R104 increment 2: physical counts, the Counts list and the count screen.
+    from bookflow.adapters.workbench import inventory_count_pages as InventoryCountPages
+    InventoryCountPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                              role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R110: the price rule list and form, the conflict preference and a price check.
     from bookflow.adapters.workbench import pricing_rule_pages as PricingRulePages
     PricingRulePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

@@ -2555,3 +2555,44 @@ command = "work-order create"
 capture = "demo_stocked_work_order"
 reason = "Replace two shutoff valves on site"
 input = { customer = "${customer.id}", date = "2026-10-21", number = "DEMO-SO-WO-1", title = "Replace two shutoff valves", lines = [{ item = "${inventory_item.id}", quantity = "2" }, { item = "${service_item.id}", quantity = "1" }] }
+
+# Physical counts (R104 increment 2): the van restocked and counted at the end of the day. The count
+# finds a valve short, a shipping kit over and the half service kit gone. The slip for the morning,
+# entered after the count, shows the half kit went back to the warehouse, so the count is derived
+# again: the kit was misplaced, not lost, and only the valve and the shipping kit post (to Cost of
+# Goods Sold, each at its average).
+[[commands]]
+command = "inventory-transfer post"
+capture = "van_restock"
+input = { date = "2026-12-12", number = "DEMO-VAN-RESTOCK", from_site = "Warehouse", to_site = "Van 1", lines = [{ item = "${inventory_item.id}", quantity = "4" }, { item = "${shipping_demo_item.id}", quantity = "2" }], memo = "Restock the van" }
+reason = "Restock the van for the next day's calls"
+
+[[commands]]
+command = "inventory-count create"
+capture = "van_count"
+input = { site = "Van 1", date = "2026-12-12", number = "DEMO-VAN-COUNT", items = ["${inventory_item.id}", "${shipping_demo_item.id}", "${purchase_demo_item.id}"], memo = "End-of-day van count" }
+reason = "Count the van at the end of the day"
+
+[[commands]]
+command = "inventory-count enter"
+input = { count = "DEMO-VAN-COUNT", entries = [{ code = "100000000050", quantity = "3" }, { item = "${shipping_demo_item.id}", quantity = "3" }, { item = "${purchase_demo_item.id}", quantity = "0" }] }
+reason = "Counted the van shelves"
+
+[[commands]]
+command = "inventory-count post"
+capture = "van_count_preview"
+dry_run = true
+input = { count = "DEMO-VAN-COUNT", expected_version = 1, adjustment_account = "${cogs_account.id}" }
+reason = "Record the van count"
+
+[[commands]]
+command = "inventory-count post"
+capture = "van_count_recorded"
+input = { count = "DEMO-VAN-COUNT", expected_version = 1, adjustment_account = "${cogs_account.id}", preview_fingerprint = "${van_count_preview.preview_fingerprint}" }
+reason = "Record the van count"
+
+[[commands]]
+command = "inventory-transfer post"
+capture = "van_unload"
+input = { date = "2026-12-12", number = "DEMO-VAN-UNLOAD", from_site = "Van 1", to_site = "Warehouse", lines = [{ item = "${purchase_demo_item.id}", quantity = "0.5" }], memo = "Half kit taken back to the shelf before the count" }
+reason = "The slip for the half kit moved back this morning"
