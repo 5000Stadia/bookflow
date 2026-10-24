@@ -3740,11 +3740,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.duplicate_numbers` | integer | yes | no | — | — |
 | `totals.duplicate_checks` | integer | yes | no | — | — |
 | `totals.retired_numbers` | integer | no | no | 0 | — |
+| `totals.spoiled_numbers` | integer | no | no | 0 | — |
+| `totals.numbers_in_printer` | integer | no | no | 0 | — |
 | `totals.legacy_uncertain_gaps` | integer | no | no | 0 | — |
 | `totals.checks_numbered_before_the_upgrade` | integer | no | no | 0 | — |
 | `disclosure` | string \| null | no | yes | null | — |
 | `rows` | array[object] | yes | no | — | — |
-| `rows[].kind` | literal["gap", "duplicate", "retired"] | yes | no | — | — |
+| `rows[].kind` | literal["gap", "duplicate", "retired", "spoiled", "printing"] | yes | no | — | — |
 | `rows[].account_id` | string | yes | no | — | — |
 | `rows[].current_account_label` | string | yes | no | — | — |
 | `rows[].current_account_name` | string | yes | no | — | — |
@@ -3756,6 +3758,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].duplicate_number` | integer \| null | no | yes | null | — |
 | `rows[].times_used` | integer \| null | no | yes | null | — |
 | `rows[].retired_number` | integer \| null | no | yes | null | — |
+| `rows[].spoiled_number` | integer \| null | no | yes | null | A spoiled or printing row's number: paper thrown away (spoiled), or in a print run still waiting for "Did checks print OK?" (printing). |
+| `rows[].spoiled_reason` | literal["misprinted", "reprinted"] \| null | no | yes | null | — |
+| `rows[].printed_for` | string \| null | no | yes | null | The cheque the paper was printed for (transaction ID). |
 | `rows[].legacy_uncertain` | boolean | no | no | false | — |
 | `rows[].before` | object \| null | no | yes | null | — |
 | `rows[].before.transaction_id` | string | yes | no | — | — |
@@ -3831,7 +3836,9 @@ Example JSON output:
     "legacy_uncertain_gaps": 0,
     "missing_numbers": 1,
     "numbered_checks": 1,
+    "numbers_in_printer": 0,
     "retired_numbers": 0,
+    "spoiled_numbers": 0,
     "unnumbered_checks": 1
   }
 }

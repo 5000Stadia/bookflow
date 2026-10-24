@@ -74,6 +74,7 @@ ACCEPTED = {
     'order-invoicing-v1': (619, '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531'),
     'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
+    'check-printing-v1': (631, '9c23839164c720973415eddfee3b6829602df24884e49f1e01c26bd4b116e7ec'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -153,6 +154,8 @@ CHAIN_ADDITIONS = {
     'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
     'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
     'partial-po-v1': {'purchase-order close-lines'},
+    'check-printing-v1': {'check print', 'check print-alignment', 'check print-cancel', 'check print-confirm',
+                          'check print-pdf', 'check print-queue', 'check print-run', 'check print-setup', 'check reprint'},
 }
 
 _ANCESTOR_EDIT = """

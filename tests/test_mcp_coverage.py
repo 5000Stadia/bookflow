@@ -61,7 +61,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +2 sales-order invoice and sales-order billing (R101 increment 4).
     # +2 sales-order purchase-order and work-order purchase-order (R101 increment 5).
     # +1 purchase-order close-lines (R153).
-    assert len(rows) == 624
+    # +9 check printing (R152): check print-queue, print, print-confirm, print-cancel, reprint, print-run, print-pdf,
+    # print-setup and print-alignment.
+    assert len(rows) == 633
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven

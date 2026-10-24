@@ -108,8 +108,17 @@ def document(s, noun, header, lines, check_number=None):
         currency=currency, amount=Money(funding['amount_minor_units'], currency).to_dict(),
         expense_total=Money(total, currency).to_dict(), expense_lines=len(expenses),
         check_number=check_number, funding_details=funding if not funding['amount_minor_units'] else None,
+        print_status=_print_status(s, noun, header),
         item_total=Money(checked_sum((row['amount_minor_units'] for row in captured), 'items.total'), currency).to_dict(),
         items=[check_items.output(row, row['line_id'], currency) for row in captured])
+
+
+def _print_status(s, noun, header):
+    """Where a check saved to be printed stands in printing (R152); None for every other document."""
+    if noun != 'check' or header is None or not sa.inspect(s.company.conn).has_table('check_print_marks'):
+        return None
+    from bookflow.company import check_printing
+    return check_printing.print_status(s, header['id'])
 
 
 def _saved_expenses(lines):
@@ -132,6 +141,7 @@ def _facts(s, inp, noun, header):
     if header is None:
         return dict(account=inp.account, pay_to=inp.pay_to, date=inp.date, amount=inp.amount,
                     memo=inp.memo, number=getattr(inp, 'number', None), class_id=inp.class_id,
+                    to_be_printed=getattr(inp, 'to_be_printed', False),
                     expenses=list(inp.expenses), selected_line_id=None,
                     items=check_items.resolve(s, getattr(inp, 'items', None) or [], [], inp.class_id,
                                               registers._home(s)))
@@ -155,6 +165,7 @@ def _facts(s, inp, noun, header):
         # A correction that does not name a number keeps the one on the paper; None here
         # means "keep", and company/check_numbers.py is what knows what is already there.
         number=getattr(inp, 'number', None),
+        to_be_printed=getattr(inp, 'to_be_printed', None),
         class_id=inp.class_id if given('class_id') else None,
         expenses=list(inp.expenses) if inp.expenses is not None else _saved_expenses([line for line in lines if line['kind'] == 'journal' and line['line_id'] != funding['line_id'] and line['line_id'] not in item_ids]),
         items=check_items.resolve(s, getattr(inp, 'items', None), previous_items, inp.class_id, registers._home(s)),
@@ -208,7 +219,7 @@ def _register(facts, s, noun, inp, header):
             else header['version'], **values)
     summary = MoneyOutSummary(
         kind=DOCUMENT_KIND[noun], account_id=account['id'], funding=FUNDING_TYPE[noun],
-        check_number=check_numbers.current(s, header['id'])['check_number'] if noun == 'check' and header else None,
+        check_number=(check_numbers.current(s, header['id']) or {}).get('check_number') if noun == 'check' and header else None,
         currency=currency, amount=amount.to_dict(),
         expense_total=Money(expense_total, currency).to_dict(),
         expense_lines=len(facts['expenses']), item_total=Money(item_total, currency).to_dict(),
@@ -216,8 +227,32 @@ def _register(facts, s, noun, inp, header):
     # Only a cheque asks for one. A card charge never consumes a check number, so it sends
     # no request at all and the journal it posts keeps its own document reference alone.
     instrument = (check_numbers.request(account['id'], facts['number'])
-                  if noun == 'check' else None)
+                  if noun == 'check' and not _stays_unnumbered(s, facts, header) else None)
+    if noun == 'check' and instrument is None:
+        summary = summary.model_copy(update={'print_status': 'queued'})
     return register, summary, instrument, facts["items"]
+
+
+def _stays_unnumbered(s, facts, header):
+    """Whether this write leaves the cheque without a number, waiting in the print queue (R152).
+
+    A new check saved to be printed has none. A correction of one still waiting keeps having none
+    unless it types a number or says ``to_be_printed: false``, which numbers it the way a
+    hand-written check is numbered. A check that already has a number cannot be queued again:
+    reprinting it is ``check reprint``.
+    """
+    if header is None:
+        return bool(facts.get('to_be_printed'))
+    held = check_numbers.current(s, header['id'])
+    if held is not None:
+        if facts.get('to_be_printed'):
+            raise journals.invalid('to_be_printed', f'check {held["check_number"]} already has a number; '
+                                   'print it again with `check reprint`')
+        return False
+    if facts.get('number') is not None or facts.get('to_be_printed') is False:
+        return False
+    from bookflow.company import check_printing
+    return check_printing.marked(s, header['id'])
 
 
 def _mismatch(noun, currency, amount, expense_total, item_total=0):
@@ -377,6 +412,9 @@ def _translate(s, ctx, inp, noun, operation):
     if operation == 'void':
         revision = journals.revision(s, header)
         lines = money_out.lines(s, revision)
+        if noun == 'check':
+            from bookflow.company import check_printing
+            check_printing.guard_correction(s, header, before=None, after=None, voiding=True)
         numbers = money_out.check_numbers_of(s, noun, [revision['id']])
         # A voided cheque keeps its number: the paper it was written on is still gone, so
         # nothing here asks the chequebook for anything.
@@ -385,6 +423,10 @@ def _translate(s, ctx, inp, noun, operation):
     facts = _facts(s, inp, noun, header)
     register, summary, instrument, items = _register(facts, s, noun, inp, header)
     journal, funding = check_items.translate(s, register, summary, header, inp.expected_version if header else None)
+    if noun == 'check' and header is not None:
+        from bookflow.company import check_printing
+        before = check_items.funding(s, money_out.lines(s, journals.revision(s, header)))
+        check_printing.guard_correction(s, header, before=before, after=funding)
     if not summary.amount.minor_units:
         summary = summary.model_copy(update={'funding_details': funding})
     return journal, summary, header, instrument, items, funding
@@ -428,6 +470,11 @@ def apply(plan, ctx, s):
         extra = (('money_out_documents', 'money_out_document', 'transaction_id', [money_out.marker(
             noun, header['id'], at=header['created_at'], actor_id=s.actor.id,
             interface=ctx.interface.value, event=fresh.data['event'])]),)
+        if noun == 'check' and getattr(inp, 'to_be_printed', False):
+            from bookflow.company import check_printing
+            extra += (('check_print_marks', 'check_print_mark', 'transaction_id', [check_printing.mark_row(
+                header['id'], header['type'], at=header['created_at'], actor_id=s.actor.id,
+                interface=ctx.interface.value, event=fresh.data['event'])]),)
     if operation != 'void' and fresh.data['changed']:
         monetary = [l for l in fresh.data['pending']['document_lines'] if l['kind'] == 'journal']
         funding['line_id'] = monetary[0]['line_id'] if monetary else None

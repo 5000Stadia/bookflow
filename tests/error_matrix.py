@@ -2215,3 +2215,25 @@ for _noun in ('sales-order', 'work-order'):
         'E_DIRECTIVE_NOT_FOUND': 'context directive does not exist',
         'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
     }
+
+# Check printing (R152): the print queue, print runs, "Did checks print OK?", reprints and alignment.
+_PRINT_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+MATRIX['check print-queue'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account'}
+MATRIX['check print'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'nothing queued, a check not queued on the account, or a partial first sheet of voucher checks',
+                         'E_DUPLICATE_NUMBER': 'a number in the run is already used, retired, spoiled or in the printer',
+                         'E_PERIOD_CLOSED': 'a queued check dated on or before the closing date',
+                         'E_VALUE_RANGE': 'the run would pass the largest check number'} | _PRINT_TAIL
+MATRIX['check print-confirm'] = {'E_RECORD_NOT_FOUND': 'unknown run', 'E_VALIDATION': 'already answered, or a failed number not in the run',
+                                 'E_PERMISSION': 'an agent: what printed is a person\'s to say'} | _PRINT_TAIL
+MATRIX['check print-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown run', 'E_VALIDATION': 'already answered',
+                                'E_PERMISSION': 'an agent'} | _PRINT_TAIL
+MATRIX['check reprint'] = {'E_RECORD_NOT_FOUND': 'not a check or bill payment', 'E_VALIDATION': 'no number yet, voided, or in a print run',
+                           'E_DUPLICATE_NUMBER': 'the new number is used on the account', 'E_PERIOD_CLOSED': 'a new number for a closed-period check',
+                           'E_VERSION_CONFLICT': 'stale expected_version', 'E_VALUE_RANGE': 'past the largest check number',
+                           'E_PERMISSION': 'an agent'} | _PRINT_TAIL
+MATRIX['check print-run'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
+MATRIX['check print-pdf'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
+MATRIX['check print-setup'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or an offset beyond 2 inches',
+                               'E_VERSION_CONFLICT': 'stale expected_version'} | _PRINT_TAIL
+MATRIX['check print-alignment'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or a partial voucher sheet'}

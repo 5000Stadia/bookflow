@@ -576,6 +576,26 @@ A billed trip cannot be voided or have its miles changed until its invoice is vo
 (`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
 for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
 
+## Printing checks: "print this week's checks"
+
+Write the checks with `to_be_printed: true` (on `check post`, or on `bill pay` by check from a bank
+account) and leave `number` out: they wait in the bank account's print queue with no number
+(`check print-queue`). `check print` gives them numbers in order from `first_number`, the number on
+the first check loaded in the printer, and `check print-pdf --run` returns the PDF to print. A number
+already used on the account is refused, never skipped.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "check print", "reason": "Print this week's checks",
+ "input": {"account": "Checking", "first_number": "1001", "style": "voucher"}}
+```
+
+Then ask the person "Did the checks print OK?" and stop: only they know what came out of the printer,
+so `check print-confirm` (all fine, or `failed_from` the first bad number), `check print-cancel` and
+`check reprint` are a person's act and refused to an agent. Misprinted checks go back to the queue for
+new numbers and their numbers are recorded as spoiled, which `report missing-checks` shows. A printed
+check's amount, payee and bank account cannot be changed: void it and write a new one.
+
 ## Special prices: "give Acme 10% off pipe fittings through December"
 
 A price rule changes the price a sales line defaults to when its conditions hold: items or

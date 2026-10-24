@@ -1444,3 +1444,24 @@ EXAMPLES['work-order purchase-order'] = Example(
     + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
     {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
      'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})
+# R152: Print Checks.
+_PRINT_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'check print-queue': Example('bookflow check print-queue --account Checking' + _PRINT_CO, {'account': 'Checking'}),
+    'check print': Example('bookflow check print --account Checking --first-number 1001 --style voucher'
+                           ' --reason "Print this week\'s checks"' + _PRINT_CO,
+                           {'account': 'Checking', 'first_number': '1001', 'style': 'voucher'}),
+    'check print-pdf': Example(f'bookflow check print-pdf {ID} --company "Demo Plumbing Co"', {'run': ID}),
+    'check print-confirm': Example(f'bookflow check print-confirm {ID} --failed-from 1003 --reason "Jammed at 1003"'
+                                   + _PRINT_CO, {'run': ID, 'failed_from': '1003'}),
+    'check print-cancel': Example(f'bookflow check print-cancel {ID} --reason "Wrong paper loaded"' + _PRINT_CO, {'run': ID}),
+    'check print-run': Example(f'bookflow check print-run {ID}' + _PRINT_CO, {'run': ID}),
+    'check reprint': Example(f'bookflow check reprint {ID} --new-number 1010 --reason "Coffee on check 1004"' + _PRINT_CO,
+                             {'check': ID, 'new_number': '1010'}),
+    'check print-setup': Example('bookflow check print-setup --account Checking --style standard --offset-x-hundredths 5'
+                                 ' --offset-y-hundredths -3 --reason "Fine alignment"' + _PRINT_CO,
+                                 {'account': 'Checking', 'style': 'standard', 'offset_x_hundredths': 5,
+                                  'offset_y_hundredths': -3}),
+    'check print-alignment': Example('bookflow check print-alignment --account Checking --offset-x-hundredths 5'
+                                     ' --company "Demo Plumbing Co"', {'account': 'Checking', 'offset_x_hundredths': 5}),
+})

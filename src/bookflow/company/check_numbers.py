@@ -128,7 +128,12 @@ def _held(s, account_id, key, *, excluding=None):
     if excluding is not None:
         query = query.where(t.c.transaction_id != excluding)
     found = s.company.conn.execute(query).mappings().first()
-    return dict(found) if found else None
+    if found:
+        return dict(found)
+    # A number on paper in the printer -- a print run nobody has confirmed yet -- is held by the
+    # cheque it was printed for, exactly as if it were already written on it (R152).
+    from bookflow.company import check_printing
+    return check_printing.held_in_printer(s, account_id, key, excluding=excluding)
 
 
 def _ever_issued(s, account_id, keys, *, excluding=None):
@@ -147,6 +152,10 @@ def _ever_issued(s, account_id, keys, *, excluding=None):
         if excluding is not None:
             query = query.where(table.c.transaction_id != excluding)
         found.update(row[0] for row in s.company.conn.execute(query))
+    # Numbers the print layer has put on paper: in a run awaiting "Did checks print OK?", or
+    # spoiled by a misprint or a reprint. None of them is free to hand out again (R152).
+    from bookflow.company import check_printing
+    found.update(check_printing.on_paper(s, account_id, keys, excluding=excluding))
     return found
 
 
@@ -158,7 +167,8 @@ def _highest_issued(s, account_id):
         value = s.company.conn.execute(sa.select(sa.func.max(table.c.check_sequence)).where(
             table.c.account_id == account_id)).scalar()
         highest = max(highest, int(value or 0))
-    return highest
+    from bookflow.company import check_printing
+    return max(highest, check_printing.highest_on_paper(s, account_id))
 
 
 def duplicate(account, literal, holder):

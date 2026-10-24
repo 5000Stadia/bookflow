@@ -585,6 +585,7 @@ SECTIONS: tuple[Section, ...] = (
                    "/reconcile-opening/start"),
             Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
+            Action("Print checks", READ, ("check print-queue",), "/print-checks"),
             _report("Missing checks", "missing-checks"),
             _report("Reconciliation discrepancy", "reconciliation-discrepancy"),
             _report("Entries to review", "entries-to-review"),

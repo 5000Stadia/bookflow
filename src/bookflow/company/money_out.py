@@ -175,9 +175,17 @@ def check_numbers_of(s, noun, revision_ids):
     if noun != 'check' or not revision_ids:
         return {}
     t = c.check_instrument_revisions
-    return {row['revision_id']: row['check_number'] for row in s.company.conn.execute(
+    found = {row['revision_id']: row['check_number'] for row in s.company.conn.execute(
         sa.select(t.c.revision_id, t.c.check_number).where(
             t.c.revision_id.in_(list(revision_ids)))).mappings()}
+    # A cheque reprinted under a new number (R152, `check reprint`) carries the new number on
+    # the revision it is still at: the paper changed and the document did not, so only the
+    # current projection knows it. The revision row keeps the number first issued.
+    p = c.check_instruments
+    found.update({row['revision_id']: row['check_number'] for row in s.company.conn.execute(
+        sa.select(p.c.revision_id, p.c.check_number).where(
+            p.c.revision_id.in_(list(revision_ids)))).mappings()})
+    return found
 
 
 def marker(noun, transaction_id, *, at, actor_id, interface, event):
