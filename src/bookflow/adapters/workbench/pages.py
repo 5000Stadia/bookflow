@@ -2151,12 +2151,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             elif verb == 'sales-order':
                 workflow_note += (' This makes the open sales order for the accepted estimate, carrying its lines and what was already '
                                   'invoiced. An estimate has one work order or one sales order, never both. Retrying returns the same order.')
-            if noun == 'sales-order':
+            if verb == 'purchase-order':
+                workflow_note = ('Order what this document is short: one purchase order from one vendor, linked to the lines it '
+                                 'covers. Leave lines empty to order each stocked line\'s shortfall from its preferred vendor; '
+                                 'name lines (item and quantity) and a vendor to order something else, spares included.')
+            elif noun == 'sales-order':
                 workflow_note = ('A sales order records what the customer ordered. It posts nothing and moves no stock; the invoice made '
                                  'from it does. Cancel part of a line with Cancelled quantity, or tick Close to cancel what is still open. '
                                  'Close the whole order (status closed, with a reason) when nothing more will ship.')
         if Billing.is_conversion(noun, verb):
-            described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent')]
+            described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent', 'all_open')]
             workflow_note = 'Bill remaining work, original-scope percentages, or per-line quantities and net amounts. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
         if noun == 'deposit' and verb == 'post':
             labels = {'document.deposit_to': 'Deposit to bank', 'document.date': 'Deposit date', 'document.number': 'Deposit number (automatic when blank)', 'document.memo': 'Memo', 'document.sources': 'Payments and sales receipts to bank', 'document.additional': 'Other money', 'document.cash_back.account': 'Cash back account', 'document.cash_back.amount': 'Cash back amount', 'document.cash_back.memo': 'Cash back memo'}

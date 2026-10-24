@@ -178,6 +178,8 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
     current = ordering and header['current_revision_id'] == rev['id']
     figures = sales_orders.line_quantities(s, header, rev, lines, identities, rev['currency']) if current else {}
     stock = _line_stock(s, header, lines) if current else {}
+    from bookflow.company.shortfall import document_coverage
+    coverage = document_coverage(s, header['id']) if current else {}
     for line in lines:
         f, ident = line_facts(line), identities[line['line_id']]
         currency = rev['currency']
@@ -189,7 +191,7 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
             facts=f, quantity=format_quantity_micro_units(f.quantity_microunits),
             completed_quantity=format_quantity_micro_units(f.completed_quantity_microunits),
             cancelled_quantity=format_quantity_micro_units(f.cancelled_quantity_microunits) if ordering else None,
-            order=figures.get(line['line_id']), stock=stock.get(f.item_id),
+            order=figures.get(line['line_id']), stock=stock.get(f.item_id), coverage=coverage.get(line['line_id']),
             unit_price=amount(f.unit_price_minor_units), net=amount(f.net_minor_units),
             tax=amount(f.tax_minor_units), total=amount(f.gross_minor_units),
             estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units),

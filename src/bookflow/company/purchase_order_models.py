@@ -272,6 +272,9 @@ class PurchaseOrderSummaryOutput(CommonOut):
 class PurchaseOrderOutput(PurchaseOrderSummaryOutput):
     revision: PurchaseOrderRevisionOutput
     conversion: PurchaseOrderConversionOutput | None = None
+    covers: list['CoverageOutput'] | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        'The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), '
+        'each with what is still to arrive for it. Absent on an order written by hand.'))
 
 
 class PurchaseOrderWriteOutput(PurchaseOrderOutput, WriteOutput):
@@ -298,3 +301,8 @@ class PurchaseOrderHistoryOutput(_Input):
     has_more: bool
     next_cursor: str | None
     audit_watermark: int
+
+
+from bookflow.company.work_outputs import CoverageOutput  # noqa: E402  (a forward reference above)
+PurchaseOrderOutput.model_rebuild()
+PurchaseOrderWriteOutput.model_rebuild()

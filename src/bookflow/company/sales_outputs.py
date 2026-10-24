@@ -290,6 +290,21 @@ class WorkBillingCurrent(StrictModel):
     status: str
 
 
+class OrderTaxLine(StrictModel):
+    line_id: str
+    quoted_tax: MoneyOutput
+    invoice_tax: MoneyOutput
+    difference: MoneyOutput
+
+
+class OrderTaxDifference(StrictModel):
+    """An invoice made from a sales order is taxed as of its own date; this is how far that is from the quote."""
+    lines: list[OrderTaxLine]
+    quoted_tax: MoneyOutput
+    invoice_tax: MoneyOutput
+    difference: MoneyOutput
+
+
 class SalesWriteOutput(SalesOutput, WriteOutput):
     settlement: InvoiceCorrectionOutput | None = None
     source_effect: WorkBillingSourceEffect | None = None
@@ -306,6 +321,9 @@ class SalesWriteOutput(SalesOutput, WriteOutput):
         'invoice used, drawn by a credit memo applied to it. Absent when the company holds no prepayments.'))
     balance_due: MoneyOutput | None = Field(default=None, description=(
         'With prepayment_applied: what the invoice still owes after the prepayment.'))
+    order_tax: OrderTaxDifference | None = Field(default=None, description=(
+        'An invoice made from a sales order: its tax per billed line and in total against the order\'s quoted tax '
+        'for the part billed. Absent on every other sale.'))
 
     @model_serializer(mode='wrap')
     def compatible_payment_settlement(self, handler):
@@ -316,6 +334,8 @@ class SalesWriteOutput(SalesOutput, WriteOutput):
             result.pop('balance_due', None)
         if self.settlement is None:
             result.pop('settlement', None)
+        if self.order_tax is None:
+            result.pop('order_tax', None)
         if self.settlement_current is None:
             result.pop('settlement_current', None)
         return result

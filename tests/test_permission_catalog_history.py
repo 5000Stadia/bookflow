@@ -71,7 +71,9 @@ ACCEPTED = {
     'mileage-v1': (606, '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24'),
     'collections-v1': (608, '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c'),
     'pricing-rules-v1': (617, 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2'),
-    'accountant-review-v1': (631, '877ceb08e1129d87f3df58ea6b3bd71bb280384118db2585cc0906c46fe4b2f1'),
+    'order-invoicing-v1': (619, '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531'),
+    'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
+    'accountant-review-v1': (635, 'b8597a6ae2aedb851b87aa4e14471100a55cd8f5c1fa9df36b775e1e7cefd19f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -148,6 +150,8 @@ CHAIN_ADDITIONS = {
     'pricing-rules-v1': {'price-rule activate', 'price-rule create', 'price-rule deactivate', 'price-rule list',
                          'price-rule preferences', 'price-rule preview', 'price-rule set-preferences',
                          'price-rule show', 'price-rule update'},
+    'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
+    'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
     'accountant-review-v1': {'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify',
                              'accountant remove', 'accountant reviewed-through', 'accountant-copy cancel',
                              'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',

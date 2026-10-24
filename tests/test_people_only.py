@@ -36,6 +36,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # mileage-v1 adds none: vehicles, rates, trips, trip billing and reimbursement are an agent's to do as a person's.
     # collections-v1 adds none: moving a customer's credit between jobs is bookkeeping.
     # pricing-rules-v1 adds none: price rules are bookkeeping setup, as price levels are.
+    # order-invoicing-v1 adds none, nor does shortfall-po-v1.
     # accountant-review-v1 adds designating and removing an external accountant, cancelling an accountant's copy
     # and importing an accountant's changes: who may change the books, and what comes into them, is the owner's call.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)

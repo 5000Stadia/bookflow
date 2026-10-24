@@ -105,7 +105,9 @@ def _sources(s, as_of, customer_id):
     -- is skipped here and read through the owner instead, so one line's remaining
     scope is never counted twice.
     """
-    documents = work.rows(s, c.work_documents, c.work_documents.c.kind.in_(query.BILLING_KINDS),
+    # Sales orders are goods a customer is waiting for, listed by `report open-sales-orders`, not work to bill.
+    kinds = [kind for kind in query.BILLING_KINDS if kind != 'sales_order']
+    documents = work.rows(s, c.work_documents, c.work_documents.c.kind.in_(kinds),
                           order=c.work_documents.c.id)
     for header in documents:
         if not query.billable_source(header):

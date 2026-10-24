@@ -279,6 +279,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/price_rule_preferences`](schema/company/price_rule_preferences.md)
 - [`company/price_rules`](schema/company/price_rules.md)
 - [`company/principals`](schema/company/principals.md)
+- [`company/purchase_coverage_links`](schema/company/purchase_coverage_links.md)
 - [`company/purchase_deletions`](schema/company/purchase_deletions.md)
 - [`company/purchase_expense_lines`](schema/company/purchase_expense_lines.md)
 - [`company/purchase_item_lines`](schema/company/purchase_item_lines.md)

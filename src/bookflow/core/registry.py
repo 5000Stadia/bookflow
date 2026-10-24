@@ -313,7 +313,8 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.payment_cmds": ["payment", "payment selection", "invoice", "application", "payment operation", "payment preview", "payment settlement"],
     "bookflow.commands.work_cmds": ["proposal", "estimate", "work-order", "sales-order"],
     "bookflow.commands.time_cmds": ["time-activity"],
-    "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity"],
+    "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity", "sales-order"],
+    "bookflow.commands.shortfall_cmds": ["sales-order", "work-order"],
     "bookflow.commands.register_cmds": ["register"],
     "bookflow.commands.check_cmds": ["check", "card-charge", "card-credit"],
     "bookflow.commands.credit_memo_cmds": ["credit-memo"],
@@ -377,6 +378,7 @@ NOUN_MODULES: dict[str, list[str]] = {
 MODULE_VERBS: dict[str, frozenset[str]] = {
     "bookflow.commands.query_cmds": frozenset({"query"}),
     "bookflow.commands.billing_cmds": frozenset({"invoice", "sales-receipt", "billing"}),
+    "bookflow.commands.shortfall_cmds": frozenset({"purchase-order"}),
     "bookflow.commands.compact_cmds": frozenset({"compact"}),
     "bookflow.commands.backup_cmds": frozenset({"backup", "restore"}),
 }

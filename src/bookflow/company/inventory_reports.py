@@ -71,7 +71,7 @@ class InventoryValuationRow(StockRow):
 
 class StockStatusRow(StockRow):
     quantity_committed: str = Field(description="Open quantity of this item on open sales orders and work orders dated by as_of, in its base unit.")
-    quantity_for_assemblies: str = Field(description="Reserved for pending assembly builds; 0 until assembly builds exist.")
+    quantity_for_assemblies: str = Field(description="Reserved for pending assembly builds dated by as_of; available deducts it while available_deducts_pending_builds is on.")
     quantity_available: str = Field(description="On hand less committed (and less reserved for builds under its own preference); on hand while the company's available_deducts_sales_orders preference is off.")
     quantity_on_order: str
     next_delivery_date: str | None = Field(description="Earliest expected date of a live purchase order with this item still to arrive.")

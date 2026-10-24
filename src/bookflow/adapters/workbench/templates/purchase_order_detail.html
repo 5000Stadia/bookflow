@@ -25,5 +25,6 @@
 <td data-label="Amount" class="num"><span class="sales-cell-label" aria-hidden="true">Amount</span>{{ line.amount|amount }}</td></tr>{% endfor %}
 </tbody><tfoot><tr><th colspan="4">Total ({{ record.currency }})</th><th class="num">{{ record.total|amount }}</th></tr></tfoot></table></div>
 {% if record.memo %}<p>Memo: {{ record.memo }}</p>{% endif %}
+{% if record.covers %}<h3>Ordered to cover</h3><ul data-covers>{% for link in record.covers %}<li><a href="/c/{{ company_id }}/{{ link.work_kind.replace('_', '-') }}/{{ link.work_document_id }}">{{ link.work_kind.replace('_', ' ')|capitalize }} {{ link.work_number }}</a> · {{ link.linked }} ordered · {{ link.to_arrive }} still to arrive</li>{% endfor %}</ul>{% endif %}
 <p><a href="/c/{{ company_id }}/purchase-order/{{ record.id }}/history">Order history</a></p>
 </section>
