@@ -19,7 +19,7 @@ from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
 from bookflow.core.models import redact_paths
 from bookflow.core.perms import private_umask
-from bookflow.core import performance
+from bookflow.core import performance, timings
 from bookflow.core.registry import Command, Plan, Touched
 from bookflow.core.session import Actor, Session
 from bookflow.hub import access, schema as h
@@ -422,8 +422,15 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
             s.config.flush_pending(s.hub, commits=s.commits)
             _complete_pending_organizations(s, ctx)
         return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run, _recovery_checked=True)
-    with performance.span("command.execute", command=cmd.name):
-        return guard(body, s.is_hub_admin)
+    call = timings.begin()
+    try:
+        with performance.span("command.execute", command=cmd.name):
+            result = guard(body, s.is_hub_admin)
+    except BaseException as e:
+        timings.end(call, command=cmd.name, ctx=ctx, session=s, raw_input=raw_input, error=e)
+        raise
+    timings.end(call, command=cmd.name, ctx=ctx, session=s, raw_input=raw_input, result=result)
+    return result
 
 
 def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str | None = None,

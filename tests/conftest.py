@@ -73,6 +73,8 @@ def _checkpoint_databases(root: Path) -> None:
     """Fold every database's write-ahead log into its main file, so a copy never depends on a
     -wal file being copied at the same instant as its database. Nothing holds the root open here."""
     import sqlite3
+    from bookflow.core import timings
+    timings.flush()  # the timings writer holds no database open once its queue is written
     for path in root.rglob("*.db"):
         with sqlite3.connect(path) as db:
             busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()

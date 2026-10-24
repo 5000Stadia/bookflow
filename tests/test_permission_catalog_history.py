@@ -77,6 +77,7 @@ ACCEPTED = {
     'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
     'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
     'accountant-review-v1': (664, '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21'),
+    'performance-v1': (666, '362ea8b6763e4acb3aa5d804755ddc65f842e303525a04ea13921514277b381a'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -169,6 +170,7 @@ CHAIN_ADDITIONS = {
                              'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',
                              'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
                              'report accountant-review'},
+    'performance-v1': {'perf report', 'perf settings'},
 }
 
 _ANCESTOR_EDIT = """

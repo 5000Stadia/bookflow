@@ -165,16 +165,23 @@ def execute_detail(reader: BoundReader, request: DepositRequest, binding, *, ctx
         raise TypeError('closed deposit request required')
     audience = pa.audience(reader, binding)
     at = at or q.now()
+    from bookflow.core import timings
+    call, session = timings.begin(), None
     try:
         session = reads.open_selected(reader, audience, request.company, ctx)
         value = _produce(session, request, audience, at)
     except BookflowError as error:
+        timings.end(call, command=request.command, ctx=ctx, session=session, error=error)
         failure = CapturedFailure.capture(error)
         audience.validate()
         return failure.error().to_dict(), DepositProof(audience.identity, request, None, _seal=_SEAL,
                                                        failure=failure, observed_at=at)
+    except BaseException as error:
+        timings.end(call, command=request.command, ctx=ctx, session=session, error=error)
+        raise
     audience.validate()
     document = value.model_dump(mode='json')
+    timings.end(call, command=request.command, ctx=ctx, session=session, result=document)
     return document, DepositProof(audience.identity, request, document, _seal=_SEAL, observed_at=at)
 
 
