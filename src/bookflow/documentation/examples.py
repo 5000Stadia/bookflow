@@ -1423,3 +1423,32 @@ EXAMPLES.update({
         'bookflow price-rule set-preferences --conflict-policy priority --reason "Rules over price levels"' + _PRICE_CO,
         {'conflict_policy': 'priority'}),
 })
+
+# Accountant review (R121): the external accountant, the accountant's copy and what comes back, the checklist.
+_ACCT_CO = ' --company "Demo Plumbing Co" --json'
+_CHANGES = '/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json'
+EXAMPLES.update({
+    'accountant add': Example('bookflow accountant add jlee --through 2026-09-30 --note "Q3 review" --reason "Q3 review"' + _ACCT_CO,
+                              {'user': 'jlee', 'through': '2026-09-30', 'note': 'Q3 review'}),
+    'accountant remove': Example('bookflow accountant remove jlee --reason "Review finished"' + _ACCT_CO, {'user': 'jlee'}),
+    'accountant list': Example('bookflow accountant list' + _ACCT_CO, {}),
+    'accountant reclassify': Example(
+        f'bookflow accountant reclassify {ID} --from-account "Office Supplies" --to-account "Repairs and Maintenance"'
+        ' --amount 120.00 --reason "Repairs booked to office"' + _ACCT_CO,
+        {'transaction': ID, 'from_account': 'Office Supplies', 'to_account': 'Repairs and Maintenance', 'amount': '120.00'}),
+    'accountant mark-entry': Example(f'bookflow accountant mark-entry {ID} --note "Agreed to the bank statement"'
+                                     ' --reason "Q3 review"' + _ACCT_CO, {'transaction': ID, 'note': 'Agreed to the bank statement'}),
+    'accountant reviewed-through': Example('bookflow accountant reviewed-through 2026-09-30 --note "Q3 adjustments posted"'
+                                           ' --reason "Q3 review"' + _ACCT_CO, {'through': '2026-09-30', 'note': 'Q3 adjustments posted'}),
+    'accountant-copy export': Example('bookflow accountant-copy export 2026-09-30 --reason "Q3 review by our accountant"' + _ACCT_CO,
+                                      {'through': '2026-09-30'}),
+    'accountant-copy status': Example('bookflow accountant-copy status' + _ACCT_CO, {}),
+    'accountant-copy cancel': Example('bookflow accountant-copy cancel --reason "Accountant sent a list of entries instead"' + _ACCT_CO, {}),
+    'accountant-copy changes': Example('bookflow accountant-copy changes --reason "Q3 adjustments for the owner"'
+                                       ' --company "Demo Plumbing Co (restored)" --json', {}),
+    'accountant-copy preview': Example(f'bookflow accountant-copy preview "{_CHANGES}"' + _ACCT_CO, {'file': _CHANGES}),
+    'accountant-copy import': Example(f'bookflow accountant-copy import "{_CHANGES}" --reason "Q3 adjustments"' + _ACCT_CO,
+                                      {'file': _CHANGES}),
+    'report accountant-review': Example('bookflow report accountant-review --as-of 2026-09-30' + _ACCT_CO, {'as_of': '2026-09-30'}),
+    'report accountant-changes': Example('bookflow report accountant-changes' + _ACCT_CO, {}),
+})
