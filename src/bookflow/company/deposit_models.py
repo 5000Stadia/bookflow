@@ -15,6 +15,8 @@ ID = Annotated[str, Field(min_length=1, max_length=26, pattern=r'^[A-Za-z0-9_-]+
 Units = Annotated[int, Field(ge=0, le=INT64_MAX)]
 Positive = Annotated[int, Field(gt=0, le=INT64_MAX)]
 Text = Annotated[str, Field(max_length=2000)]
+# Rows one deposit may hold (receipts plus other money): a busy month's checks, with room to spare.
+MAX_ROWS = 2000
 Kind = Literal['customer','vendor','employee','other_name']
 
 
@@ -87,8 +89,8 @@ class InlineDocument(StrictModel):
 
     @model_validator(mode='after')
     def complete_rows(self):
-        if len(self.sources)+len(self.additional)>200:
-            raise ValueError(f'a deposit holds at most 200 rows (sources plus additional lines) and this one has '
+        if len(self.sources)+len(self.additional)>MAX_ROWS:
+            raise ValueError(f'a deposit holds at most {MAX_ROWS} rows (sources plus additional lines) and this one has '
                              f'{len(self.sources)+len(self.additional)}; record the rest in a second deposit')
         if len({s.source for s in self.sources})!=len(self.sources):raise ValueError('duplicate source')
         ids=[r.line_id for r in self.additional if r.line_id is not None]
@@ -117,8 +119,8 @@ class ReplacementDocument(StrictModel):
     cash_back: CashBackInput | None
     custom_fields: CustomFieldValuePatch
     expected_custom_field_kinds: CustomFieldKindExpectations
-    sources: list[SourceInput] = Field(max_length=200)
-    additional: list[AdditionalInput] = Field(max_length=200)
+    sources: list[SourceInput] = Field(max_length=MAX_ROWS)
+    additional: list[AdditionalInput] = Field(max_length=MAX_ROWS)
 
     @model_validator(mode='after')
     def complete_rows(self):

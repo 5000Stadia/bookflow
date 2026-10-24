@@ -310,22 +310,11 @@ WHERE t.status IN ('open', 'partly_received')
 ORDER BY r.date, t.number, t.id
 """
 
-# What each ordered line has had received against it: the active physical claims the
-# receipts made on it. A released claim was given back by a receipt correction or a void.
-_RECEIVED = """
-SELECT l.line_id, l.quantity_microunits, l.amount_minor_units,
-       coalesce((SELECT sum(c.quantity_microunits) FROM purchase_order_receipt_claims c
-                 WHERE c.order_line_id=l.line_id
-                   AND NOT EXISTS (SELECT 1 FROM purchase_order_receipt_releases x WHERE x.claim_id=c.id)), 0)
-FROM purchase_order_lines l WHERE l.revision_id=:revision
-"""
-
 
 def _open_amount(ordered_quantity, amount, received_quantity):
     """The ordered amount of what has not arrived, by exact proportion of the line.
 
-    A line with no quantity -- an account line -- stays open for its whole amount until
-    the order is billed or closed. A received share is rounded half to even at the cent.
+    A line with no quantity -- an account line -- is open for what has not been billed. A received share is rounded half to even at the cent.
     """
     if not ordered_quantity:
         return amount
@@ -346,9 +335,16 @@ def open_purchase_orders(inp: OpenPurchaseOrdersInput, s, *, principal_id=None) 
         state, offset = ledger._state(s, inp, "open-purchase-orders", principal_id, vendor_id, account_scoped=False)
         raw, currency = s.company.raw, state.metadata.currency
         found = []
+        from bookflow.company import purchase_order_billing as order_billing, purchase_orders as orders
         for order in _rows(raw.execute(_OPEN_ORDERS, {"date_to": inp.date_to, "vendor": vendor_id})):
-            open_balance = sum(_open_amount(quantity, amount, received)
-                               for _, quantity, amount, received in raw.execute(_RECEIVED, {"revision": order["revision_id"]}))
+            # Each line's open part, from the one owner of a line's state: receipts, bills that
+            # took part of the order, and lines closed by hand all count (R153).
+            header = orders.resolve(s, order["id"])
+            open_balance = sum(
+                _open_amount(line["ordered_quantity_microunits"], line["amount_minor_units"],
+                             line["ordered_quantity_microunits"] - line["open_quantity_microunits"])
+                if line["measured"] == "quantity" else line["open_amount_minor_units"]
+                for line in order_billing.line_states(s, header, orders.revision(s, header)))
             if open_balance:
                 found.append((order, open_balance))
         totals = dict(amount=0, received=0, open_balance=0)
