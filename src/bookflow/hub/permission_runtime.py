@@ -144,7 +144,10 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.COMMITTED_STOCK_POLICY_VERSION: 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5',
     c.MILEAGE_POLICY_VERSION: '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24',
     c.COLLECTIONS_POLICY_VERSION: '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c',
-    c.SCHEDULING_POLICY_VERSION: 'c20da0053c1131960bf352445e89c8ee75cc203854747bfde99629fea786a433',
+    c.PRICING_RULES_POLICY_VERSION: 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2',
+    c.ORDER_INVOICING_POLICY_VERSION: '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531',
+    c.SHORTFALL_PO_POLICY_VERSION: 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374',
+    c.SCHEDULING_POLICY_VERSION: 'ee96eee179cba1f324edf7072853098056af4dbe5bd72428ab9429e343abf044',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -264,6 +267,9 @@ def known_catalog(version):
     from . import permission_committed_stock_catalog
     from . import permission_mileage_catalog
     from . import permission_collections_catalog
+    from . import permission_pricing_rules_catalog
+    from . import permission_order_invoicing_catalog
+    from . import permission_shortfall_po_catalog
     from . import permission_scheduling_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -310,6 +316,9 @@ def known_catalog(version):
         c.COMMITTED_STOCK_POLICY_VERSION: permission_committed_stock_catalog,
         c.MILEAGE_POLICY_VERSION: permission_mileage_catalog,
         c.COLLECTIONS_POLICY_VERSION: permission_collections_catalog,
+        c.PRICING_RULES_POLICY_VERSION: permission_pricing_rules_catalog,
+        c.ORDER_INVOICING_POLICY_VERSION: permission_order_invoicing_catalog,
+        c.SHORTFALL_PO_POLICY_VERSION: permission_shortfall_po_catalog,
         c.SCHEDULING_POLICY_VERSION: permission_scheduling_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

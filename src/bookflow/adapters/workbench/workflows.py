@@ -32,10 +32,11 @@ def label(field: str) -> str:
 
 def company_form_groups(leaves):
     preferences = {'estimates_enabled', 'progress_billing_enabled', 'close_estimates_after_billing',
-                   'sales_orders_enabled', 'available_deducts_sales_orders'}
+                   'sales_orders_enabled', 'available_deducts_sales_orders', 'available_deducts_pending_builds'}
     labels = dict(estimates_enabled='Create estimates', progress_billing_enabled='Enable progress billing',
         sales_orders_enabled='Use sales orders',
         available_deducts_sales_orders='Quantity available deducts quantity on sales orders and work orders',
+        available_deducts_pending_builds='Quantity available deducts quantity reserved for pending builds',
         close_estimates_after_billing='Make estimates inactive after final billing (only with progress billing off)',
         automatically_apply_payments='Suggest matching invoice, then oldest invoices for new payments',
         automatically_calculate_payments='Calculate selected invoice payments when no amount was entered',

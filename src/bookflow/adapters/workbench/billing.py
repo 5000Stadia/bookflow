@@ -34,7 +34,7 @@ def context(result, company_id, source=None):
 
 
 def selection(raw, form):
-    result = {k: v for k, v in raw.items() if k not in ('line_ids', 'selections', 'percent')}
+    result = {k: v for k, v in raw.items() if k not in ('line_ids', 'selections', 'percent', 'all_open')}
     mode = form.get('billing-selection', 'remaining')
     selected = [key.removeprefix('billing-line:') for key, value in form.items()
                 if key.startswith('billing-line:') and value == '1']
@@ -54,6 +54,8 @@ def selection(raw, form):
                     raise BookflowError('E_VALIDATION', message='Choose quantity, net, scope percent or an earlier allocation.')
                 value = form.get(('billing-recovery:' if mode == 'recovery' else 'billing-rebill:' if kind == 'rebill_allocation_id' else 'billing-value:') + identity, '')
                 result['selections'].append({'line_id': identity, kind: value})
+    elif mode == 'all-open':
+        result['all_open'] = True
     elif mode != 'remaining':
         raise BookflowError('E_VALIDATION', message='Choose a billing selection mode.')
     return result

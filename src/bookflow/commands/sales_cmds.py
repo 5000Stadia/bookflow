@@ -26,6 +26,9 @@ def _write(document_type, verb, model):
         if verb == 'post' and document_type in ('invoice', 'sales_receipt'):
             from bookflow.company.prepayments import add_note
             add_note(s, plan.preview, inp.customer, 'invoice' if document_type == 'invoice' else 'sales_receipt')
+        if document_type == 'invoice' and verb in ('update', 'void') and getattr(plan.preview, 'changed', True):
+            from bookflow.company.order_releases import preview_notes
+            preview_notes(s, plan, inp, update=verb == 'update')
         return plan
 
     cmd = command(
@@ -56,6 +59,9 @@ def _write(document_type, verb, model):
     if verb == 'post' and document_type in ('invoice', 'sales_receipt'):
         from bookflow.company.prepayments import noted
         cmd.applier(noted(sales.apply, 'invoice' if document_type == 'invoice' else 'sales_receipt'))
+    elif document_type == 'invoice' and verb in ('update', 'void'):
+        from bookflow.company.order_releases import wrap
+        cmd.applier(wrap(sales.apply, update=verb == 'update'))
     else:
         cmd.applier(sales.apply)
     return cmd
@@ -114,7 +120,11 @@ def _delete(noun, model):
     from bookflow.company.sales_deletion_models import SalesDeleteOutput
     from bookflow.core.deletion_families import capability
     def planner(inp, ctx, s):
-        return deletion.prepare(s, ctx, inp, noun)
+        plan = deletion.prepare(s, ctx, inp, noun)
+        if noun == 'invoice':
+            from bookflow.company.order_releases import preview_notes
+            preview_notes(s, plan, inp)
+        return plan
     def recover(inp, ctx, s):
         return deletion.recover(inp, ctx, s, noun)
     cmd = command(noun+' delete', scope='company',
@@ -132,7 +142,11 @@ def _delete(noun, model):
     cmd.authorize_input = authorize
     cmd.ledger = True
     cmd.permanent_recovery = recover
-    cmd.applier(deletion.apply)
+    if noun == 'invoice':
+        from bookflow.company.order_releases import wrap
+        cmd.applier(wrap(deletion.apply))
+    else:
+        cmd.applier(deletion.apply)
     return cmd
 
 

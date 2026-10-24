@@ -35,6 +35,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # committed-stock-v1 adds none (a report).
     # mileage-v1 adds none: vehicles, rates, trips, trip billing and reimbursement are an agent's to do as a person's.
     # collections-v1 adds none: moving a customer's credit between jobs is bookkeeping.
+    # pricing-rules-v1 adds none: price rules are bookkeeping setup, as price levels are.
+    # order-invoicing-v1 adds none, nor does shortfall-po-v1.
     # scheduling-v1 adds none (to-dos, notices, reminders).
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {

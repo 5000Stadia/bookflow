@@ -57,8 +57,11 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +18 mileage (R118): vehicle create/update/show/list, mileage-rate set/delete/list, trip create/update/void/show/
     # query/invoice/sales-receipt/billing/reimburse, report mileage-by-vehicle and mileage-by-job.
     # +2 customer-credit transfer, customer-credit transfer-void (R148).
+    # +9 price rules (R110): price-rule create/update/activate/deactivate/show/list/preview, preferences, set-preferences.
+    # +2 sales-order invoice and sales-order billing (R101 increment 4).
+    # +2 sales-order purchase-order and work-order purchase-order (R101 increment 5).
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
-    assert len(rows) == 621
+    assert len(rows) == 634
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -273,9 +276,19 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # write_off_class wherever the receive input is carried, and customer-credit transfer's optional credit_memo,
     # payment, memo, expected_facts_fingerprint and apply_to amount -- their null branches. underpayment is a
     # defaulted literal and adds none. No new variant kind.
-    # 3355 -> 3385 (R111), measured as a whole: the eleven todo, notice and reminders commands' optional inputs
+    # 3355 -> 3399 (R110, price rules), measured per command: price-rule create 17, update 19, preview 4, list 2,
+    # activate 1, deactivate 1 (show, preferences and set-preferences 0) -- 44. No existing command moved: line
+    # inputs are unchanged, only the captured line facts gained pricing_rule. No new variant kind.
+    # 3399 -> 3411 (R101 increment 4), measured per command: sales-order invoice 11 (the null branches of its
+    # optional number, line_ids, selections, memo, ar_account, terms, due_date and fingerprint, and an order
+    # selection's line_id and item), sales-order billing 1 (cursor). release_to_order on invoice update, void and
+    # delete is a defaulted choice and adds none. No new variant kind.
+    # 3411 -> 3423 (R101 increment 5), measured per command: sales-order purchase-order and work-order purchase-order
+    # 6 each (the null branches of their optional vendor, lines, expected_date and memo, and a line's line_id and
+    # item). No existing command moved: purchase-order show gains an output field only. No new variant kind.
+    # 3423 -> 3453 (R111), measured as a whole: the eleven todo, notice and reminders commands' optional inputs
     # and company update's five scheduler and overdue notice preferences, their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3385
+    assert sum(len(group["paths"]) for group in mapped)==3453
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

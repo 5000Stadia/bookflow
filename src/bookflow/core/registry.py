@@ -313,7 +313,8 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.payment_cmds": ["payment", "payment selection", "invoice", "application", "payment operation", "payment preview", "payment settlement"],
     "bookflow.commands.work_cmds": ["proposal", "estimate", "work-order", "sales-order"],
     "bookflow.commands.time_cmds": ["time-activity"],
-    "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity"],
+    "bookflow.commands.billing_cmds": ["estimate", "work-order", "time-activity", "sales-order"],
+    "bookflow.commands.shortfall_cmds": ["sales-order", "work-order"],
     "bookflow.commands.register_cmds": ["register"],
     "bookflow.commands.check_cmds": ["check", "card-charge", "card-credit"],
     "bookflow.commands.credit_memo_cmds": ["credit-memo"],
@@ -329,6 +330,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.budget_cmds": ["budget", "memorized-report", "report"],
     "bookflow.commands.fixed_asset_cmds": ["fixed-asset", "loan"],
     "bookflow.commands.mileage_cmds": ["vehicle", "mileage-rate", "trip", "report"],
+    "bookflow.commands.pricing_rule_cmds": ["price-rule"],
     "bookflow.commands.memorized_cmds": ["memorized", "memorized-group"],
     "bookflow.commands.scheduling_cmds": ["todo", "notice", "reminders"],
     "bookflow.commands.transfer_cmds": ["transfer"],
@@ -376,6 +378,7 @@ NOUN_MODULES: dict[str, list[str]] = {
 MODULE_VERBS: dict[str, frozenset[str]] = {
     "bookflow.commands.query_cmds": frozenset({"query"}),
     "bookflow.commands.billing_cmds": frozenset({"invoice", "sales-receipt", "billing"}),
+    "bookflow.commands.shortfall_cmds": frozenset({"purchase-order"}),
     "bookflow.commands.compact_cmds": frozenset({"compact"}),
     "bookflow.commands.backup_cmds": frozenset({"backup", "restore"}),
 }
@@ -453,6 +456,7 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "loan": {"record_type": "loan", "identifier": "loan", "output_identifier": "id", "ui_group": "Accounting", "display_field": "name", "singular_label": "Loan", "plural_label": "Loans"},
     "vehicle": {"record_type": "vehicle", "identifier": "vehicle", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "name", "singular_label": "Vehicle", "plural_label": "Vehicles"},
     "mileage-rate": {"record_type": "mileage_rate", "identifier": "effective_date", "output_identifier": "effective_date", "ui_group": "Customers and sales", "display_field": "effective_date", "singular_label": "Mileage rate", "plural_label": "Mileage rates"},
+    "price-rule": {"record_type": "price_rule", "identifier": "rule", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "name", "singular_label": "Price rule", "plural_label": "Price rules"},
     "trip": {"record_type": "trip", "identifier": "trip", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "trip_end_date", "singular_label": "Trip", "plural_label": "Trips"},
     "todo": {"record_type": "todo", "identifier": "todo", "output_identifier": "id", "ui_group": "Company", "display_field": "title", "singular_label": "To-do", "plural_label": "To-dos"},
     "notice": {"record_type": "overdue_notice", "identifier": "notice", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "customer_name", "singular_label": "Overdue notice", "plural_label": "Overdue notices"},

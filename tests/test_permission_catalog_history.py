@@ -70,7 +70,10 @@ ACCEPTED = {
     'committed-stock-v1': (588, 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5'),
     'mileage-v1': (606, '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24'),
     'collections-v1': (608, '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c'),
-    'scheduling-v1': (619, 'c20da0053c1131960bf352445e89c8ee75cc203854747bfde99629fea786a433'),
+    'pricing-rules-v1': (617, 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2'),
+    'order-invoicing-v1': (619, '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531'),
+    'shortfall-po-v1': (621, 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374'),
+    'scheduling-v1': (632, 'ee96eee179cba1f324edf7072853098056af4dbe5bd72428ab9429e343abf044'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -144,6 +147,11 @@ CHAIN_ADDITIONS = {
                    'trip reimburse', 'trip sales-receipt', 'trip show', 'trip update', 'trip void', 'vehicle create',
                    'vehicle list', 'vehicle show', 'vehicle update'},
     'collections-v1': {'customer-credit transfer', 'customer-credit transfer-void'},
+    'pricing-rules-v1': {'price-rule activate', 'price-rule create', 'price-rule deactivate', 'price-rule list',
+                         'price-rule preferences', 'price-rule preview', 'price-rule set-preferences',
+                         'price-rule show', 'price-rule update'},
+    'order-invoicing-v1': {'sales-order billing', 'sales-order invoice'},
+    'shortfall-po-v1': {'sales-order purchase-order', 'work-order purchase-order'},
     'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
                       'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
 }

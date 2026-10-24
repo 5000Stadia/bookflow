@@ -576,6 +576,29 @@ A billed trip cannot be voided or have its miles changed until its invoice is vo
 (`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
 for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
 
+## Special prices: "give Acme 10% off pipe fittings through December"
+
+A price rule changes the price a sales line defaults to when its conditions hold: items or
+`item_categories`, `customers` (a customer covers its jobs) or `customer_types`, `classes`, `sales_reps`,
+a `date_from`/`date_to` window on the transaction date, and `min_quantity`. Its adjustment is a percent or
+amount (`kind`), `down` or `up`, from the item's `sales_price` or `cost`, rounded to the `cent`, `x.99`,
+`x.95` or `dollar`. Quantity discounts are `breaks`: `[{"min_quantity": "10", "value": "5"}, {"min_quantity":
+"50", "value": "10"}]` is 5% off from 10 and 10% off from 50.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "price-rule create", "reason": "Acme year-end deal",
+ "input": {"name": "Acme fittings 10% off", "customers": ["Acme"], "item_categories": ["Pipe fittings"],
+           "value": "10", "date_to": "2026-12-31"}}
+```
+
+Before quoting, `price-rule preview` (item, customer, quantity, date) says what a line would cost and
+why ("price from rule Acme fittings 10% off: ..."). When a price level and rules both price a line, the
+company preference picks the lowest price (the default) or the first rule by `priority`
+(`price-rule set-preferences`). A line priced by a rule carries it in `item_snapshot.pricing_rule`; a typed
+`unit_price` overrides it. Saved documents never change when a rule does; end a deal early with
+`price-rule deactivate`.
+
 ## How are we doing against budget?
 
 A budget is a named plan for one fiscal year: an amount per account per month, entered positive for
@@ -687,6 +710,35 @@ invoice made from it does. Its show output gives each line `order.ordered`, `inv
 - Estimates, proposals, work orders and orders may carry stocked parts. A stocked line is billed
   by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
 - `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
+
+## Billing what shipped on an order
+
+"Bill Acme for what shipped today" is `sales-order invoice <number> --expected-version <v>
+--conversion-key <new key> --date <today>`. With no selection it bills what can ship: each
+stocked line up to what is available to this order (on hand less what other orders and work
+orders commit), and the order's other open lines with it. If nothing can ship it refuses and lists
+each line's open quantity and availability: choose `--all-open true` (bill every open quantity
+whatever the stock), `line_ids` or `selections` (a quantity per line, naming the line or its
+item). The invoice is taxed at its own date's rates; `order_tax` shows the difference from the
+order's quote. Money held on the order or its estimate is applied unless `apply_prepayment` is
+false. A retry with the same key returns the same invoice.
+
+Voiding, deleting or updating away an order-made invoice line reopens that quantity on the order
+by default; pass `release_to_order cancel` to cancel it on the order instead. The preview says
+which. A credit memo never changes the order. `invoice post`, `sales-receipt post` and
+`payment receive` warn when the customer has an open order and give the command to use instead.
+
+## Ordering what an order is short
+
+`sales-order purchase-order <number> --date <d>` (or `work-order purchase-order`) writes one
+purchase order for what the document is short: its open stocked quantity not on hand, not already
+on order for it and not needed first by other open documents. Lines default to those whose
+preferred vendor is the vendor; with several vendors it refuses and lists each vendor with its
+lines, so run it once per vendor with `--vendor`. Running it again before anything changes orders
+nothing. Explicit `lines` (item or line_id, quantity) order any amount, spares included. Each
+document line shows the purchase-order lines ordered for it and what is still to arrive; each
+purchase order shows what it covers. Amending a purchase order down, receiving it or voiding it
+brings the shortfall back by exactly that.
 
 ## What is available to sell
 

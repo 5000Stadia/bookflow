@@ -24,7 +24,8 @@ def _constraint(table_, name):
 
 
 def test_the_frozen_replacements_are_what_the_metadata_declares():
-    assert M.revision == 'co0083' and M.revision in _chain() and HEADS['company'] == 'co0083'
+    # Its own place in the chain, not that it is the head (co0086 came after).
+    assert M.revision == 'co0083' and M.revision in _chain()
     assert M.CHANGED == ('work_documents', 'work_billing_conversions')
     assert "'sales_order','mileage')" in _constraint(c.work_documents, 'ck_work_kind')
     assert "(kind = 'mileage' AND status IN ('recorded','voided'))" in _constraint(c.work_documents, 'ck_work_status')

@@ -158,7 +158,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
 
     # co0063 only widened a CHECK, co0064 only added an index, co0065 only added triggers and co0066 only added tables; putting the old CHECK back
     # and dropping the index, triggers and tables is the exact co0062 file. co0067 widened two CHECKs and one trigger
-    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068, co0069, co0071 and co0072 only added a table each, co0074 a table and seven company_info columns, co0073 (after co0074 in the chain) widened one guard, co0078 three tables, co0079 a table and one widened guard, co0076 two, co0075 two, and co0070 widened two empty ones and added another. co0077 widened three CHECKs, five guards and an index and added three columns and a trigger; its own REPLACEMENTS and TRIGGERS, run backwards, and dropping what it added, undo it. co0083 widened three CHECKs and two guards and added four tables; undone the same way, first. The demo holds a sales tax
+    # and added a table; its own REPLACEMENTS and guard edit, run backwards, undo it. co0068, co0069, co0071 and co0072 only added a table each, co0074 a table and seven company_info columns, co0073 (after co0074 in the chain) widened one guard, co0078 three tables, co0079 a table and one widened guard, co0076 two, co0075 two, and co0070 widened two empty ones and added another. co0077 widened three CHECKs, five guards and an index and added three columns and a trigger; its own REPLACEMENTS and TRIGGERS, run backwards, and dropping what it added, undo it. co0083 widened three CHECKs and two guards and added four tables; undone the same way, first. co0086 only added two tables. The demo holds a sales tax
     # adjustment (DEMO-STADJ-1), which no co0062 file can, so the older archive is made from a company without one.
     client.organization.new(name="Older Books Organization")
     company = client.company.new(legal_name="Older Books", home_currency="USD", timezone="UTC",
@@ -178,6 +178,10 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
 
     def older(conn):
+        conn.execute("DROP TABLE purchase_coverage_links")  # co0087's, with its triggers
+        conn.execute("ALTER TABLE company_info DROP COLUMN available_deducts_pending_builds")  # co0082's one column
+        for table in ("price_rule_preferences", "price_rules"):
+            conn.execute(f"DROP TABLE {table}")  # co0086's
         for table in ("mileage_reimbursements", "mileage_trips", "mileage_rates", "vehicles"):
             conn.execute(f"DROP TABLE {table}")  # co0083's, with their indexes
         conn.execute("DROP TRIGGER work_line_cancellation_kind")  # co0077's

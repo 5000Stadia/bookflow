@@ -155,3 +155,25 @@ def test_stock_status_time_on_a_thousand_open_lines(books):
     print(f'\nstock-status with 1,000 open lines: {seconds:.3f}s')
     assert row['quantity_committed'] == '1000' and row['quantity_available'] == '-900'
     assert seconds < 30
+
+
+def test_pending_builds_count_by_their_date_and_deduct_under_their_own_preference(books):
+    """R102 x R103: For Assemblies reads pending builds dated by the report date, as open orders are read;
+    available deducts them while available_deducts_pending_builds (on by default) is on."""
+    from tests.test_assembly_builds import _buy, _kit, _part
+    run = books['run']
+    tank, valve = _part(books, 'Heater Tank', '100.00'), _part(books, 'Relief Valve', '10.00')
+    kit = _kit(books, [(tank, '1'), (valve, '2')])
+    _buy(books, tank, '5', '100.00', '2017-03-01')
+    _buy(books, valve, '10', '10.00', '2017-03-01')
+    run('assembly build', dict(item=kit, quantity='6', date='2017-03-10', pending=True), reason='Waiting on parts')
+    before, _ = _stock(books, tank, '2017-03-09')
+    assert (before['quantity_for_assemblies'], before['quantity_available']) == ('0', '5')
+    after, _ = _stock(books, tank, '2017-12-31')
+    assert (after['quantity_for_assemblies'], after['quantity_available']) == ('6', '-1')
+    assert _stock(books, valve)[0]['quantity_for_assemblies'] == '12'
+    assert books['run']('item show', dict(item=tank))['quantity_available'] == '-1'
+    run('company update', dict(available_deducts_pending_builds=False), reason='Show on hand')
+    off, _ = _stock(books, tank)
+    assert (off['quantity_for_assemblies'], off['quantity_available']) == ('6', '5')
+    assert books['run']('item show', dict(item=tank))['quantity_available'] == '5'

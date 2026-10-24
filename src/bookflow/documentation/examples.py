@@ -1393,6 +1393,53 @@ EXAMPLES["customer-credit transfer"] = Example(
      "amount": "10.00", "date": "2026-10-20", "operation_key": "xfer-b-to-a"})
 EXAMPLES["customer-credit transfer-void"] = Example(
     f'bookflow customer-credit transfer-void {ID} --reason "Moved to the wrong job"' + _C, {"transfer": ID})
+
+# Price rules (R110): a promotion for one customer's category, quantity breaks, and the price a line would get.
+_PRICE_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'price-rule create': Example(
+        'bookflow price-rule create --name "Riverside clearing 10% off" --customers "Riverside Apartments"'
+        ' --items "Mainline Clearing" --value 10 --date-to 2026-12-31 --reason "Year-end deal"' + _PRICE_CO,
+        {'name': 'Riverside clearing 10% off', 'customers': ['Riverside Apartments'], 'items': ['Mainline Clearing'],
+         'value': '10', 'date_to': '2026-12-31'}),
+    'price-rule update': Example(
+        'bookflow price-rule update "Riverside clearing 10% off" --expected-version 1 --rounding x.99'
+        ' --reason "Charm pricing"' + _PRICE_CO,
+        {'rule': 'Riverside clearing 10% off', 'expected_version': 1, 'rounding': 'x.99'}),
+    'price-rule activate': Example(f'bookflow price-rule activate {ID} --expected-version 2 --reason "Deal back on"' + _PRICE_CO,
+                                   {'rule': ID, 'expected_version': 2}),
+    'price-rule deactivate': Example(f'bookflow price-rule deactivate {ID} --expected-version 1 --reason "Deal ended"' + _PRICE_CO,
+                                     {'rule': ID, 'expected_version': 1}),
+    'price-rule show': Example('bookflow price-rule show "Riverside clearing 10% off"' + _PRICE_CO,
+                               {'rule': 'Riverside clearing 10% off'}),
+    'price-rule list': Example('bookflow price-rule list --customer "Riverside Apartments"' + _PRICE_CO,
+                               {'customer': 'Riverside Apartments'}),
+    'price-rule preview': Example(
+        'bookflow price-rule preview --item "Mainline Clearing" --customer "Riverside Apartments" --quantity 10'
+        ' --date 2026-11-02' + _PRICE_CO,
+        {'item': 'Mainline Clearing', 'customer': 'Riverside Apartments', 'quantity': '10', 'date': '2026-11-02'}),
+    'price-rule preferences': Example('bookflow price-rule preferences' + _PRICE_CO, {}),
+    'price-rule set-preferences': Example(
+        'bookflow price-rule set-preferences --conflict-policy priority --reason "Rules over price levels"' + _PRICE_CO,
+        {'conflict_policy': 'priority'}),
+})
+# R101 increment 4: bill what can ship on an order; retries with the same key return the same invoice.
+EXAMPLES['sales-order invoice'] = Example(
+    'bookflow sales-order invoice DEMO-SO-1 --expected-version 2 --conversion-key "riverside-ship-1" --date 2026-10-22'
+    ' --company "Demo Plumbing Co" --reason "Shipped what we had" --json',
+    {'sales_order': 'DEMO-SO-1', 'expected_version': 2, 'conversion_key': 'riverside-ship-1', 'date': '2026-10-22'})
+EXAMPLES['sales-order billing'] = Example('bookflow sales-order billing DEMO-SO-1 --company "Demo Plumbing Co" --json',
+                                          {'sales_order': 'DEMO-SO-1'})
+# R101 increment 5: order what an order is short from the items' preferred vendor; a retry orders nothing.
+EXAMPLES['sales-order purchase-order'] = Example(
+    'bookflow sales-order purchase-order DEMO-SO-1 --date 2026-10-22 --company "Demo Plumbing Co" --reason "Order the backorder" --json',
+    {'sales_order': 'DEMO-SO-1', 'date': '2026-10-22'})
+EXAMPLES['work-order purchase-order'] = Example(
+    'bookflow work-order purchase-order DEMO-SO-WO-1 --date 2026-10-22 --vendor "Central Supply" --lines '
+    + _shlex.quote(_json.dumps([{'item': 'Brass Shutoff Valve', 'quantity': '3'}]))
+    + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
+    {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
+     'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})
 # R111: to-dos, overdue notices and the Reminders list.
 EXAMPLES.update({
     "todo create": Example(

@@ -229,6 +229,6 @@ def billing(s, ctx, inp, kind):
         source_revision_id=source['current_revision_id'], owner_id=owner['id'], owner_kind=owner['kind'],
         owner_version=owner['version'], currency=rev['currency'], lines=rendered, destinations=destinations,
         count=len(found), has_more=more, next_cursor=continuation(state, len(found), more), audit_watermark=state.sequence,
-        can_invoice=bool(can_bill), can_sales_receipt=bool(can_bill),
+        can_invoice=bool(can_bill), can_sales_receipt=bool(can_bill) and owner['kind'] != 'sales_order',
         remaining_net_minor_units=sum(line['remaining_net_minor_units'] for line in rendered),
         remaining_tax_minor_units=sum(line['remaining_tax_minor_units'] for line in rendered), warnings=warnings)

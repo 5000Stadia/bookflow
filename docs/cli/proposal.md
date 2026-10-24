@@ -458,6 +458,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -547,6 +561,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -1320,6 +1345,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -1409,6 +1448,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -2131,6 +2181,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -2220,6 +2284,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -3299,6 +3374,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -3388,6 +3477,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
@@ -4145,6 +4245,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
+| `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.pricing_rule.id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.version` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.priority` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.kind` | literal["percent", "amount"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.direction` | literal["down", "up"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.basis` | literal["sales_price", "cost"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
@@ -4234,6 +4348,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
 | `revision.lines[].stock.on_order` | string | yes | no | — | What live purchase orders still have to deliver. |
 | `revision.lines[].stock.available` | string | yes | no | — | Available to this document: on hand less what others commit (on hand while the company preference is off). |
+| `revision.lines[].coverage` | array[object] \| null | no | yes | null | Sales orders and work orders: purchase-order lines ordered to cover this line, with what is still to arrive. |
+| `revision.lines[].coverage[].work_document_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].work_kind` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].work_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_line_id` | string | yes | no | — | — |
+| `revision.lines[].coverage[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `revision.lines[].coverage[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `revision.lines[].coverage[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `revision.lines[].coverage[].expected_date` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |

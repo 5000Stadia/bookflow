@@ -2161,6 +2161,51 @@ MATRIX['trip reimburse'] = {'E_VALIDATION': 'a trip named twice, a voided trip, 
                             'E_PREVIEW_STALE': 'the trips or rates changed since the preview whose fingerprint was given'} | _MILEAGE_TAIL
 MATRIX['report mileage-by-vehicle'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown vehicle'}
 MATRIX['report mileage-by-job'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown customer'}
+
+# Price rules (R110).
+_PRICE_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+               'E_DIRECTIVE_INACTIVE': 'deactivated --directive', 'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive'}
+_PRICE_WRITE = {'E_VALIDATION': 'no value or breaks, both, breaks not rising, date_to before date_from, a zero min_quantity, or x.99 rounding without cents',
+                'E_RECORD_NOT_FOUND': 'an unknown item, category, customer, customer type, class or sales rep',
+                'E_INACTIVE_REFERENCE': 'a named item, customer, class or rep is inactive',
+                'E_VALUE_RANGE': 'a discount over 100 percent', 'E_AMOUNT_PRECISION': 'an amount finer than the currency allows',
+                'E_NAME_TAKEN': 'another rule has the name'} | _PRICE_TAIL
+MATRIX['price-rule create'] = dict(_PRICE_WRITE)
+MATRIX['price-rule update'] = _PRICE_WRITE | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['price-rule activate'] = {'E_RECORD_NOT_FOUND': 'unknown rule', 'E_VERSION_CONFLICT': 'stale expected_version'} | _PRICE_TAIL
+MATRIX['price-rule deactivate'] = {'E_RECORD_NOT_FOUND': 'unknown rule', 'E_VERSION_CONFLICT': 'stale expected_version'} | _PRICE_TAIL
+MATRIX['price-rule show'] = {'E_RECORD_NOT_FOUND': 'unknown rule'}
+MATRIX['price-rule list'] = {'E_RECORD_NOT_FOUND': 'unknown item or customer filter'}
+MATRIX['price-rule preview'] = {'E_VALIDATION': 'a zero quantity, or an item with no price that no rule prices',
+                                'E_RECORD_NOT_FOUND': 'unknown item, customer, class, rep or price level'}
+MATRIX['price-rule preferences'] = {}
+MATRIX['price-rule set-preferences'] = {'E_VALIDATION': 'not lowest_price or priority'} | _PRICE_TAIL
+# Invoicing from sales orders (R101 increment 4).
+MATRIX['sales-order invoice'] = {
+    **_SALES_WRITE_ERRORS, **_WORK_WRITE_ERRORS,
+    'E_VALIDATION': 'nothing on the order can ship by default (each line\'s open quantity and availability are given), a percent or net-amount selection, or an item that no single open line carries',
+    'E_WORK_DEPENDENCY': 'the order is voided, closed or inactive, a selected line is already invoiced, or a quantity exceeds what is open',
+    'E_CONVERSION_KEY_REUSED': 'permanent key already names a different operational or financial intent',
+}
+MATRIX['sales-order billing'] = {
+    'E_RECORD_NOT_FOUND': 'order absent from selected company',
+    'E_QUERY_STALE': 'company audit changed between linked destination pages',
+}
+
+# Shortfall coverage (R101 increment 5).
+for _noun in ('sales-order', 'work-order'):
+    MATRIX[f'{_noun} purchase-order'] = {
+        'E_RECORD_NOT_FOUND': 'document, vendor or item absent from selected company',
+        'E_VALIDATION': 'nothing is short for this vendor (a retry orders nothing), short lines come from several vendors and none is named, explicit lines without a vendor, or an item with no purchase cost',
+        'E_WORK_DEPENDENCY': 'the document is closed, cancelled, voided or inactive and commits nothing',
+        'E_INACTIVE_REFERENCE': 'the vendor or an item is inactive',
+        'E_VALUE_RANGE': 'a quantity or amount beyond supported bounds',
+        'E_AMOUNT_PRECISION': 'a rate with more precision than the currency has',
+        'E_DUPLICATE_NUMBER': 'the purchase order number is already used',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive does not exist',
+        'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
+    }
 # Unattended scheduling and reminders (R111): to-dos, overdue notices and the Reminders list.
 _SCHED_TAIL = {
     'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
