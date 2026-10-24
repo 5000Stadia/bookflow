@@ -202,7 +202,8 @@ def test_printing_a_closed_period_check_is_refused(books):
     books['run']('company update', {'closing_date': '2026-03-31'}, reason='Close March')
     with pytest.raises(BookflowError) as closed:
         books['run']('check print', {'account': books['bank'], 'first_number': '100'}, reason='Print')
-    assert closed.value.code == 'E_PERIOD_CLOSED' and closed.value.details['transaction_id'] == a['id']
+    # A bare run leaves it waiting and, with nothing else to print, says so.
+    assert closed.value.code == 'E_PERIOD_CLOSED' and closed.value.details['skipped'] == [a['id']]
 
 
 def test_a_printed_check_keeps_its_amount_and_payee_but_its_memo_can_change(books):
