@@ -509,6 +509,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     prior = {line['line_id']: line for line in old_lines}
     entered = inp.lines if inp.lines is not None else [SalesLineInput(item=line['item_id'], line_id=line['line_id']) for line in old_lines]
     seen, lines = set(), []
+    from bookflow.company import placements
+    header_site = placements.site_id_for(s, getattr(inp, 'site', None))
     for line, group in expand_groups(s, entered):
         key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
         if key is not None and (key not in prior or key in seen):
@@ -525,6 +527,11 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         if resolved.get('item_id') is not None:
             resolved['item_id'] = resolved['profile'].item.id
         resolved['line_id'] = key
+        # The inventory site a stocked line takes from or gives back to (R104): the line's, else the sale's.
+        site = (placements.site_id_for(s, line.site, field='lines.site') if getattr(line, 'site', None) is not None
+                else header_site)
+        if site:
+            resolved['site_id'] = site
         lines.append(resolved)
         warnings.extend(w for w in line_warnings if w not in warnings)
     if len(lines) > 200:
@@ -823,7 +830,7 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     # refusal here -- more going out than is on hand on some earlier date, a closed period any
     # delta would land in -- leaves nothing behind, because nothing has been written.
     stock = inventory_effects.plan(
-        s, entries=[] if operation == 'void' else _stock_entries(pending),
+        s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'])
     inventory_effects.open_dates(s, stock)
@@ -871,7 +878,7 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     return plan
 
 
-def _stock_entries(pending):
+def _stock_entries(pending, lines=None):
     """The entered lines that move stock, in the shape the inventory ledger takes them.
 
     The quantity issued is the line's *base* quantity, not the quantity typed: stock is held
@@ -880,6 +887,7 @@ def _stock_entries(pending):
     master, so what a stored revision issued cannot change when the item is repointed.
     """
     profiles = {line['document_line_id']: line for line in pending['sales_line_profiles']}
+    sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = profiles[envelope['id']]
@@ -890,7 +898,7 @@ def _stock_entries(pending):
             key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
             kind='issue', quantity_microunits=line['base_quantity_microunits'],
             asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
-            class_id=envelope['class_id']))
+            class_id=envelope['class_id'], site_id=sites.get(envelope['position'])))
     return entries
 
 

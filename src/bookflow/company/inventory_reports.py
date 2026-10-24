@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_serializer
 
 from bookflow.company import inventory, ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
@@ -38,6 +38,9 @@ class StockInput(StrictModel):
     basis: Literal["accrual"] = "accrual"
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
+    site: str | None = Field(default=None, max_length=200, description=(
+        "Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock "
+        "status) what is committed, on order and available there. Omitted, the whole company, as before."))
 
     _as_of = field_validator("as_of")(iso_date)
 
@@ -47,7 +50,10 @@ class StockInput(StrictModel):
 
 
 class InventoryValuationInput(StockInput):
-    pass
+    by: Literal["item", "site"] = Field(default="item", description=(
+        "item: one row per item (the default). site: one row per item and site (Inventory Valuation Summary by "
+        "Site); each site's value is its share of the item's by quantity, so the sites add up to the item and the "
+        "rows add up to the inventory asset account."))
 
 
 class StockStatusInput(StockInput):
@@ -63,6 +69,17 @@ class StockRow(StrictModel):
     quantity_on_hand: str
     average_cost: MoneyOutput
     asset_value: MoneyOutput
+    site_id: str | None = Field(default=None, description="The inventory site of this row, on a reading by site; absent otherwise.")
+    site_name: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _company_rows_as_before(self, handler):
+        # A reading of the whole company reads exactly as it did before sites existed (R104).
+        values = handler(self)
+        if self.site_id is None:
+            values.pop("site_id", None)
+            values.pop("site_name", None)
+        return values
 
 
 class InventoryValuationRow(StockRow):
@@ -205,6 +222,8 @@ def _shared(row, currency):
 
 
 def inventory_valuation(inp: InventoryValuationInput, s, *, principal_id=None) -> InventoryValuationOutput:
+    if inp.site is not None or inp.by == "site":
+        return valuation_by_site(inp, s, principal_id=principal_id)
     state, offset, page, currency, total, _ = _run(inp, s, principal_id, "inventory-valuation")
     rows = [InventoryValuationRow(**_shared(row, currency)) for row in page[:inp.limit]]
     return InventoryValuationOutput(
@@ -240,6 +259,8 @@ def _incoming(s, as_of):
 
 
 def stock_status(inp: StockStatusInput, s, *, principal_id=None) -> StockStatusOutput:
+    if inp.site is not None:
+        return stock_status_by_site(inp, s, principal_id=principal_id)
     from bookflow.company import commitments
     committed = commitments.committed(s, inp.as_of)
     builds = commitments.for_assemblies(s, inp.as_of)
@@ -272,3 +293,179 @@ def stock_status(inp: StockStatusInput, s, *, principal_id=None) -> StockStatusO
         metadata=state.metadata, rows=rows, count=len(rows),
         totals=StockStatusTotals(asset_value=money(total, currency), below_reorder_point=below),
         next_cursor=ledger._continuation(state, offset, len(rows), len(page) > inp.limit, s.company))
+
+
+# ---------------------------------------------------------------- readings by site (R104)
+
+def _incoming_by_site(s, as_of):
+    """``_incoming`` by ``(item, site)``: a purchase-order line arrives at its site, else the default site."""
+    from bookflow.company import placements, purchase_orders as orders, receiving, schema as c
+    import sqlalchemy as sa
+    t = c.purchase_orders
+    default = placements.default_site_id(s)
+    quantity, dates = {}, {}
+    for header in s.company.conn.execute(
+            sa.select(t).where(t.c.status.in_(("open", "partly_received")))).mappings():
+        rev = orders.revision(s, dict(header))
+        if rev["date"] > as_of:
+            continue
+        for line in receiving.order_remaining(s, dict(header), rev):
+            if line["remaining_quantity_microunits"] > 0:
+                key = (line["item_id"], line.get("site_id") or default)
+                quantity[key] = quantity.get(key, 0) + line["remaining_quantity_microunits"]
+                if rev["expected_date"] and (key not in dates or rev["expected_date"] < dates[key]):
+                    dates[key] = rev["expected_date"]
+    return quantity, dates
+
+
+def _by_site(inp, s, principal_id, report):
+    """Every selected item's quantity and value split over its sites, both ties asserted, then filtered.
+
+    Returns the state, the offset, the item rows (all of them), ``{item: {site: quantity}}``,
+    ``{item: {site: value}}``, the sites in name order and the chosen site (or None).
+    """
+    from bookflow.company import placements
+    with ledger._snapshot(s.company):
+        ledger.register_ledger_functions(s.company)
+        state, offset = ledger._state(s, inp, report, principal_id, None, account_scoped=False)
+        raw, currency = s.company.raw, state.metadata.currency
+        params = {"date_to": inp.as_of}
+        items = _rows(raw.execute(_SELECTED + "SELECT * FROM selected ORDER BY full_name_key, id", params))
+        total = sum(money(int(row["value"]), currency).minor_units for row in items)
+        _check_tie(raw, params, total)
+        placements.check_tie(s, inp.as_of)
+        sites = placements.all_sites(s)
+        order = [site["id"] for site in sites]
+        default = placements.default_site_id(s)
+        held = placements.by_item(placements.on_hand(s, inp.as_of))
+        values = {row["id"]: placements.value_split(int(row["value"]), held.get(row["id"], {}), order, default)
+                  for row in items}
+        chosen = placements.resolve_site(s, inp.site, active=False) if inp.site else None
+        return state, offset, items, held, values, sites, chosen, currency
+
+
+def _site_row(row, quantity, value, currency, site):
+    return dict(item_id=row["id"], item_name=row["full_name"], item_type=row["type"], description=row["description"],
+                active=bool(row["active"]), quantity_on_hand=_quantity(quantity),
+                average_cost=money(_average(value, quantity), currency), asset_value=money(value, currency),
+                site_id=site["id"], site_name=site["name"])
+
+
+def valuation_by_site(inp: InventoryValuationInput, s, *, principal_id=None) -> InventoryValuationOutput:
+    """Inventory Valuation Summary by Site, or one site's valuation."""
+    state, offset, items, held, values, sites, chosen, currency = _by_site(inp, s, principal_id, "inventory-valuation")
+    rows = []
+    for row in items:
+        for site in sites:
+            if chosen is not None and site["id"] != chosen["id"]:
+                continue
+            quantity = held.get(row["id"], {}).get(site["id"], 0)
+            value = values[row["id"]].get(site["id"], 0)
+            if chosen is None and not quantity and not value:
+                continue
+            rows.append(_site_row(row, quantity, value, currency, site))
+    total = sum(r["asset_value"].minor_units for r in rows)
+    page = rows[offset:offset + inp.limit + 1]
+    shown = [InventoryValuationRow(**r) for r in page[:inp.limit]]
+    return InventoryValuationOutput(
+        metadata=state.metadata, rows=shown, count=len(shown), totals=StockTotals(asset_value=money(total, currency)),
+        next_cursor=ledger._continuation(state, offset, len(shown), len(page) > inp.limit, s.company))
+
+
+def stock_status_by_site(inp: StockStatusInput, s, *, principal_id=None) -> StockStatusOutput:
+    """Inventory Stock Status by Site: on hand, committed, on order and available at one site."""
+    from bookflow.company import commitments, placements
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    state, offset, items, held, values, sites, chosen, currency = _by_site(inp, s, principal_id, "stock-status")
+    committed = commitments.committed_by_site(s, inp.as_of)
+    builds = commitments.for_assemblies_by_site(s, inp.as_of)
+    deduct_documents, deduct_builds = commitments.deducts_documents(s), commitments.deducts_builds(s)
+    on_order, deliveries = _incoming_by_site(s, inp.as_of)
+    site = chosen["id"]
+    t = c.item_site_settings
+    settings = {row["item_id"]: row for row in s.company.conn.execute(
+        sa.select(t).where(t.c.site_id == site)).mappings()}
+    rows, total, below = [], 0, 0
+    for row in items:
+        quantity = held.get(row["id"], {}).get(site, 0)
+        value = values[row["id"]].get(site, 0)
+        taken, reserved = committed.get((row["id"], site), 0), builds.get((row["id"], site), 0)
+        available = quantity - (taken if deduct_documents else 0) - (reserved if deduct_builds else 0)
+        setting = settings.get(row["id"])
+        reorder_min = setting["reorder_point_min_microunits"] if setting else None
+        reorder_max = setting["reorder_point_max_microunits"] if setting else None
+        flagged = _below(available, reorder_min)
+        total += value
+        below += int(flagged)
+        rows.append(StockStatusRow(
+            **_site_row(row, quantity, value, currency, chosen),
+            quantity_committed=_quantity(taken), quantity_for_assemblies=_quantity(reserved),
+            quantity_available=_quantity(available), quantity_on_order=_quantity(on_order.get((row["id"], site), 0)),
+            next_delivery_date=deliveries.get((row["id"], site)),
+            reorder_point_min=None if reorder_min is None else _quantity(reorder_min),
+            reorder_point_max=None if reorder_max is None else _quantity(reorder_max),
+            below_reorder_point=flagged, preferred_vendor_id=row["preferred_vendor_id"]))
+    page = rows[offset:offset + inp.limit + 1]
+    shown = page[:inp.limit]
+    return StockStatusOutput(
+        metadata=state.metadata, rows=shown, count=len(shown),
+        totals=StockStatusTotals(asset_value=money(total, currency), below_reorder_point=below),
+        next_cursor=ledger._continuation(state, offset, len(shown), len(page) > inp.limit, s.company))
+
+
+class QuantityBySiteInput(StockInput):
+    pass
+
+
+class QuantityBySiteRow(StrictModel):
+    item_id: str
+    item_name: str
+    site_id: str | None = Field(description="Inventory site; null on an item's unassigned row (committed by lines naming no site).")
+    site_name: str
+    quantity_on_hand: str
+    quantity_committed: str
+    quantity_for_assemblies: str
+    quantity_available: str
+    quantity_on_order: str
+    asset_value: MoneyOutput
+
+
+class QuantityBySiteOutput(ledger.Page):
+    totals: StockTotals
+    rows: list[QuantityBySiteRow]
+
+
+def quantity_by_site(inp: QuantityBySiteInput, s, *, principal_id=None) -> QuantityBySiteOutput:
+    """Quantity on Hand by Site: each item by site, with what open lines naming no site commit as unassigned."""
+    from bookflow.company import commitments
+    state, offset, items, held, values, sites, chosen, currency = _by_site(inp, s, principal_id, "quantity-by-site")
+    committed = commitments.committed_by_site(s, inp.as_of)
+    builds = commitments.for_assemblies_by_site(s, inp.as_of)
+    deduct_documents, deduct_builds = commitments.deducts_documents(s), commitments.deducts_builds(s)
+    on_order, _ = _incoming_by_site(s, inp.as_of)
+    rows = []
+    for row in items:
+        for site in sites + [None]:
+            site_id = site["id"] if site else None
+            if chosen is not None and site_id != chosen["id"]:
+                continue
+            quantity = held.get(row["id"], {}).get(site_id, 0) if site else 0
+            value = values[row["id"]].get(site_id, 0) if site else 0
+            taken, reserved = committed.get((row["id"], site_id), 0), builds.get((row["id"], site_id), 0)
+            incoming = on_order.get((row["id"], site_id), 0)
+            if not (quantity or value or taken or reserved or incoming):
+                continue
+            available = quantity - (taken if deduct_documents else 0) - (reserved if deduct_builds else 0)
+            rows.append(QuantityBySiteRow(
+                item_id=row["id"], item_name=row["full_name"], site_id=site_id,
+                site_name=site["name"] if site else "Unassigned", quantity_on_hand=_quantity(quantity),
+                quantity_committed=_quantity(taken), quantity_for_assemblies=_quantity(reserved),
+                quantity_available=_quantity(available), quantity_on_order=_quantity(incoming),
+                asset_value=money(value, currency)))
+    total = sum(r.asset_value.minor_units for r in rows)
+    page = rows[offset:offset + inp.limit + 1]
+    shown = page[:inp.limit]
+    return QuantityBySiteOutput(
+        metadata=state.metadata, rows=shown, count=len(shown), totals=StockTotals(asset_value=money(total, currency)),
+        next_cursor=ledger._continuation(state, offset, len(shown), len(page) > inp.limit, s.company))

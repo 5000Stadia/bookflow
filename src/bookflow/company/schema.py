@@ -1207,3 +1207,5 @@ from bookflow.company.credit_transfer_schema import define_tables as _define_cre
 globals().update(_define_credit_transfer_tables(metadata, _column, _table))
 from bookflow.company.pricing_rule_schema import define_tables as _define_pricing_rule_tables
 globals().update(_define_pricing_rule_tables(metadata, _column, _table, _common))
+from bookflow.company.inventory_site_schema import define_tables as _define_inventory_site_tables
+globals().update(_define_inventory_site_tables(metadata, _column, _table, _common))

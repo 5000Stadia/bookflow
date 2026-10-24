@@ -712,13 +712,14 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     return credits
 
 
-def _stock_entries(pending, profile):
+def _stock_entries(pending, profile, lines=None):
     """The item rows that send stock back, in the shape the inventory ledger takes them.
 
     What leaves the shelf is read off the captured facts, not off the item master, so
     repointing an item afterwards cannot change which rows of a stored revision moved stock.
     """
     items = {row['document_line_id']: row for row in pending['vendor_credit_item_lines']}
+    sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -729,6 +730,7 @@ def _stock_entries(pending, profile):
             amount=line['amount_minor_units'], offset_account_id=profile.ap_account.id,
             class_id=envelope['class_id'])
         if entry is not None:
+            entry.site_id = sites.get(envelope['position'])   # R104
             entries.append(entry)
     return entries
 
@@ -921,7 +923,7 @@ def _compose(s, ctx, inp, resolved, previous=None):
     # history. A refusal here (more sent back than is on hand, a closed period, value left
     # behind) leaves nothing behind, because nothing has been written.
     stock = inventory_effects.plan(
-        s, entries=_stock_entries(pending, profile),
+        s, entries=_stock_entries(pending, profile, resolved['lines']),
         reversing=inventory_effects.own_movements(s, old_header['id']) if previous else (),
         date=revision['date'], currency=currency, field='items')
     inventory_effects.open_dates(s, stock)

@@ -520,7 +520,10 @@ def _item_line(s, line, header_class, currency, index, noun='bill'):
     # The purchase description is the item's own words unless the row overrode them; it is
     # stored on the envelope, exactly where an expense row's memo is stored.
     memo = line.description if line.description is not None else row['purchase_description']
-    return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile)
+    from bookflow.company import placements
+    site_id = placements.site_id_for(s, getattr(line, 'site', None), field=field + '.site')
+    return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile,
+                **({'site_id': site_id} if site_id else {}))
 
 
 # ---------------------------------------------------------------- supplier reference
@@ -1120,7 +1123,12 @@ def _from_order(s, inp, operation):
         and (key not in supplied or getattr(inp, key) is None)})
 
 
-def _stock_entries(pending, profile):
+def _header_site(s, inp):
+    from bookflow.company import placements
+    return placements.site_id_for(s, getattr(inp, 'site', None))
+
+
+def _stock_entries(pending, profile, lines=None, header_site=None):
     """The item lines that move stock, in the shape the inventory ledger takes them.
 
     The family a line belongs to is read off the captured facts rather than off the item
@@ -1128,6 +1136,7 @@ def _stock_entries(pending, profile):
     afterwards must not change which lines a stored revision moved.
     """
     items = {row['document_line_id']: row for row in pending['purchase_item_lines']}
+    sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -1138,6 +1147,7 @@ def _stock_entries(pending, profile):
             facts, key=envelope['id'], amount=line['amount_minor_units'],
             offset_account_id=profile.ap_account.id, class_id=envelope['class_id'])
         if entry is not None:
+            entry.site_id = sites.get(envelope['position']) or header_site   # R104
             entries.append(entry)
     return entries
 
@@ -1263,7 +1273,8 @@ def prepare(s, ctx, inp, operation):
     # here -- negative stock on any earlier date, a closed period any delta would land in --
     # leaves nothing behind, because nothing has been written.
     stock = inventory_effects.plan(
-        s, entries=[] if operation == 'void' or received else _stock_entries(pending, resolved['profile']),
+        s, entries=[] if operation == 'void' or received else _stock_entries(
+            pending, resolved['profile'], resolved['lines'], _header_site(s, inp)),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'], field='items')
     inventory_effects.open_dates(s, stock)

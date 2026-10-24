@@ -176,6 +176,8 @@ def _order(s, selector, expected, profile, items, old_line_ids):
         facts = item['profile']
         if facts.item.id != line['item_id']:
             raise journals.invalid('items.item', 'must match the selected ordered item')
+        if not item.get('site_id') and line.get('site_id'):
+            item['site_id'] = line['site_id']   # the purchase-order line's site (R104)
         used[key] = used.get(key, 0) + facts.quantity_microunits
         if used[key] > line['quantity_microunits']:
             _dependency('Received quantity exceeds this ordered line’s remaining quantity.', order_line_id=key)
@@ -222,8 +224,12 @@ def prepare(s, ctx, inp, operation):
             items = previous_items
         else:
             items = check_items.resolve(s, inputs, previous_items, None, currency)
+            from bookflow.company import placements
+            header_site = placements.site_id_for(s, getattr(inp, 'site', None))
             for item, entered in zip(items, inputs):
                 item['order_line_id'] = entered.order_line_id
+                if header_site and not item.get('site_id'):
+                    item['site_id'] = header_site   # the receipt's own site (R104)
         for item in items:
             if item['profile'].item_type not in inventory.TRACKED_TYPES:
                 raise journals.invalid('items', 'item receipts receive stock items; enter other costs on a bill')
@@ -403,7 +409,8 @@ def order_remaining(s, header, rev):
     return [dict(order_line_id=line['line_id'], item_id=line['item_id'],
                  ordered_quantity_microunits=line['quantity_microunits'],
                  received_quantity_microunits=used.get(line['line_id'], 0),
-                 remaining_quantity_microunits=0 if legacy else line['quantity_microunits'] - used.get(line['line_id'], 0))
+                 remaining_quantity_microunits=0 if legacy else line['quantity_microunits'] - used.get(line['line_id'], 0),
+                 site_id=line.get('site_id'))
             for line in lines if line['item_id'] and line['quantity_microunits'] is not None]
 
 

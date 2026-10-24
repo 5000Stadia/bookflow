@@ -319,10 +319,12 @@ def _stock_entries(s, lines, *, date):
         if date < issue['effective_date']:
             raise _invalid('date', 'a return cannot be dated before the sale it returns; '
                                    f"this line was sold on {issue['effective_date']}")
-        entries.append(inventory_effects.return_entry(
+        entry = inventory_effects.return_entry(
             facts, key=line['envelope']['id'],
             quantity_microunits=line['base_quantity_microunits'],
-            issue_id=issue['id'], class_id=line['envelope']['class_id']))
+            issue_id=issue['id'], class_id=line['envelope']['class_id'])
+        entry.site_id = line.get('site_id')
+        entries.append(entry)
     return entries
 
 
@@ -381,6 +383,9 @@ def commercial(s, inp, *, document_id, pending, previous=None):
             pending['credit_source_claims'].extend(resolved['claim_rows'])
             resolved['tax_ordinal'] = None
             resolved['line_id'] = line_id
+            if entered.site is not None:
+                from bookflow.company import placements
+                resolved['site_id'] = placements.site_id_for(s, entered.site, field='lines.site')
             lines.append(resolved)
         else:
             supplied = {name: getattr(entered, name) for name in entered.model_fields_set

@@ -70,6 +70,7 @@ def attach(s, fresh, items):
             amount=item['amount_minor_units'], offset_account_id=d['purchase_funding']['account_id'],
             class_id=line['class_id'])
         if entry is not None:
+            entry.site_id = item.get('site_id')   # R104
             entries.append(entry)
         outputs.append(output(item, line['line_id'], line['currency']))
     stock = inventory_effects.plan(s, entries=entries,

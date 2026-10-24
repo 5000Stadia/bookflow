@@ -243,6 +243,8 @@ def billed_lines(s, rev, selected, profile, retax=None):
         entry['adjustment_taxable'] = bool(profile.preferences.sales_tax_enabled and code is not None
                                            and code.taxable and not exempt)
         placed[index] = len(lines) + 1
+        if line.get('site_id'):
+            entry['site_id'] = line['site_id']   # the order line's inventory site (R104)
         lines.append(entry)
         sources.append(chosen.get(line['id']))
     from bookflow.company import tax_policy

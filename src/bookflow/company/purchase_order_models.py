@@ -65,6 +65,15 @@ class PurchaseOrderLineInput(_Input):
     billable: bool = False
     class_id: _Selector | None = None
     class_mode: Literal['inherit', 'none', 'value'] = 'inherit'
+    site: _Selector | None = Field(default=None, description=(
+        "Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site."))
+
+    @model_serializer(mode='wrap')
+    def unset_site(self, handler):
+        values = handler(self)
+        if 'site' not in self.model_fields_set:
+            values.pop('site', None)
+        return values
 
     @model_validator(mode='after')
     def coherent_row(self) -> Self:
@@ -96,6 +105,8 @@ class _PurchaseOrderFields(_Input):
     reference: OrderReference | None = None
     memo: Text | None = None
     class_id: _Selector | None = None
+    site: _Selector | None = Field(default=None, description=(
+        'Inventory site the item lines are to arrive at where a line names none; omitted, the default site.'))
 
 
 class PurchaseOrderPostInput(_PurchaseOrderFields):
@@ -128,7 +139,7 @@ class PurchaseOrderUpdateInput(_PurchaseOrderFields):
     @model_serializer(mode='wrap')
     def only_supplied(self, handler):
         values = handler(self)
-        for key in ('expected_date', 'ship_to', 'terms', 'reference', 'memo', 'class_id'):
+        for key in ('expected_date', 'ship_to', 'terms', 'reference', 'memo', 'class_id', 'site'):
             if key not in self.model_fields_set:
                 values.pop(key, None)
         return values
